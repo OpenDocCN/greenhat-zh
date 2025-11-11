@@ -1,27 +1,38 @@
 - en: Chapter 8 -
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第8章 -
 - en: Reverse Engineering Xbox Security
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 反向工程Xbox安全性
 - en: In this chapter, I will describe how I defeated the initial production version
     of the Xbox security system that was first encountered in Chapter 6\. The security
     system was discovered after analyzing the FLASH ROM and realizing that the true
     hardware initialization and boot image decryption sequence was somehow hidden
     outside of the FLASH ROM. The Chapter 7 introduced some basic cryptography concepts
     that will be useful understanding the contents of this chapter.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我将描述我是如何击败了第6章中首次遇到的Xbox安全系统的初始生产版本。该安全系统是在分析FLASH ROM并意识到真正的硬件初始化和引导映像解密序列以某种方式隐藏在FLASH
+    ROM之外后发现的。第7章介绍了一些基本的加密概念，这些概念将有助于理解本章的内容。
 - en: '**Extracting Secrets from Hardware**'
+  id: totrans-3
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '**从硬件中提取秘密**'
 - en: 'The hidden boot code in the Xbox, as concluded in Chapter 6, can be recovered
     by eavesdropping on one of the following buses: (1) the FSB, (2) the main memory
     bus, or (3) the Northbridge-Southbridge connection.'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 如第6章所述，Xbox中的隐藏引导代码可以通过监听以下总线之一来恢复：（1）前端总线（FSB），（2）主内存总线，或（3）北桥-南桥连接。
 - en: 'The format of the Front Side Bus (FSB) of the Pentium processor used in the
     Xbox is documented in the Pentium III processor datasheets, available at Intel’s
     Developer Website. The FSB is a bidirectional 64-bit data bus with about fifty
@@ -34,8 +45,11 @@
     probe wire onto each of the almost one hundred signals. In addition, a logic analyzer
     that supports AGTL+ signaling is required. The combination of all these factors
     made me look elsewhere for a starting point for eavesdropping.'
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: Xbox中使用的Pentium处理器的前端总线（FSB）格式在Intel开发者网站上可用的Pentium III处理器数据表中进行了记录。FSB是一个双向64位数据总线，大约有五十个地址和控制信号，所有信号都以133
+    MHz的速度运行。总线使用一种称为AGTL+的信号约定。由于信号数量众多且物理形式因素具有挑战性，监听此总线是一个昂贵且困难的做法。可行的方案包括：（a）使用价值数千美元的特殊仿真器断开插座来安装处理器，或（b）反向工程Xbox主板上的每个FSB迹线的含义，并在几乎每一个信号上焊接一段短探针线。此外，还需要一个支持AGTL+信号的逻辑分析仪。所有这些因素的结合使我不得不在其他地方寻找监听的起点。
 - en: Our next eavesdropping candidate, the main memory bus, is a 128-bit data bus
     plus address and control signals running at 200 MHz with double data rate (DDR)
     clocking. The memory bus uses a signaling convention known as SSTL-2\. (The details
@@ -44,8 +58,10 @@
     speeds, eavesdropping the main memory bus is probably easier than eavesdropping
     the processor FSB, because of the empty (spare) memory footprints designed into
     the Xbox motherboard.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们下一个监听候选者，主内存总线，是一个128位数据总线，带有地址和控制信号，以200 MHz的双倍数据速率（DDR）时钟运行。内存总线使用一种称为SSTL-2的信号约定。（通过阅读三星K4D263238M内存部件的数据表，可以推断出此总线的详细信息，该数据表可在三星电子网站上找到。）尽管速度更高，但由于Xbox主板中设计了空（备用）内存足迹，监听主内存总线可能比监听处理器FSB更容易。
 - en: A relatively inexpensive, standard 100-pin TQFP adapter (Thin Quad Flat Pack,
     a rectangular chip package with 100 gull-wing shaped pins) could be soldered onto
     the empty memory footprints. These adapters would provide convenient probe points
@@ -55,18 +71,24 @@
     the processor cache without ever being stored into main memory. Once the processor
     is done with the cache line containing the key, it will be overwritten, so the
     key should never leave the physical perimeter of the processor.
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个相对便宜的标准100引脚TQFP适配器（薄型四边扁平封装，一种具有100个鹤嘴形引脚的矩形芯片封装）可以被焊接在空白的内存焊盘上。这些适配器将提供方便的探针点，用于连接逻辑分析仪。这种方法的问题是你只能捕获写入主内存的数据。解密密钥通常是只读数据，只读数据将直接从隐藏的引导只读存储器进入处理器缓存，而不会存储到主内存中。一旦处理器处理完包含密钥的缓存行，它将被覆盖，因此密钥永远不会离开处理器的物理边界。
 - en: '**More About High Speed** **Information Transmission**'
+  id: totrans-8
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '**关于高速信息传输的更多信息**'
 - en: Eavesdropping and modifying data on computer buses is a powerful technique that
     is difficult to counter. In order to understand how to eavesdrop, you will need
     a little bit of background on how digital information is transmitted inside a
     computer.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 在计算机总线上窃听和修改数据是一种强大且难以防御的技术。为了理解如何窃听，你需要了解一些关于数字信息如何在计算机内部传输的背景知识。
 - en: 'There are two major categories of signaling standards: single-ended and differential.
     The transmission of digital information over a wire requires a translation into
     physical quantities such as voltage and current. Classically, signals were defined
@@ -80,16 +102,20 @@
     also known as a return current, must find its way back through the “ground”. At
     very high speeds, the return paths for current do not necessarily follow the same
     path as the signal current. This imbalance results in a distorted signal.'
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 信号标准主要有两大类：单端和差分。在导线上传输数字信息需要将其转换为物理量，如电压和电流。传统上，信号是以相对于一个称为“地”的公共参考电势测量的电压来定义的。这种信号被称为单端或非平衡信号。不幸的是，地参考点的概念仅在信号相对于其传播时间变化缓慢时才有效。实际上，每一个电势的变化都伴随着电流的流动。自然法则要求电流守恒，即对于每一个方向的电流流动，必须有相反方向的电流流动。在单端信号中，反向电流，也称为返回电流，必须通过“地”返回。在非常高的速度下，电流的返回路径不一定与信号电流的路径相同。这种不平衡导致信号失真。
 - en: Differential signaling combats this problem by using two wires to transmit a
     signal, with one wire used for the signal current and the other used for an explicit
     return current path. The differential approach allows the signal and return paths
     to be laid out so that they track each other, ensuring that the flow of current
     is balanced. The result is a more robust signal transmission system at the cost
     of twice the number of wires.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 差分信号通过使用两根线来传输信号，其中一根用于信号电流，另一根用于显式的返回电流路径，以此来解决上述问题。差分方法允许信号和返回路径被布置得相互跟踪，确保电流的流动保持平衡。结果是，以两倍线数为代价，得到了一个更健壮的信号传输系统。
 - en: A specific standard for interpreting voltages as logic values is called a signaling
     convention. The venerable TTL and 3.3V CMOS signaling conventions were invented
     in an era when transistors performed so poorly that large signal excursions were
@@ -101,8 +127,10 @@
     They also account for the fact that electric waves carry energy that must be dissipated
     upon the termination of its journey, otherwise the energy will reflect and cause
     interference with incoming waves.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 一种将电压解释为逻辑值的特定标准称为信号约定。在晶体管性能如此之差的时期，发明了值得尊敬的TTL和3.3V CMOS信号约定，那时需要大的信号波动。最近，许多新的甚至旧的信号约定正在变得越来越受欢迎，如SSTL（串联假负载终止逻辑）、GTL（枪式收发器逻辑）、LVDS（低电压差分信号）和PECL（伪发射极耦合逻辑）。这些高速信号约定解释了电波相对于数据传输速率传播得较慢的事实。它们还解释了电波携带的能量必须在旅程结束时耗散，否则能量将反射并干扰入射波的事实。
 - en: In high-speed applications, wires are often called “transmission lines” in order
     to emphasize the fact that these waves travel slowly in comparison to the signal
     transition time (the time required for a signal to transition between a “1” and
@@ -112,8 +140,10 @@
     of the signal is slow. Even if there is only one transition every year, problems
     can still arise if the duration of that transition takes only a picosecond (one
     trillionth of a second).
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 在高速应用中，为了强调这些波相对于信号转换时间（信号在“1”和“0”状态之间转换所需的时间）传播得较慢，通常将电线称为“传输线”。（请注意，速度比较是相对于信号的转换时间进行的，而不是其粗略的信号频率。）一个常见的错误是认为由于信号的时钟频率较慢，可以忽略传输线效应。即使每年只有一个转换，如果该转换的持续时间仅为皮秒（一万亿分之一秒），问题仍然可能发生。
 - en: The good news for novices is that the latest FPGAs from vendors such as Xilinx
     come with built-in support for almost every widely deployed signaling standard.
     The other piece of good news is that signaling standards are becoming increasingly
@@ -122,8 +152,11 @@
     standard. By following the recommended practices in the datasheet and application
     notes, you can use the FPGA to eavesdrop on a wide range of signals. Just remember
     to keep your eavesdropping taps as short as possible and you shouldn’t go wrong.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于新手来说，好消息是来自Xilinx等供应商的最新FPGA带有对几乎所有广泛部署的信号标准的内置支持。另一个好消息是信号标准正变得越来越有文档记录。例如，Xilinx
+    FPGA数据表说明了每个支持的信号标准所期望的终端电阻的位置和值。通过遵循数据表和应用说明中的推荐做法，您可以使用FPGA监听广泛的信号。只需记住将您的监听探头尽可能保持短，您就不会出错。
 - en: The third potential eavesdropping candidate, the Northbridge to Southbridge
     connection, is a pair of unidirectional, 8-bit wide differential busses, each
     with just one control signal and one clock signal. The bus uses the HyperTransport
@@ -133,8 +166,11 @@
     with an oscilloscope, cross-checked against the open HyperTransport specifications
     available at the HyperTransport consortium’s website, were used to verify the
     assumption that the HyperTransport signalling convention is indeed being used.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三种潜在的监听候选者是北桥到南桥的连接，这是一对单向、8位宽的差分总线，每个总线只有一个控制信号和一个时钟信号。该总线使用HyperTransport信号约定，以DDR时钟频率200
+    MHz运行。总线的信号约定是从nVidia网站上关于与Xbox芯片组紧密相关的nForce的公开可用信息中推断出来的。使用示波器进行了一些测量，并与HyperTransport联盟网站上可用的开放HyperTransport规范进行了交叉验证，以验证假设HyperTransport信号约定确实在使用。
 - en: The HyperTransport bus is implemented on the Xbox motherboard with all the signals
     parallel and evenly spaced, a decision likely driven by the high operating speed
     of the bus. This makes the bus an ideal target for eavesdropping, except for the
@@ -142,8 +178,10 @@
     speed requires special attention to the stub length of the eavesdropping traces
     (in order to preserve the integrity of the signals) and it also requires a rather
     expensive logic analyzer or a custom analyzer circuit.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: HyperTransport总线在Xbox主板上实现，所有信号都是并行且均匀分布的，这个决定可能是由总线的高运行速度所驱动的。这使得总线成为窃听的理想目标，除了它运行在如此高的数据率之外。在如此高速率运行的总线上窃听需要特别注意窃听轨迹的长度（以保持信号的完整性），并且还需要一个相当昂贵的逻辑分析仪或定制的分析电路。
 - en: Ultimately, the Northbridge-Southbridge connection was chosen as the first bus
     to eavesdrop because it has by far the fewest wires, and therefore requires the
     least amount of soldering. The Northbrige-Southbridge connection has only ten
@@ -152,46 +190,64 @@
     amount of time, but also greatly increases the risk of hardware failures due to
     solder bridges or damaged traces. Thus, minimizing the number of solder connections
     minimizes the risk of collateral damage to the motherboard.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 最终，北桥-南桥连接被选为第一个窃听的总线，因为它拥有的线缆数量最少，因此需要的焊接量也最少。北桥-南桥连接只有十个独特的信号，而FSB和主内存各有大约一百个信号。焊接大量连接不仅消耗大量时间，而且由于焊桥或损坏的轨迹，还大大增加了硬件故障的风险。因此，最小化焊接连接的数量可以最小化对主板的附带损害风险。
 - en: '**Eavesdropping a High Speed Bus**'
+  id: totrans-18
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: '**窃听高速总线**'
 - en: 'I had committed to the HyperTransport eavesdropping approach in late January
     2002\. The significant technical issues with this approach were:'
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 我在2002年1月下旬承诺采用HyperTransport窃听方法。这种方法存在一些重大的技术问题：
 - en: • Tapping the high-speed differential bus without disrupting signal integrity
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: • 在不破坏信号完整性的情况下窃听高速差分总线
 - en: • Finding or building a logging tool that could keep up with the 400 MB/s data
     rates on the HyperTransport bus
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: • 寻找或构建一个能够跟上HyperTransport总线400 MB/s数据率的日志工具
 - en: • Determining the polarity and bit ordering of the differential HyperTransport
     bus traces on the motherboard
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: • 确定主板上的差分HyperTransport总线轨迹的极性和比特顺序
 - en: '**Tapping the Bus on a Budget**'
+  id: totrans-23
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: '**在预算内挖掘总线**'
 - en: The first two issues are intimately linked. High-speed bus analysis and logging
     tools typically have proprietary interfaces that would require a custom adapter
     to the Xbox motherboard. The last issue, determining bit polarity and ordering,
     just requires a lot of post-processing and data massaging after the data logger
     is attached and functioning.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 前两个问题紧密相连。高速总线分析和日志工具通常具有专有接口，这需要为Xbox主板定制适配器。最后一个问题，确定比特极性和顺序，只需要在数据记录器连接并运行后进行大量的后处理和数据整理。
 - en: HyperTransport is an open standard that has gained industry acceptance, meaning
     that off-the-shelf protocol analyzers and logging tools are available for the
     bus. One such example is the HyperTransport protocol analyzer by FuturePlus. Unfortunately,
     this protocol analyzer was priced in excess of $25,000 at the time the work was
     being done. In addition, the protocol analyzer requires the target board to be
     specially designed to accommodate the protocol analyzer’s bus interface pod.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: HyperTransport是一个获得行业认可的开标准，这意味着市场上可以找到适用于总线的现成协议分析仪和日志工具。一个例子是FuturePlus的HyperTransport协议分析仪。不幸的是，这个协议分析仪在开展工作时的价格超过了25,000美元。此外，协议分析仪需要目标板特别设计以适应协议分析仪的接口模块。
 - en: Instead of buying a protocol analyzer and investing the time and effort to adapt
     it for use with the Xbox, I built my own simplified one. This task is feasible
     because the HyperTransport protocol is quite simple. The Xbox implementation of
@@ -204,8 +260,10 @@
     and interrupt lines, are handled in HyperTransport using in-band command packets.
     Hence, just ten differential signals (twenty wires) are all you need for eavesdropping
     the bus — great news for hackers.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 与其购买协议分析仪并投入时间和精力来适应它在Xbox上的使用，我构建了自己的简化版。这项任务可行，因为HyperTransport协议相当简单。Xbox对HyperTransport的实现使用了两个8位单向总线，一个用于发送，一个用于接收。每个总线都与其相关联一个时钟和一条选通线。信号标准要求在时钟的每个边缘上呈现有效数据。新数据包的开始由数据线离开空闲状态来指示。选通线区分命令和数据包。所有其他总线典型的边带信号，如地址、读写控制、芯片选择和中断线，在HyperTransport中都是通过带内命令包来处理的。因此，只需要十个差分信号（二十根线）就可以监听总线——这对黑客来说是个好消息。
 - en: The HyperTransport protocol is simple enough, but what about finding something
     that can both physically interface to the Xbox bus and keep up with the 400 MB/s
     speeds? The ideal tool for building this HyperTransport bus tap would be an FPGA.
@@ -220,13 +278,20 @@
     CTT (Center Tap Terminated) signaling for its network interfaces, and also had
     an Intel StrongArm processor on board for configuration, control, and debugging
     purposes.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: HyperTransport协议足够简单，但如何找到既能物理连接到Xbox总线又能跟上400 MB/s速度的东西呢？构建这个HyperTransport总线分接的理想工具是一个FPGA。然而，在当时，没有FPGA能够跟上高速数据率，更重要的是，没有经过供应商认证可用于HyperTransport的FPGA。理论上，Xilinx
+    Virtex-II FPGA适用于这个应用，但该产品刚刚推出，设备价格昂贵且难以获得（如今，你可以以不到一百美元的价格购买低端Virtex-II FPGA）。当时我手头最好的FPGA是一个Xilinx
+    Virtex-E FPGA，我之前将其设计到我的论文原型超级计算机网络路由器中。该网络路由器板使用CTT（中心抽头终止）信号为其网络接口，并且板上还配备了一个Intel
+    StrongArm处理器，用于配置、控制和调试目的。
 - en: The challenge therefore boiled down to figuring out how to interface HyperTransport
     signals to CTT signals, and how to coax 400 MB/s performance out of an FPGA that
     wasn’t intended to run at those speeds.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，挑战归结为如何将HyperTransport信号与CTT信号接口，以及如何从本意不用于这些速度的FPGA中榨取400 MB/s的性能。
 - en: The HyperTransport signaling convention, it turns out, is a close relative of
     the more common LVDS (low voltage differential signaling) convention, specified
     in the TIA/EIA-644 standard. HyperTransport drivers create a signal with a differential
@@ -242,12 +307,17 @@
     located very close to the Xbox motherboard in order to not corrupt the target
     signals. A long cable would dissipate energy out of the wires and introduce noise
     and reflections that might cause the system to cease functioning.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 结果表明，HyperTransport信号约定与更常见的LVDS（低电压差分信号）约定非常接近，该约定在TIA/EIA-644标准中指定。HyperTransport驱动器通常创建一个中心在600
+    mV共模电压周围的600 mV差分摆幅的信号。另一方面，LVDS接收器可以理解具有大于100 mV差分摆幅和50 mV至2.35 V之间任何共模电压的数据。因此，LVDS接收器可以直接与HyperTransport驱动器兼容！（尽管Virtex-E支持直接连接到LVDS信号，但我无法利用这一点，因为我拥有的Virtex-E部件已经被设计进了一个为CTT信号硬连线的系统中。）如果你正在设计自己的分接板，最佳方法将是使用FPGA的本地LVDS功能，而不是这里描述的破解方法。此外，LVDS接收器必须非常靠近Xbox主板，以避免损坏目标信号。长电缆会从线上耗散能量，并引入可能使系统停止工作的噪声和反射。
 - en: '**What About Driving Signals onto** **HyperTransport?**'
+  id: totrans-30
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '**关于驱动信号到HyperTransport的思考？**'
 - en: The eavesdropping application described in this chapter only requires a HyperTransport
     receiver. Applications such as “man-in-the-middle” attacks require a device that
     can override HyperTransport signals and insert a false bit or two. Such a device
@@ -260,8 +330,11 @@
     that cancels out the intended signal can be attached to a HyperTransport line.
     This kind of overdrive can be accomplished using the flexible, programmable I/O
     provided in FPGAs such as the Xilinx Virtex-E and Virtex II.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章描述的窃听应用只需要一个HyperTransport接收器。像“中间人”攻击这样的应用则需要一种可以覆盖HyperTransport信号并插入一个或两个错误比特的设备。这样的设备是可行的，因为HyperTransport，就像LVDS一样，使用电流模式驱动器。换句话说，驱动器被设计成只将一定量的电流驱动到线上，而不考虑它产生的电压。在正常情况下，这工作得非常好，因为线的阻抗根据欧姆定律将电流转换成电压。然而，电流可以相加并相互抵消。一个对抗性的差分驱动器可以连接到HyperTransport线上，并施加一个过驱动电流来抵消预期的信号。这种过驱动可以使用Xilinx
+    Virtex-E和Virtex II等FPGA中提供的灵活、可编程的I/O来实现。
 - en: The simplest application of such a bus override device would be one that modifies
     the destination of the reset vector as it is transmitted to the CPU, enabling
     you to gain control of the Xbox. The reset vector destination is coded into a
@@ -271,8 +344,10 @@
     is clocked by the HyperTransport bus clock and synchronized to a reset signal.
     A “man-in-the-middle” attack like this wil defeat even a cryptographically secure
     public-key boot block implementation.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种总线覆盖设备的简单应用之一将是修改重置向量的目的地，当它被发送到CPU时，这样你就可以控制Xbox。重置向量的目的地编码在一个单字节中，该字节位于0xFFFF.FFF0处的“跳转”操作码之后。重置向量很可能在重置去激活后以确定性的时钟数被传输，因此这个攻击的定时元素可以只是一个由HyperTransport总线时钟时钟并由重置信号同步的计时器。这种“中间人”攻击甚至可以击败加密安全的公钥引导块实现。
 - en: The solution to the problem of getting the HyperTransport signals to the FPGA
     is to use a signal conversion chip. LVDS is a popular standard for LCD panel interfaces
     and backplanes used in telecomm systems, so numerous inexpensive LVDS-to-CMOS
@@ -290,8 +365,12 @@
     Xbox motherboard’s HyperTransport signals and feed them into the board I had previously
     built for my thesis. The chip I chose was the Texas Instruments SN65LVDS386, and
     you can find data sheets for this chip at Texas Instruments’ website.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 解决将HyperTransport信号传输到FPGA问题的方案是使用信号转换芯片。LVDS是电信系统中广泛使用的LCD面板接口和背板的标准，因此有大量的低成本LVDS到CMOS转换器可供选择。当然，所需的信号约定是CTT，但仔细观察后发现，将CMOS驱动器连接到CTT接收器实际上并不成问题。CTT是一种电流模式信号约定，它将+8
+    mA或-8 mA电流驱动到1.5伏特终止的50欧姆传输线。接收器是一个差分放大器，它将参考终止电压与传输线电压进行比较。在Virtex-E中，CTT接收器放大器被指定在接收电压相对于参考电压上下波动超过200
+    mV时工作。大多数驱动CTT终止线的CMOS发射器在向50欧姆负载提供或吸收8 mA电流时都不会有问题。此外，CMOS发射器应该没有问题驱动连接到固定电压的电线。因此，标准的LVDS到CMOS转换器芯片可以用来将Xbox主板上的HyperTransport信号传输到我为我的论文之前构建的板上。我选择的芯片是德州仪器的SN65LVDS386，你可以在德州仪器的网站上找到该芯片的数据表。
 - en: Attaching the LVDS-to-CMOS converter chip to the board is made delightfully
     simple by the clean layout used for the HyperTransport bus on the Xbox motherboard.
     Figure 8-1 is a picture of what the HyperTransport bus traces look like. Notice
@@ -299,22 +378,31 @@
     wires, such as the clock (TX CK/TX CX* and RX CK/RX CX*) and the strobe line (TXD8/TXD8*
     and RXD8/RXD8*), are even labeled for us with polarity markings! This simple layout
     enables the use of an easy-to-engineer tap board.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过Xbox主板上的HyperTransport总线使用的整洁布局，将LVDS到CMOS转换器芯片连接到板上变得非常简单。图8-1展示了HyperTransport总线布局的样子。注意所有电线是如何平行运行的，以及它们是如何均匀分布的。一些电线，如时钟（TX
+    CK/TX CX* 和 RX CK/RX CX*）和选通线（TXD8/TXD8* 和 RXD8/RXD8*），甚至被标记了极性标记！这种简单的布局使得使用易于设计的分接板成为可能。
 - en: The tap board contains just the LVDS-to-CMOS converter chip, some power conditioning
     circuitry, and a set of traces laid out right up to the edge of the board that
     are identically spaced to the HyperTransport bus on the Xbox motherboard. For
     identical spacing and easy alignment and mounting, I measured the dimensions of
     these traces using a digital caliper tool. Figure 8-2 illustrates the dimensions
     of the HyperTransport bus traces.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 分接板仅包含LVDS到CMOS转换器芯片、一些电源调节电路，以及一组直接延伸到板边缘的线路，这些线路的间距与Xbox主板上的HyperTransport总线相同。为了实现相同的间距和便于对齐及安装，我使用数字卡尺测量了这些线路的尺寸。图8-2展示了HyperTransport总线线路的尺寸。
 - en: '![](../Images/index-143_1.png)'
+  id: totrans-36
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../Images/index-143_1.png)'
 - en: '**Figure 8-1**: HyperTransport bus traces as laid out on an Xbox motherboard.'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: '**图8-1**：Xbox主板上的HyperTransport总线布局。'
 - en: The measurements were a little tricky to make. My approach was to measure the
     overall width of the bus and divide the width by the number of traces and spaces
     to get the average expected spacing and trace width. I then laid out these traces
@@ -324,20 +412,28 @@
     this, calibrate yourself by printing out a few long lines of known length and
     measuring them. Printers can have different scaling errors along the horizontal
     and vertical axes, so be sure to print lines in both directions.)
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 测量有点棘手。我的方法是测量总总线宽度，然后将宽度除以走线和空间的数量，以获得平均预期的间距和走线宽度。然后我用PCB CAD程序布置这些走线，并在1:1的比例下将布局打印在纸上。我比较了打印的走线与电路板上的走线，并手动进行了一些调整。（请注意，许多打印机都有一些小的缩放误差，所以如果你尝试这样做，通过打印出几条已知长度的长线并测量它们来校准自己。打印机在水平和垂直轴上可能会有不同的缩放误差，所以务必在两个方向上打印线条。）
 - en: '![figure_8-2](../Images/figure_8-2.png)'
+  id: totrans-39
   prefs: []
   type: TYPE_IMG
+  zh: '![figure_8-2](../Images/figure_8-2.png)'
 - en: '**Figure 8-2**: Dimensions of the HyperTransport bus traces on the Xbox motherboard.
     A “mil” is 1/1000th of an inch or 25.4 microns.'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: '**图8-2**：Xbox主板上的HyperTransport总线走线的尺寸。1“mil”等于1/1000英寸或25.4微米。'
 - en: Designing your own boards is fairly easy with the right software. You can find
     out more about how to make your own boards by reading the Appendix C, “Getting
     Into PCB Layout.”
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用合适的软件设计自己的电路板相当容易。你可以通过阅读附录C，“进入PCB布局”，了解更多关于如何制作自己的电路板的信息。
 - en: Once the component selection process was finished, the design and layout of
     the HyperTransport tap and signal conversion board took just a few more hours.
     A schematic of the board’s design can be seen in Figure 8-6. The board was then
@@ -357,23 +453,31 @@
     belt sander from tearing the copper traces off of the board. Be careful when using
     a belt sander to sculpt small boards like the tap board — a belt sander could
     just as easily sculpt your fingers by accident.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦组件选择过程完成，HyperTransport 插针和信号转换电路板的设计和布局仅花了几个小时。电路板设计的示意图可以在图8-6中看到。然后，通过互联网下的订单来制造电路板。许多电路板制造商提供经济实惠、快速周转的电路板制造服务，这些服务通过电子邮件或ftp上传接受Gerber文件格式的电路板设计。在这种情况下，我五天内制作了两块电路板，每块电路板的价格为33美元（有关如何制作自己的电路板更多信息，请参见附录C，“进入PCB布局”）。这个价格仅包括将电路板切割成方形部件的费用。然而，我需要电路板带有HyperTransport插针的一侧具有特殊形状，以便在不干扰Xbox主板上的现有组件的情况下安装电路板。我还需要电路板的配对边缘被斜切，这样电路板就可以以轻微的角度安装，简化将插针电路板焊接到主板上的任务。我使用砂光带手动雕刻边缘，使其符合图8-3中描述的形状。在雕刻时，电路板必须以使砂光带的磨料带首先接触电路板的走线侧的方式进行定位，以防止砂光带撕裂电路板上的铜走线。在使用砂光带雕刻像插针电路板这样的小电路板时要小心——砂光带同样可能意外地雕刻你的手指。
 - en: '**![figure_8-3](../Images/figure_8-3.png)Figure 8-3**: Shaping of the HyperTransport
     tap board edge.'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: '**![figure_8-3](../Images/figure_8-3.png)图8-3**：HyperTransport插针电路板边缘的形状。'
 - en: After sculpting the beveled edge, all the parts were soldered onto the board.
     (See Appendix B, “Soldering Techniques.”)
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 在雕刻斜边之后，所有部件都被焊接到了电路板上。（参见附录B，“焊接技术”。）
 - en: The finished tap board now had to be attached to the Xbox motherboard. This
     critical step was perhaps the most difficult one. First, the Xbox motherboard
     was prepared by using a fine grit sandpaper to strip away the green soldermask,
     revealing the bright bare copper of the target traces. Then, these traces were
     fluxed and a thin coat of solder was applied using a hot soldering iron tip.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 完成的测试板现在必须固定到Xbox主板上。这一关键步骤可能是最困难的一个。首先，使用细砂纸去除Xbox主板上的绿色焊膏，露出目标焊线的亮铜色。然后，这些焊线被涂上助焊剂，并使用热烙铁尖端涂上一层薄薄的焊锡。
 - en: The procedure I used for attaching the tap board to the motherboard is shown
     in Figure 8-4\. The prepared tap board was tacked onto the motherboard at the
     approximate location and angle using a thin (30 AWG) wire soldered between a trace
@@ -389,45 +493,66 @@
     integrity of the joint must come from the epoxy and not the solder joints.) I
     used Miller-Stephenson Epoxy formula 907, and it sets with enough strength for
     me to lift the Xbox by the tap board and not disturb the tap connection.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 我用于将测试板固定到主板上的步骤在图8-4中展示。准备好的测试板使用一根细线（30 AWG）焊接在测试板上的一个焊线和主板上的一个焊线之间，以大约的位置和角度固定在主板上。搭接线仅作为临时辅助工具，用于固定板子，将被移除，因此如果线桥接多个焊线无关紧要。一旦线被固定，我小心地调整了测试板在主板上的位置，加热线以释放其连接，避免抬起任何铜线。
+    （我使用显微镜帮助确定最佳对齐。）一旦我对板子的位置满意，我就将强环氧树脂涂在板接缝上，以固定所有部件。环氧树脂应该固化并形成一个刚性、坚固的接缝。（请注意，某些环氧树脂如果应用不当会固化成凝胶；这是不可接受的，因为接缝的整个机械完整性必须来自环氧树脂，而不是焊缝。）我使用了Miller-Stephenson环氧树脂配方907，它固化后足够坚固，我可以通过测试板提起Xbox，而不会干扰测试连接。
 - en: '![figure_8-4](../Images/figure_8-4.png)'
+  id: totrans-47
   prefs: []
   type: TYPE_IMG
+  zh: '![figure_8-4](../Images/figure_8-4.png)'
 - en: '**Figure 8-4**: Tap board soldering procedure.'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: '**图8-4**：测试板焊接步骤。'
 - en: '![](../Images/index-146_1.png)'
+  id: totrans-49
   prefs: []
   type: TYPE_IMG
+  zh: '![](../Images/index-146_1.png)'
 - en: '**Figure 8-5**: HyperTransport tap board mounted on the Xbox motherboard.'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: '**图8-5**：安装在Xbox主板上的HyperTransport测试板。'
 - en: Once the epoxy had cured, I removed the temporary tack wire that was used to
     hold the tap board in place, and cleaned the bare mated traces with a bit of solderwick
     and flux. The last step of soldering the tap board traces to the bare motherboard
     traces was now no different from soldering any surface mount component onto a
     board; most of the standard techniques described in Appendix B applied directly
     to this situation. Figure 8-5 shows what the finished assembly looks like.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 环氧固化后，我移除了用于固定测试板的临时搭接线，并用一小块焊锡膏和助焊剂清理了裸露的焊接线。将测试板焊接线焊接到裸露的主板焊接线上的最后一步现在与将任何表面贴装组件焊接到板上的步骤没有区别；附录B中描述的大多数标准技术可以直接应用于这种情况。图8-5显示了最终组装的外观。
 - en: '**Building the Data Logger**'
+  id: totrans-52
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: '**构建数据记录器**'
 - en: The second challenge of eavesdropping the HyperTransport bus is acquiring or
     building a logging device that can keep up with the 400 MB/s data rate of the
     bus. Considering my budget, I decided that my only option was to build a logger,
     as buying any tools with sufficient performance for this job was well outside
     of my budget.
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 监听HyperTransport总线面临的第二个挑战是获取或构建一个能够跟上总线400 MB/s数据率的记录设备。考虑到我的预算，我决定我的唯一选择是构建一个记录器，因为购买任何足够性能的工具都远远超出了我的预算。
 - en: '![](../Images/index-147_1.png)'
+  id: totrans-54
   prefs: []
   type: TYPE_IMG
+  zh: '![](../Images/index-147_1.png)'
 - en: '**Figure 8-6**: Schematic of the HyperTransport tap board.'
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: '**图8-6**：HyperTransport测试板的电路图。'
 - en: In building the logging device, I had settled on using a Virtex-E FPGA that
     was integrated into a board that I had previously built. However, the one problem
     with using the Virtex-E FPGA is that the performance of the FPGA (as specified
@@ -440,15 +565,21 @@
     the delays, while the compiler and automated place-and-route tool handle the non-critical
     parts of the circuit. Figure 8-7 shows the overall design that was used to capture
     the data on the HyperTransport bus.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 在构建记录设备时，我决定使用一个集成在我之前构建的板上的Virtex-E FPGA。然而，使用Virtex-E FPGA的一个问题是FPGA的性能（如数据手册中指定）不足以跟上HyperTransport总线。幸运的是，FPGA可以很好地超频，因为它们的制造公差非常保守，并且因为FPGA性能主要受可配置布线织物中的信号传播延迟的限制。因此，可以通过软延迟线和选择性地反转时钟手动识别和补偿一些关键性能限制路径。最敏感的性能块可以手动放置以优化延迟，而编译器和自动放置和路由工具处理电路的非关键部分。图8-7显示了用于在HyperTransport总线上捕获数据的整体设计。
 - en: '![figure_8-7](../Images/figure_8-7.png)'
+  id: totrans-57
   prefs: []
   type: TYPE_IMG
+  zh: '![figure_8-7](../Images/figure_8-7.png)'
 - en: '**Figure 8-7**: Block diagram of the data logger built in the Xilinx Virtex-E
     FPGA.'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: '**图8-7**：Xilinx Virtex-E FPGA中构建的数据记录器框图。'
 - en: 'The design is fairly simple in concept: take the high speed data off of the
     HyperTransport bus and clock it into four phases of a quarter speed clock, creating
     a data stream that is four times slower but four times wider. This confines all
@@ -462,8 +593,10 @@
     zeros” (DNSZ) function. In the DNSZ mode, data consisting of all 0’s is not stored
     in the FIFO. This is helpful in culling out all of the idle data on the HyperTransport
     bus. The resulting data traces are a time-stamped series of 32-bit words.'
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 在概念上，设计相当简单：从HyperTransport总线上取下高速数据，并将其时钟输入到四分之一的时钟的四相中，创建一个速度慢四倍但宽度增加四倍的数据流。这使所有手动放置和调整仅限于前几个输入触发器。接下来，使用一组延迟和旋转器重新对齐数据，并将数据逐个存储在先进先出（FIFO）内存中。触发FIFO捕获开始的信号由一个计时器比较器生成，该比较器从第一次复位开始计数。可以通过连接多次运行的结果来捕获长时间的数据窗口，每次运行的捕获触发点都比前一次延迟。对触发电路的后期优化是“不存储零”（DNSZ）功能。在DNSZ模式下，由所有0组成的数据不会存储在FIFO中。这有助于剔除HyperTransport总线上的所有空闲数据。结果数据轨迹是一系列带时间戳的32位字。
 - en: The most difficult part of the FPGA data logger design was calibrating the delays
     on the input paths. Delay calibration was accomplished by using an oscilloscope
     to probe a small window of data on the HyperTransport bus. Wire delays and byte-wide
@@ -471,26 +604,34 @@
     was aided by the fact that during idle times, a common sequence of commands was
     repeated on the bus every few hundred microseconds, which served as the calibration
     reference.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: FPGA数据记录器设计中最困难的部分是在输入路径上校准延迟。延迟校准是通过使用示波器探测HyperTransport总线上的一个小数据窗口来完成的。通过调整线延迟和字节宽度的旋转，直到探测到的数据与日志数据匹配。这个过程得益于在空闲时间内，每几百微秒在总线上重复一个常见的命令序列，这作为校准参考。
 - en: '**Determining the Bus Order and Polarity**'
+  id: totrans-61
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: '**确定总线顺序和极性**'
 - en: The final challenge after logging the data is figuring out the order of the
     signals on the HyperTransport bus and their polarities. Note that while the two
     most important signals of the HyperTransport bus on the Xbox motherboard are labeled
     for us, the remaining eight data lines have ambiguous polarity and bit ordering.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 在记录数据后的最终挑战是确定HyperTransport总线上的信号顺序及其极性。请注意，虽然Xbox主板上HyperTransport总线的两个最重要的信号为我们标注了标签，但剩余的八条数据线具有模糊的极性和位顺序。
 - en: The correct polarity of the eight data signals was determined by observing the
     idle bus data bit pattern. The HyperTransport bus spends most of its time in an
     idle state, so this is not difficult. If the idle pattern is supposed to be all
     0s, then any bit position that shows up as a 1 has its polarity inverted. This
     was corrected in hardware by inserting an inversion term in the FPGA on the appropriate
     wire.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 八个数据信号的正确极性是通过观察空闲总线数据位模式确定的。HyperTransport总线大部分时间处于空闲状态，因此这并不困难。如果空闲模式应该是全0，那么任何显示为1的位位置其极性被反转。这通过在FPGA上适当线路上插入一个反转项在硬件中得到了纠正。
 - en: Determining the correct bit ordering is much more difficult, however. Operating
     under the assumption that data coming across the HyperTransport bus must in large
     part come from the FLASH ROM, a 1’s count was performed on a byte by byte basis.
@@ -504,30 +645,41 @@
     from each ROM and the logger were tabulated, and, with the aid of a short C program,
     columns of bits were transposed until an ordering was found that made all of the
     row values match up.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，确定正确的位顺序要困难得多。在假设通过HyperTransport总线传入的数据大部分来自FLASH ROM的情况下，按字节逐字节进行了1的计数。理论上是总线顺序是一个纯排列，这意味着字节中二进制1的数量在FLASH
+    ROM数据和由记录器捕获的数据之间保持不变。将1的计数模式并排放置以识别FLASH ROM和记录数据之间对应候选区域的模式。幸运的是，HyperTransport总线上的前几个字是位于FLASH内存底部的芯片组特定初始化，因此找到正确对齐的模式并没有花费太多时间。每个ROM和记录器的字节集被列出，并且，借助一个简短的C程序，位列被转置，直到找到一个使所有行值匹配的顺序。
 - en: '**Making Sense of the Captured Data**'
+  id: totrans-65
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '**解读捕获的数据**'
 - en: Now that valid data traces have been extracted, the problem remains of deciphering
     the meaning of it all. Before doing so, let us recap what we know about the data
     we have collected thus far.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在已经提取了有效的数据跟踪，但问题仍然是解读其含义。在这样做之前，让我们回顾一下我们目前收集到的数据。
 - en: '• **Temporal correlation.** The logged data, on a macroscopic scale, should
     have a strong time correlation to the expected sequence of initialization events:
     jam table initialization, followed by a decryption step, fol owed by execution
     from RAM. The regions of the log traces that correspond to each of these events
     can be determined by just observing when large bursts of activity happen, followed
     by regions of silence.'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: • **时间相关性。** 在宏观尺度上，记录的数据应该与预期的初始化事件序列有强烈的时间相关性：首先是干扰表初始化，然后是解密步骤，接着是从RAM执行。日志跟踪中对应于这些每个事件的区域可以通过观察大爆发活动发生的时间，然后是寂静区域来确定。
 - en: • **Transaction lengths.** Since the Pentium processor has both a data and an
     instruction cache, al fetches on the HyperTransport bus to FLASH ROM or the hidden
     boot ROM should come in even-length bursts of traffic.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: • **事务长度。** 由于Pentium处理器既有数据缓存也有指令缓存，因此HyperTransport总线对FLASH ROM或隐藏引导ROM的所有获取都应该以偶数长度的流量爆发到来。
 - en: • **Guaranteed ordering.** The collected data is time stamped and chronologically
     correct, so if the first instruction fetched in the reset vector can be identified
     in the data logs, the position and structure of the remainder of the instructions
@@ -541,8 +693,10 @@
     when I first started looking at traces, all I saw was the encrypted data plus
     a smattering of code, none of which could really be lined up in any logical fashion
     with a boot vector.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: • **保证顺序。**收集的数据带有时间戳，并且按时间顺序排列，因此如果能够在数据日志中识别出重置向量的第一个指令，就可以推断出其余指令的位置和结构。最初，我忽略了检查通过HyperTransport总线传输的数据的宏观组织结构，这给我带来了一些麻烦。图8-7中记录机器的简化框图表明，每当HyperTransport总线重置时，记录FIFO都会重置。这听起来是个不错的主意，然而我最初错误地假设HyperTransport总线在施加电源时只会重置一次。实际上，HyperTransport总线在初始化跳转表步骤后会重置第二次。因此，当我最初开始查看跟踪时，我看到的只是加密数据和一些零散的代码，这些代码都无法以任何逻辑方式与引导向量对齐。
 - en: Imagine how disappointing that was! I took a step back and observed the HyperTransport
     bus events on an oscilloscope with the time scale set at the milliseconds per
     division. I observed that there was an earlier reset pulse, and after adjusting
@@ -557,12 +711,17 @@
     sifting through traces looking for cache lines, I had collected enough code to
     feed into a disassembler. (See the sidebar on software analysis tools for more
     information about the disassembler that I used.)
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 想象一下那有多令人失望！我退后一步，用示波器观察了HyperTransport总线事件，时间刻度设置为每分度毫秒。我发现有一个较早的重置脉冲，调整触发机制只捕获第一个脉冲后，引导指令就很容易识别了。在秘密ROM中的0xFFFF.FFF0地址处的十六字节恰好与FLASH
+    ROM中的相同十六字节相同。从那时起，我通过进行大量的跟踪和反汇编，并做好记录，跟踪程序计数器的当前值，以便将每个指令块放置在内存中的正确位置。每个缓存行读取由16或32个连续的字节组成，这导致了一个独特的数据记录器时间戳模式，有助于逆向工程过程。经过几小时的筛选，我收集了足够的代码输入到反汇编器中。（有关我使用的反汇编器的更多信息，请参阅软件分析工具的侧边栏。）
 - en: '**More Tools of the Trade: Software** **Analysis Tools**'
+  id: totrans-71
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '**更多行业工具：软件分析工具**'
 - en: 'Inevitably at some point in your hacking experiences, you will come across
     a need to disassemble some assembly language code. I was introduced to an excellent
     tool for this job by some fel ow software hackers in January 2002 while I was
@@ -574,8 +733,12 @@
     a vast array of useful and fun tools. Some of my favorites include the ability
     to automatically pattern match code library signatures to function calls, and
     the ability to follow jumps at the press of a key.'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 在你的黑客经验中，不可避免地会在某个时刻遇到需要反汇编一些汇编语言代码的需求。2002年1月，当我正在逆向工程Xbox安全系统时，一些软件黑客向我介绍了一个用于这项工作的优秀工具。这个工具由Ilfak
+    Guilfanov开发，名为“IDA Pro”，由DataRescue Corporation（http://www.datarescue.com/idabase/）销售。IDA
+    Pro不仅能够反汇编x86代码，还能反汇编大量嵌入式处理器的代码。IDA Pro输出的质量也非常高：代码段会自动标注和整理以提高可读性。IDA Pro还提供了一系列实用且有趣的功能。我最喜欢的功能之一是能够自动匹配代码库签名与函数调用，以及能够通过按下一个键来跟踪跳转。
 - en: Another tool that was quite handy during the code analysis was HackMan. HackMan
     is freeware from TechnoLogismiki Corporation (http://www.technologismiki.com/hackman/).
     It is nominally a “hex editor,” i.e., a file editor that allows you to manipulate
@@ -584,16 +747,21 @@
     is not as powerful as IDA Pro, but it is interactive with the hex editor. This
     allowed me to rapidly test candidate cache lines for valid code while tracing
     through the data logs, while assembling the final binary image of the secret ROM.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 在代码分析期间，另一个非常有用的工具是HackMan。HackMan是TechnoLogismiki公司（http://www.technologismiki.com/hackman/）的免费软件。它本质上是一个“十六进制编辑器”，即一个允许你直接操作二进制数据的文件编辑器，但它有很多独特的功能，远超简单的编辑。例如，HackMan内置了解码器。解码器不如IDA
+    Pro强大，但它与十六进制编辑器是交互式的。这使我能够在追踪数据日志的同时，快速测试候选缓存行是否为有效代码，并组装秘密ROM的最终二进制图像。
 - en: After a bit of data massaging and a good bit of help from some on-line hacker
     friends, we had determined that the cipher being used was RC-4/128. RC-4 is a
     symmetric cipher, and the key had to be stored somewhere in the Xbox, but I was
     having difficulty trying to identify the key in the data stream. The key seemed
     to span cache line fetches that were shared with pieces of code which at the time
     I could not map to a definitive location.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 在进行了一些数据处理，并得到了一些在线黑客朋友的很大帮助后，我们确定所使用的密钥是RC-4/128。RC-4是一种对称密钥，密钥必须存储在Xbox的某个地方，但我很难在数据流中识别出密钥。看起来密钥跨越了与当时我无法定位的代码片段共享的缓存行提取。
 - en: As the night was drawing long and I was growing weary of staring at hex digits,
     I decided to try something that should never have worked. I adapted an RC-4 decryption
     program to decrypt the target image in FLASH ROM using a key that was derived
@@ -605,17 +773,24 @@
     should show that all values are roughly equally probable for a non-matching key.
     However, if the key was the correct one, the histogram should be biased, with
     some values being significantly more popular than al the other values.
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 随着夜晚的深入，我厌倦了盯着十六进制数字，决定尝试一种本不应该奏效的方法。我将RC-4解密程序改编成使用从数据日志中的滑动窗口中导出的密钥来解密FLASH
+    ROM中的目标图像。这是一个相当蛮力式的方法，因为它需要成千上万次的解密（日志中的每一个字节都需要一次）来搜索整个数据流。我通过将RC-4解密程序的输出输入到直方图程序来自动化这个过程。如果密钥不匹配，输出应该是统计上的“白色”。换句话说，输出直方图应该显示所有值对于非匹配密钥来说概率大致相等。然而，如果密钥是正确的，直方图应该是有偏的，某些值比所有其他值更受欢迎。
 - en: 'Eventually I finished the program, trykeys, to perform this brute-force search
     around 5 AM. Bleary-eyed and tired, I decided to give the program a test run before
     calling it quits for the night. Imagine the dumbfounded look on my face as I watched
     the output of the program as it crunched away at the candidate data stream:'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 最终，我在大约凌晨5点完成了程序，trykeys，用于执行这种蛮力搜索。我疲惫不堪，眼睛模糊，决定在结束这一天的努力之前先测试一下程序。想象一下，当我看着程序处理候选数据流时的惊讶表情：
 - en: '[PRE0]'
+  id: totrans-77
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: The FLASH ROM image is named ms4.bin, and the binary data logger trace is named
     binout.full. The trykeys program had identified a statistically different histogram
     (with an average value of 96 and a minimum bucket height of 5) for a decryption
@@ -626,8 +801,10 @@
     getting some sleep and catching up on my schoolwork, I finished doing a proper
     analysis of the data stream and I had patched together an image of the entire
     secret boot sector.
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: FLASH ROM映像被命名为ms4.bin，二进制数据记录器跟踪文件被命名为binout.full。trykeys程序已经识别出一个在统计上不同的直方图（平均值为96，最小桶高度为5），这是通过使用起始偏移量为8745的数据作为测试密钥来解密ROM映像的结果。然后，我从数据流中隔离出候选密钥，并使用该候选密钥分析了解密后的输出。输出看起来像是真实的、有效的代码。我在一个隐藏的引导扇区中找到了这个密钥，它存储在南桥芯片中！几天后，在休息并补上我的学校作业之后，我完成了对数据流的适当分析，并拼凑出了整个秘密引导扇区的映像。
 - en: With the secret boot code’s RC-4 key in hand, I had the ability to generate
     FLASH ROM images that could be accepted by any Xbox at the time. The implication
     is that the entire trust mechanism of the Xbox could be violated by just overriding
@@ -640,12 +817,18 @@
     the native Xbox CPU. The physical structure of the Xbox LPC interface implementation
     allows users, as well as Microsoft’s contract manufacturer, to install a properly
     designed FLASH ROM override device without any soldering.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 拿到秘密引导代码的RC-4密钥后，我有能力生成任何Xbox都能接受的FLASH ROM映像。这意味着，通过仅仅覆盖或替换Xbox主板上的ROM，就可以违反Xbox的整个信任机制。这是通过使用微软提供的测试结构来覆盖制造过程中的FLASH
+    ROM以进行测试和诊断来实现的。Xbox必须以每秒一个的速度下线，因此微软设计了一套快速连接测试点，以实现FLASH ROM覆盖。能够引导到替代ROM映像对于使用原生Xbox
+    CPU运行生产测试程序非常有价值。Xbox LPC接口实现的物理结构允许用户以及微软的合同制造商在不进行任何焊接的情况下安装设计良好的FLASH ROM覆盖设备。
 - en: '**The Legal Challenges of Hacking**'
+  id: totrans-80
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '**黑客的法律挑战**'
 - en: 'In retrospect, hacking the Xbox was less challenging technically than it was
     socially and legally. After retrieving the secret key from the Southbridge chip,
     I met with my research advisor, Prof. Tom Knight, at the MIT Artificial Intelligence
@@ -666,8 +849,10 @@
     entity. The result of five months of legal stalemate was an AI Laboratory technical
     memorandum, followed by an academic presentation of the work at the conference
     on Cryptographic Hardware in Embedded Systems (CHES) in August 2002.'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 回顾起来，破解Xbox在技术上不如在社会和法律上具有挑战性。在从南桥芯片中提取出密钥之后，我在麻省理工学院人工智能实验室与我的研究导师，汤姆·奈特教授，会面，讨论我的研究结果。我的导师指出，我的工作可能违反了DMCA，因此在发表之前，我们联系了麻省理工学院的法务部门寻求咨询。麻省理工学院法务部门最终回应说，DMCA使得这个案例风险太高，我必须以个人身份发表，尽管我的工作是在麻省理工学院作为我的计算机架构研究的一部分进行的。我感到绝望，认为我永远负担不起律师费用，也永远无法发表我的研究结果，但随后哈尔·阿贝尔森教授将我介绍给了电子前沿基金会（EFF）。结果，EFF的李天和刘乔以及波士顿学院被分配来帮助我发表我的工作。随后几个月进行了深思熟虑和定位。这是一场在两个前线进行的战斗：我们必须说服麻省理工学院接受这项工作，同时试图安抚微软。经过四个月的斗争，在微软对我的工作进行了鼓励性的审查，以及我的实验室同事和教授们的压倒性支持下，麻省理工学院最终屈服了。麻省理工学院决定，我可以作为麻省理工学院的学生发表我的工作，而不是作为一个独立实体。五个月的法律僵局的结果是，一份人工智能实验室技术备忘录，随后在2002年8月于嵌入式系统加密硬件（CHES）会议上的学术展示。
 - en: While the ending of this story may be happy, things could have been very different
     if not for the support of my advisor, my laboratory and the talented lawyers at
     the EFF. The DMCA draws a fuzzy line between a rogue hacker and a legitimate researcher;
@@ -678,8 +863,10 @@
     academic institutions. There are countless others who were also working on the
     Xbox with excellent results, but their voices shal remain forever silent behind
     the curtain of the DMCA.
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然这个故事的结果可能很愉快，但如果不是我的导师、我的实验室以及EFF的杰出律师们的支持，事情可能会非常不同。DMCA在流氓黑客和合法研究人员之间划了一条模糊的界限；或许没有麻省理工学院的背书，我就无法满足DMCA的研究豁免条件，我的研究可能永远不会发表，或者即使发表了也可能遭到微软的质疑。言论自由适用于所有人，而不仅仅是那些有幸坐在著名学术机构象牙塔中的人。还有无数其他人也在研究Xbox并取得了出色的成果，但他们的声音将永远在DMCA的幕后保持沉默。
 - en: Clearly, the ability to override the trust mechanism used in the Xbox has sticky
     legal implications. While *my* intent was mostly to satisfy my curiosity and secondly
     to run my own code on the Xbox under my fair-use rights, other people have a desire
@@ -690,8 +877,10 @@
     ponderous one. I had extracted the key in February, 2002, and it took until almost
     June before I was allowed to publish the results of my study in the appropriate
     academic forum.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 显然，绕过Xbox中使用的信任机制具有棘手的法律含义。虽然我的主要意图是满足我的好奇心，其次是在Xbox上运行我自己的代码，行使我的公平使用权，但其他人有复制游戏和修改以及重新分发微软的版权内核代码的愿望。因为加密算法对它的应用是盲目的，提取RC-4密钥使得所有应用程序都平等。因此，我联系了电子前沿基金会（EFF）以帮助我解决法律问题。法律程序是缓慢而沉重的。我在2002年2月提取了密钥，直到几乎6月才被允许在适当的学术论坛上公布我的研究结果。
 - en: Never had I experienced so much ado over 128 bits. The Digital Millennium Copyright
     Act (DMCA) of 1998 has eternally changed the landscape of hardware hacking. Reverse
     engineering used to be a protected act, deemed part of what makes a marketplace
@@ -700,12 +889,16 @@
     serve you thousands of dollars of fines and lawsuits. I strongly recommend that
     you read Chapter 12, “Caveat Hacker,” so that you understand your legal rights
     and responsibilities.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 我从未经历过如此多的争议集中在128位上。1998年的《数字千年版权法》（DMCA）永远改变了硬件黑客的格局。逆向工程曾经是一项受保护的行动，被认为是使市场健康和具有竞争力的因素之一。现在，在家中私底下对加密安全系统进行篡改和绕过，以行使您的公平使用权，可能会让您面临数千美元的罚款和诉讼。我强烈建议您阅读第12章，“警告黑客”，以便了解您的法律权利和责任。
 - en: '**Security Through Obscurity**'
+  id: totrans-85
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '**模糊安全**'
 - en: 'The technique used by Microsoft in the first version of the Xbox security is
     an excellent example of security through obscurity. A strong cipher, RC-4/128,
     was used to encrypt the ROM image in order to prevent people from analyzing the
@@ -714,8 +907,10 @@
     an encryption key. This decryption/encryption key is the important piece of information
     buried inside the secret boot ROM. Hiding this key is security through obscurity:
     once the key is found, the cipher is moot and all security is lost.'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 微软在Xbox第一版安全中使用的技巧是模糊安全的绝佳例子。为了防止人们分析ROM内容或创建自己的ROM，使用了强大的加密算法RC-4/128来加密ROM镜像。然而，RC-4/128是一种对称加密算法，这意味着Xbox必须包含一个也可以用作加密密钥的解密密钥。这个解密/加密密钥是隐藏在秘密引导ROM中的重要信息。隐藏这个密钥是模糊安全：一旦找到密钥，加密算法就变得无关紧要，所有安全都会丧失。
 - en: True security would require that the user have access to every single piece
     of the Xbox and still be unable to encrypt their own valid FLASH ROM image. This
     implies that some secret must be kept outside of the Xbox. Public-key cryptography
@@ -723,13 +918,18 @@
     to encrypt or sign the Xbox boot code, then knowing the entire contents of the
     secure boot ROM would be useless, since the main secret, Microsoft’s private key,
     remains safely out of our reach in a vault somewhere in Redmond, Washington.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 真正的安全需要用户能够访问Xbox的每一块零件，但仍无法加密他们自己的有效FLASH ROM镜像。这意味着必须将某些秘密保存在Xbox之外。公钥加密就是为了这种场景而发明的。如果微软使用公钥加密算法来加密或签名Xbox引导代码，那么知道安全引导ROM的全部内容将毫无用处，因为主要秘密，微软的私钥，仍然安全地保存在华盛顿雷德蒙德某个保险库中，我们无法触及。
 - en: There is an upside, however. The next chapter introduces the findings of my
     colleagues, many of which include the discovery of back doors in the Xbox initialization
     sequence. These backdoors enable you to run your own code on the Xbox without
     enabling access to Microsoft’s copyrighted works, and without enabling the copying
     of games. The next chapter will also introduce Xbox security version 1.1, which
     was cracked in just a few days by Andy Green in the UK.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，也有积极的一面。下一章将介绍我同事的研究成果，其中许多成果包括在Xbox初始化序列中发现后门。这些后门允许你在Xbox上运行自己的代码，而无需启用访问微软的版权作品，也无需启用游戏复制。下一章还将介绍Xbox安全版本1.1，该版本在英国的Andy
+    Green仅用几天时间就破解了。
