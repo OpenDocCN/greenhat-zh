@@ -1,155 +1,230 @@
 - en: Chapter 12. Direct Memory Access
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第12章. 直接内存访问
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
 - en: '*Direct Memory Access (DMA)* is a feature of modern processors that lets a
     device transfer data to and from main memory independently of the CPU. With DMA,
     the CPU merely initiates the data transfer (that is to say, it does not complete
     it), and then the device (or a separate DMA controller) actually moves the data.
     Because of this, DMA tends to provide higher system performance as the CPU is
     free to perform other tasks during the data transfer.'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: '*直接内存访问（DMA）*是现代处理器的一个特性，允许设备独立于CPU将数据传输到和从主内存。使用DMA时，CPU仅初始化数据传输（也就是说，它不会完成它），然后设备（或单独的DMA控制器）实际移动数据。正因为如此，DMA往往能提供更高的系统性能，因为CPU在数据传输期间可以自由执行其他任务。'
 - en: Note
+  id: totrans-3
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: There is some overhead in performing DMA. Accordingly, only devices that move
     large amounts of data (for example, storage devices) use DMA. You wouldn’t use
     DMA just to transfer one or two bytes of data.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行DMA操作会有一些开销。因此，只有移动大量数据（例如，存储设备）的设备才使用DMA。你不会仅仅为了传输一两个字节的数据就使用DMA。
 - en: Implementing DMA
+  id: totrans-5
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 实现DMA
 - en: Unlike with previous topics, I’m going to take a holistic approach here. Namely,
     I’m going to show an example first, and then I’ll describe the DMA family of functions.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 与之前的话题不同，我将在这里采取整体的方法。也就是说，我将首先展示一个示例，然后我将描述DMA函数系列。
 - en: The following pseudocode is a `device_attach` routine for a fictitious device
     that uses DMA.
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下伪代码是一个使用DMA的虚构设备的`device_attach`例程。
 - en: '[PRE0]'
+  id: totrans-8
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: This pseudocode begins by calling ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `bus_dma_tag_create` to create a DMA tag named ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `foo_parent_dma_tag`. At heart, *DMA tags* describe the characteristics and restrictions
     of DMA transactions.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个伪代码首先调用`bus_dma_tag_create`来创建一个名为`foo_parent_dma_tag`的DMA标签。本质上，*DMA标签*描述了DMA事务的特性与限制。
 - en: Next, `bus_dma_tag_create` is called again. Notice that `foo_parent_dma_tag`
     is this call’s ![](httpatomoreillycomsourcenostarchimages1137503.png) first argument.
     See, DMA tags can inherit the characteristics and restrictions of other tags.
     Of course, child tags cannot loosen the restrictions set up by their parents.
     Consequently, the DMA tag ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `foo_baz_dma_tag` is a “draconian” version of `foo_parent_dma_tag`.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，再次调用`bus_dma_tag_create`。注意，`foo_parent_dma_tag`是这个调用参数的第一个参数。看，DMA标签可以继承其他标签的特性与限制。当然，子标签不能放宽其父标签设置的限制。因此，DMA标签`foo_baz_dma_tag`是`foo_parent_dma_tag`的“严苛”版本。
 - en: The next statement, `bus_dmamap_create`, creates a DMA map named ![](httpatomoreillycomsourcenostarchimages1137507.png)
     `foo_baz_dma_map`. Loosely speaking, *DMA maps* represent memory areas that have
     been allocated according to the properties of a DMA tag and are within device
     visible address space.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一个语句`bus_dmamap_create`创建了一个名为`foo_baz_dma_map`的DMA映射。粗略地说，*DMA映射*代表根据DMA标签属性分配的内存区域，并且位于设备可见地址空间内。
 - en: Finally, ![](httpatomoreillycomsourcenostarchimages1137509.png) `bus_dmamap_load`
     loads the buffer ![](httpatomoreillycomsourcenostarchimages1137513.png) `foo_baz_buf`
     into the device visible address associated with the DMA map ![](httpatomoreillycomsourcenostarchimages1137511.png)
     `foo_baz_dma_map`.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，`bus_dmamap_load`将缓冲区`foo_baz_buf`加载到与DMA映射`foo_baz_dma_map`关联的设备可见地址。
 - en: Note
+  id: totrans-13
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Any arbitrary buffer can be used for DMA. However, buffers are inaccessible
     to devices until they’ve been loaded (or mapped) into a device visible address
     (that is, a DMA map).
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 任何任意的缓冲区都可以用于DMA。然而，缓冲区在加载（或映射）到设备可见地址（即DMA映射）之前对设备是不可访问的。
 - en: 'Note that `bus_dmamap_load` requires a ![](httpatomoreillycomsourcenostarchimages1137515.png)
     callback function, which typically looks something like this:'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意`bus_dmamap_load`需要一个回调函数，通常看起来像这样：
 - en: '[PRE1]'
+  id: totrans-16
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Here, ![](httpatomoreillycomsourcenostarchimages1137501.png) arg dereferences
     to the sixth argument passed to `bus_dmamap_load`, which was `foo_baz_busaddr`.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，`arg`解引用到传递给`bus_dmamap_load`的第六个参数，即`foo_baz_busaddr`。
 - en: This callback function executes after the buffer-load operation completes. If
     successful, the ![](httpatomoreillycomsourcenostarchimages1137507.png) address
     where the buffer was loaded is returned in ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `arg`. If unsuccessful, ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `foo_callback` does ![](httpatomoreillycomsourcenostarchimages1137503.png) nothing.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 此回调函数在缓冲区加载操作完成后执行。如果成功，![httpatomoreillycomsourcenostarchimages1137507.png](httpatomoreillycomsourcenostarchimages1137507.png)
+    缓冲区被加载的地址将返回在 ![httpatomoreillycomsourcenostarchimages1137505.png](httpatomoreillycomsourcenostarchimages1137505.png)
+    `arg` 中。如果失败，![httpatomoreillycomsourcenostarchimages1137499.png](httpatomoreillycomsourcenostarchimages1137499.png)
+    `foo_callback` 不会做任何事情。
 - en: Initiating a DMA Data Transfer
+  id: totrans-19
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 启动 DMA 数据传输
 - en: 'Assuming the buffer-load operation completed successfully, one can initiate
     a DMA data transfer with something like this:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 假设缓冲区加载操作成功完成，可以使用类似以下方式启动 DMA 数据传输：
 - en: Note
+  id: totrans-21
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Most devices just require the device visible address of a buffer to be written
     to a specific register to start a DMA data transfer.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 大多数设备只需要将缓冲区的设备可见地址写入特定寄存器以启动 DMA 数据传输。
 - en: '[PRE2]'
+  id: totrans-23
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: Here, the ![](httpatomoreillycomsourcenostarchimages1137503.png) device visible
     address of a buffer is ![](httpatomoreillycomsourcenostarchimages1137499.png)
     written to a ![](httpatomoreillycomsourcenostarchimages1137501.png) device register.
     Recall that the `foo_callback` function described in the previous section returns
     in ![](httpatomoreillycomsourcenostarchimages1137503.png) `foo_baz_busaddr` the
     device visible address of `foo_baz_buf`.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，缓冲区的设备可见地址 ![httpatomoreillycomsourcenostarchimages1137503.png](httpatomoreillycomsourcenostarchimages1137503.png)
+    被写入 ![httpatomoreillycomsourcenostarchimages1137499.png](httpatomoreillycomsourcenostarchimages1137499.png)
+    设备寄存器。回想一下，前一小节中描述的 `foo_callback` 函数在 ![httpatomoreillycomsourcenostarchimages1137503.png](httpatomoreillycomsourcenostarchimages1137503.png)
+    `foo_baz_busaddr` 中返回了 `foo_baz_buf` 的设备可见地址。
 - en: Dismantling DMA
+  id: totrans-25
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 拆卸 DMA
 - en: Now that you know how to implement DMA, I’ll demonstrate how to dismantle it.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你已经知道了如何实现 DMA，我将演示如何拆卸它。
 - en: '[PRE3]'
+  id: totrans-27
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: As you can see, this pseudocode simply tears down everything in the opposite
     order that it was built up.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，这段伪代码只是以相反的顺序拆除了构建时的一切。
 - en: Now, let’s discuss in detail the different functions encountered here and in
     the previous two sections.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们详细讨论在这里和前两个部分遇到的不同函数。
 - en: Creating DMA Tags
+  id: totrans-30
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 创建 DMA 标签
 - en: As mentioned earlier, DMA tags describe the characteristics and restrictions
     of DMA transactions and are created by using the `bus_dma_tag_create` function.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，DMA 标签描述了 DMA 事务的特性及限制，并通过使用 `bus_dma_tag_create` 函数创建。
 - en: '[PRE4]'
+  id: totrans-32
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Here, the `parent` argument identifies the parent DMA tag. To create a top-level
     DMA tag, pass `bus_get_dma_tag(device_t dev)` as `parent`.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，`parent` 参数标识了父 DMA 标签。要创建顶级 DMA 标签，请将 `bus_get_dma_tag(device_t dev)` 作为
+    `parent` 传递。
 - en: The `alignment` argument denotes the physical alignment, in bytes, of each DMA
     segment. Recall that DMA maps represent memory areas that have been allocated
     according to the properties of a DMA tag. These memory areas are known as *DMA
@@ -157,54 +232,84 @@
     DMA](ch12.html#implementing_dma "Implementing DMA") in [Implementing DMA](ch12.html#implementing_dma
     "Implementing DMA"), you’ll see that `arg` is actually assigned the address of
     a DMA segment.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: '`alignment` 参数表示每个 DMA 段的物理对齐，单位为字节。回想一下，DMA 映射表示根据 DMA 标签属性已分配的内存区域。这些内存区域被称为
+    *DMA 段*。如果你回到 [实现 DMA](ch12.html#implementing_dma "实现 DMA") 中描述的 `foo_callback`
+    函数，你会看到 `arg` 实际上被分配了一个 DMA 段的地址。'
 - en: The `alignment` argument must be `1`, which denotes no specific alignment, or
     a power of two. As an example, drivers that require DMA buffers to begin on a
     multiple of 4KB would pass `4096` as `alignment`.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: '`alignment` 参数必须是 `1`，表示没有特定的对齐，或者是一个 2 的幂。例如，需要 DMA 缓冲区从 4KB 的倍数开始的驱动程序会将
+    `4096` 作为 `alignment` 传递。'
 - en: The `boundary` argument specifies the physical address boundaries that cannot
     be crossed by each DMA segment; that is, they cannot cross any multiple of `boundary`.
     This argument must be `0`, which indicates no boundary restrictions, or a power
     of two.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: '`boundary` 参数指定了每个 DMA 段不能跨越的物理地址边界；也就是说，它们不能跨越任何 `boundary` 的倍数。此参数必须是 `0`，表示没有边界限制，或者是一个
+    2 的幂。'
 - en: The `lowaddr` and `highaddr` arguments outline the address range that cannot
     be employed for DMA. For example, devices incapable of DMA above 4GB would have
     `0xFFFFFFFF` as `lowaddr` and `BUS_SPACE_MAXADDR` as `highaddr`.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lowaddr` 和 `highaddr` 参数定义了不能用于 DMA 的地址范围。例如，无法进行超过 4GB DMA 的设备将 `0xFFFFFFFF`
+    作为 `lowaddr`，将 `BUS_SPACE_MAXADDR` 作为 `highaddr`。'
 - en: Note
+  id: totrans-38
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '`0xFFFFFFFF` equals 4GB, and the constant `BUS_SPACE_MAXADDR` signifies the
     maximum addressable memory for your architecture.'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: '`0xFFFFFFFF` 等于 4GB，常量 `BUS_SPACE_MAXADDR` 表示您架构可寻址的最大内存。'
 - en: 'The `filtfunc` and `filtfuncarg` arguments denote an optional callback function
     and its first argument, respectively. This function is executed for every attempt
     to load (or map) a DMA buffer between `lowaddr` and `highaddr`. If there’s a device-accessible
     region between lowaddr and highaddr, filtfunc is supposed to tell the system.
     Here is the function prototype for `filtfunc`:'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: '`filtfunc` 和 `filtfuncarg` 参数分别表示一个可选的回调函数及其第一个参数。此函数在尝试在 `lowaddr` 和 `highaddr`
+    之间加载（或映射）DMA 缓冲区时执行。如果在 `lowaddr` 和 `highaddr` 之间存在设备可访问区域，filtfunc 应该通知系统。以下是
+    `filtfunc` 的函数原型：'
 - en: '[PRE5]'
+  id: totrans-41
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: This function must return `0` if the address ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `addr` is device-accessible or a nonzero value if it’s inaccessible.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果地址 ![](httpatomoreillycomsourcenostarchimages1137499.png) `addr` 可被设备访问，则此函数必须返回
+    `0`；如果它不可访问，则返回非零值。
 - en: If `filtfunc` and `filtfuncarg` are `NULL`, the entire address range from `lowaddr`
     to `highaddr` is considered inaccessible.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果 `filtfunc` 和 `filtfuncarg` 是 `NULL`，则从 `lowaddr` 到 `highaddr` 的整个地址范围被认为是不可访问的。
 - en: The maxsize argument denotes the maximum amount of memory, in bytes, that may
     be allocated for a single DMA map.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: '`maxsize` 参数表示单个 DMA 映射可能分配的最大内存量，以字节为单位。'
 - en: The `nsegments` argument specifies the number of scatter/gather segments allowed
     in a single DMA map. A *scatter/gather segment* is simply a memory page. The name
     comes from the fact that when you take a set of physically discontinuous pages
@@ -213,314 +318,491 @@
     memory; however sometimes a large enough block is not available. So the kernel
     “tricks” the device by using a buffer composed of scatter/gather segments. Every
     DMA segment is a scatter/gather segment.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nsegments` 参数指定了在单个 DMA 映射中允许的散列/收集段的数量。一个 *散列/收集段* 简单地就是一个内存页面。这个名字来源于当你将一组物理上不连续的页面虚拟地组装成一个单一的连续缓冲区时，你必须“散列”你的写入和“收集”你的读取。某些设备需要连续的内存块；然而，有时可能没有足够大的块可用。因此，内核通过使用由散列/收集段组成的缓冲区来“欺骗”设备。每个
+    DMA 段都是一个散列/收集段。'
 - en: The `nsegments` argument may be `BUS_SPACE_UNRESTRICTED`, which indicates no
     number restriction. DMA tags made with `BUS_SPACE_UNRESTRICTED` cannot create
     DMA maps; they can only be parent tags, because the system cannot support DMA
     maps composed of an unlimited number of scatter/gather segments.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nsegments` 参数可以是 `BUS_SPACE_UNRESTRICTED`，这表示没有数量限制。使用 `BUS_SPACE_UNRESTRICTED`
+    创建的 DMA 标签不能创建 DMA 映射；它们只能作为父标签，因为系统无法支持由无限数量的散列/收集段组成的 DMA 映射。'
 - en: The `maxsegsz` argument denotes the maximum size, in bytes, of an individual
     DMA segment within a single DMA map.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: '`maxsegsz` 参数表示单个 DMA 映射中单个 DMA 段的最大大小，以字节为单位。'
 - en: The `flags` argument modifies `bus_dma_tag_create`’s behavior. [Table 12-1](ch12s02.html#bus_underscore_dma_underscore_tag_unders
     "Table 12-1. bus_dma_tag_create Symbolic Constants") displays its only valid value.
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: '`flags` 参数修改 `bus_dma_tag_create` 的行为。[表 12-1](ch12s02.html#bus_underscore_dma_underscore_tag_unders
+    "表 12-1. bus_dma_tag_create 符号常量") 显示了它的唯一有效值。'
 - en: Table 12-1. bus_dma_tag_create Symbolic Constants
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 12-1. bus_dma_tag_create 符号常量
 - en: '| Constant | Description |'
+  id: totrans-50
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-51
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `BUS_DMA_ALLOCNOW` | Preallocates enough resources to handle at least one
     buffer-load operation; if sufficient resources are unavailable, `ENOMEM` is returned.
     |'
+  id: totrans-52
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMA_ALLOCNOW` | 预分配足够的资源来处理至少一个缓冲区加载操作；如果资源不足，则返回 `ENOMEM`。 |'
 - en: 'The `lockfunc` and `lockfuncarg` arguments denote an optional callback function
     and its first argument, respectively. Remember how `bus_dmamap_load` requires
     a callback function? Well, `lockfunc` executes right before and after that function
     to acquire and release any necessary synchronization primitives. Here is `lockfunc`’s
     function prototype:'
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lockfunc` 和 `lockfuncarg` 参数分别表示一个可选的回调函数及其第一个参数。还记得 `bus_dmamap_load` 需要一个回调函数吗？嗯，`lockfunc`
+    在该函数之前和之后执行以获取和释放任何必要的同步原语。以下是 `lockfunc` 的函数原型：'
 - en: '[PRE6]'
+  id: totrans-54
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: When lockfunc executes, ![](httpatomoreillycomsourcenostarchimages1137499.png)
     op contains either `BUS_DMA_LOCK` or `BUS_DMA_UNLOCK`. That is, `op` dictates
     what lock operation to perform.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 当 `lockfunc` 执行时，![](httpatomoreillycomsourcenostarchimages1137499.png) 操作包含
+    `BUS_DMA_LOCK` 或 `BUS_DMA_UNLOCK`。也就是说，`op` 决定了要执行哪种锁定操作。
 - en: The `dmat` argument expects a pointer to `bus_dma_tag_t;` assuming `bus_dma_tag_create`
     is successful, this pointer will store the resulting DMA tag.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: '`dmat` 参数期望一个指向 `bus_dma_tag_t` 的指针；假设 `bus_dma_tag_create` 成功，此指针将存储生成的 DMA
+    标签。'
 - en: Tearing Down DMA Tags
+  id: totrans-57
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 拆卸 DMA 标签
 - en: DMA tags are torn down by the `bus_dma_tag_destroy` function.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: DMA 标签通过 `bus_dma_tag_destroy` 函数被拆解。
 - en: '[PRE7]'
+  id: totrans-59
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: This function returns `EBUSY` if there are any DMA maps still associated with
     `dmat`.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果有任何 DMA 映射仍然与 `dmat` 关联，此函数将返回 `EBUSY`。
 - en: DMA Map Management Routines, Part 1
+  id: totrans-61
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: DMA 映射管理例程，第 1 部分
 - en: As mentioned earlier, DMA maps represent memory areas (that is to say, DMA segments)
     that have been allocated according to the properties of a DMA tag and are within
     device visible address space.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，DMA 映射代表根据 DMA 标签属性分配的内存区域（即 DMA 段），并且位于设备可见地址空间内。
 - en: 'DMA maps can be managed with the following functions:'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: DMA 映射可以使用以下功能进行管理：
 - en: '[PRE8]'
+  id: totrans-64
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: The `bus_dmamap_create` function creates a DMA map based on the DMA tag `dmat`
     and stores the result in `mapp`. The `flags` argument modifies `bus_dmamap_create`’s
     behavior. [Table 12-2](ch12s04.html#bus_underscore_dmamap_underscore_create "Table 12-2. bus_dmamap_create
     Symbolic Constants") displays its only valid value.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_create` 函数根据 DMA 标签 `dmat` 创建 DMA 映射，并将结果存储在 `mapp` 中。`flags` 参数修改
+    `bus_dmamap_create` 的行为。[表 12-2](ch12s04.html#bus_underscore_dmamap_underscore_create
+    "表 12-2. bus_dmamap_create 符号常量") 显示其唯一有效的值。'
 - en: Table 12-2. bus_dmamap_create Symbolic Constants
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 12-2. bus_dmamap_create 符号常量
 - en: '| Constant | Description |'
+  id: totrans-67
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-68
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `BUS_DMA_COHERENT` | Causes cache synchronization operations to be as cheap
     as possible for your DMA buffers; this flag is implemented only on *sparc64*.
     |'
+  id: totrans-69
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMA_COHERENT` | 使缓存同步操作尽可能便宜，适用于您的 DMA 缓冲区；此标志仅在 *sparc64* 上实现。|'
 - en: The `bus_dmamap_destroy` function tears down the DMA map `map`. The `dmat` argument
     is the DMA tag that `map` was based on.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_destroy` 函数拆解 DMA 映射 `map`。`dmat` 参数是 `map` 所基于的 DMA 标签。'
 - en: Loading (DMA) Buffers into DMA Maps
+  id: totrans-71
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 将 (DMA) 缓冲区加载到 DMA 映射中
 - en: 'The FreeBSD kernel provides four functions for loading a buffer into the device
     visible address associated with a DMA map:'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD 内核提供了四个函数，用于将缓冲区加载到与 DMA 映射关联的设备可见地址：
 - en: '`bus_dmamap_load`'
+  id: totrans-73
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_load`'
 - en: '`bus_dmamap_load_mbuf`'
+  id: totrans-74
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_load_mbuf`'
 - en: '`bus_dmamap_load_mbuf_sg`'
+  id: totrans-75
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_load_mbuf_sg`'
 - en: '`bus_dmamap_load_uio`'
+  id: totrans-76
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_load_uio`'
 - en: Before I describe these functions, an explanation of `bus_dma_segment` structures
     is needed.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 在描述这些函数之前，需要解释 `bus_dma_segment` 结构。
 - en: bus_dma_segment Structures
+  id: totrans-78
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: bus_dma_segment 结构
 - en: A `bus_dma_segment` structure describes a single DMA segment.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个 `bus_dma_segment` 结构描述一个单独的 DMA 段。
 - en: '[PRE9]'
+  id: totrans-80
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: The ![](httpatomoreillycomsourcenostarchimages1137499.png) `ds_addr` field contains
     its device visible address and ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `ds_len` contains its length.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ds_addr` 字段包含其设备可见地址，`ds_len` 包含其长度。'
 - en: bus_dmamap_load Function
+  id: totrans-82
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: bus_dmamap_load 函数
 - en: We first discussed the `bus_dmamap_load` function in [Implementing DMA](ch12.html#implementing_dma
     "Implementing DMA") in [Implementing DMA](ch12.html#implementing_dma "Implementing
     DMA").
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们首先在 [实现 DMA](ch12.html#implementing_dma "实现 DMA") 中讨论了 `bus_dmamap_load` 函数。[实现
+    DMA](ch12.html#implementing_dma "实现 DMA")。
 - en: '[PRE10]'
+  id: totrans-84
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: This function loads the buffer buf into the device visible address associated
     with the DMA map map. The dmat argument is the DMA tag that map is based on. The
     buflen argument is the number of bytes from buf to load. `bus_dmamap_load` returns
     immediately and never blocks for any reason.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数将缓冲区 buf 加载到与 DMA 映射 map 关联的设备可见地址。dmat 参数是 map 所基于的 DMA 标签。buflen 参数是要从
+    buf 加载的字节数。`bus_dmamap_load` 立即返回，并且不会因任何原因而阻塞。
 - en: 'The `callback` and `callbackarg` arguments denote a callback function and its
     first argument, respectively. `callback` executes after the buffer-load operation
     completes. If resources are lacking, the buffer-load operation and `callback`
     will be deferred. If `bus_dmamap_load` returns `EINPROGRESS`, this has occurred.
     Here is `callback`’s function prototype:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: '`callback` 和 `callbackarg` 参数分别表示回调函数及其第一个参数。`callback` 在缓冲区加载操作完成后执行。如果资源不足，缓冲区加载操作和
+    `callback` 将被延迟。如果 `bus_dmamap_load` 返回 `EINPROGRESS`，则已发生这种情况。以下是 `callback`
+    的函数原型：'
 - en: '[PRE11]'
+  id: totrans-87
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'When callback executes, ![](httpatomoreillycomsourcenostarchimages1137503.png)
     error discloses the success (0) or failure (`EFBIG`) of the buffer-load operation
     (the error code `EFBIG` stands for *error: file too large*). The ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `segs` argument is the array of DMA segments that `buf` has been loaded into;
     ![](httpatomoreillycomsourcenostarchimages1137501.png) `nseg` is this array’s
     size.'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 当回调执行时，![错误](httpatomoreillycomsourcenostarchimages1137503.png) 错误显示缓冲区加载操作的成功（0）或失败（`EFBIG`）。错误代码
+    `EFBIG` 代表 *错误：文件过大*。![段](httpatomoreillycomsourcenostarchimages1137499.png) `segs`
+    参数是 `buf` 已加载到的 DMA 段的数组；![段数](httpatomoreillycomsourcenostarchimages1137501.png)
+    `nseg` 是此数组的大小。
 - en: 'The following pseudocode is an example `callback` function:'
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下伪代码是一个示例 `callback` 函数：
 - en: '[PRE12]'
+  id: totrans-90
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: This function ![](httpatomoreillycomsourcenostarchimages1137499.png) iterates
     through `segs` to return the ![](httpatomoreillycomsourcenostarchimages1137501.png)
     device visible address of each DMA segment that `buf` has been loaded into.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数 ![段](httpatomoreillycomsourcenostarchimages1137499.png) 遍历 `segs` 以返回 `buf`
+    已加载到的每个 DMA 段的设备可见地址。
 - en: Note
+  id: totrans-92
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: If `buf` can fit into one DMA segment, the `foo_callback` function described
     in [Implementing DMA](ch12.html#implementing_dma "Implementing DMA") in [Implementing
     DMA](ch12.html#implementing_dma "Implementing DMA") may be used as `callback`.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果 `buf` 可以适应一个 DMA 段，那么可以在 [实现 DMA](ch12.html#implementing_dma "实现 DMA") 中描述的
+    `foo_callback` 函数用作 `callback`。
 - en: The `flags` argument modifies `bus_dmamap_load`’s behavior. Valid values for
     this argument are shown in [Table 12-3](ch12s05.html#bus_underscore_dmamap_underscore_load_sy
     "Table 12-3. bus_dmamap_load Symbolic Constants").
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: '`flags` 参数修改了 `bus_dmamap_load` 的行为。此参数的有效值显示在 [表 12-3](ch12s05.html#bus_underscore_dmamap_underscore_load_sy
+    "表 12-3. bus_dmamap_load 符号常量") 中。'
 - en: Table 12-3. bus_dmamap_load Symbolic Constants
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 12-3. bus_dmamap_load 符号常量
 - en: '| Constant | Description |'
+  id: totrans-96
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-97
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `BUS_DMA_NOWAIT` | If memory resources are lacking, the buffer-load operation
     and `callback` will *not* be deferred. |'
+  id: totrans-98
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMA_NOWAIT` | 如果内存资源不足，缓冲区加载操作和 `callback` 将 *不会* 被延迟。|'
 - en: '| `BUS_DMA_NOCACHE` | Prevents caching the DMA buffer, thereby causing all
     DMA transactions to be executed without reordering; this flag is implemented only
     on *sparc64*. |'
+  id: totrans-99
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMA_NOCACHE` | 防止缓存 DMA 缓冲区，因此所有 DMA 事务都将在不重新排序的情况下执行；此标志仅在 *sparc64*
+    上实现。|'
 - en: bus_dmamap_load_mbuf Function
+  id: totrans-100
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: bus_dmamap_load_mbuf 函数
 - en: 'The `bus_dmamap_load_mbuf` function is a variant of `bus_dmamap_load` that
     loads mbuf chains (you’ll learn about mbuf chains in [Chapter 16](ch16.html "Chapter 16. Network
     Drivers, Part 1: Data Structures")).'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_load_mbuf` 函数是 `bus_dmamap_load` 的一个变体，用于加载 mbuf 链（你将在 [第 16 章](ch16.html
+    "第 16 章。网络驱动程序，第一部分：数据结构") 中了解 mbuf 链）。'
 - en: '[PRE13]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'Most of these arguments are identical to their `bus_dmamap_load` counterparts
     except for:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些参数中的大多数与它们的 `bus_dmamap_load` 对应参数相同，除了：
 - en: The `mbuf` argument, which expects an mbuf chain
+  id: totrans-104
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`mbuf` 参数，它期望一个 mbuf 链'
 - en: The `callback2` argument, which requires a different callback function
+  id: totrans-105
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`callback2` 参数，它需要一个不同的回调函数'
 - en: The `flags` argument, which implicitly sets `BUS_DMA_NOWAIT`
+  id: totrans-106
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`flags` 参数，它隐式设置 `BUS_DMA_NOWAIT`'
 - en: 'Here is `callback2`’s function prototype:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是 `callback2` 的函数原型：
 - en: '[PRE14]'
+  id: totrans-108
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: '`callback2` is like `callback`, but it returns the ![](httpatomoreillycomsourcenostarchimages1137499.png)
     amount of data loaded.'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: '`callback2` 与 `callback` 类似，但它返回加载的数据量。'
 - en: bus_dmamap_load_mbuf_sg Function
+  id: totrans-110
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: bus_dmamap_load_mbuf_sg 函数
 - en: The `bus_dmamap_load_mbuf_sg` function is an alternative to `bus_dmamap_load_mbuf`
     that does not use `callback2`.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_load_mbuf_sg` 函数是 `bus_dmamap_load_mbuf` 的一个替代方案，它不使用 `callback2`。'
 - en: '[PRE15]'
+  id: totrans-112
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: As you can see, this function directly and immediately returns ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `segs` and ![](httpatomoreillycomsourcenostarchimages1137501.png) `nseg`.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，此函数直接并立即返回 ![段](httpatomoreillycomsourcenostarchimages1137499.png) `segs`
+    和 ![段数](httpatomoreillycomsourcenostarchimages1137501.png) `nseg`。
 - en: bus_dmamap_load_uio Function
+  id: totrans-114
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: bus_dmamap_load_uio 函数
 - en: The `bus_dmamap_load_uio` function is identical to `bus_dmamap_load_mbuf` except
     that it loads the buffers from within a `uio` structure.
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_load_uio` 函数与 `bus_dmamap_load_mbuf` 相同，但它从 `uio` 结构内部加载缓冲区。'
 - en: '[PRE16]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: bus_dmamap_unload Function
+  id: totrans-117
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: bus_dmamap_unload 函数
 - en: The `bus_dmamap_unload` function unloads the buffers from a DMA map.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bus_dmamap_unload` 函数从 DMA 映射中卸载缓冲区。'
 - en: '[PRE17]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: DMA Map Management Routines, Part 2
+  id: totrans-120
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: DMA 映射管理例程，第二部分
 - en: This section describes an alternative set of functions used to manage DMA maps.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 本节描述了一组用于管理 DMA 映射的替代函数。
 - en: '[PRE18]'
+  id: totrans-122
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: The `bus_dmamem_alloc` function creates a DMA map based on the DMA tag `dmat`
     and stores the result in `mapp`. This function also allocates `maxsize` bytes
     of contiguous memory (where `maxsize` is defined by `dmat`). The address of this
@@ -528,129 +810,205 @@
     eventually become your DMA buffer. The `flags` argument modifies `bus_dmamem_alloc`’s
     behavior. Valid values for this argument are shown in [Table 12-4](ch12s06.html#bus_underscore_dmamem_underscore_alloc_s
     "Table 12-4. bus_dmamem_alloc Symbolic Constants").
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bus_dmamem_alloc` 函数根据DMA标签 `dmat` 创建DMA映射，并将结果存储在 `mapp` 中。此函数还分配 `maxsize`
+    字节的连续内存（其中 `maxsize` 由 `dmat` 定义）。此内存的地址返回在 `vaddr` 中。正如你很快就会看到的，这段连续内存最终将成为你的DMA缓冲区。`flags`
+    参数修改 `bus_dmamem_alloc` 的行为。此参数的有效值显示在 [表12-4](ch12s06.html#bus_underscore_dmamem_underscore_alloc_s
+    "表12-4. bus_dmamem_alloc符号常量") 中。'
 - en: Table 12-4. bus_dmamem_alloc Symbolic Constants
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 表12-4. bus_dmamem_alloc符号常量
 - en: '| Constant | Description |'
+  id: totrans-125
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-126
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `BUS_DMA_ZERO` | Causes the allocated memory to be set to zero |'
+  id: totrans-127
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMA_ZERO` | 导致分配的内存被设置为0 |'
 - en: '| `BUS_DMA_NOWAIT` | Causes `bus_dmamem_alloc` to return `ENOMEM` if the allocation
     cannot be immediately fulfilled due to resource shortage |'
+  id: totrans-128
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMA_NOWAIT` | 如果由于资源短缺无法立即满足分配，则 `bus_dmamem_alloc` 返回 `ENOMEM` |'
 - en: '| `BUS_DMA_WAITOK` | Indicates that it is okay to wait for resources; if the
     allocation cannot be immediately fulfilled, the current process is put to sleep
     to wait for resources to become available. |'
+  id: totrans-129
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMA_WAITOK` | 表示可以等待资源；如果分配不能立即满足，当前进程将被挂起以等待资源可用。 |'
 - en: '| `BUS_DMA_COHERENT` | Causes cache synchronization operations to be as cheap
     as possible for your DMA buffer; this flag is implemented only on arm and sparc64.
     |'
+  id: totrans-130
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMA_COHERENT` | 使DMA缓冲区的缓存同步操作尽可能便宜；此标志仅在arm和sparc64上实现。 |'
 - en: '| `BUS_DMA_NOCACHE` | Prevents caching the DMA buffer, thereby causing all
     DMA transactions to be executed without reordering; this flag is implemented only
     on *amd64* and *i386*. |'
+  id: totrans-131
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMA_NOCACHE` | 防止缓存DMA缓冲区，因此导致所有DMA事务都执行而不重新排序；此标志仅在 *amd64* 和 *i386*
+    上实现。 |'
 - en: Note
+  id: totrans-132
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '`bus_dmamem_alloc` is used when you require a physically contiguous DMA buffer.'
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你需要一个物理上连续的DMA缓冲区时，使用 `bus_dmamem_alloc`。
 - en: The `bus_dmamem_free` function releases the memory at `vaddr` that was previously
     allocated by `bus_dmamem_alloc`. Then it tears down the DMA map `map`.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bus_dmamem_free` 函数释放由 `bus_dmamem_alloc` 之前分配的 `vaddr` 内存。然后它拆除了DMA映射 `map`。'
 - en: A Straightforward Example
+  id: totrans-135
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 一个简单的例子
 - en: The following pseudocode is a `device_attach` routine for a fictitious device
     that requires DMA. This pseudocode should demonstrate how to use `bus_dmamem_alloc`.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下伪代码是一个需要DMA的虚构设备的 `device_attach` 例程。此伪代码应演示如何使用 `bus_dmamem_alloc`。
 - en: '[PRE19]'
+  id: totrans-137
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: Although ![](httpatomoreillycomsourcenostarchimages1137505.png) `bus_dmamem_alloc`
     allocates ![](httpatomoreillycomsourcenostarchimages1137507.png) memory and creates
     a ![](httpatomoreillycomsourcenostarchimages1137509.png) DMA map, ![](httpatomoreillycomsourcenostarchimages1137511.png)
     loading that ![](httpatomoreillycomsourcenostarchimages1137515.png) memory into
     the ![](httpatomoreillycomsourcenostarchimages1137513.png) DMA map still needs
     to occur.
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然 ![更多](http://atomoreilly.com/source/nostarch/images/1137505.png) `bus_dmamem_alloc`
+    分配 ![更多](http://atomoreilly.com/source/nostarch/images/1137507.png) 内存并创建一个 ![更多](http://atomoreilly.com/source/nostarch/images/1137509.png)
+    DMA映射，![更多](http://atomoreilly.com/source/nostarch/images/1137511.png) 将该内存加载到![更多](http://atomoreilly.com/source/nostarch/images/1137513.png)
+    DMA映射中仍然需要发生。
 - en: Also, since `bus_dmamem_alloc` allocates contiguous memory, the `nsegments`
     argument must be ![](httpatomoreillycomsourcenostarchimages1137501.png) `1`. Likewise,
     the ![](httpatomoreillycomsourcenostarchimages1137499.png) `maxsize` and ![](httpatomoreillycomsourcenostarchimages1137503.png)
     `maxsegsz` arguments must be identical.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，由于 `bus_dmamem_alloc` 分配连续内存，`nsegments` 参数必须是 ![更多](http://atomoreilly.com/source/nostarch/images/1137501.png)
+    `1`。同样，![更多](http://atomoreilly.com/source/nostarch/images/1137499.png) `maxsize`
+    和 ![更多](http://atomoreilly.com/source/nostarch/images/1137503.png) `maxsegsz`
+    参数必须相同。
 - en: Lastly, since `nsegments` is `1`, ![](httpatomoreillycomsourcenostarchimages1137517.png)
     `callback` can be the `foo_callback` function shown in [Implementing DMA](ch12.html#implementing_dma
     "Implementing DMA") in [Implementing DMA](ch12.html#implementing_dma "Implementing
     DMA").
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，由于 `nsegments` 是 `1`，![更多](http://atomoreilly.com/source/nostarch/images/1137517.png)
+    `callback` 可以是 [实现DMA](ch12.html#implementing_dma "实现DMA") 中显示的 `foo_callback`
+    函数，见 [实现DMA](ch12.html#implementing_dma "实现DMA")。
 - en: Synchronizing DMA Buffers
+  id: totrans-141
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 同步DMA缓冲区
 - en: DMA buffers must be synchronized after each write completed by the CPU/driver
     or a device. The exact reason why is beyond the scope of this book. But it’s basically
     done to ensure that the CPU/driver and device have a consistent view of the DMA
     buffer.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: DMA 缓冲区必须在 CPU/驱动程序或设备完成每次写入操作后同步。确切的原因超出了本书的范围。但基本上是为了确保 CPU/驱动程序和设备对 DMA 缓冲区有一个一致的观点。
 - en: DMA buffers are synchronized with the `bus_dmamap_sync` function.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: DMA 缓冲区与 `bus_dmamap_sync` 函数同步。
 - en: '[PRE20]'
+  id: totrans-144
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: This function synchronizes the DMA buffer currently loaded in the DMA map `map`.
     The `dmat` argument is the DMA tag that `map` is based on. The `op` argument identifies
     the type of synchronization operation to perform. Valid values for this argument
     are shown in [Table 12-5](ch12s08.html#bus_underscore_dmamap_underscore_sync_sy
     "Table 12-5. bus_dmamap_sync Symbolic Constant").
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数同步当前加载在 DMA 映射 `map` 中的 DMA 缓冲区。`dmat` 参数是 `map` 所基于的 DMA 标签。`op` 参数标识要执行同步操作的类型。此参数的有效值显示在
+    [表 12-5](ch12s08.html#bus_underscore_dmamap_underscore_sync_sy "表 12-5. bus_dmamap_sync
+    符号常量") 中。
 - en: Table 12-5. bus_dmamap_sync Symbolic Constant
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 12-5. bus_dmamap_sync 符号常量
 - en: '| Constant | Description |'
+  id: totrans-147
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-148
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `BUS_DMASYNC_PREWRITE` | Used to synchronize after the CPU/driver writes
     to the DMA buffer |'
+  id: totrans-149
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMASYNC_PREWRITE` | 用于在 CPU/驱动程序写入 DMA 缓冲区后同步 |'
 - en: '| `BUS_DMASYNC_POSTREAD` | Used to synchronize after a device writes to the
     DMA buffer |'
+  id: totrans-150
   prefs: []
   type: TYPE_TB
+  zh: '| `BUS_DMASYNC_POSTREAD` | 用于在设备写入 DMA 缓冲区后同步 |'
 - en: Conclusion
+  id: totrans-151
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: 'This chapter detailed FreeBSD’s DMA management routines. These routines are
     primarily used by storage and network drivers, which are discussed in [Chapter 13](ch13.html
     "Chapter 13. Storage Drivers"), [Chapter 16](ch16.html "Chapter 16. Network Drivers,
     Part 1: Data Structures"), and [Chapter 17](ch17.html "Chapter 17. Network Drivers,
     Part 2: Packet Reception and Transmission").'
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章详细介绍了 FreeBSD 的 DMA 管理例程。这些例程主要用于存储和网络驱动程序，这些内容在 [第 13 章](ch13.html "第 13
+    章。存储驱动程序")、[第 16 章](ch16.html "第 16 章。网络驱动程序，第一部分：数据结构") 和 [第 17 章](ch17.html
+    "第 17 章。网络驱动程序，第二部分：数据包接收和传输") 中进行了讨论。
