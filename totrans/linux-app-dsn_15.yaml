@@ -1,45 +1,67 @@
 - en: '![](../images/285-1.jpg)'
+  id: totrans-0
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/285-1.jpg)'
 - en: '[**IMPLEMENTING YOUR SNMP MIB**](toc.html#chapter15)'
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**实现您的 SNMP MIB**](toc.html#chapter15)'
 - en: '![](../images/as.jpg)'
+  id: totrans-2
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/as.jpg)'
 - en: 'In this chapter we will implement the MIB we developed in Chapter 14 by writing
     an extension to the Net-SNMP agent to add support for the LAD-MIB. We’ll cover
     the following topics:'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将通过编写 Net-SNMP 代理的扩展来添加对 LAD-MIB 的支持，从而实现我们在第14章中开发的 MIB。我们将涵盖以下主题：
 - en: The Net-SNMP Agent
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: Net-SNMP代理
 - en: 'The MIB skeleton: mib2c'
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: MIB 框架：mib2c
 - en: 'The header file: ladProject.h'
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 头文件：ladProject.h
 - en: 'The code file: ladProject.c'
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 代码文件：ladProject.c
 - en: Makefile revisited
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 重新审视 Makefile
 - en: Debugging
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 调试
 - en: Traps
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 陷阱
 - en: Remember that our goal is to implement a working SNMP agent that supports our
     MIB. When queried for the objects we have defined, the agent will respond with
     the current values of those objects. We will also be able to assign values to
@@ -49,35 +71,54 @@
     13, you should be familiar with it). The snmptable command retrieves the ladAlarmTable
     from a system called myappliance using SNMPv2 and the community name *public;*
     then it displays the table row by row to make it easy to read.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 记住，我们的目标是实现一个支持我们 MIB 的工作的 SNMP 代理。当查询我们定义的对象时，代理将响应这些对象的当前值。我们还将能够为具有读写访问权限的对象分配值。例如，我们可以使用
+    snmptable 命令从 Alarm 表中检索值，如下所示。不要过于担心这个命令的格式（尽管如果你阅读了第13章，你应该熟悉它）。snmptable 命令使用
+    SNMPv2 和社区名称 *public;* 从名为 myappliance 的系统检索 ladAlarmTable，然后逐行显示表格，以便于阅读。
 - en: '![](../images/286-1.jpg)'
+  id: totrans-12
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/286-1.jpg)'
 - en: The SNMP commands will allow remote access to information kept within the ladd
     daemon’s internal data structures. As shown in Figure 15-1, SNMP is used between
     the remote system and the SNMP agent. The agent then uses PostgreSQL to request
     the information from RTA running within the ladd daemon.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: SNMP 命令将允许远程访问 ladd 守护进程内部数据结构中保存的信息。如图15-1所示，SNMP 用于远程系统和 SNMP 代理之间。然后代理使用
+    PostgreSQL 从 ladd 守护进程内运行的 RTA 请求信息。
 - en: '![](../images/286-2.jpg)'
+  id: totrans-14
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/286-2.jpg)'
 - en: '*Figure 15-1: SNMP agent as go-between*'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: '*图15-1：SNMP代理作为中间人*'
 - en: '**NOTE**'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: '**注意**'
 - en: '*You will notice some differences in file placement in this chapter compared
     with Chapter 13, because here we are designing the agent for the appliance itself.
     For clarity, we will be keeping our files under /opt rather than distributing
     them around the filesystem in their normal default locations.*'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: '*在本章中，你将注意到文件放置与第13章有所不同，因为在这里我们正在为设备本身设计代理。为了清晰起见，我们将保持我们的文件在/opt目录下，而不是在文件系统的正常默认位置周围分布。*'
 - en: '[**The Net-SNMP Agent**](toc.html#chapter15.1)'
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**Net-SNMP代理**](toc.html#chapter15.1)'
 - en: We’ll be extending the Net-SNMP agent, so we’ll need to download the source
     tarball, which we can find at [http://net-snmp.sourceforge.net](http://net-snmp.sourceforge.net/).
     As of this writing, version 5.2.1 is current, so we’ll retrieve net-snmp-5.2.1.tar.gz.
@@ -85,8 +126,12 @@
     you can just grab the most current version. The process for extending the agent
     that we will be describing in this chapter hasn’t changed significantly in all
     the time the we have been working with it (that is, since at least UCD-SNMP 4.1).
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将扩展 Net-SNMP 代理，因此我们需要下载源代码包，可以在[http://net-snmp.sourceforge.net](http://net-snmp.sourceforge.net/)找到。截至本文撰写时，版本
+    5.2.1 是当前的版本，因此我们将检索 net-snmp-5.2.1.tar.gz。毫无疑问，当你阅读这篇文章时，Net-SNMP 将会发布几个版本，但你可以直接获取最新版本。在本章中我们将描述的扩展代理的过程，在我们使用它的所有时间里（即至少自
+    UCD-SNMP 4.1 以来）并没有发生显著变化。
 - en: 'Our goal is to set up a way of building our agent that will make it easy to
     download a new release of Net-SNMP in the future and just drop it into a build.
     The plan is to create a Makefile that will untar Net-SNMP, copy the agent extensions
@@ -98,74 +143,118 @@
     the vanilla agent. This will allow us to test the process before we complicate
     things with our MIB. The following is a simplified version of the Makefile you’ll
     find on the CD that comes with this book:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们的目的是设置一种构建我们的代理的方式，这样我们将来就可以轻松地下载 Net-SNMP 的新版本，并将其直接放入构建中。计划是创建一个 Makefile，它会解压
+    Net-SNMP，将代理扩展复制到构建树中的正确位置，配置 Net-SNMP 代理以包含扩展，然后构建它。要升级到 Net-SNMP 的新版本，你只需要将新的
+    Net-SNMP 源代码 tarball 放入目录中，并更改定义 Net-SNMP 版本的 Makefile 中的那一行。我们还没有准备好我们的扩展，所以让我们先解压并构建纯代理。这将使我们能够在用
+    MIB 复杂化事情之前测试这个过程。以下是在本书附带的光盘中找到的简化版 Makefile：
 - en: '![](../images/287-1.jpg)'
+  id: totrans-21
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/287-1.jpg)'
 - en: If you are using a newer version of Net-SNMP, just drop your tarball into the
     same directory as the Makefile, change ![](../images/1.jpg) the NETSNMP_VERSION
     line to match your version, and continue with the instructions below.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你使用的是 Net-SNMP 的新版本，只需将你的 tarball 放入与 Makefile 相同的目录中，将 NETSNMP_VERSION 行更改为匹配你的版本，然后继续下面的说明。
 - en: We’ll put the Makefile and configure input files into the same directory as
     the tarball we just downloaded. Configure.input contains the interactive answers
     expected by the configure step. The -prefix option tells configure to use the
     /opt/snmp prefix to our file locations. Installation of Net-SNMP follows the familiar
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将把 Makefile 和 configure 输入文件放入我们刚刚下载的 tarball 的同一目录中。Configure.input 包含配置步骤期望的交互式答案。-prefix
+    选项告诉配置脚本使用 /opt/snmp 前缀来指定文件位置。Net-SNMP 的安装遵循大多数 Linux 源包的熟悉步骤，尽管我们将让 Makefile
+    为我们完成这些工作。
 - en: ./configure
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: ./configure
 - en: make
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: make
 - en: make install
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: make install
 - en: steps of most Linux source packages, though we will let the Makefile do this
     for us.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 步骤，尽管我们将让 Makefile 为我们完成这些工作。
 - en: 'Here’s what our configure.input looks like:'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 这就是我们的 configure.input 的样子：
 - en: <blank line>
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: （空白行）
 - en: '2'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: '2'
 - en: Not Set
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 未设置
 - en: Not Set
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 未设置
 - en: /var/log/snmpd.log
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: /var/log/snmpd.log
 - en: /var/net-snmp
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: /var/net-snmp
 - en: The first line must be blank because the configure script asks us to hit ENTER
     when we are ready to enter the input.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 第一行必须是空的，因为配置脚本要求我们在准备好输入时按回车键。
 - en: The 2 selects SNMPv2 as our default version of SNMP. This doesn’t really apply
     to the agent because it takes its cue from the requests received, but the Net-SNMP
     package contains the source for management applications like snmpget and snmpwalk,
     as well.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 2 选项选择 SNMPv2 作为我们的默认 SNMP 版本。这实际上并不适用于代理，因为它从接收到的请求中获取线索，但 Net-SNMP 软件包还包含了管理应用程序（如
+    snmpget 和 snmpwalk）的源代码。
 - en: The two Not Set lines are for system contact and system location (objects available
     in MIB-2). We will be overriding these values in our agent configuration file,
     so we’ll just set these objects to the string Not Set.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 两个“未设置”行用于系统联系人信息和系统位置（MIB-2 中可用的对象）。我们将在代理配置文件中覆盖这些值，因此我们只需将这些对象设置为字符串“未设置”。
 - en: The next two lines are the default log file and persistent storage locations.
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 下两行是默认的日志文件和持久存储位置。
 - en: Give this a try by typing **make**. It will build the Net-SNMP applications
     (snmpget, snmpwalk, etc.), the libraries, and the agent. If it doesn’t work, try
     executing the steps by hand, without the Makefile. First untar the tarball and
@@ -174,246 +263,369 @@
     from configure to see if you are missing something, like a library you need to
     install. If you don’t see anything wrong, type **make** (in the net-snmp.5.2.1
     directory) and watch for errors. You can’t move on until this works.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过输入 **make** 来尝试一下。它将构建 Net-SNMP 应用程序（snmpget、snmpwalk 等）、库和代理。如果不起作用，尝试手动执行这些步骤，而不使用
+    Makefile。首先解压 tarball 并进入它生成的目录。然后运行 **./configure** 并回答我们上面在 configure 输入中列出的问题。检查配置的输出，看看是否缺少某些内容，比如需要安装的库。如果没有看到任何问题，请在
+    net-snmp.5.2.1 目录中输入 **make** 并注意错误。除非这个工作正常，否则你不能继续。
 - en: Once you get make working, install Net-SNMP onto your development system. As
     root, type
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦make工作正常，就在你的开发系统上安装Net-SNMP。作为root用户，输入
 - en: make install
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: make install
 - en: This will install files in several directories under /opt/snmp.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将在/opt/snmp下的几个目录中安装文件。
 - en: $ ls /opt/snmp
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: $ ls /opt/snmp
 - en: bin/ include/ lib/ man/ sbin/ share/
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: bin/ include/ lib/ man/ sbin/ share/
 - en: The /opt/snmp directory tree is our staging area for the files we will need
     to copy to our appliance to get the agent working there. We won’t need the include
     or man directories on our appliance.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: /opt/snmp目录树是我们将需要复制到设备上的文件的临时区域，以使代理在那里工作。我们不需要设备上的include或man目录。
 - en: We may also decide to remove client applications like snmpget and snmpset from
     the bin directory on our appliance, but be sure *not* to remove snmptrap, since
     we will be using that to send traps from our appliance. The other commands may
     come in handy if we ever need to log in to the box for debugging or if we want
     to invoke them from the CLI or web interface for diagnostic purposes, but they
     are not necessary for the functioning of the agent or the sending of traps.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们也可以决定从我们的设备上的bin目录中移除客户端应用程序，如snmpget和snmpset，但请务必**不要**移除snmptrap，因为我们将会使用它从我们的设备发送陷阱。其他命令在需要登录到设备进行调试或从CLI或Web界面调用它们进行诊断时可能会很有用，但它们对于代理或发送陷阱的功能不是必需的。
 - en: The agent itself, snmpd, will be in the /opt/snmp/sbin directory, along with
     snmptrapd. We can remove snmptrapd, because it will not be needed on our appliance.
     You should keep it on your development system, though—it will come in handy when
     you want to test your ability to send traps.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 代理本身，snmpd，将在/opt/snmp/sbin目录中，与snmptrapd一起。我们可以移除snmptrapd，因为它在我们的设备上不需要。尽管如此，你仍然应该在开发系统上保留它——当你想要测试发送陷阱的能力时，它会很有用。
 - en: MIB files reside in /opt/snmp/share/snmp/mibs. They are not strictly necessary
     for the appliance, but there are reasons we may want to include them. First, we
     may want to simplify creation of the filters used to send traps (see the example
     on logmuxd and SNMP traps in Chapter 7). Second, we may want to deliver them on
     the appliance for use by the customer’s network management software.
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: MIB文件位于/opt/snmp/share/snmp/mibs。它们对于设备不是绝对必要的，但我们可能有一些原因想要包含它们。首先，我们可能想要简化创建用于发送陷阱的过滤器（参见第7章中关于logmuxd和SNMP陷阱的示例）。其次，我们可能想要将它们提供给客户方的网络管理软件使用。
 - en: 'If we want to use the human-readable names for numeric object identifiers (OIDs)
     in logmuxd filters, we will have to tell the snmptrap command where to find these
     MIB files. We can either add these options to the command line used to invoke
     snmptrap:'
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们想在logmuxd过滤器中使用数字对象标识符（OID）的易读名称，我们必须告诉snmptrap命令在哪里可以找到这些MIB文件。我们可以将这些选项添加到调用snmptrap的命令行中：
 - en: -m ALL -M /opt/snmp/share/snmp/mibs
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: -m ALL -M /opt/snmp/share/snmp/mibs
 - en: 'or make these environment variables available to it:'
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 或者使这些环境变量对它可用：
 - en: export MIBS=ALL
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: export MIBS=ALL
 - en: export MIBDIRS=/opt/snmp/share/snmp/mibs
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: export MIBDIRS=/opt/snmp/share/snmp/mibs
 - en: This tells the SNMP commands (snmpget, snmpset, snmpwalk, snmptrap, and so on)
     to use all the MIB files found in the /opt/snmp/share/snmp/mibs directory.
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 这告诉SNMP命令（snmpget、snmpset、snmpwalk、snmptrap等）使用在/opt/snmp/share/snmp/mibs目录中找到的所有MIB文件。
 - en: 'Although you may be removing things from this staging area before installing
     the software on your appliance, let’s not do that quite yet. We’ll need some of
     what’s there for creating our MIB extension. In fact, you should add /opt/snmp/bin
     to your environment variable, like so:'
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管在将软件安装到设备上之前，你可能需要从这个临时区域移除一些东西，但现在我们还不这样做。我们需要其中的一些内容来创建我们的MIB扩展。实际上，你应该像这样将/opt/snmp/bin添加到你的环境变量中：
 - en: export PATH=/opt/snmp/bin:$PATH
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: export PATH=/opt/snmp/bin:$PATH
 - en: Now it’s time to move on and create the agent extension and implement the MIB.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在是时候继续前进，创建代理扩展并实现MIB。
 - en: '[**The MIB Skeleton: mib2c**](toc.html#chapter15.2)'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**MIB骨架：mib2c**](toc.html#chapter15.2)'
 - en: Net-SNMP kindly provides a utility that can read an MIB file and produce skeleton
     code for an agent extension. Later in this chapter, we’ll show you how to flesh
     out this skeleton into a complete implementation of your MIB.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: Net-SNMP友好地提供了一个工具，可以读取MIB文件并为代理扩展生成骨架代码。在本章的后面部分，我们将向你展示如何将这个骨架扩展成一个完整的MIB实现。
 - en: '**NOTE**'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: '**注意**'
 - en: '*Net-SNMP provides multiple output code styles for mib2c; we will be using
     the older UCD-SNMP code style. The newer, so-called “MIB for Dummies” style is
     not what this chapter describes. We have chosen to use the older style because
     it’s sufficient for our needs (and it’s also where our experience lies).*'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: '*Net-SNMP 为 mib2c 提供了多种输出代码风格；我们将使用较旧的 UCD-SNMP 代码风格。较新的所谓“MIB for Dummies”风格不是本章所描述的内容。我们选择使用较旧的风格，因为它足以满足我们的需求（而且这也是我们的经验所在）。*'
 - en: Before we can run mib2c, you’ll need to install the SNMP Perl module, which
     is provided in the Net-SNMP tarball. When you ran make earlier, it decompressed
     this tarball and created the directory net-snmp-5.2.1 (or whatever version you
     used). Drop down into this directory and then to perl/SNMP. There you’ll find
     a README file to explain how to build and install the SNMP Perl module. Alternatively,
     you can install the libsnmp-perl package if one is provided by your Linux distribution.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们能够运行 mib2c 之前，您需要安装 SNMP Perl 模块，该模块包含在 Net-SNMP tarball 中。当您之前运行 make 命令时，它解压缩了这个
+    tarball 并创建了 net-snmp-5.2.1 目录（或您使用的任何版本）。进入这个目录，然后进入 perl/SNMP。在那里您会找到一个 README
+    文件，解释如何构建和安装 SNMP Perl 模块。或者，如果您提供的 Linux 发行版中有 libsnmp-perl 包，您也可以安装它。
 - en: 'We also need to make our MIB files (LADDIE-GROUP-SMI.txt and LAD-MIB.txt, which
     we created in Chapter 12) available to mib2c by copying them into the directory
     containing our other MIBs (/opt/snmp/share/ snmp/mibs). Or, if you prefer, you
     can add a period (.) to your MIBDIRS list like this:'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们还需要通过将它们复制到包含我们的其他 MIB 的目录 (/opt/snmp/share/snmp/mibs) 中，使我们的 MIB 文件（LADDIE-GROUP-SMI.txt
+    和 LAD-MIB.txt，我们在第 12 章中创建）可供 mib2c 使用。或者，如果您愿意，您可以将点 (.) 添加到您的 MIBDIRS 列表中，如下所示：
 - en: export MIBDIRS=.:/opt/snmp/share/snmp/mibs
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: export MIBDIRS=.:/opt/snmp/share/snmp/mibs
 - en: Now let’s run mib2c to generate the skeleton code. You’ll want to be in the
     same directory as your MIB files if you added the . to your directory path. Please
     note that we provide mib2c with a MIB module or OID, not the name of the MIB file.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在让我们运行 mib2c 生成骨架代码。如果您将 . 添加到您的目录路径中，您需要确保在您的 MIB 文件所在的目录中。请注意，我们向 mib2c 提供的是一个
+    MIB 模块或 OID，而不是 MIB 文件的名称。
 - en: '![](../images/290-1.jpg)'
+  id: totrans-66
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/290-1.jpg)'
 - en: 'In the middle of all this, you will see the following at line ![](../images/1.jpg):'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 在所有这些过程中，您将在第 ![](../images/1.jpg) 行看到以下内容：
 - en: '![](../images/291-1.jpg)'
+  id: totrans-68
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/291-1.jpg)'
 - en: We use option one because that’s where we have experience. You may want to try
     the newer and more flexible Net-SNMP type, but we don’t need that flexibility
     for what we’re doing here.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们使用第一种选项，因为我们有经验。您可能想尝试较新且更灵活的 Net-SNMP 类型，但在这里我们不需要这种灵活性。
 - en: '[**The Header File: ladProject.h**](toc.html#chapter15.3)'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**《头文件：ladProject.h**》](toc.html#chapter15.3)'
 - en: 'Two files have been generated for us: ladProject.c and ladProject.h. The header
     file, ladProject.h, is short and sweet, and we won’t need to bother ourselves
     with it further. Here’s what it looks like:'
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 为我们生成了两个文件：ladProject.c 和 ladProject.h。头文件 ladProject.h 简短且简洁，我们不需要进一步处理它。下面是它的样子：
 - en: '![](../images/291-2.jpg)'
+  id: totrans-72
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/291-2.jpg)'
 - en: These are prototypes for routines generated for us in the code file, ladProject.c.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些是 ladProject.c 代码文件中为我们生成的例程的原型。
 - en: '[**The Code File: ladProject.c**](toc.html#chapter15.4)'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**《代码文件：ladProject.c**》](toc.html#chapter15.4)'
 - en: 'The ladProject.c file is the one we’ll be modifying. Rather than describing
     the generated code and then making a second pass through it to add our modifications,
     we’ll just step through it, making our changes as we go. We’ll distinguish the
     code we add from what mib2c generated using bold text. Specifically, we need to
     make the following modifications to the generated skeleton code:'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: ladProject.c 文件是我们将要修改的文件。我们不会描述生成的代码，然后再进行第二次遍历来添加我们的修改，而是会逐步进行，在过程中进行修改。我们将使用粗体文本区分我们添加的代码和
+    mib2c 生成的代码。具体来说，我们需要对生成的骨架代码进行以下修改：
 - en: Include the header for libpq (the PostgreSQL library).
+  id: totrans-76
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 包含 libpq（PostgreSQL 库）的头文件。
 - en: Provide a function to connect to RTA in the ladd daemon.
+  id: totrans-77
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 ladd 守护进程中提供一个连接到 RTA 的函数。
 - en: Provide functions to read and write RTA tables over the connection to the ladd
     daemon.
+  id: totrans-78
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 提供函数以通过连接到 ladd 守护进程来读取和写入 RTA 表。
 - en: Provide code to read each scalar in the MIB.
+  id: totrans-79
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为 MIB 中的每个标量提供读取代码。
 - en: Provide code to read each table object in the ladAlarmTable.
+  id: totrans-80
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为 ladAlarmTable 中的每个表对象提供读取代码。
 - en: Provide a write function for each writable object in the MIB.
+  id: totrans-81
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 为 MIB 中的每个可写对象提供一个写函数。
 - en: '[***Includes***](toc.html#chapter15.5)'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***包含文件***](toc.html#chapter15.5)'
 - en: We begin by including the necessary header files. Remember, we will be marking
     our additions and modifications in bold.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们首先包括必要的头文件。记住，我们将用粗体标记我们的添加和修改。
 - en: '![](../images/292-1.jpg)'
+  id: totrans-84
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/292-1.jpg)'
 - en: Here we have accomplished our first goal by including ![](../images/1.jpg) the
     header file that defines the libpq PostgreSQL API.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们已经通过包含![图片](../images/1.jpg)定义libpq PostgreSQL API的头文件，实现了我们的第一个目标。
 - en: '[***The Base OID***](toc.html#chapter15.6)'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***基本OID***](toc.html#chapter15.6)'
 - en: In this code, the comment generated by mib2c basically says it all. This is
     the base OID for all the objects defined in our MIB.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 在此代码中，由mib2c生成的注释基本上已经说明了所有内容。这是我们MIB中定义的所有对象的基OID。
 - en: '![](../images/292-2.jpg)'
+  id: totrans-88
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/292-2.jpg)'
 - en: '[***MIB Objects Definitions***](toc.html#chapter15.7)'
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***MIB对象定义***](toc.html#chapter15.7)'
 - en: The next bit of code defines all the *leaf objects* in our MIB, by which we
     mean all the objects for which we will be returning values. A define is generated
     for each of these leaf objects to give a unique number to each object we will
     be processing. The name of the define is an all-uppercase version of the object
     name from the MIB file; for example, ladVersion becomes LADVERSION.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一段代码定义了我们MIB中的所有*叶对象*，我们指的是我们将返回值的对象。为这些叶对象中的每一个生成一个定义，为我们将要处理的每个对象赋予一个唯一的数字。定义的名称是MIB文件中对象名称的全大写版本；例如，ladVersion变为LADVERSION。
 - en: 'Each object also has its own entry in the ladProject_variables table (shown
     below), which provides the following information for the object:'
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个对象在ladProject_variables表中都有自己的条目（如下所示），为该对象提供以下信息：
 - en: A unique identifier to be used later in our case statements (the define name
     we just discussed)
+  id: totrans-92
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个将在我们后续的case语句中使用的唯一标识符（我们刚才讨论的define名称）
 - en: The data type
+  id: totrans-93
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 数据类型
 - en: Whether it is read-only or read-write
+  id: totrans-94
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 是否为只读或读写
 - en: The function that will be called to read the object’s value
+  id: totrans-95
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将要调用的读取对象值的函数
 - en: The OID suffix, which, when appended to the base OID, will give the complete
     OID of the object
+  id: totrans-96
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 当附加到基OID时，将给出对象完整OID的OID后缀
 - en: We find the raw output of mib2c to be a little hard to read because the defines
     for the unique identifier values are mixed in with the table row definitions.
     In an attempt to make this more accessible, we have rearranged it a bit to put
@@ -424,59 +636,89 @@
     to check the output. Ultimately, you will be responsible for the code working
     properly. First, let’s take a look at the code, and then we’ll discuss the problems
     we see.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们发现mib2c的原始输出有点难以阅读，因为唯一标识符值的定义与表行定义混合在一起。为了使它更容易访问，我们稍作整理，将所有定义放在一起，并将所有内容对齐在列中。不幸的是，mib2c没有为我们生成完美的代码，但我们将利用这一点来讲解应该生成的内容。像mib2c这样的工具是节省时间的伟大工具，但您应该始终意识到应该生成的内容，并记住检查输出。最终，您将负责代码正确运行。首先，让我们看看代码，然后我们将讨论我们看到的问题。
 - en: '![](../images/293-1.jpg)'
+  id: totrans-98
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/293-1.jpg)'
 - en: '![](../images/294-1.jpg)'
+  id: totrans-99
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/294-1.jpg)'
 - en: The first problem above is that the generated code includes ![](../images/1.jpg)
     ladTrapZoneId and ![](../images/2.jpg) ladTrapZoneName as readable objects, but
     it shouldn’t. These objects are only used in traps, and they are not readable
     or writable by the agent, so we have no code to write for them and will not need
     to indicate a callback for them here. We should remove these two lines.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述第一个问题是生成的代码包括![图片](../images/1.jpg)ladTrapZoneId和![图片](../images/2.jpg)ladTrapZoneName作为可读对象，但它们不应该。这些对象仅在陷阱中使用，并且代理无法读取或写入它们，因此我们不需要为它们编写代码，并且在这里也不需要指示回调。我们应该删除这两行。
 - en: 'Second, the OID suffix field is wrong for every object here. You append this
     suffix to the base OID (ladProject_variables_oid, defined in the previous section)
     to get the OID of the individual object. This is how we defined the base OID:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二，每个对象的OID后缀字段都是错误的。您将此后缀附加到基OID（ladProject_variables_oid，在上一节中定义）以获取单个对象的OID。这就是我们定义基OID的方式：
 - en: '![](../images/294-2.jpg)'
+  id: totrans-102
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/294-2.jpg)'
 - en: 'So, for example, the OID for ladAlarmState in the generated code should be:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，在生成的代码中，ladAlarmState的OID应该是：
 - en: '{ 1, 3, 6, 1, 4, 1, 23528, 1, 1, 1, 1, 5 };'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: '{ 1, 3, 6, 1, 4, 1, 23528, 1, 1, 1, 1, 5 };'
 - en: Let’s see if this is right. We can check it by running snmptranslate.
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们看看这是否正确。我们可以通过运行snmptranslate来检查它。
 - en: $ snmptranslate -On LAD-MIB:ladAlarmState .1.3.6.1.4.1.23528.1.1.1.2.1.1.5
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: $ snmptranslate -On LAD-MIB:ladAlarmState .1.3.6.1.4.1.23528.1.1.1.2.1.1.5
 - en: That’s certainly not right. We’re missing two nodes from our OID hierarchy.
     If you perform this snmptranslate test on each of the scalars in the LAD-MIB,
     you’ll find they are all missing the numbers for ladSystem (1) and ladSystemScalars
     (1). If you repeat the test for the table columns, you’ll see that they are missing
     ladSystem (1) and ladSystemTables (2). This is like missing a few directory levels
     from a file pathname.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 这肯定是不对的。我们缺少OID层次结构中的两个节点。如果你对LAD-MIB中的每个标量执行此snmptranslate测试，你会发现它们都缺少ladSystem
+    (1)和ladSystemScalars (1)的数字。如果你对表格列重复此测试，你会发现它们缺少ladSystem (1)和ladSystemTables
+    (2)。这就像从文件路径名中缺少几个目录级别一样。
 - en: 'Let’s fix this table before we move on. Here is the corrected code, with the
     added numbers in bold:'
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们继续之前，让我们修复这个表格。以下是修正后的代码，其中添加的数字已加粗：
 - en: '![](../images/294-3.jpg)'
+  id: totrans-109
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/294-3.jpg)'
 - en: '![](../images/295-1.jpg)'
+  id: totrans-110
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/295-1.jpg)'
 - en: 'That’s better. We’ve removed the objects from the trapInfo section, corrected
     the OIDs, and corrected the length of the suffix. Note also that we had to change
     the struct type we are using as a template for this array from variable4 to variable7,
@@ -488,27 +730,41 @@
     can find these structures defined in var_struct.h in the directory include/net-snmp/agent,
     under the net-snmp-5.2.1 directory. You can look here for what’s available in
     case you need an even longer struct. See how variable7 is defined:'
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 这样就好多了。我们已经从trapInfo部分移除了对象，修正了OID，并修正了后缀的长度。注意，我们不得不将我们用作此数组模板的结构类型从variable4更改为variable7，因为我们的OID现在更长。Net-SNMP头文件为不同长度的OID提供了几个不同的结构。你不想使用过多的内存，但你确实需要一个足够长的结构来容纳你将要定义的最长后缀。当我们将我们的后缀长度从三个增加到五个用于表格对象时，我们超过了variable4的长度，下一个更长的就是variable7。你可以在net-snmp-5.2.1目录下的include/net-snmp/agent目录中的var_struct.h文件中找到这些结构。如果你需要更长的结构，你可以在这里查看可用的选项。看看variable7是如何定义的：
 - en: '![](../images/295-2.jpg)'
+  id: totrans-112
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/295-2.jpg)'
 - en: Notice the length of ![](../images/1.jpg) the name field.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意 ![](../images/1.jpg) 名称字段的长度。
 - en: '[***RTA Access Routines***](toc.html#chapter15.8)'
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***RTA访问例程***](toc.html#chapter15.8)'
 - en: 'Now we need to insert the functions we’ll be using to connect and communicate
     with the ladd daemon: lad_connect(), query(), and update().'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们需要插入我们将要使用的连接和与ladd守护进程通信的函数：lad_connect()、query()和update()。
 - en: '![](../images/295-3.jpg)'
+  id: totrans-116
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/295-3.jpg)'
 - en: '![](../images/296-1.jpg)'
+  id: totrans-117
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/296-1.jpg)'
 - en: We have defined ![](../images/1.jpg) a global variable to hold the handle for
     our connection to Laddie and ![](../images/2.jpg) the function to establish this
     connection, lad_connect. Notice the use of PQconnectdb, PQStatus, PQerrorMessage,
@@ -527,8 +783,10 @@
     confusion to do so. We only make the change in these examples to prevent line
     wrap, due to the limited horizontal space on a book’s printed page. You won’t
     need to do this in your code.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们定义了一个全局变量来保存我们与Laddie的连接句柄以及建立此连接的函数，lad_connect。注意PQconnectdb、PQStatus、PQerrorMessage和PQfinish的使用。这些是libpq中提供的函数；你可以在PostgreSQL为这个库提供的文档中了解更多关于它们的信息。基本上，我们正在尝试连接到本地主机的8888端口（ladd守护进程决定使用的端口）。如果失败，我们返回资源（PQfinish），使用我们之前看到的DEBUGMSGTL宏记录错误信息，并返回一个错误。否则，我们返回成功。请注意，DEBUGMSGTL需要一个格式语句和像printf一样的参数，但它需要一个额外的括号对。我们在DEBUGMSGTL调用中用较短的LAD替换了默认的ladProject字符串，只是为了在我们的示例中节省一些水平空间。下面你将看到的未更改的生成代码默认使用ladProject。你应该在你的代码中保持这些一致性；也就是说，如果你添加新的DEBUGMSGTL语句，使用mib2c生成的相同值。你不需要保持DEBUGMSGTL字符串与你的项目名称一致，但这样做可以避免混淆。我们只在这些示例中做出更改，以防止由于书籍打印页面的有限水平空间而导致的换行。你不需要在你的代码中这样做。
 - en: We follow this with our function to read values from RTA tables. You pass it
     the table and field names, a filter string (you might use this to select a table
     row), options, a buffer to return the value from the table, and the length of
@@ -538,14 +796,20 @@
     MIB object could require reading multiple RTA tables—that is, there needn’t be
     a one-to-one correspondence between RTA fields and MIB objects—our MIB for Laddie
     does not require this.
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们接着使用我们的函数从RTA表中读取值。你需要传递表名和字段名、一个过滤器字符串（你可能用它来选择表行）、选项、一个用于从表中返回值的缓冲区，以及该缓冲区的长度。我们没有为一次从RTA表中查询多个字段做出任何准备。（这实际上并不是一个问题，因为Net-SNMP一次只会传递给我们一个MIB对象来读取。）虽然单个MIB对象可能需要读取多个RTA表——也就是说，RTA字段和MIB对象之间不需要一一对应——但我们为Laddie准备的MIB不需要这样做。
 - en: '![](../images/296-2.jpg)'
+  id: totrans-120
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/296-2.jpg)'
 - en: '![](../images/297-1.jpg)'
+  id: totrans-121
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/297-1.jpg)'
 - en: We start by checking that ![](../images/1.jpg) our connection to Laddie is still
     valid. If it is not, we reconnect by calling lad_connect(). Then we construct
     our query string and ![](../images/2.jpg) execute the query using Pqexec(). The
@@ -556,93 +820,135 @@
     Otherwise, we extract the first value returned (there should only be one, in our
     case), return it in the buffer provided to us, then ![](../images/4.jpg) return
     success.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们首先检查![图片](../images/1.jpg)我们的Laddie连接是否仍然有效。如果不是，我们通过调用lad_connect()重新连接。然后我们构造我们的查询字符串，并使用Pqexec()执行查询。PostgreSQL库的应用程序编程接口（API）允许你在单个查询中请求多个值，这就是为什么结果以元组列表的形式返回。我们检查我们的元组是否正常。如果不正常，我们清理，返回资源，并![图片](../images/3.jpg)向我们的调用者返回一个错误。否则，我们提取返回的第一个值（在我们的情况下，应该只有一个），将其返回给我们提供的缓冲区，然后![图片](../images/4.jpg)返回成功。
 - en: The code below is very similar to the query routine above, but it builds an
     update request for writing to the field, then passes it to libpq. This is the
     routine our MIB write routines will call.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 下面的代码与上面的查询例程非常相似，但它构建了一个更新请求以写入字段，然后将其传递给 libpq。这是我们 MIB 写入例程将调用的例程。
 - en: '![](../images/297-2.jpg)'
+  id: totrans-124
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/297-2.jpg)'
 - en: '![](../images/298-1.jpg)'
+  id: totrans-125
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/298-1.jpg)'
 - en: We should point out that these are just simple, generic routines for reading
     from and writing to a PostgreSQL database and, thus, RTA tables. There is nothing
     SNMP-specific or Laddie-specific about them. You could use them in any application
     written in C that needs to access RTA tables from another application on the same
     system—the only thing you’d need to change is the port number.
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们应该指出，这些只是从 PostgreSQL 数据库读取和写入的简单、通用例程，因此是 RTA 表。它们与 SNMP 或 Laddie 特定的没有任何关系。您可以在任何用
+    C 编写的应用程序中使用它们，该应用程序需要从同一系统上的另一个应用程序访问 RTA 表——您唯一需要更改的是端口号。
 - en: '[***The Initialization Routine***](toc.html#chapter15.9)'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***初始化例程***](toc.html#chapter15.9)'
 - en: Now we come to the fairly simple initialization routine that mib2c generated
     for us. Notice that we made no changes to the generated code. We could have put
     a call to lad_connect() here, but we refrained, for the sake of simplicity. Our
     first call to the query() or update() routines we defined above will detect that
     the connection does not exist and then create it for us.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们来到了 mib2c 为我们生成的相当简单的初始化例程。请注意，我们没有对生成的代码进行任何修改。我们本可以在这里调用 lad_connect()，但我们为了简单起见而没有这样做。我们定义的
+    query() 或 update() 例程的第一个调用将检测到连接不存在，然后为我们创建它。
 - en: '![](../images/298-2.jpg)'
+  id: totrans-129
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/298-2.jpg)'
 - en: '![](../images/299-1.jpg)'
+  id: totrans-130
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/299-1.jpg)'
 - en: The ![](../images/1.jpg) REGISTER_MIB line will register your OID subtree with
     the central agent code so it will know to call you to read and write the objects
     in this subtree. Notice that we had to change the variable4 to variable7 here,
     as well.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: '![](../images/1.jpg) REGISTER_MIB 行将您的 OID 子树注册到中央代理代码中，以便它知道调用您来读取和写入此子树中的对象。请注意，我们在这里也必须将
+    variable4 更改为 variable7。'
 - en: '[***The Scalars***](toc.html#chapter15.10)'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***标量***](toc.html#chapter15.10)'
 - en: The next routine is where all reads of scalars are processed. *Scalars* are
     leaf objects in the MIB (that is, they are not accessed by indexing into a table).
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一个例程是处理所有标量读取的地方。*标量* 是 MIB 中的叶对象（即，它们不是通过索引表来访问的）。
 - en: 'Before we dive into this function, let’s take a moment to look at the input
     parameters. They are described quite nicely in the AGENT.txt file that is provided
     with the Net-SNMP package (highly recommended reading, by the way), but we’ll
     summarize them here:'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们深入这个函数之前，让我们花一点时间看看输入参数。它们在 Net-SNMP 软件包提供的 AGENT.txt 文件中描述得相当好（顺便说一句，这是一本非常值得阅读的书籍），但我们将在这里总结它们：
 - en: vp is a pointer to the relevant entry in the array we discussed in the section
     “MIB Objects Definitions” on page 268.
+  id: totrans-135
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: vp 是指向我们在第 268 页“MIB 对象定义”部分讨论的数组中相关条目的指针。
 - en: name is the OID from the request, and length is the length of this OID.
+  id: totrans-136
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: name 是请求中的 OID，length 是此 OID 的长度。
 - en: exact indicates whether you are processing a request for the exact OID passed
     to you, like a GET or SET, or one that requires you to find the OID to process,
     like a GETNEXT. (GETNEXT is why name and length are also output parameters. You
     have to set them appropriately for GETNEXT requests to indicate the OID for which
     you are returning a value.)
+  id: totrans-137
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: exact 表示您是否正在处理一个请求精确 OID，如 GET 或 SET，或者需要您找到 OID 来处理，如 GETNEXT。（GETNEXT 是为什么名称和长度也是输出参数。您必须为
+    GETNEXT 请求适当地设置它们，以指示您返回值的 OID。）
 - en: var_len is an output parameter that the function must set to the length of the
     data being returned.
+  id: totrans-138
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: var_len 是一个输出参数，该函数必须将其设置为返回数据的长度。
 - en: write_method is also an output parameter and is used to point to the function
     that will handle a SET for any of the OIDs you have made SET-able.
+  id: totrans-139
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: write_method 也是一个输出参数，用于指向将处理任何您已设置为可 SET 的 OID 的 SET 的函数。
 - en: The function returns the value of the data requested, or a NULL if the data
     is not available.
+  id: totrans-140
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 函数返回请求的数据值，如果数据不可用则返回 NULL。
 - en: Now let’s tackle the body of the function. We have reformatted some of the lines
     to better fit the printed page, but otherwise, most of this routine remains as
     it was generated. We have highlighted the few lines that needed to be added or
@@ -650,17 +956,27 @@
     can see, very little work needs to be done in the SNMP agent to retrieve the readable
     values in our MIB. Each object requires a single access of a field in Laddie’s
     RTA-accessible tables.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们来处理函数的主体部分。我们已对一些行进行了重新格式化，以便更好地适应打印页面，但除此之外，大部分常规操作保持原样。我们突出显示了需要添加或更改的几行，以便从
+    Laddie 守护进程的 RTA 表中检索值。如您所见，在 SNMP 代理中需要做的工作非常少，以检索我们 MIB 中的可读值。每个对象都需要对 Laddie
+    的 RTA 可访问表中的一个字段进行单次访问。
 - en: '![](../images/299-2.jpg)'
+  id: totrans-142
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/299-2.jpg)'
 - en: '![](../images/300-1.jpg)'
+  id: totrans-143
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/300-1.jpg)'
 - en: '![](../images/300-2.jpg)'
+  id: totrans-144
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/300-2.jpg)'
 - en: Our only changes are in the switch statement. We call our query() routine to
     retrieve values from RTA tables in Laddie to fulfill the request. The value of
     ladVersion comes from the version field of Laddie’s Config table. We added ![](../images/1.jpg)
@@ -668,73 +984,109 @@
     purposes. Each row has a version field, but we only want one answer to our request,
     so we use the option LIMIT 1\. We also want the second row of the table, so we
     add the option OFFSET 1.
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们唯一的更改是在 switch 语句中。我们调用我们的 query() 例程从 Laddie 的 RTA 表中检索值以满足请求。ladVersion
+    的值来自 Laddie 配置表的版本字段。我们添加了 ![图片](../images/1.jpg) 选项 LIMIT 1 OFFSET 1，因为配置表有多个行用于不同的目的。每一行都有一个版本字段，但我们只想得到一个答案，所以我们使用选项
+    LIMIT 1。我们还想要表的第二行，所以我们添加了选项 OFFSET 1。
 - en: We don’t have any such problem with the number of zones, which we take simply
     from ![](../images/3.jpg) the nrows (number of rows) field in ![](../images/2.jpg)
     the rta_tables table, but we do have to use the filter parameter to query() and
     select the row for which ![](../images/4.jpg) the name field is Zone. The rta_tables
     table has a row for every RTA table in the ladd daemon, so we can just go to the
     row describing the Zone table to find the number of rows.
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于区域数量，我们没有遇到任何问题，我们直接从 ![图片](../images/3.jpg) rta_tables 表中的 nrows（行数）字段获取，但我们必须使用
+    filter 参数来 query() 和选择 name 字段为 Zone 的行。rta_tables 表为 ladd 守护进程中的每个 RTA 表都有一个行，因此我们可以直接访问描述
+    Zone 表的行以找到行数。
 - en: '[***Reading the Alarm Table***](toc.html#chapter15.11)'
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**读取警报表**](toc.html#chapter15.11)'
 - en: The var_ladAlarmTable() function processes reads of objects in the ladAlarmTable.
     Again, most of our work will be to add code to the switch statement. The main
     difference in routines for reading tables is the need to handle the index to the
     table row and the determination of the table size.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: var_ladAlarmTable() 函数处理 ladAlarmTable 中的对象读取。同样，我们的大部分工作将是向 switch 语句中添加代码。读取表例程的主要区别在于需要处理表行索引和确定表大小。
 - en: '![](../images/301-1.jpg)'
+  id: totrans-149
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/301-1.jpg)'
 - en: 'The beginning of var_ladAlarmTable looks a lot like var_ladProject, where we
     implemented our scalars. All we’ve done so far is add a few local variables, specifically:'
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: var_ladAlarmTable 的开头与 var_ladProject 非常相似，我们在那里实现了我们的标量。我们迄今为止所做的一切只是添加了一些局部变量，具体如下：
 - en: '![](../images/1.jpg) table_size, which will hold the number of rows in our
     table.'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图片](../images/1.jpg) table_size，它将保存我们表中的行数。'
 - en: '![](../images/2.jpg) table_index, which shows the table row we want to retrieve.'
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图片](../images/2.jpg) table_index，它显示我们想要检索的表行。'
 - en: '![](../images/3.jpg) filter, which is what we will pass to query() to tell
     it which row we want.'
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图片](../images/3.jpg) filter，这是我们传递给 query() 的，以告诉它我们想要哪一行。'
 - en: '![](../images/302-1.jpg)'
+  id: totrans-154
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/302-1.jpg)'
 - en: This should be familiar from our discussion of LADNUMBEROFZONES in the section
     “The Scalars” on page 275\. We need the length of the table for our processing
     below. Notice that the reaction to a failure to retrieve the table length is ![](../images/1.jpg)
     returning NULL. This should never fail, but we still need to cover this case.
     If we fail to get the length of the table, the agent will just bypass this table
     as if it didn’t exist when someone walks our MIB.
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 这应该在我们对第 275 页“标量”部分中 LADNUMBEROFZONES 的讨论中很熟悉。我们需要表的长度来处理下面的操作。请注意，对于无法检索表长度的情况，反应是
+    ![图片](../images/1.jpg) 返回 NULL。这不应该失败，但我们仍然需要处理这种情况。如果我们无法获取表的长度，代理将像它不存在一样绕过此表，当有人遍历我们的
+    MIB 时。
 - en: '![](../images/302-2.jpg)'
+  id: totrans-156
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/302-2.jpg)'
 - en: In the code above we take advantage of ![](../images/1.jpg) the header_simple_table()
     function provided by Net-SNMP. The AGENT.txt file defines a *simple table* as
     one that is singly indexed by an integer running from 1 to some determinable maximum
     value; all rows within that range are valid (no holes) and the data can be retrieved
     directly—for example, by indexing into an underlying data structure, such as our
     RTA Zone table.
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 在上面的代码中，我们利用了Net-SNMP提供的![](../images/1.jpg) header_simple_table()函数。AGENT.txt文件定义了一个*简单表*，它由一个从1开始到某个可确定的最大值的整数单索引；该范围内的所有行都是有效的（没有空隙），数据可以直接检索——例如，通过索引到底层数据结构，如我们的RTA区域表。
 - en: The comment block was generated by mib2c, and it includes a constant called
     TABLE_SIZE that we have replaced with the variable table_size, as we discussed
     earlier.
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 注释块是由mib2c生成的，它包括一个名为TABLE_SIZE的常量，我们将其替换为前面讨论的变量table_size。
 - en: '![](../images/302-3.jpg)'
+  id: totrans-159
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/302-3.jpg)'
 - en: We simply ![](../images/1.jpg) take our table index from the end of our OID.
     The OID of the *instance* of an object is the OID of the *object definition,*
     suffixed by the instance index. In the case of any simple table, as defined above,
@@ -743,69 +1095,101 @@
     the Zone table. We are getting all of our values for the objects in the ladAlarmTable
     from the Zone table, so we can just ![](../images/2.jpg) create this filter once
     and use it in all of our queries.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们简单地![](../images/1.jpg)从我们的OID末尾获取表索引。对象的*实例*的OID是对象定义的OID，后跟实例索引。在任何简单表中，如上所述，实例索引将是表行号（第一行从1开始，而不是0）。然后我们使用这个索引来创建查询区域表的过滤字符串。我们正在从区域表获取ladAlarmTable中对象的全部值，因此我们只需![](../images/2.jpg)创建这个过滤字符串一次，并在所有查询中使用它。
 - en: The rest of the routine (below) is a switch statement indexed by the object
     requested.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下（下方）的常规操作是一个根据请求的对象进行索引的切换语句。
 - en: '![](../images/303-1.jpg)'
+  id: totrans-162
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/303-1.jpg)'
 - en: '![](../images/303-2.jpg)'
+  id: totrans-163
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/303-2.jpg)'
 - en: '![](../images/304-1.jpg)'
+  id: totrans-164
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/304-1.jpg)'
 - en: In each of the cases, we query some field in the Zone table to get the value
     in our switch statement. If the query fails, we break out of the switch and return
     NULL, which tells the agent this value is not retrievable.
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 在每个情况下，我们查询区域表中的某个字段以获取切换语句中的值。如果查询失败，我们将跳出切换并返回NULL，这告诉代理此值无法检索。
 - en: Another thing to notice here is that we have to return a write_method for each
     of the objects we have defined as having read-write access. Each writable object
     has its own write method—that is, a pointer to the routine called to handle SETs.
     Whenever a write (snmpset) is done, the main agent code first calls the read routine
     to find the appropriate write routine.
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一点需要注意的地方是，我们必须为每个我们定义为具有读写访问权限的对象返回一个write_method。每个可写对象都有自己的写入方法——即指向处理SET调用的例程的指针。每当进行写入（snmpset）操作时，主代理代码首先调用读取例程以找到适当的写入例程。
 - en: '[***Writing the Alarm Table***](toc.html#chapter15.12)'
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**编写警报表**](toc.html#chapter15.12)'
 - en: Each of the write routines for writable objects looks basically the same, so
     we’ll just take the ladAlarmEnable object as an example.
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于可写对象的每个写入例程看起来基本上都一样，所以我们只需以ladAlarmEnable对象为例。
 - en: 'The write routines all center around a switch statement selecting between different
     processing based on the action parameter. The cases in the switch will always
     be as follows:'
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: 写入例程都围绕一个基于动作参数选择不同处理的切换语句。切换语句中的情况将始终如下：
 - en: RESERVE1
+  id: totrans-170
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: RESERVE1
 - en: RESERVE2
+  id: totrans-171
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: RESERVE2
 - en: FREE
+  id: totrans-172
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: FREE
 - en: ACTION
+  id: totrans-173
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: ACTION
 - en: UNDO
+  id: totrans-174
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: UNDO
 - en: COMMIT
+  id: totrans-175
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: COMMIT
 - en: Writing is much more complex than reading. When the agent receives an SNMPSET
     command for one of your objects, the read code we discussed above will be called
     to return the write_method (a pointer to the write routine for the specific object).
@@ -820,109 +1204,170 @@
     at least do your best, and keep this in mind. More information on this subject
     is provided with the Net-SNMP package in the AGENT.txt file in the top directory.
     Here is the code we have modified for Laddie’s agent.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 写入比读取复杂得多。当代理接收到针对您的对象的 SNMPSET 命令时，上面讨论的读取代码将被调用来返回 write_method（特定对象的写入例程的指针）。然后，该写入函数将每次使用不同的操作参数重复调用。如果一切顺利，写入方法将依次调用
+    RESERVE1、RESERVE2、ACTION 和 COMMIT。第二个 RESERVE 是为了在接收到多个对象的写入时允许对象之间的依赖性。如果任一 RESERVE
+    返回失败，您将被调用 FREE 以释放任何分配的资源。对于在处理过程中进一步失败的情况，提供了撤销。您必须承诺（真心实意地希望如此）撤销不能失败，这样您的设置就不会变得不一致——至少要尽力而为，并牢记这一点。关于这个主题的更多信息可以在
+    Net-SNMP 软件包的顶级目录中的 AGENT.txt 文件中找到。以下是我们对 Laddie 代理修改的代码。
 - en: '![](../images/305-1.jpg)'
+  id: totrans-177
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/305-1.jpg)'
 - en: We have changed the code generated by mib2c to make value static and to add
     another static variable to hold a saved value. This function will be called repeatedly
     with a sequence of action parameters, so we can save some information from call
     to call.
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已将 mib2c 生成的代码更改为使值静态，并添加另一个静态变量来保存保存的值。此函数将使用一系列操作参数重复调用，因此我们可以从调用到调用保存一些信息。
 - en: '![](../images/305-2.jpg)'
+  id: totrans-179
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/305-2.jpg)'
 - en: These should look familiar from our scalar and ladAlarmTable queries, above.
     Here, we’ll be using them for both queries and updates.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些应该与上面我们的标量和 ladAlarmTable 查询看起来很熟悉。这里，我们将使用它们进行查询和更新。
 - en: '**table_index = name[name_len-1];**'
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: '**table_index = name[name_len-1];**'
 - en: This should look familiar, too. We’re grabbing the table index from the end
     of the OID.
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 这也应该很熟悉。我们从 OID 的末尾获取表索引。
 - en: '![](../images/305-3.jpg)'
+  id: totrans-183
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/1.jpg)'
 - en: '![](../images/306-1.jpg)'
+  id: totrans-184
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/306-1.jpg)'
 - en: The RESERVE1 action checks the value type and length for accuracy. The code
     to check for wrong type and wrong length was generated for us, but we’ve changed
     it a bit, replacing the printfs with DEBUGMSGTL macros. We’ve also added ![](../images/1.jpg)
     a range check for the value being written. The enable value should always be either
     0 or 1.
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: RESERVE1 动作检查值类型和长度以确保准确性。用于检查错误类型和错误长度的代码已为我们生成，但我们稍作修改，将 printf 替换为 DEBUGMSGTL
+    宏。我们还添加了对写入值范围的检查。启用值应始终为 0 或 1。
 - en: '![](../images/306-2.jpg)'
+  id: totrans-186
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/306-2.jpg)'
 - en: In Laddie we don’t have any use for RESERVE2 and FREE. Normally, RESERVE2 would
     be used for checking interdependencies between the objects in the var-bind list
     of the SNMP SET, and FREE would be used to free any resources we tied up temporarily,
     but neither of these apply to our Laddie MIB. No code is highlighted in RESERVE2
     because we didn’t add anything. Even the comments were generated for us by mib2c.
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Laddie 中，我们不需要使用 RESERVE2 和 FREE。通常，RESERVE2 会用于检查 SNMP SET 的 var-bind 列表中对象的相互依赖性，而
+    FREE 会用于释放我们暂时占用的任何资源，但这两者都不适用于我们的 Laddie MIB。在 RESERVE2 中没有突出显示代码，因为我们没有添加任何内容。甚至注释也是由
+    mib2c 生成的。
 - en: '![](../images/306-3.jpg)'
+  id: totrans-188
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/306-3.jpg)'
 - en: In ACTION, we are retrieving the current value and saving it in saved_value
     before we write the new value to the RTA Zone table. If we run into trouble, we
     return an error. The value we save may be used in the UNDO case.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 ACTION 中，我们在将新值写入 RTA Zone 表之前，从当前值中检索并保存到 saved_value 中。如果我们遇到麻烦，我们将返回一个错误。我们保存的值可能在撤销情况下使用。
 - en: '![](../images/307-1.jpg)'
+  id: totrans-190
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/307-1.jpg)'
 - en: We UNDO by writing the saved value back, but only if ACTION got as far as retrieving
     the old value.
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们通过将保存的值写回来实现撤销，但前提是 ACTION 已经检索到旧值。
 - en: '![](../images/307-2.jpg)'
+  id: totrans-192
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/307-2.jpg)'
 - en: We have nothing to do in the COMMIT case. ACTION already wrote the value to
     the RTA table in the Laddie daemon.
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 在COMMIT案例中，我们没有什么要做。ACTION已经将值写入Laddie守护进程的RTA表中。
 - en: '![](../images/307-3.jpg)'
+  id: totrans-194
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/307-3.jpg)'
 - en: If we didn’t return an error before this point, we return a successful completion.
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果在此点之前我们没有返回错误，我们就返回成功的完成。
 - en: All of the other write routines look just like this, so that wraps up our discussion
     of the LAD-MIB implementation. The next step is to build it.
+  id: totrans-196
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有其他写入例程看起来都像这样，因此我们关于LAD-MIB实现的讨论到此结束。下一步是构建它。
 - en: '[**Makefile Revisited**](toc.html#chapter15.13)'
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**重新审视Makefile**](toc.html#chapter15.13)'
 - en: In “The Net-SNMP Agent” on page 262, we used a Makefile to generate our agent.
     Now we just have to modify this Makefile to include our LAD-MIB code.
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: 在“Net-SNMP代理”的第262页中，我们使用Makefile生成我们的代理。现在我们只需修改这个Makefile以包含我们的LAD-MIB代码。
 - en: '![](../images/307-4.jpg)'
+  id: totrans-199
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/307-4.jpg)'
 - en: '![](../images/308-1.jpg)'
+  id: totrans-200
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/308-1.jpg)'
 - en: The changes are fairly minor. We’ve added two lines to the setup case to ![](../images/1.jpg)
     create the lad directory under agent/mibgroup and ![](../images/2.jpg) copy our
     ladProject header and C file there.
+  id: totrans-201
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些更改相当微小。我们在设置案例中添加了两行来在agent/mibgroup下创建lad目录，并将我们的ladProject头文件和C文件复制到那里！[](../images/1.jpg)
 - en: The config case ![](../images/3.jpg) adds "-lpq" to LDFLAGS to tell the linker
     to include libpq for the PostgreSQL code used by our update and query routines.
     We also ![](../images/4.jpg) tell configure to include our MIB in the build.
+  id: totrans-202
   prefs: []
   type: TYPE_NORMAL
+  zh: 配置案例！[](../images/3.jpg) 将 "-lpq" 添加到LDFLAGS中，以告诉链接器包含用于我们更新和查询例程的PostgreSQL代码的libpq库。我们还！[](../images/4.jpg)
+    告诉configure在构建中包含我们的MIB。
 - en: That’s it! If Net-SNMP releases new security improvements, bug fixes, or new
     features, all we have to do is drop a new source tarball into the build directory,
     change the NETSNMP_VERSION line in the Makefile, and rebuild. Each Net-SNMP release
@@ -930,8 +1375,10 @@
     was still UCD-SNMP, and it has been blissfully easy to roll a new Net-SNMP version
     into new releases of our appliance software. For this (among other things) we
     are eternally grateful to the maintainers of UCD/NET-SNMP.
+  id: totrans-203
   prefs: []
   type: TYPE_NORMAL
+  zh: 就这些！如果Net-SNMP发布了新的安全改进、错误修复或新功能，我们只需要将新的源tarball放入构建目录，更改Makefile中的NETSNMP_VERSION行，然后重新构建。自从我们开始使用Net-SNMP以来，每个Net-SNMP版本都保持了向后兼容性，当时Net-SNMP还是UCD-SNMP，将新的Net-SNMP版本滚动到我们的设备软件的新版本中一直是一件令人愉快的事情。为此（以及其他原因），我们永远感激UCD/NET-SNMP的维护者。
 - en: In Chapter 14 we mentioned that our SNMP agent uses the old style, non-RTA configuration
     method (that is, a .conf file somewhere under /etc). You may have wondered why
     we didn’t discuss how to RTA-ize the SNMP agent so we could change its configuration
@@ -940,82 +1387,122 @@
     as they become available. Right now it’s simple—we don’t have changes to port
     to the agent each time we update, and all of our customizations are localized
     in our MIB extension.
+  id: totrans-204
   prefs: []
   type: TYPE_NORMAL
+  zh: 在第14章中，我们提到我们的SNMP代理使用的是旧式的非RTA配置方法（即，位于/etc下的某个地方的.conf文件）。你可能想知道为什么我们没有讨论如何将SNMP代理RTA化，这样我们就可以像Laddie一样动态更改其配置。这是原因。我们不希望定制基本代理，因为这会使新版本发布变得复杂。现在很简单——我们没有每次更新都要移植到代理的变化，并且所有定制都集中在我们的MIB扩展中。
 - en: All we need to do now is build and install it.
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们需要做的就是构建和安装它。
 - en: make
+  id: totrans-206
   prefs: []
   type: TYPE_NORMAL
+  zh: make
 - en: make install
+  id: totrans-207
   prefs: []
   type: TYPE_NORMAL
+  zh: make install
 - en: You’ll also need to copy the files you need from /opt/snmp into your appliance
     build, but that’s beyond the scope of this chapter.
+  id: totrans-208
   prefs: []
   type: TYPE_NORMAL
+  zh: 你还需要将所需的文件从/opt/snmp复制到你的设备构建中，但这超出了本章的范围。
 - en: '[**Debugging**](toc.html#chapter15.14)'
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**调试**](toc.html#chapter15.14)'
 - en: Thanks to the DEBUGMSGTL macros, we have dropped in our MIB extension as we
     wrote it, and we are all set to trace the flow of control in our agent, should
     this become necessary. Just shut down the agent running in the background
+  id: totrans-210
   prefs: []
   type: TYPE_NORMAL
+  zh: 多亏了DEBUGMSGTL宏，我们直接将我们的MIB扩展作为我们编写的那样添加进去，并且我们已经准备好在必要时跟踪我们的代理中的控制流。只需关闭在后台运行的代理
 - en: /etc/rc.d/init.d/snmpd stop
+  id: totrans-211
   prefs: []
   type: TYPE_NORMAL
+  zh: /etc/rc.d/init.d/snmpd stop
 - en: 'and run your own copy from the command line:'
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: 并从命令行运行你的副本：
 - en: /opt/snmp/sbin/snmpd -D "LAD" -Le -f -c /opt/snmp/etc/snmp/snmpd.conf -C
+  id: totrans-213
   prefs: []
   type: TYPE_NORMAL
+  zh: /opt/snmp/sbin/snmpd -D "LAD" -Le -f -c /opt/snmp/etc/snmp/snmpd.conf -C
 - en: The -c <path to config file> -C is from the normal command string to run the
     agent. We discussed this in Chapter 14\. What’s new are the first three options.
+  id: totrans-214
   prefs: []
   type: TYPE_NORMAL
+  zh: -c <配置文件路径> -C 是从运行代理的正常命令字符串中来的。我们在第14章中讨论了这一点。新的是前三个选项。
 - en: 'The -D "LAD" activates our DEBUGMSGTL statements, which specified "LAD". Here’s
     one taken from the code we discussed above:'
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
+  zh: '`-D "LAD"` 激活我们的DEBUGMSGTL语句，指定了"LAD"。以下是从我们上面讨论的代码中摘录的一个示例：'
 - en: DEBUGMSGTL(("LAD", "reading ladAlarmState\n"));
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
+  zh: DEBUGMSGTL(("LAD", "reading ladAlarmState\n"));
 - en: The -Le tells the agent to send the output to stderr. Other options are stdout,
     syslog, or a file. See the man page for snmpd for more information.
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: '`-Le` 参数告诉代理将输出发送到stderr。其他选项包括stdout、syslog或文件。有关snmpd的更多信息，请参阅手册页。'
 - en: The -f tells the agent not to fork and go into the background. This keeps it
     tied to our current terminal window so we can see the output.
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
+  zh: '`-f` 参数告诉代理不要进行分叉并进入后台。这使其与我们的当前终端窗口相关联，因此我们可以看到输出。'
 - en: Now query the agent using snmpget, snmpset, or snmpwalk from another terminal
     window and watch the output, or capture it to a file.
+  id: totrans-219
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，使用另一个终端窗口中的snmpget、snmpset或snmpwalk查询代理，并观察输出，或者将其捕获到文件中。
 - en: '[**Traps**](toc.html#chapter15.15)'
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**陷阱**](toc.html#chapter15.15)'
 - en: We have defined two traps in our MIB, but we will not be discussing how to send
     these traps in this chapter. In Chapter 14 we discussed the use of the snmptrap
     utility to send traps for us, and in Chapter 7 we explained how to use a log event
     to trigger an SNMP trap. Just keep in mind that the traps we have defined in our
     LAD-MIB are not generated by the SNMP agent. They are generated through the logging
     subsystem from events recorded by the ladd daemon, itself.
+  id: totrans-221
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在我们的MIB中定义了两个陷阱，但我们将不会在本章中讨论如何发送这些陷阱。在第14章中，我们讨论了使用snmptrap实用程序为我们发送陷阱的方法，在第7章中，我们解释了如何使用日志事件来触发SNMP陷阱。只需记住，我们定义在LAD-MIB中的陷阱不是由SNMP代理生成的。它们是通过记录由ladd守护进程记录的事件的日志子系统生成的。
 - en: '[**Summary**](toc.html#chapter15.16)'
+  id: totrans-222
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**总结**](toc.html#chapter15.16)'
 - en: In Chapter 14 you learned how to create a MIB to match an application, and in
     this chapter you learned how to create a MIB extension for the Net-SNMP agent
     to implement that MIB, as well as how to use the PostgreSQL interface library
     and RTA to retrieve the MIB data values from another daemon process. At this point
     you should feel comfortable that you could do this yourself from scratch.
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
+  zh: 在第14章中，你学习了如何创建一个与应用程序匹配的MIB，在本章中，你学习了如何创建一个用于Net-SNMP代理的MIB扩展以实现该MIB，以及如何使用PostgreSQL接口库和RTA从另一个守护进程进程中检索MIB数据值。此时，你应该感到自信，能够从头开始自己完成这项工作。
 - en: You should also feel familiar enough with the structure of MIB and a Net-SNMP
     agent extension to hack new objects into the MIB and the code. There is no need
     to go back through generating skeleton code with mib2c. All you have to do is
@@ -1024,14 +1511,20 @@
     array, and then add cases to the to the appropriate switch statements. Just keep
     in mind that while you can add things to a MIB, you cannot reassign OIDs. If you
     always add to the end of a branch, you should be in good shape.
+  id: totrans-224
   prefs: []
   type: TYPE_NORMAL
+  zh: 你也应该足够熟悉MIB和Net-SNMP代理扩展的结构，以便将新对象插入MIB和代码中。没有必要通过mib2c生成骨架代码。你只需要将新对象添加到MIB文件中（主要是剪切和粘贴工作），在定义列表中为这些变量定义新数字，向ladProject_variables数组添加适当的行，然后向适当的switch语句添加情况。只需记住，虽然你可以向MIB添加内容，但你不能重新分配OID。如果你总是添加到分支的末尾，你应该处于良好状态。
 - en: In Chapter 14 we mentioned that we had neglected to include the edge and input
     columns from our Laddie table in our MIB. A good test of your understanding of
     these two chapters would be to go back and add one or both of these fields to
     the MIB and agent yourself.
+  id: totrans-225
   prefs: []
   type: TYPE_NORMAL
+  zh: 在第14章中，我们提到我们忽略了在MIB中包含Laddie表中的边缘和输入列。对你这两章的理解的一个很好的测试是将其中一个或两个这些字段添加到MIB和代理中。
 - en: '![](../images/311-1.jpg)'
+  id: totrans-226
   prefs: []
   type: TYPE_IMG
+  zh: '![图片](../images/311-1.jpg)'
