@@ -1,312 +1,448 @@
 - en: Chapter 10. PROFILING AND BENCHMARKING UNDER XEN
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第10章。XEN下的性能分析及基准测试
 - en: '*Disraeli was pretty close: actually, there are Lies, Damn lies, Statistics,
     Benchmarks, and Delivery dates*.'
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: '*迪斯雷利非常接近：实际上，有谎言、该死的谎言、统计数据、基准测试和交货日期*。'
 - en: —*Anonymous, attributed to Usenet*![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: —*匿名，归因于Usenet*![无标题图片](httpatomoreillycomsourcenostarchimages333191.png.jpg)
 - en: We've made a great fuss over how Xen, as a virtualization technology, offers
     better performance than competing technologies. However, when it comes to proofs
     and signs, we have been waving our hands and citing authorities. We apologize!
     In this chapter we will discuss how to measure Xen's performance for yourself,
     using a variety of tools.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们一直大谈特谈Xen作为虚拟化技术，其性能优于竞争技术。然而，当我们谈到证据和迹象时，我们一直在挥舞着手臂，引用权威人士。我们道歉！在本章中，我们将讨论如何使用各种工具亲自测量Xen的性能。
 - en: We'll look closely at three general classes of performance monitoring, each
     of which you might use for a different reason. First, we have benchmarking Xen
     domU performance. If you are running a hosting service (or buying service from
     a hosting service), you need to see how the Xen image you are providing (or renting)
     stacks up to the competition. In this category, we have general-purpose *synthetic
     benchmarks*.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将仔细研究三种一般性能监控类别，每种类别你可能出于不同的原因使用。首先，我们有基准测试Xen domU性能。如果你正在运行托管服务（或从托管服务购买服务），你需要看到你提供的Xen镜像（或租用的）与竞争对手相比如何。在这个类别中，我们有通用*合成基准测试*。
 - en: Second, we want to be able to benchmark Xen versus other virtualization solutions
     (or bare hardware) *for your workload* because Xen has both strengths and weaknesses
     compared to other virtualization packages. These *application benchmarks* will
     help to determine whether Xen is the best match for your application.
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二，我们希望能够为你的工作负载基准测试Xen与其他虚拟化解决方案（或裸机）的性能，因为与其他虚拟化软件包相比，Xen既有优势也有劣势。这些*应用基准测试*将有助于确定Xen是否是你应用程序的最佳匹配。
 - en: Third, sometimes you have a performance problem in your Xen-related or kernel-related
     program, and you want to pinpoint the bits of code that are moving slowly. This
     category includes *profiling tools*, such as OProfile. (Xen developers may also
     ask you for OProfile output when you ask about performance issues on the *xen-devel*
     list.)
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三，有时你在与Xen相关或内核相关的程序中遇到性能问题，你想要定位运行缓慢的代码部分。这个类别包括*性能分析工具*，例如OProfile。（Xen开发者也可能在你询问*xen-devel*列表上的性能问题时要求你提供OProfile输出。）
 - en: Although some of these techniques might come in handy while troubleshooting,
     we haven't really aimed our discussion here at solving problems—rather, we try
     to present an overview of the tools for various forms of speed measurement. See
     [Chapter 15](ch15.html "Chapter 15. TROUBLESHOOTING") for more specific troubleshooting
     suggestions.
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然这些技术可能在故障排除时有所帮助，但我们在这里的讨论并不是为了解决问题——相反，我们试图展示各种速度测量工具的概述。有关更具体的故障排除建议，请参阅[第15章](ch15.html
+    "第15章。故障排除")。
 - en: A Benchmarking Overview
+  id: totrans-8
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 基准测试概述
 - en: We've seen that the performance of a paravirtualized Xen domain running most
     workloads approximates that of the native machine. However, there are cases where
     this isn't true or where this fuzzy simulacrum of the truth isn't precise enough.
     In these cases, we move from prescientific assertion to direct experimentation—that
     is, using benchmarking tools and simulators to find actual, rather than theoretical,
     performance numbers.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经看到，大多数工作负载下，运行在半虚拟化Xen域的性能接近原生机器。然而，有些情况下这并不成立，或者这种模糊的真实模拟并不足够精确。在这些情况下，我们从先验科学断言转向直接实验——也就是说，使用基准测试工具和模拟器来找到实际而不是理论上的性能数字。
 - en: As we're sure you know, generalized benchmarking is, if not a "hard problem,"^([[56](#ftn.CHP-10-FNOTE-1)])
     at least quite difficult. If your load is I/O bound, testing the CPU will tell
     you nothing you need to know. If your load is IPC-bound or blocking on certain
     threads, testing the disk and the CPU will tell you little. Ultimately, the best
     results come from benchmarks that use as close to real-world load as possible.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所知，通用基准测试如果不是一个“难题”，至少也是一个相当困难的问题。如果你的负载是I/O受限，测试CPU将告诉你你需要知道的一切。如果你的负载是IPC受限或在某些线程上阻塞，测试磁盘和CPU将告诉你很少。最终，最理想的结果来自尽可能接近真实世界负载的基准测试。
 - en: The very best way to test, for example, the performance of a server that serves
     an HTTP web application would be to sniff live traffic hitting your current HTTP
     server, and then replay that data against the new server, speeding up or slowing
     down the replay to see if you have more or less capacity than before.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，测试一个服务器（该服务器提供 HTTP 网络应用）的性能的最好方法，就是嗅探当前 HTTP 服务器上正在发生的实时流量，然后将这些数据回放给新服务器，加快或减慢回放速度，以查看你的容量是否比之前更多或更少。
 - en: This, of course, is rather difficult both to do and to generalize. Most people
     go at least one step into "easier" and "more general." In the previous example,
     you might pick a particularly heavy page (or a random sampling of pages) and test
     the server with a generalized HTTP tester, such as Siege. This usually still gives
     you pretty good results, is a lot easier, and has fewer privacy concerns than
     running the aforementioned live data.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，这既困难又难以概括。大多数人至少会走一步“更容易”和“更通用”的道路。在前面的例子中，你可能会选择一个特别重的页面（或页面的随机样本）并使用一个通用的
+    HTTP 测试器，如 Siege，来测试服务器。这通常仍然会给你相当好的结果，更容易操作，并且比运行上述实时数据有更少的隐私问题。
 - en: There are times, however, when a general benchmark, for all its inadequacies,
     is the best tool. For example, if you are trying to compare two virtual private
     server providers, a standard, generalized test might be more readily available
     than a real-world, specific test. Let's start by examining a few of the synthetic
     benchmarks that we've used.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，有时尽管通用基准测试有其不足之处，但它可能是最好的工具。例如，如果你正在尝试比较两个虚拟专用服务器提供商，一个标准化的、通用的测试可能比现实世界的、具体的测试更容易获得。让我们先检查一下我们使用过的几个合成基准测试。
 - en: UnixBench
+  id: totrans-14
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: UnixBench
 - en: One classic benchmarking tool is the public domain UnixBench released by *BYTE*
     magazine in 1990, available from [http://www.tux.org/pub/tux/niemi/unixbench/](http://www.tux.org/pub/tux/niemi/unixbench/).
     The tool was last updated in 1999, so it is rather old. However, it seems to be
     quite popular for benchmarking VPS providers—by comparing one provider's UnixBench
     number to another, you can get a rough idea of the capacity of VM they're providing.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个经典的基准测试工具是 1990 年由 *BYTE* 杂志发布的公共领域 UnixBench，可以从 [http://www.tux.org/pub/tux/niemi/unixbench/](http://www.tux.org/pub/tux/niemi/unixbench/)
+    获取。该工具最后更新于 1999 年，所以它相当古老。然而，它似乎在基准测试 VPS 提供商方面非常受欢迎——通过比较一个提供商的 UnixBench 数值与另一个，你可以大致了解他们提供的虚拟机的容量。
 - en: UnixBench is easy to install—download the source, untar it, build it, and run
     it.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: UnixBench 安装简单——下载源代码，解压，构建，然后运行。
 - en: '[PRE0]'
+  id: totrans-17
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: (That last command is a literal "Run"—it's a script that cycles through the
     various tests, in order, and outputs results.)
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: （最后一个命令是一个字面上的“运行”——它是一个脚本，按顺序循环执行各种测试，并输出结果。）
 - en: You may get some warnings, or even errors, about the `-fforce-mem` option that
     UnixBench uses, depending on your compiler version. If you edit the Makefile to
     remove all instances of `-fforce-mem`, UnixBench should build successfully.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能会收到一些关于 UnixBench 使用的 `-fforce-mem` 选项的警告，甚至错误，这取决于你的编译器版本。如果你编辑 Makefile
+    以删除所有 `-fforce-mem` 实例，UnixBench 应该可以成功构建。
 - en: 'We recommend benchmarking the Xen instance in single-user mode if possible.
     Here''s some example output:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果可能的话，我们建议在单用户模式下对 Xen 实例进行基准测试。以下是一些示例输出：
 - en: '[PRE1]'
+  id: totrans-21
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Armed with a UnixBench number, you at least have some basis for comparison between
     different VPS providers. It's not going to tell you much about the specific performance
     you're going to get, but it has the advantage that it is a widely published, readily
     available benchmark.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 拥有一个 UnixBench 数值，你至少可以比较不同 VPS 提供商之间的一些基础。它不会告诉你太多关于你将获得的具体性能，但它有一个优点，那就是它是一个广泛发布的、易于获取的基准。
 - en: Other tools, such as netperf and Bonnie++, can give you more detailed performance
     information.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 其他工具，如 netperf 和 Bonnie++，可以提供更详细的表现信息。
 - en: Analyzing Network Performance
+  id: totrans-24
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 分析网络性能
 - en: 'One popular tool for measuring low-level network performance is netperf. This
     tool supports a variety of performance measurements, with a focus on measuring
     the efficiency of the network implementation. It''s also been used in Xen-related
     papers. For one example, see "The Price of Safety: Evaluating IOMMU Performance"
     by Muli Ben-Yehuda et al.^([[57](#ftn.CHP-10-FNOTE-2)])'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个用于测量低级网络性能的流行工具是 netperf。该工具支持各种性能测量，重点在于测量网络实现的效率。它也被用于与 Xen 相关的论文中。例如，参见
+    Muli Ben-Yehuda 等人撰写的“安全性的代价：评估 IOMMU 性能”。
 - en: First, download netperf from [http://netperf.org/netperf/DownloadNetperf.html](http://netperf.org/netperf/DownloadNetperf.html).
     We picked up version 2.4.4.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，从[http://netperf.org/netperf/DownloadNetperf.html](http://netperf.org/netperf/DownloadNetperf.html)下载netperf。我们选择了版本2.4.4。
 - en: '[PRE2]'
+  id: totrans-27
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: Untar it and enter the netperf directory.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 解压并进入netperf目录。
 - en: '[PRE3]'
+  id: totrans-29
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: Configure, build, and install netperf. (Note that these directions are a bit
     at variance with the documentation; the documentation claims that */opt/netperf*
     is the hard-coded install prefix, whereas it seems to install in */usr/local*
     for me. Also, the manual seems to predate netperf's use of Autoconf.)
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 配置、构建和安装netperf。（注意，这些说明与文档略有不同；文档声称`/opt/netperf`是硬编码的安装前缀，但对我来说它似乎安装在`/usr/local`。此外，手册似乎早于netperf使用Autoconf。）
 - en: '[PRE4]'
+  id: totrans-31
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: netperf works by running the client, `netperf`, on the machine being benchmarked.
     `netperf` connects to a `netserver` daemon and tests the rate at which it can
     send and receive data. So, to use `netperf`, we first need to set up `netserver`.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: netperf通过在基准测试的机器上运行客户端`netperf`来工作。`netperf`连接到`netserver`守护进程，并测试它发送和接收数据的能力。因此，要使用`netperf`，我们首先需要设置`netserver`。
 - en: 'In the standard service configuration, `netserver` would run under `inetd`;
     however, `inetd` is obsolete. Many distros don''t even include it by default.
     Besides, you probably don''t want to leave the benchmark server running all the
     time. Instead of configuring `inetd`, therefore, run `netserver` in standalone
     mode:'
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 在标准服务配置中，`netserver`会在`inetd`下运行；然而，`inetd`已经过时。许多发行版默认甚至不包括它。此外，你可能不希望基准服务器一直运行。因此，而不是配置`inetd`，我们可以以独立模式运行`netserver`：
 - en: '[PRE5]'
+  id: totrans-34
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: Now we can run the `netperf` client with no arguments to perform a 10-second
     test with the local daemon.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们可以不带任何参数运行`netperf`客户端，以执行与本地守护进程的10秒测试。
 - en: '[PRE6]'
+  id: totrans-36
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'Okay, looks good. Now we''ll test from the dom0 to this domU. To do that, we
     install the netperf binaries as described previously and run `netperf` with the
     `-H` option to specify a target host (in this case, .74 is the domU we''re testing
     against):'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 好吧，看起来不错。现在我们将从dom0测试到这个domU。为此，我们按照之前描述的方式安装netperf二进制文件，并使用`-H`选项运行`netperf`来指定目标主机（在这种情况下，.74是我们正在测试的domU）：
 - en: '[PRE7]'
+  id: totrans-38
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'Cool. Not as fast, obviously, but we expected that. Now from another physical
     machine to our test domU:'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 好的。显然没有这么快，但我们预料到了。现在从另一台物理机器到我们的测试domU：
 - en: '[PRE8]'
+  id: totrans-40
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'Ouch. Well, so how much of that is Xen, and how much is the network we''re
     going through? To find out, we''ll run the `netserver` daemon on the dom0 hosting
     the test domU and connect to that:'
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 哎呦。那么，其中有多少是Xen，又有多少是我们正在通过的网络？为了找出答案，我们将在托管测试domU的dom0上运行`netserver`守护进程并连接到它：
 - en: '[PRE9]'
+  id: totrans-42
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: It could be worse, I guess. The moral of the story? `xennet` introduces a noticeable
     but reasonable overhead. Also, netperf can be a useful tool for discovering the
     actual bandwidth you've got available. In this case the machines are connected
     via a 100Mbit connection, and netperf lists an actual throughput of 93.66Mbits/second.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 我想情况可能更糟。这个故事的意义是什么？`xennet`引入了明显的但合理的开销。此外，netperf可以是一个有用的工具，用于发现你实际可用的带宽。在这种情况下，机器通过100Mbit连接连接，netperf列出的实际吞吐量为93.66Mbits/second。
 - en: Measuring Disk Performance with Bonnie++
+  id: totrans-44
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 使用Bonnie++衡量磁盘性能
 - en: One of the major factors in a machine's overall performance is its disk subsystem.
     By exercising its hard drives, we can get a useful metric to compare Xen providers
     or Xen instances with, say, VMware guests.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 机器整体性能的一个主要因素是其磁盘子系统。通过锻炼其硬盘，我们可以得到一个有用的指标，用于比较Xen提供商或Xen实例与，比如说，VMware虚拟机。
 - en: We, like virtually everyone else on the planet, use Bonnie++ to measure disk
     performance. Bonnie++ attempts to measure both random and sequential disk performance
     and does a good job simulating real-world loads. This is especially important
     in the Xen context because of the degree to which domains are partitioned—although
     domains share resources, there's no way for them to coordinate resource use.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们，就像地球上几乎所有人一样，使用Bonnie++来衡量磁盘性能。Bonnie++试图衡量随机和顺序磁盘性能，并且很好地模拟了真实世界的负载。这在Xen环境中尤为重要，因为域的分区程度——尽管域共享资源，但它们无法协调资源使用。
 - en: One illustration of this point is that if multiple domains are trying to access
     a platter simultaneously, what looks like sequential access from the viewpoint
     of one VM becomes random accesses to the disk. This makes things like seek time
     and the robustness of your tagged queuing system much more important. To test
     the effect of these optimizations on domU performance, you'll probably want a
     tool like Bonnie++.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个观点的一个例子是，如果有多个域名同时尝试访问磁盘，从单个虚拟机的角度来看，这看起来像是顺序访问，但实际上是对磁盘的随机访问。这使得诸如寻道时间和你的标记队列系统的鲁棒性变得更加重要。为了测试这些优化对domU性能的影响，你可能需要一个像Bonnie++这样的工具。
 - en: 'The Bonnie++ author maintains a home page at [http://www.coker.com.au/bonnie++/](http://www.coker.com.au/bonnie++/).
     Download the source package, build it, and install it:'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: Bonnie++的作者在 [http://www.coker.com.au/bonnie++/](http://www.coker.com.au/bonnie++/)
+    上维护一个主页。下载源代码包，构建它，并安装它：
 - en: '[PRE10]'
+  id: totrans-49
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'At this point you can simply invoke Bonnie++ with a command such as:'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这一点上，你可以简单地使用如下命令调用Bonnie++：
 - en: '[PRE11]'
+  id: totrans-51
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'This command will run some tests, printing status information as it goes along,
     and eventually generate output like this:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 此命令将运行一些测试，并在运行过程中打印状态信息，最终生成如下输出：
 - en: '[PRE12]'
+  id: totrans-53
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'Note that some tests may simply output a row of pluses. This indicates that
     the machine finished them in less than 500 ms. Make the workload more difficult.
     For example, you might specify something like:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，某些测试可能仅仅输出一行加号。这表示机器在500毫秒内完成了这些测试。使工作负载更加困难。例如，你可能指定如下：
 - en: '[PRE13]'
+  id: totrans-55
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: This specifies writing 2512MB files for I/O performance tests. (This is the
     default file size, which is twice the RAM size on this particular machine. This
     is important to ensure that we're not just exercising RAM rather than disk.) It
     also tells Bonnie++ to create 256*1024 files in its file creation tests.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 这指定了写入2512MB文件以进行I/O性能测试。（这是默认文件大小，是这台特定机器RAM大小的两倍。这很重要，以确保我们不仅仅是在锻炼RAM而不是磁盘。）它还告诉Bonnie++在其文件创建测试中创建256*1024个文件。
 - en: We also recommend reading Bonnie++'s online manual, which includes a fair amount
     of pithy benchmarking wisdom, detailing why the author chose to include the tests
     that he did, and what meanings the different numbers have.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们还推荐阅读Bonnie++的在线手册，其中包含大量精辟的基准测试智慧，详细说明了作者为什么选择包含这些测试，以及不同数字的含义。
 - en: '* * *'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: '^([[56](#CHP-10-FNOTE-1)]) The phrase "hard problem" is usually used as dry
     and bleak humor. Classic "hard problems" include natural language and strong AI.
     See also: "interesting."'
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[56](#CHP-10-FNOTE-1)]) “难题”这个短语通常被用作干巴巴的幽默。经典的“难题”包括自然语言和强人工智能。另见：“有趣”。
 - en: ^([[57](#CHP-10-FNOTE-2)]) See [http://ols.108.redhat.com/2007/Reprints/ben-yehuda-Reprint.pdf](http://ols.108.redhat.com/2007/Reprints/ben-yehuda-Reprint.pdf).
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[57](#CHP-10-FNOTE-2)]) 查看 [http://ols.108.redhat.com/2007/Reprints/ben-yehuda-Reprint.pdf](http://ols.108.redhat.com/2007/Reprints/ben-yehuda-Reprint.pdf)。
 - en: Application Benchmarks
+  id: totrans-61
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 应用程序基准测试
 - en: Of course, the purpose of a server is to run applications—we're not really interested
     in how many times per second the VM can do absolutely nothing. For testing application
     performance, we use the applications that we're planning to put on the machine,
     and then throw load at them.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，服务器的目的是运行应用程序——我们并不真正关心虚拟机每秒可以做多少次绝对无意义的事情。为了测试应用程序的性能，我们使用计划放在机器上的应用程序，然后向它们施加负载。
 - en: Since this is necessarily application-specific, we can't give you too many pointers
     on specifics. There are good test suites available for many popular libraries.
     For example, we've had customers benchmark their Xen instances with the popular
     web framework Django.^([[58](#ftn.CHP-10-FNOTE-3)])
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于这是特定于应用程序的，我们无法在具体细节上提供太多指导。许多流行的库都有好的测试套件。例如，我们曾有过客户使用流行的Web框架Django对Xen实例进行基准测试.^([[58](#ftn.CHP-10-FNOTE-3)])
 - en: 'httperf: A Load Generator for HTTP Servers'
+  id: totrans-64
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: httperf：HTTP服务器的负载生成器
 - en: Having tested the effectiveness of your domain's network interface, you may
     want to discover how well the domain performs when serving applications through
     that interface. Because of Xen's server-oriented heritage, one popular means of
@@ -315,549 +451,811 @@
     HTTP/1.1 and SSL protocols and offers a variety of workload generators. You may
     find `httperf` useful if, for example, you're trying to figure out how many users
     your web server can handle before it goes casters-up.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 在测试了您域的网络接口的有效性之后，您可能想了解该域通过该接口提供应用时的表现如何。由于Xen的服务器导向传统，测试其在基于HTTP的实际情况中的性能的一种流行方法是使用`httperf`。该工具生成HTTP请求并总结性能统计信息。它支持HTTP/1.1和SSL协议，并提供各种工作负载生成器。例如，如果您试图找出您的Web服务器在崩溃之前可以处理多少用户，您可能会发现`httperf`很有用。
 - en: First, install `httperf` on a machine other than the one you're testing—it can
     be another domU, but we usually prefer to install it on something completely separate.
     This "load" machine should also be as close to the target machine as possible—preferably
     connected to the same Ethernet switch.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，在您要测试的机器上安装`httperf`——它可以是一个另一个domU，但我们通常更喜欢将其安装在完全不同的东西上。这个“负载”机器也应该尽可能接近目标机器——最好是连接到同一个以太网交换机。
 - en: You can get `httperf` through your distro's package-management mechanism or
     from [http://www.hpl.hp.com/research/linux/httperf/](http://www.hpl.hp.com/research/linux/httperf/).
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以通过您发行版的包管理机制或从[http://www.hpl.hp.com/research/linux/httperf/](http://www.hpl.hp.com/research/linux/httperf/)获取`httperf`。
 - en: 'If you''ve downloaded the source code, build it using the standard method.
     `httperf` ''s documentation recommends using a separate build directory rather
     than building directly in the source tree. Thus, from the `httperf` source directory:'
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您已下载源代码，请使用标准方法构建它。`httperf`的文档建议使用单独的构建目录而不是直接在源树中构建。因此，从`httperf`源目录：
 - en: '[PRE14]'
+  id: totrans-69
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'Next, run appropriate tests. What we usually do is run `httperf` with a command
     similar to this:'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，运行适当的测试。我们通常的做法是使用类似以下命令的`httperf`：
 - en: '[PRE15]'
+  id: totrans-71
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: In this case we're just demanding a static HTML page, so the request rate is
     obscenely high; usually we would use a much smaller number in tests of real-world
     database-backed websites.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这种情况下，我们只是要求一个静态HTML页面，因此请求速率非常高；通常在测试现实世界数据库支持的网站时，我们会使用一个远小得多的数字。
 - en: '`httperf` will then give you some statistics. The important numbers, in our
     experience, are the connection rate, the request rate, and the reply rate. All
     of these should be close to the rate specified on the command line. If they start
     to decline from that number, that indicates that the server has reached its capacity.'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: '`httperf`将随后为您提供一些统计信息。根据我们的经验，重要的数字是连接速率、请求速率和回复速率。所有这些都应该接近命令行上指定的速率。如果它们开始从该数字下降，这表明服务器已达到其容量。'
 - en: 'However, `httperf` isn''t limited to repeated requests for a single file. We
     prefer to use `httperf` in session mode by specifying the `--wsesslog` workload
     generator. This gives a closer approximation to the actual load on the web server.
     You can create a session file from your web server logs with a bit of Perl, winding
     up with a simple formatted list of URLs:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，`httperf`不仅限于对单个文件的重复请求。我们更喜欢通过指定`--wsesslog`工作负载生成器以会话模式使用`httperf`。这给出了更接近实际负载的近似值。您可以使用一些Perl从您的Web服务器日志创建会话文件，最终得到一个简单的格式化URL列表：
 - en: '[PRE16]'
+  id: totrans-75
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'This session file lists files for `httperf` to request, with indentations to
     define bursts; a group of lines that begin with whitespace is a burst. When run,
     `httperf` will request the first burst, wait a certain amount of time, then move
     to the next burst. Equipped with this session file, we can use `httperf` to simulate
     a user:'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 此会话文件列出了`httperf`请求的文件，缩进用于定义突发；以空白字符开始的行组是一个突发。当运行时，`httperf`将请求第一个突发，等待一定时间，然后移动到下一个突发。配备此会话文件，我们可以使用`httperf`来模拟用户：
 - en: '[PRE17]'
+  id: totrans-77
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: This will start 40 sessions at the rate of one per second. The new parameter,
     `--wsesslog`, takes the input of *urls.txt* and runs through it in bursts, pausing
     10 seconds between bursts to simulate the user thinking.
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将每秒启动40个会话。新参数`--wsesslog`从*urls.txt*读取输入并在突发中运行，突发之间暂停10秒以模拟用户思考。
 - en: Again, throw this at your server, increasing the rate until the server can't
     meet demand. When the server fails, congratulations! You've got a benchmark.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 再次，将此命令应用到您的服务器上，逐渐增加速率，直到服务器无法满足需求。当服务器失败时，恭喜！您已经得到了一个基准。
 - en: 'Another Application Benchmark: POV-Ray'
+  id: totrans-80
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 另一个应用基准测试：POV-Ray
 - en: Of course, depending on your application, `httperf` may not be a suitable workload.
     Let's say that you've decided to use Xen to render scenes with popular open source
     raytracer POV-Ray. (If nothing else, it's a good way to soak up spare CPU cycles.)
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，根据您的应用，`httperf`可能不是一个合适的工作负载。假设您已经决定使用Xen来渲染由流行的开源光线追踪器POV-Ray创建的场景。（如果不是其他原因，这也是一种消耗空闲CPU周期的不错方式。）
 - en: 'The POV-Ray benchmark is easy to run. Just give the `-benchmark` option on
     the command line:'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: POV-Ray基准测试易于运行。只需在命令行上给出`-benchmark`选项：
 - en: '[PRE18]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'This renders a standard scene and gives a large number of statistics, ending
     with an overall summary and rendering time. A domU with a 2.8 GHz Pentium 4 and
     256MB of memory gave us the following output:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将渲染一个标准场景，并给出大量统计数据，最后以总体总结和渲染时间为结束。一个配备2.8 GHz奔腾4和256MB内存的domU给出了以下输出：
 - en: '[PRE19]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: Now you've got a single number that you can easily compare between various setups
     running POV-Ray, be they Xen instances, VMware boxes, or physical servers.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在您得到了一个单一的数字，可以轻松地比较运行POV-Ray的各种配置，无论是Xen实例、VMware盒子还是物理服务器。
 - en: Tuning Xen for Optimum Benchmarking
+  id: totrans-87
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 调优Xen以实现最佳基准测试
 - en: Most system administration work involves comparing results at the machine level—analyzing
     the performance of a Xen VM relative to another machine, virtual or not. However,
     with virtualization, there are some performance knobs that aren't obvious but
     can make a huge difference in the final benchmark results.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 大多数系统管理工作涉及在机器级别比较结果——分析Xen虚拟机相对于另一台机器的性能，无论是有虚拟的还是没有虚拟的。然而，在虚拟化的情况下，有一些性能旋钮并不明显，但它们可以在最终的基准测试结果中产生巨大差异。
 - en: 'First, Xen allocates CPU dynamically and attempts to keep the CPU busy as much
     as possible. That is, if dom2 isn''t using all of its allocated CPU, dom3 can
     pick up the extra. Although this is usually a good thing, it can make CPU benchmark
     data misleading. While testing, you can avoid this problem by specifying the `cap`
     parameter to the scheduler. For example, to ensure that domain ID 1 can get no
     more than 50 percent of one CPU:'
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，Xen动态分配CPU，并尽可能保持CPU忙碌。也就是说，如果dom2没有使用其分配的全部CPU，dom3可以接手额外的CPU。虽然这通常是好事，但它可能会使CPU基准测试数据具有误导性。在测试时，您可以通过指定调度器的`cap`参数来避免这个问题。例如，为了确保域ID
+    1不能超过一个CPU的50%：
 - en: '[PRE20]'
+  id: totrans-90
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: Second, guests in HVM mode absolutely must use paravirtualized drivers for acceptable
     performance. This point is driven home in a XenSource analysis of benchmark results
     published by VMware, in which XenSource points out that, in VMware's benchmarks,
     "XenSource's Xen Tools for Windows, which optimize the I/O path, were not installed.
     The VMware benchmarks should thus be disregarded in their entirety."
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 其次，在HVM模式下运行的客户机绝对必须使用虚拟化驱动程序才能获得可接受的性能。这一点在XenSource对VMware发布的基准测试结果的分析中得到了强调，其中XenSource指出，在VMware的基准测试中，“XenSource的Windows
+    Xen工具，它优化了I/O路径，没有被安装。因此，VMware的基准测试应该完全不予考虑。”
 - en: Also, shared resources (like disk I/O) are difficult to account, can interact
     with dom0 CPU demand, and can be affected by other domUs. For example, although
     paravirtualized Xen can deliver excellent network performance, it requires more
     CPU cycles to do so than a nonvirtualized machine. This may affect the capacity
     of your machine.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，共享资源（如磁盘I/O）难以计算，可能会与dom0的CPU需求交互，并可能受到其他domUs的影响。例如，尽管虚拟化Xen可以提供出色的网络性能，但它需要比非虚拟化机器更多的CPU周期来完成这项工作。这可能会影响您机器的容量。
 - en: This is a difficult issue to address, and we can't really offer a magic bullet.
     One point to note is that the dom0 will likely use more CPU than an intuitive
     estimate would suggest; it's very important to weight the dom0's CPU allocation
     heavily, or perhaps even devote a core exclusively to the dom0 on boxes with four
     or more cores.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是一个难以解决的问题，我们无法真正提供一个万能的解决方案。有一点需要注意，dom0可能会使用比直观估计更多的CPU；在dom0的CPU分配上给予高度重视，或者在具有四个或更多核心的机器上，可能甚至需要为dom0专门分配一个核心。
 - en: For benchmarking, we also recommend minimizing error by benchmarking with a
     reasonably loaded machine. If you're expecting to run a dozen domUs, then they
     should all be performing some reasonable synthetic task while benchmarking to
     get an appreciation for the real-world performance of the VM.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于基准测试，我们还建议通过使用合理负载的机器来最小化误差。如果您预计要运行十几个domUs，那么在基准测试时，它们都应该执行一些合理的合成任务，以便对VM的真实世界性能有一个认识。
 - en: '* * *'
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[58](#CHP-10-FNOTE-3)]) [http://journal.uggedal.com/vps-comparison-between-slicehost-and-prgmr](http://journal.uggedal.com/vps-comparison-between-slicehost-and-prgmr)
     uses Django among other tools.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[58](#CHP-10-FNOTE-3)]) [http://journal.uggedal.com/vps-comparison-between-slicehost-and-prgmr](http://journal.uggedal.com/vps-comparison-between-slicehost-and-prgmr)
+    使用Django等工具。
 - en: Profiling with Xen
+  id: totrans-97
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用Xen进行性能分析
 - en: Of course, there is one way of seeing shared resource use more precisely. We
     can *profile* the VM as it runs our application workload to get a clear idea of
     what it's doing and—with a Xen-aware profiler—how other domains are interfering
     with us.
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，有一种更精确地查看共享资源使用情况的方法。我们可以*分析*运行我们的应用程序工作负载时的虚拟机，以清楚地了解它在做什么，以及——使用一个Xen感知的分析器——其他域是如何干扰我们的。
 - en: Profiling refers to the practice of examining a specific application to see
     what it spends time doing. In particular, it can tell you whether an app is CPU
     or I/O limited, whether particular functions are inefficient, or whether performance
     problems are occurring outside of the app entirely, perhaps in the kernel.
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 性能分析是指检查特定应用程序以查看它花费时间做什么的实践。特别是，它可以告诉你应用程序是CPU还是I/O受限，是否某些函数效率低下，或者性能问题是否完全发生在应用程序之外，可能在内核中。
 - en: Here, we'll discuss a sample setup with Xen and OProfile, using the kernel compile
     as a standard workload (and one that most Xen admins are likely to be familiar
     with).
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们将讨论一个使用Xen和OProfile的示例设置，使用内核编译作为标准工作负载（这也是大多数Xen管理员可能熟悉的工作负载）。
 - en: Xenoprof
+  id: totrans-101
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Xenoprof
 - en: OProfile is probably the most popular profiling package for Linux.^([[59](#ftn.CHP-10-FNOTE-4)])
     The kernel includes OProfile support, and the user-space tools come with virtually
     every distro we know. If you have a performance problem with a particular program
     and want to see precisely what's causing it, OProfile is the tool for the job.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: OProfile可能是Linux上最受欢迎的性能分析包。[59](#ftn.CHP-10-FNOTE-4) 内核包括OProfile支持，用户空间工具几乎包含我们知道的每个发行版。如果你有特定程序的性能问题，并想确切地看到导致问题的原因，OProfile是这项工作的工具。
 - en: OProfile works by incrementing a counter whenever the program being profiled
     performs a particular action. For example, it can keep count of the number of
     cache misses or the number of instructions executed. When the counter reaches
     a certain value, it instructs the OProfile daemon to sample the counter, using
     a non-maskable interrupt to ensure prompt handling of the sampling request.
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: OProfile通过在程序被分析执行特定操作时增加计数器来工作。例如，它可以计算缓存未命中次数或执行指令次数。当计数器达到一定值时，它指示OProfile守护进程采样计数器，使用不可屏蔽的中断来确保及时处理采样请求。
 - en: Xenoprofile, or Xenoprof, is a version of OProfile that has been extended to
     work as a system-wide profiling tool under Xen, using hypercalls to enable domains
     to access hardware performance counters. It supports analysis of complete Xen
     instances and accounts for time spent in the hypervisor or within another domU.
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: Xenoprofile，或Xenoprof，是OProfile的一个版本，它已被扩展以在Xen下作为系统级性能分析工具使用，通过超调来启用域访问硬件性能计数器。它支持分析完整的Xen实例，并计算在虚拟机管理程序或另一个domU中花费的时间。
 - en: Getting OProfile
+  id: totrans-105
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 获取 OProfile
 - en: As of recent versions, Xen includes support for OProfile versions up to 0.9.2
     (0.9.3 will require you to apply a patch to the Xen kernel). For now, it would
     probably be best to use the packaged version to minimize the tedious effort of
     recompilation.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，Xen包括对OProfile版本高达0.9.2的支持（0.9.3将需要你对Xen内核应用补丁）。目前，使用打包版本可能是最好的选择，以最大限度地减少重新编译的繁琐工作。
 - en: If you're using a recent version of Debian, Ubuntu, CentOS, or Red Hat, you're
     in luck; the version of OProfile that they ship is already set up to work with
     Xen. Other distro kernels, if they ship with Xen, will likely also incorporate
     OProfile's Xen support.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你使用的是较新的Debian、Ubuntu、CentOS或Red Hat版本，那么你很幸运；他们提供的OProfile版本已经设置为与Xen一起工作。其他发行版的内核，如果它们包含Xen，也可能包含OProfile的Xen支持。
 - en: Building OProfile
+  id: totrans-108
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 构建 OProfile
 - en: If you're not so lucky as to have Xen profiling support already, you'll have
     to download and build OProfile, for which we'll give very brief directions just
     for completeness.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你没有Xen性能分析支持这么幸运，你将不得不下载并构建OProfile，我们将给出非常简短的说明，以确保完整性。
 - en: The first thing to do is to download the OProfile source from [http://oprofile.sourceforge.net/](http://oprofile.sourceforge.net/).
     We used version 0.9.4.
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先要做的事情是从[http://oprofile.sourceforge.net/](http://oprofile.sourceforge.net/)下载OProfile源代码。我们使用了版本0.9.4。
 - en: 'First, untar OProfile, like so:'
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，解压OProfile，如下所示：
 - en: '[PRE21]'
+  id: totrans-112
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'Then configure and build OProfile:'
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后配置并构建OProfile：
 - en: '[PRE22]'
+  id: totrans-114
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'Finally, do a bit of Linux kernel configuration if your kernel isn''t correctly
     configured already. (You can check by issuing `gzip -d -i /proc/config.gz | grep
     PROFILE`.) In our case that returns:'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，如果你的内核尚未正确配置，请进行一些Linux内核配置。（你可以通过执行`gzip -d -i /proc/config.gz | grep PROFILE`来检查。）在我们的例子中，它返回：
 - en: '[PRE23]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: Note
+  id: totrans-117
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '/proc/config.gz *is an optional feature that may not exist. If it doesn''t,
     you''ll have to find your configuration some other way. On Fedora 8, for example,
     you can check for profiling support by looking at the kernel config file shipped
     with the distro*:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: '`/proc/config.gz`是一个可选功能，可能不存在。如果不存在，你必须以其他方式找到你的配置。例如，在Fedora 8上，你可以通过查看随发行版提供的内核配置文件来检查分析支持：'
 - en: '[PRE24]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: If your kernel isn't set up for profiling, rebuild it with profiling support.
     Then install and boot from the new kernel (a step that we won't detail at length
     here).
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你的内核没有配置为分析，请使用分析支持重新构建它。然后安装并从新内核引导（这里不会详细说明这一步骤）。
 - en: OProfile Quickstart
+  id: totrans-121
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: OProfile 快速入门
 - en: To make sure OProfile works, you can profile a standard workload in domain 0\.
     (We chose the kernel compile because it's a familiar task to most sysadmins, although
     we're compiling it out of the Xen source tree.)
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了确保OProfile正常工作，你可以在域0中分析一个标准的工作负载。（我们选择了内核编译，因为对于大多数系统管理员来说这是一个熟悉的任务，尽管我们是在Xen源树外编译的。）
 - en: 'Begin by telling OProfile to clear its sample buffers:'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，告诉OProfile清除其样本缓冲区：
 - en: '[PRE25]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: Now configure OProfile.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在配置OProfile。
 - en: '[PRE26]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: The first three arguments are the command (setup for profiling), kernel image,
     and an option to create separate output files for libraries used. The final switch,
     `event`, describes the event that we're instructing OProfile to monitor.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 前三个参数是命令（分析设置）、内核镜像以及为使用的库创建单独输出文件选项。最后的开关`event`描述了我们指示OProfile监控的事件。
 - en: The precise event that you'll want to sample varies depending on your processor
     type (and on what you're trying to measure). For this run, to get an overall approximation
     of CPU usage, we used `CPU_CLK_UNHALTED` on an Intel Core 2 machine. On a Pentium
     4, the equivalent measure would be `GLOBAL_POWER_EVENTS`. The remaining arguments
     indicate the size of the counter, the unit mask (in this case, 0x1), and that
     we want both the kernel and userspace code.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 你想要采样的精确事件取决于你的处理器类型（以及你试图测量的内容）。对于这次运行，为了得到CPU使用率的整体近似值，我们在Intel Core 2机器上使用了`CPU_CLK_UNHALTED`。在Pentium
+    4上，等效的度量将是`GLOBAL_POWER_EVENTS`。剩余的参数表示计数器的尺寸，单位掩码（在这种情况下，0x1），以及我们想要内核和用户空间代码。
 - en: INSTALLING AN UNCOMPRESSED KERNEL ON RED HAT–DERIVED DISTROS
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 在基于Red Hat的发行版上安装未压缩的内核
 - en: One issue that you may run into with OProfile and kdump, as with any tool that
     digs into the kernel's innards, is that these tools expect to find an uncompressed
     kernel with debugging symbols for maximum benefit. This is simple to provide if
     you've built the kernel yourself, but with a distro kernel it can be more difficult.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能会遇到与OProfile和kdump相关的问题，就像任何深入内核内部结构的工具一样，这些工具期望找到一个未压缩的带有调试符号的内核以获得最大效益。如果你自己构建了内核，这很简单，但如果使用的是发行版内核，可能会更困难。
 - en: Under Red Hat and others, these kernels (and other software built for debugging)
     are in special `-debuginfo` RPM packages. These packages aren't in the standard
     `yum` repositories, but you can get them from Red Hat's FTP site. For Red Hat
     Enterprise Linux 5, for example, that'd be [ftp://ftp.redhat.com/pub/redhat/linux/enterprise/5Server/en/os/i386/Debuginfo](ftp://ftp.redhat.com/pub/redhat/linux/enterprise/5Server/en/os/i386/Debuginfo).
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Red Hat和其他系统中，这些内核（以及为调试构建的其他软件）包含在特殊的`-debuginfo` RPM软件包中。这些软件包不在标准的`yum`仓库中，但你可以从Red
+    Hat的FTP站点获取它们。例如，对于Red Hat Enterprise Linux 5，那将是[ftp://ftp.redhat.com/pub/redhat/linux/enterprise/5Server/en/os/i386/Debuginfo](ftp://ftp.redhat.com/pub/redhat/linux/enterprise/5Server/en/os/i386/Debuginfo)。
 - en: 'For the default kernel, you''ll want the packages:'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于默认内核，你需要以下软件包：
 - en: '[PRE27]'
+  id: totrans-133
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: Download these and install them using RPM.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 下载这些并使用RPM安装它们。
 - en: '[PRE28]'
+  id: totrans-135
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'To start collecting samples, run:'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 要开始收集样本，请运行：
 - en: '[PRE29]'
+  id: totrans-137
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: Then run the experiment that you want to profile, in this case a kernel compile.
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后运行你想要分析的实验，在这种情况下是一个内核编译。
 - en: '[PRE30]'
+  id: totrans-139
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: Then stop the profiler.
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后停止分析器。
 - en: '[PRE31]'
+  id: totrans-141
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: 'Now that we have samples, we can extract meaningful and useful information
     from the mass of raw data via the standard postprofiling tools. The main analysis
     command is `opreport`. To get a basic overview of the processes that consumed
     CPU, we could run:'
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们有了样本，我们可以通过标准的后分析工具从大量原始数据中提取有意义和有用的信息。主要分析命令是`opreport`。为了获取消耗CPU的进程的基本概述，我们可以运行：
 - en: '[PRE32]'
+  id: totrans-143
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: This tells us which processes accounted for CPU usage during the compile, with
     a threshold of 2 percent (indicated by the `-t 2` option.) This isn't terribly
     interesting, however. We can get more granularity using the `--symbols` option
     with `opreport`, which gives a best guess as to what functions accounted for the
     CPU usage. Try it.
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 这告诉我们哪些进程在编译期间占用了CPU使用率，阈值为2%（由`-t 2`选项指示）。然而，这并不十分有趣。我们可以使用`opreport`的`--symbols`选项获得更多的粒度，它给出了关于哪些函数占用了CPU使用率的最佳猜测。试试看。
 - en: 'You might be interested in other events, such as cache misses. To get a list
     of possible counters customized for your hardware, issue:'
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能对其他事件感兴趣，例如缓存未命中。要获取针对你的硬件定制的可能计数器的列表，请执行以下命令：
 - en: '[PRE33]'
+  id: totrans-146
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: Profiling Multiple Domains in Concert
+  id: totrans-147
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 协同分析多个域
 - en: So far, all this has covered standard use of OProfile, without touching on the
     Xen-specific features. But one of the most useful features of OProfile, in the
     Xen context, is the ability to profile entire domains against each other, analyzing
     how different scheduling parameters, disk allocations, drivers, and code paths
     interact to affect performance.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，所有这些都涵盖了OProfile的标准用法，没有涉及Xen特定的功能。但在Xen环境中，OProfile最有用的功能之一是能够对整个域进行相互分析，分析不同的调度参数、磁盘分配、驱动程序和代码路径如何相互作用以影响性能。
 - en: When profiling multiple domains, dom0 still coordinates the session. It's not
     currently possible to simply profile in a domU without dom0's involvement—domUs
     don't have direct access to the CPU performance counters.
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 当分析多个域时，dom0仍然协调会话。目前无法在dom0不参与的情况下简单地在一个domU中进行分析——domUs没有直接访问CPU性能计数器的权限。
 - en: Active vs. Passive Profiling
+  id: totrans-150
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 主动与被动分析
 - en: Xenoprofile supports both active and passive modes for domain profiling.
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: Xenoprofile支持域分析中的主动和被动模式。
 - en: When profiling in passive mode, the results indicate which domain is running
     at sample time but don't delve more deeply into what's being executed. It's useful
     to get a quick look at which domains are using the system.
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 在被动模式下进行分析时，结果指示在采样时间运行的是哪个域，但不会深入挖掘正在执行的内容。快速查看哪些域正在使用系统很有用。
 - en: In active mode, each domU runs its own instance of OProfile, which samples events
     within its virtual machine. Active mode allows better granularity than passive
     mode, but is more inconvenient. Only paravirtualized domains can run in active
     mode.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 在主动模式下，每个domU运行其自己的OProfile实例，它在其虚拟机内部采样事件。主动模式比被动模式提供了更好的粒度，但不太方便。只有半虚拟化域才能在主动模式下运行。
 - en: Active Profiling
+  id: totrans-154
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 主动分析
 - en: 'Active profiling is substantially more interesting. For this example, we''ll
     use three domains: dom0, to control the profiler, and domUs 1 and 3 as active
     domains.'
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 主动分析更有趣。在这个例子中，我们将使用三个域：dom0，用于控制分析器，以及domUs 1和3作为主动域。
 - en: '[PRE34]'
+  id: totrans-156
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: 'First, set up the daemon in dom0 with some initial parameters:'
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，在dom0中设置守护进程并使用一些初始参数：
 - en: '[PRE35]'
+  id: totrans-158
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: This introduces the `--xen` option, which gives the path to the uncompressed
     Xen kernel image, and the `--active-domains` option, which lists the domains to
     profile in active mode. The `:1 s` at the end of the event option tells OProfile
     to count events in both userspace and kernel space.
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 这引入了`--xen`选项，它提供了未压缩的Xen内核镜像的路径，以及`--active-domains`选项，它列出了以主动模式进行分析的域。事件选项末尾的`:1
+    s`告诉OProfile在用户空间和内核空间中计数事件。
 - en: Note
+  id: totrans-160
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Specify domains by numeric ID. OProfile won''t interpret names*.'
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: '*通过数字ID指定域。OProfile不会解释名称*。'
 - en: Next, start OProfile in the active domUs. The daemon must already be running
     in dom0, otherwise the domU won't have permission to access the performance counters.
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，在主动domUs中启动OProfile。守护进程必须在dom0中已经运行，否则domU将没有权限访问性能计数器。
 - en: '[PRE36]'
+  id: totrans-163
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: 'Run the same commands in domain 3\. Finally, begin sampling in domain 0:'
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 在域3中运行相同的命令。最后，在域0中开始采样：
 - en: '[PRE37]'
+  id: totrans-165
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: Now we can run commands in the domains of interest. Let's continue to use the
     kernel compile as our test workload, but this time complicate matters by running
     a disk-intensive benchmark in another domain.
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们可以运行感兴趣域中的命令。让我们继续使用内核编译作为我们的测试工作负载，但这次通过在另一个域中运行磁盘密集型基准测试来复杂化问题。
 - en: '[PRE38]'
+  id: totrans-167
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: 'When the kernel compile and Bonnie++ have finished, we stop OProfile:'
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 当内核编译和Bonnie++完成时，我们停止OProfile：
 - en: '[PRE39]'
+  id: totrans-169
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: Now each domU will have its own set of samples, which we can view with `opreport`.
     Taken together, these reports form a complete picture of the various domains'
     activity. We might suggest playing with the CPU allocations and seeing how that
     influences OProfile's results.
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，每个 domU 都将有自己的样本集，我们可以使用 `opreport` 来查看。这些报告综合起来，形成了一个关于各个域活动的完整画面。我们可能会建议尝试调整
+    CPU 分配，看看这如何影响 OProfile 的结果。
 - en: An OProfile Example
+  id: totrans-171
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: OProfile 示例
 - en: 'Now let''s try applying OProfile to an actual problem. Here''s the scenario:
     We''ve moved to a setup that uses LVM mirroring on a pair of 1 TB SATA disks.
     The hardware is a quad-core Intel QX6600, with 8GB memory and an ICH7 SATA controller,
     using the AHCI driver. We''ve devoted 512MB of memory to the dom0.'
+  id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在让我们尝试将 OProfile 应用于实际的问题。这里是场景：我们已经迁移到一个使用一对 1 TB SATA 磁盘上的 LVM 镜像的设置。硬件是一台四核英特尔
+    QX6600，8GB 内存和一个 ICH7 SATA 控制器，使用 AHCI 驱动程序。我们为 dom0 分配了 512MB 内存。
 - en: We noted that the performance of mirrored logical volumes accessed through `xenblk`
     was about one-tenth that of nonmirrored LVs, or of LVs mirrored with the `--corelog`
     option. Mirrored LVs with and without `–corelog` performed fine when accessed
     normally within the dom0, but performance dropped when accessed via `xm block-attach`.
     This was, to our minds, ridiculous.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们注意到，通过 `xenblk` 访问的镜像逻辑卷的性能大约是非镜像 LV 或使用 `--corelog` 选项镜像的 LV 的十分之一。在 dom0
+    内部正常访问时，具有和没有 `–corelog` 的镜像 LV 表现良好，但通过 `xm block-attach` 访问时性能下降。在我们看来，这是荒谬的。
 - en: 'First, we created two logical volumes in the volume group *test*: one with
     mirroring and a mirror log, and one with the `--corelog` option.'
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们在卷组 *test* 中创建了两个逻辑卷：一个具有镜像和镜像日志，另一个使用 `--corelog` 选项。
 - en: '[PRE40]'
+  id: totrans-175
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE40]'
 - en: 'Then we made filesystems and mounted them:'
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，我们创建了文件系统并将它们挂载：
 - en: '[PRE41]'
+  id: totrans-177
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE41]'
 - en: 'Next we started OProfile, using the `--xen` option to give the path to our
     uncompessed Xen kernel image. After a few test runs profiling various events,
     it became clear that our problem related to excessive amounts of time spent waiting
     for I/O. Thus, we instruct the profiler to count `BUS_IO_WAIT` events, which indicate
     when the processor is stuck waiting for input:'
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，我们启动了 OProfile，使用 `--xen` 选项提供未压缩的 Xen 内核映像的路径。经过几次测试运行，分析各种事件，很明显我们的问题与花费在等待
+    I/O 上的时间过多有关。因此，我们指示分析器计数 `BUS_IO_WAIT` 事件，这些事件表示处理器在等待输入时卡住：
 - en: '[PRE42]'
+  id: totrans-179
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE42]'
 - en: Then we ran Bonnie++ on each device in sequence, stopping OProfile and saving
     the output each time.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，我们按顺序在每个设备上运行 Bonnie++，每次停止 OProfile 并保存输出。
 - en: '[PRE43]'
+  id: totrans-181
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE43]'
 - en: 'The LV with the corelog displayed negligible iowait, as expected. However,
     the other experienced quite a bit, as you can see in this output from our test
     of the LV in question:'
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 如预期的那样，具有核心日志的 LV 显示了可忽略的 iowait。然而，其他设备经历了很多，正如您在这份关于所讨论 LV 的测试输出中看到的那样：
 - en: '[PRE44]'
+  id: totrans-183
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE44]'
 - en: Here we see that the Xen kernel is experiencing a large number of `BUS_IO_WAIT`
     events in the `pit_read_counter` function, suggesting that this function is probably
     our culprit. A bit of searching for that function name reveals that it's been
     taken out of recent versions of Xen, so we decide to take the easy way out and
     upgrade. Problem solved—but now we have some idea why.
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们可以看到 Xen 内核在 `pit_read_counter` 函数中经历了大量 `BUS_IO_WAIT` 事件，这表明这个函数很可能是我们的罪魁祸首。对那个函数名称进行一点搜索发现，它已经被从
+    Xen 的最新版本中移除，所以我们决定走捷径进行升级。问题解决了——但现在我们有一些想法为什么。
 - en: Used properly, profiling can be an excellent way to track down performance bottlenecks.
     However, it's not any sort of magic bullet. The sheer amount of data that profiling
     generates can be seductive, and sorting through the profiler's output may take
     far more time than it's worth.
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: 正确使用，分析可以是一个跟踪性能瓶颈的优秀方法。然而，它并不是任何一种魔法子弹。分析产生的大量数据可能会很有吸引力，而整理分析器的输出可能需要比其价值更多的时间。
 - en: '* * *'
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[59](#CHP-10-FNOTE-4)]) Excluding top(1), of course.
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[59](#CHP-10-FNOTE-4)]) 当然，不包括 top(1)。
 - en: Conclusion
+  id: totrans-188
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: So that's a sysadmin's primer on performance measurement with Xen. In this chapter,
     we've described tools to measure performance, ranging from the general to the
     specific, from the hardware focused to the application oriented. We've also briefly
     discussed the Xen-oriented features of OProfile, which aim to extend the profiler
     to multiple domUs and the hypervisor itself.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 这样就介绍了一个使用 Xen 进行性能测量的系统管理员入门指南。在本章中，我们描述了从通用到特定、从硬件导向到应用导向的各种性能测量工具。我们还简要讨论了
+    OProfile 的 Xen 相关特性，这些特性旨在将分析器扩展到多个 domU 和虚拟机管理程序本身。
