@@ -1,31 +1,44 @@
 - en: Chapter 14. Common Access Method
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第 14 章。通用访问方法
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
 - en: '*Common Access Method (CAM)* is an ANSI standard. Although primarily used for
     SCSI, CAM is a method for separating host bus adapter (HBA) drivers from storage
     drivers. HBAs are devices (that is, a card or integrated circuit) that connect
     the host to other devices. For example, USB HBAs allow the host to communicate
     with USB devices.'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: '*通用访问方法 (CAM)* 是一个 ANSI 标准。尽管主要用于 SCSI，但 CAM 是一种将主机总线适配器 (HBA) 驱动程序与存储驱动程序分离的方法。HBA
+    是连接主机与其他设备的设备（即一张卡或集成电路）。例如，USB HBA 允许主机与 USB 设备通信。'
 - en: By separating HBA drivers from storage drivers, CAM reduces the complexity of
     individual drivers. Furthermore, this separation enables storage drivers (such
     as CD-ROM and tape drivers) to control their devices on anyI/O bus (such as IDE,
     SCSI, and so on) as long as an appropriate HBA driver is available. In other words,
     CAM modularizes HBA and storage drivers.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过将 HBA 驱动程序与存储驱动程序分离，CAM 减少了单个驱动程序的复杂性。此外，这种分离使得存储驱动程序（如 CD-ROM 和磁带驱动程序）可以在任何
+    I/O 总线（如 IDE、SCSI 等）上控制它们的设备，只要有一个合适的 HBA 驱动程序可用。换句话说，CAM 将 HBA 和存储驱动程序模块化。
 - en: In CAM vernacular, HBA drivers are known as software interface modules (SIMs),
     and storage drivers are known as peripheral modules. Incidentally, the storage
     drivers discussed in [Chapter 13](ch13.html "Chapter 13. Storage Drivers") are
     not under CAM. To avoid confusion, I’ll refer to storage drivers under CAM as
     peripheral modules from now on.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 CAM 术语中，HBA 驱动程序被称为软件接口模块 (SIMs)，而存储驱动程序被称为外围模块。顺便提一下，第 13 章（ch13.html "第
+    13 章。存储驱动程序"）中讨论的存储驱动程序不在 CAM 下。为了避免混淆，从现在起我将把 CAM 下的存储驱动程序称为外围模块。
 - en: The FreeBSD CAM implementation contains SIMs for SCSI Parallel Interface (SPI),
     Fibre Channel (FC), USB Mass Storage (UMASS), FireWire (IEEE 1394), and Advanced
     Technology Attachment Packet Interface (ATAPI). It has peripheral modules for
@@ -34,227 +47,343 @@
     interface that allows user applications to send I/O requests directly to any CAM-controlled
     device (McKusick and Neville-Neil, 2005). This interface is, fundamentally, a
     SIM (as you’ll soon see).
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD CAM 实现包含用于 SCSI 并行接口 (SPI)、光纤通道 (FC)、USB 大容量存储 (UMASS)、火线 (IEEE 1394)
+    和高级技术附件包接口 (ATAPI) 的 SIMs。它具有磁盘（`da`）、CD-ROM（`cd`）、磁带（`sa`）、磁带更换器（`ch`）、处理器类型设备（`pt`）和机箱服务（`ses`）的外围模块。此外，它还提供了一个“直通”接口，允许用户应用程序直接将
+    I/O 请求发送到任何 CAM 控制的设备（McKusick 和 Neville-Neil，2005）。这个接口本质上是一个 SIM（你很快就会看到）。
 - en: In this chapter you’ll learn how to manage HBAs using CAM. Of course, before
     you can do that, you’ll need to know how CAM interfaces peripheral modules with
     SIMs. Because peripheral modules are just storage drivers with some CAM-related
     code, they’re only briefly discussed in this chapter.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，你将学习如何使用 CAM 管理HBA。当然，在你能够做到这一点之前，你需要了解 CAM 如何将外围模块与 SIMs 接口。因为外围模块只是带有一些
+    CAM 相关代码的存储驱动程序，所以本章只是简要地讨论了它们。
 - en: How CAM Works
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 如何使用 CAM 工作
 - en: CAM is most easily understood by tracing an I/O request through it.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过追踪一个 I/O 请求通过 CAM，可以最简单地理解 CAM。
 - en: In [Figure 14-1](ch14.html#the_path_of_an_i_solidus_o_request_throu "Figure 14-1. The
     path of an I/O request through the CAM subsystem"),^([[9](#ftn.CHP-14-FN-1)])
     the kernel passes a block-centric I/O request to the `da(4)` peripheral module.
     As you would expect, this causes `da(4)`’s strategy routine (`dastrategy`) to
     execute.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 在[图 14-1](ch14.html#the_path_of_an_i_solidus_o_request_throu "图 14-1. I/O 请求通过
+    CAM 子系统的路径")中，内核将一个以块为中心的 I/O 请求传递给 `da(4)` 外围模块。正如你所期望的，这会导致 `da(4)` 的策略例程（`dastrategy`）执行。
 - en: '![The path of an I/O request through the CAM subsystem](httpatomoreillycomsourcenostarchimages1137519.png)'
+  id: totrans-10
   prefs: []
   type: TYPE_IMG
+  zh: '![I/O 请求通过 CAM 子系统的路径](httpatomoreillycomsourcenostarchimages1137519.png)'
 - en: Figure 14-1. The path of an I/O request through the CAM subsystem
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 14-1. I/O 请求通过 CAM 子系统的路径
 - en: The `dastrategy` function gets the block-centric I/O request and inserts it
     on the appropriate block I/O queue via `bioq_disksort`. It concludes by calling
     the `xpt_schedule` function. (The `da(4)` peripheral module supports every SCSI
     disk. Consequently, it manages multiple block I/O queues.)
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: '`dastrategy` 函数获取以块为中心的 I/O 请求，并通过 `bioq_disksort` 将其插入到适当的块 I/O 队列中。它通过调用
+    `xpt_schedule` 函数结束。(`da(4)` 外围模块支持每个 SCSI 硬盘。因此，它管理多个块 I/O 队列。)'
 - en: The `xpt_schedule` function, by and large, schedules a peripheral module to
     receive a *CAM Control Block (CCB)*. A CCB describes the location (or path) to
     the target device (that is, the intended recipient of the I/O request). The `xpt_schedule`
     function concludes by calling the `xpt_run_dev_allocq` function. (Note that my
     definition of CCB isn’t complete. I’ll expand this definition throughout this
     chapter.)
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: '`xpt_schedule`函数主要安排一个外围模块接收一个*CAM控制块（CCB）*。CCB描述了目标设备的位置（或路径）（即I/O请求的预期接收者）。`xpt_schedule`函数通过调用`xpt_run_dev_allocq`函数结束。（请注意，我对CCB的定义并不完整。我将在本章中扩展这个定义。）'
 - en: The `xpt_run_dev_allocq` function allocates and constructs a CCB. Afterward,
     it calls the peripheral module’s start routine (`dastart` in this example).
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: '`xpt_run_dev_allocq`函数分配并构建一个CCB。之后，它调用外围模块的启动例程（在这个例子中是`dastart`）。'
 - en: The `dastart` function takes the first block-centric I/O request off the appropriate
     block I/O queue and converts that into a SCSI command. This command is stored
     in the CCB constructed by `xpt_run_dev_allocq`. The `dastart` function ends by
     calling the `xpt_action` function.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: '`dastart`函数从适当的块I/O队列中取出第一个块中心的I/O请求，并将其转换为SCSI命令。这个命令存储在由`xpt_run_dev_allocq`构建的CCB中。`dastart`函数通过调用`xpt_action`函数结束。'
 - en: The `xpt_action` function uses the path information stored in the CCB to determine
     the SIM to which the SCSI command should be sent. It then calls that SIM’s action
     routine (`ahc_action` in this case).
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: '`xpt_action`函数使用存储在CCB中的路径信息来确定应该将SCSI命令发送到哪个SIM。然后它调用该SIM的动作例程（在这种情况下是`ahc_action`）。'
 - en: Note
+  id: totrans-17
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: A SIM was pseudo-randomly chosen for this example, so the fact that it’s `ahc(4)`
     is irrelevant.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个示例中的SIM是伪随机选择的，所以它是`ahc(4)`的事实并不重要。
 - en: The `ahc_action` function gets the CCB and translates the SCSI command into
     a hardware-specific command. This hardware-specific command is then passed to
     the device to be executed. Afterward, `ahc_action` returns back to the caller
     of `dastrategy`.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ahc_action`函数获取CCB，并将SCSI命令转换为特定的硬件命令。然后，这个特定的硬件命令被传递给设备执行。之后，`ahc_action`返回到`dastrategy`的调用者。'
 - en: As soon as the device completes the hardware-specific command (which may involve
     DMA), it sends an interrupt, which causes `ahc(4)`’s done routine (`ahc_done`)
     to execute.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦设备完成特定的硬件命令（可能涉及DMA），它就会发送一个中断，这会导致`ahc(4)`的完成例程（`ahc_done`）执行。
 - en: The `ahc_done` function appends the completion status (that is, successful or
     unsuccessful) to the CCB related to the completed hardware-specific command. It
     then calls the `xpt_done` function.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ahc_done`函数将完成状态（即成功或失败）追加到与完成的特定硬件命令相关的CCB。然后它调用`xpt_done`函数。'
 - en: The `xpt_done` function gets the completed CCB and sets it up for processing
     by `camisr`, the CAM interrupt service routine. It then schedules `camisr` to
     run.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: '`xpt_done`函数获取完成的CCB，并将其设置好以供`camisr`（CAM中断服务例程）处理。然后它安排`camisr`运行。'
 - en: Loosely speaking, the `camisr` function carries out some “housekeeping” on the
     CCB. It ends by calling the CCB’s specified completion function (`dadone` in this
     example).
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 大体上讲，`camisr`函数对CCB执行一些“家务”工作。它通过调用CCB指定的完成函数（在这个例子中是`dadone`）结束。
 - en: The `dadone` function, more or less, tells the kernel that the block-centric
     I/O request has been serviced by calling `biodone`.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: '`dadone`函数，或多或少地，通过调用`biodone`来告诉内核块中心的I/O请求已经被服务。'
 - en: '* * *'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[9](#CHP-14-FN-1)]) [Figure 14-1](ch14.html#the_path_of_an_i_solidus_o_request_throu
     "Figure 14-1. The path of an I/O request through the CAM subsystem") is adapted
     from *The Design and Implementation of the FreeBSD Operating System* by Marshall
     Kirk McKusick and George V. Neville-Neil (Addison-Wesley, 2005).
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[9](#CHP-14-FN-1)]) [图14-1](ch14.html#the_path_of_an_i_solidus_o_request_throu
+    "图14-1. I/O请求通过CAM子系统的路径") 是改编自Marshall Kirk McKusick和George V. Neville-Neil所著的《FreeBSD操作系统的设计与实现》（Addison-Wesley，2005）。
 - en: A (Somewhat) Simple Example
+  id: totrans-27
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: （一个）简单示例
 - en: Now that you’re familiar with the CAM subsystem, let’s work through some code.
     After that, I’ll detail the different CAM-related functions.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你已经熟悉了CAM子系统，让我们通过一些代码来操作。之后，我将详细说明不同的CAM相关函数。
 - en: '[Example 14-1](ch14s02.html#mfi_underscore_cam.c "Example 14-1. mfi_cam.c")
     is a SIM for a pseudo-HBA (taken from the `mfi(4)` code base).'
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例14-1](ch14s02.html#mfi_underscore_cam.c "示例14-1. mfi_cam.c") 是一个伪HBA的SIM（从`mfi(4)`代码库中提取）。'
 - en: Note
+  id: totrans-30
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Take a quick look at this code and try to discern some of its structure. If
     you don’t understand all of it, don’t worry; an explanation follows.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 快速看一下这段代码，并尝试辨别其结构。如果你不理解其中的所有内容，不要担心；解释随后到来。
 - en: Example 14-1. mfi_cam.c
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 14-1. mfi_cam.c
 - en: '[PRE0]'
+  id: totrans-33
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: The following sections describe the functions defined in [Example 14-1](ch14s02.html#mfi_underscore_cam.c
     "Example 14-1. mfi_cam.c") roughly in the order they would execute.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下章节将按执行顺序大致描述 [示例 14-1](ch14s02.html#mfi_underscore_cam.c "示例 14-1. mfi_cam.c")
+    中定义的函数。
 - en: As an aside, because ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `mfip_probe` is extremely rudimentary and because we’ve examined similar code
     elsewhere, I’ll omit discussing it.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为旁白，因为 ![](httpatomoreillycomsourcenostarchimages1137499.png) `mfip_probe`
+    非常基础，并且因为我们已经在其他地方检查了类似的代码，所以我会省略对其的讨论。
 - en: mfip_attach Function
+  id: totrans-36
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: mfip_attach 函数
 - en: 'The `mfip_attach` function is the `device_attach` implementation for this driver.
     Here is its function definition (again):'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mfip_attach` 函数是此驱动程序的 `device_attach` 实现。以下是其函数定义（再次）：'
 - en: '[PRE1]'
+  id: totrans-38
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: This function first calls ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `cam_simq_alloc` to allocate a SIM queue. Loosely speaking, *SIM queues* ensure
     that HBAs cannot be swamped by I/O requests. See, I/O requests from peripheral
     modules are housed on SIM queues to await service. When a queue becomes full,
     any additional requests are rejected.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先调用 ![](httpatomoreillycomsourcenostarchimages1137499.png) `cam_simq_alloc`
+    以分配一个 SIM 队列。简单来说，*SIM 队列* 确保 HBAs 不会被 I/O 请求淹没。请看，来自外围模块的 I/O 请求位于 SIM 队列中，等待服务。当一个队列满时，任何额外的请求都会被拒绝。
 - en: Next, ![](httpatomoreillycomsourcenostarchimages1137501.png) `cam_sim_alloc`
     is called to allocate a SIM (or bus) descriptor. Note that if an HBA implements
     multiple buses (or channels), each bus requires its own descriptor.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，![](httpatomoreillycomsourcenostarchimages1137501.png) 调用 `cam_sim_alloc`
+    以分配一个 SIM（或总线）描述符。请注意，如果 HBA 实现了多个总线（或通道），则每个总线都需要自己的描述符。
 - en: Finally, ![](httpatomoreillycomsourcenostarchimages1137503.png) `xpt_bus_register`
     takes the descriptor returned by `cam_sim_alloc` and registers it with the CAM
     subsystem.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，![](httpatomoreillycomsourcenostarchimages1137503.png) `xpt_bus_register`
+    接收 `cam_sim_alloc` 返回的描述符并将其注册到 CAM 子系统。
 - en: mfip_detach Function
+  id: totrans-42
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: mfip_detach 函数
 - en: 'The `mfip_detach` function is the `device_detach` implementation for this driver.
     Here is its function definition (again):'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mfip_detach` 函数是此驱动程序的 `device_detach` 实现。以下是其函数定义（再次）：'
 - en: '[PRE2]'
+  id: totrans-44
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: This function starts by ![](httpatomoreillycomsourcenostarchimages1137499.png)
     deregistering and ![](httpatomoreillycomsourcenostarchimages1137501.png) freeing
     its SIM descriptor. Afterward, its SIM queue is ![](httpatomoreillycomsourcenostarchimages1137503.png)
     freed.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先通过 ![](httpatomoreillycomsourcenostarchimages1137499.png) 注销并 ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    释放其 SIM 描述符。之后，其 SIM 队列被 ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    释放。
 - en: mfip_action Function
+  id: totrans-46
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: mfip_action 函数
 - en: The `mfip_action` function is defined in `mfip_attach` as the action routine
     (for verification, see the first argument to `cam_sim_alloc`). *Action routines*
     are executed every time a SIM receives a CCB.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mfip_action` 函数在 `mfip_attach` 中定义为动作例程（验证见 `cam_sim_alloc` 的第一个参数）。*动作例程*
+    在每次 SIM 收到 CCB 时执行。'
 - en: Note
+  id: totrans-48
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Recall that a CCB houses an I/O request (or command) to perform along with the
     identity of the target device (that is, the intended recipient of the I/O request).
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 回想一下，CCB 包含一个要执行 I/O 请求（或命令）以及目标设备的标识（即 I/O 请求的预期接收者）。
 - en: 'Fundamentally, `mfip_action` is akin to the `ahc_action` function shown in
     [Figure 14-1](ch14.html#the_path_of_an_i_solidus_o_request_throu "Figure 14-1. The
     path of an I/O request through the CAM subsystem"). Here is its function definition
     (again):'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 基本上，`mfip_action` 与 [图 14-1](ch14.html#the_path_of_an_i_solidus_o_request_throu
+    "图 14-1. I/O 请求通过 CAM 子系统的路径") 中显示的 `ahc_action` 函数类似。以下是其函数定义（再次）：
 - en: '[PRE3]'
+  id: totrans-51
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: Most action routines simply take a ![](httpatomoreillycomsourcenostarchimages1137499.png)
     CCB and ![](httpatomoreillycomsourcenostarchimages1137501.png) branch according
     to the `ccb_h.func_code` variable, which denotes the I/O operation to perform.
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 大多数动作例程只是接受一个 ![](httpatomoreillycomsourcenostarchimages1137499.png) CCB 并 ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    根据 `ccb_h.func_code` 变量分支，该变量表示要执行的 I/O 操作。
 - en: For now, I’m going to focus on the structure of `mfip_action` and avoid its
     specifics. An in-depth explanation of `mfip_action` appears in [Action Routines](ch14s04.html
     "Action Routines") in [xpt_bus_register Function](ch14s03.html#xpt_underscore_bus_underscore_register
     "xpt_bus_register Function").
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 目前，我将专注于 `mfip_action` 的结构，避免其具体细节。`mfip_action` 的深入解释可以在 [动作例程](ch14s04.html
+    "动作例程") 中找到，位于 [xpt_bus_register 函数](ch14s03.html#xpt_underscore_bus_underscore_register
+    "xpt_bus_register 函数")。
 - en: 'As you can see, this function can perform one of six I/O operations: it can
     ![](httpatomoreillycomsourcenostarchimages1137503.png) return the SIM and HBA
     properties, reset a ![](httpatomoreillycomsourcenostarchimages1137505.png) bus
@@ -262,89 +391,141 @@
     get or ![](httpatomoreillycomsourcenostarchimages1137511.png) set the transfer
     settings, or ![](httpatomoreillycomsourcenostarchimages1137513.png) issue a SCSI
     command to a device.'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，这个函数可以执行六种 I/O 操作之一：它可以 ![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    返回 SIM 和 HBA 属性，重置 ![图片](httpatomoreillycomsourcenostarchimages1137505.png) 总线或
+    ![图片](httpatomoreillycomsourcenostarchimages1137507.png) 设备，![图片](httpatomoreillycomsourcenostarchimages1137509.png)
+    获取或 ![图片](httpatomoreillycomsourcenostarchimages1137511.png) 设置传输设置，或者 ![图片](httpatomoreillycomsourcenostarchimages1137513.png)
+    向设备发出 SCSI 命令。
 - en: mfip_poll Function
+  id: totrans-55
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`mfip_poll` 函数'
 - en: The `mfip_poll` function is defined in `mfip_attach` as the poll routine (for
     verification, see the second argument to `cam_sim_alloc`). Customarily, *poll
     routines* wrap a SIM’s interrupt handler. See, when interrupts are unavailable
     (for example, after a kernel panic) the CAM subsystem will use poll routines to
     run its interrupt handlers.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mfip_poll` 函数定义在 `mfip_attach` 中作为轮询例程（验证见 `cam_sim_alloc` 的第二个参数）。通常，*轮询例程*
+    包装 SIM 的中断处理程序。例如，当中断不可用（例如，在内核恐慌之后）时，CAM 子系统将使用轮询例程来运行其中断处理程序。'
 - en: 'The following is the function definition for `mfip_poll` (again):'
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是 `mfip_poll` 函数的定义（再次）：
 - en: '[PRE4]'
+  id: totrans-58
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Because this SIM does not implement an interrupt handler, `mfip_poll` just ![](httpatomoreillycomsourcenostarchimages1137499.png)
     returns.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于这个 SIM 没有实现中断处理程序，`mfip_poll` 只是 ![图片](httpatomoreillycomsourcenostarchimages1137499.png)
+    返回。
 - en: mfip_start Function
+  id: totrans-60
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`mfip_start` 函数'
 - en: The `mfip_start` function transforms a SCSI command into a hardware-specific
     command. This function is called exclusively by `mfi_startio`.
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mfip_start` 函数将 SCSI 命令转换为硬件特定命令。这个函数仅由 `mfi_startio` 调用。'
 - en: Note
+  id: totrans-62
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The `mfi_startio` function is defined in *mfi.c* (which is not described in
     this book). `mfi_startio` is called by `mfip_action` (described in [mfip_action
     Function](ch14s02.html#mfip_underscore_action_function "mfip_action Function")
     in [mfip_action Function](ch14s02.html#mfip_underscore_action_function "mfip_action
     Function")) to issue a SCSI command to a device.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mfi_startio` 函数定义在 *mfi.c* 中（本书未对其进行描述）。`mfi_startio` 由 `mfip_action` 调用（在
+    [mfip_action 函数](ch14s02.html#mfip_underscore_action_function "mfip_action Function")
+    中描述，见 [mfip_action 函数](ch14s02.html#mfip_underscore_action_function "mfip_action
+    Function")）以向设备发出 SCSI 命令。'
 - en: 'Here is the function definition for `mfip_start` (again):'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是 `mfip_start` 函数的定义（再次）：
 - en: '[PRE5]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: As you can see, this function is fairly straightforward—it’s just a bunch of
     assignments. Until we’ve examined `struct ccb_scsiio` and `struct ccb_hdr`, which
     occurs in [XPT_SCSI_IO](ch14s04.html#xpt_underscore_scsi_underscore_io "XPT_SCSI_IO")
     in [XPT_SCSI_IO](ch14s04.html#xpt_underscore_scsi_underscore_io "XPT_SCSI_IO"),
     I’m going to postpone walking through this function.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，这个函数相当直接——它只是一系列赋值操作。在我们检查完 `struct ccb_scsiio` 和 `struct ccb_hdr` 之前，这些内容出现在
+    [XPT_SCSI_IO](ch14s04.html#xpt_underscore_scsi_underscore_io "XPT_SCSI_IO") 的
+    [XPT_SCSI_IO](ch14s04.html#xpt_underscore_scsi_underscore_io "XPT_SCSI_IO") 中，我将推迟对这个函数的详细分析。
 - en: Note that ![](httpatomoreillycomsourcenostarchimages1137499.png) `mfip_done`
     is set as the done routine for the hardware-specific command.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意到 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) `mfip_done` 被设置为硬件特定命令的完成例程。
 - en: mfip_done Function
+  id: totrans-68
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`mfip_done` 函数'
 - en: As implied previously, the `mfip_done` function is the done routine for this
     SIM. It is executed by `mfi_intr` immediately after a device completes a hardware-specific
     command.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，`mfip_done` 函数是这个 SIM 的完成例程。它在设备完成硬件特定命令后立即由 `mfi_intr` 执行。
 - en: Note
+  id: totrans-70
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The `mfi_intr` function is `mfi(4)`’s interrupt handler. It is defined in *mfi.c*.
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mfi_intr` 函数是 `mfi(4)` 的中断处理程序。它在 *mfi.c* 中定义。'
 - en: 'Fundamentally, `mfip_done` is akin to the `ahc_done` function shown in [Figure 14-1](ch14.html#the_path_of_an_i_solidus_o_request_throu
     "Figure 14-1. The path of an I/O request through the CAM subsystem"). Here is
     its function definition (again):'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 基本上，`mfip_done` 与 [图 14-1](ch14.html#the_path_of_an_i_solidus_o_request_throu
+    "图 14-1. I/O 请求通过 CAM 子系统的路径") 中显示的 `ahc_done` 函数类似。这是它的函数定义（再次）：
 - en: '[PRE6]'
+  id: totrans-73
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: Commonly, done routines take a ![](httpatomoreillycomsourcenostarchimages1137499.png)
     hardware-specific command and append the completion status (that is, successful
     or unsuccessful) to its associated ![](httpatomoreillycomsourcenostarchimages1137501.png)
@@ -352,280 +533,446 @@
     ![](httpatomoreillycomsourcenostarchimages1137507.png) ![](httpatomoreillycomsourcenostarchimages1137509.png)
     CCB. Once this is done, ![](httpatomoreillycomsourcenostarchimages1137511.png)
     `xpt_done` is called to process the completed CCB.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，执行例程会接受一个![httpatomoreillycomsourcenostarchimages1137499.png](httpatomoreillycomsourcenostarchimages1137499.png)硬件特定的命令，并将其完成状态（即成功或失败）附加到其关联的![httpatomoreillycomsourcenostarchimages1137501.png](httpatomoreillycomsourcenostarchimages1137501.png)
+    ![httpatomoreillycomsourcenostarchimages1137503.png](httpatomoreillycomsourcenostarchimages1137503.png)
+    ![httpatomoreillycomsourcenostarchimages1137505.png](httpatomoreillycomsourcenostarchimages1137505.png)
+    ![httpatomoreillycomsourcenostarchimages1137507.png](httpatomoreillycomsourcenostarchimages1137507.png)
+    ![httpatomoreillycomsourcenostarchimages1137509.png](httpatomoreillycomsourcenostarchimages1137509.png)
+    CCB。完成此操作后，![httpatomoreillycomsourcenostarchimages1137511.png](httpatomoreillycomsourcenostarchimages1137511.png)
+    `xpt_done` 被调用以处理完成的 CCB。
 - en: Note
+  id: totrans-75
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The `mfi(4)` code base uses DMA to acquire the completion status from a device.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mfi(4)` 代码库使用 DMA 从设备获取完成状态。'
 - en: Now that you’re familiar with [Example 14-1](ch14s02.html#mfi_underscore_cam.c
     "Example 14-1. mfi_cam.c"), I’ll expound on the different functions, structures,
     and constructs it employs.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你已经熟悉了[示例 14-1](ch14s02.html#mfi_underscore_cam.c "示例 14-1. mfi_cam.c")，我将详细说明它所使用的不同函数、结构和构造。
 - en: SIM Registration Routines
+  id: totrans-78
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: SIM 注册例程
 - en: 'As alluded to previously, registering a SIM with the CAM subsystem involves
     three functions:'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，使用 CAM 子系统注册 SIM 涉及三个功能：
 - en: '`cam_simq_alloc`'
+  id: totrans-80
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`cam_simq_alloc`'
 - en: '`cam_sim_alloc`'
+  id: totrans-81
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`cam_sim_alloc`'
 - en: '`xpt_bus_register`'
+  id: totrans-82
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`xpt_bus_register`'
 - en: cam_simq_alloc Function
+  id: totrans-83
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: cam_simq_alloc 函数
 - en: The `cam_simq_alloc` function allocates a SIM queue.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cam_simq_alloc` 函数分配一个 SIM 队列。'
 - en: '[PRE7]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'Here, `max_sim_transactions` denotes the size of the SIM queue. Normally, it
     is calculated like so:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，`max_sim_transactions` 表示 SIM 队列的大小。通常，它计算如下：
 - en: '[PRE8]'
+  id: totrans-87
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: cam_sim_alloc Function
+  id: totrans-88
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: cam_sim_alloc 函数
 - en: The `cam_sim_alloc` function allocates a SIM (or bus) descriptor.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cam_sim_alloc` 函数分配一个 SIM（或总线）描述符。'
 - en: Note
+  id: totrans-90
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: If an HBA implements multiple buses (or channels), each bus requires its own
     descriptor.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果 HBA 实现了多个总线（或通道），则每个总线都需要其自己的描述符。
 - en: '[PRE9]'
+  id: totrans-92
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: Because the first six arguments to `cam_sim_alloc` are fairly obvious—they’re
     exactly what their name implies—I’ll omit discussing them.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 因为 `cam_sim_alloc` 的前六个参数相当明显——它们正是其名称所暗示的——所以我将省略对它们的讨论。
 - en: The `max_dev_transactions` argument specifies the maximum number of concurrent
     transactions per device. This argument applies only to devices that do not support
     SCSI Tagged Command Queuing (SCSI TCQ). Generally, `max_dev_transactions` is always
     set to `1`.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: '`max_dev_transactions` 参数指定每个设备并发事务的最大数量。此参数仅适用于不支持 SCSI 标记命令队列（SCSI TCQ）的设备。通常，`max_dev_transactions`
+    总是设置为 `1`。'
 - en: The `max_tagged_dev_transactions` argument is identical to `max_dev_transactions`,
     but it applies only to devices that support SCSI TCQ.
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: '`max_tagged_dev_transactions` 参数与 `max_dev_transactions` 相同，但它仅适用于支持 SCSI TCQ
+    的设备。'
 - en: The `queue` argument expects a pointer to a SIM queue (that is, `cam_simq_alloc`’s
     return value).
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: '`queue` 参数期望一个指向 SIM 队列的指针（即 `cam_simq_alloc` 的返回值）。'
 - en: xpt_bus_register Function
+  id: totrans-97
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: xpt_bus_register 函数
 - en: The `xpt_bus_register` function registers a SIM with the CAM subsystem.
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: '`xpt_bus_register` 函数将 SIM 注册到 CAM 子系统。'
 - en: '[PRE10]'
+  id: totrans-99
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: Here, `sim` specifies the SIM to register (that is, `cam_sim_alloc`’s return
     value) and `bus` denotes its bus number. The `parent` argument is currently unused.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，`sim` 指定要注册的 SIM（即 `cam_sim_alloc` 的返回值），而 `bus` 表示其总线号。`parent` 参数目前未使用。
 - en: Note
+  id: totrans-101
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: If an HBA implements multiple buses (or channels), each bus needs its own unique
     bus number.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果 HBA 实现了多个总线（或通道），则每个总线都需要其唯一的总线号。
 - en: Action Routines
+  id: totrans-103
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 动作例程
 - en: As mentioned previously, action routines are executed every time a SIM receives
     a CCB. You can think of action routines like the “main function” for a SIM.
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，动作例程在 SIM 收到 CCB 时执行。你可以将动作例程视为 SIM 的“主函数”。
 - en: 'Here is the function prototype for an action routine (taken from the `<cam/cam_sim.h>`
     header):'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是动作例程的函数原型（来自 `<cam/cam_sim.h>` 头文件）：
 - en: '[PRE11]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: Recall that action routines `switch` according to the `ccb->ccb_h.func_code`
     variable, which contains a constant that symbolizes the I/O operation to perform.
     For the rest of this chapter, I’ll detail the most common constants/operations.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 回想一下，动作例程根据 `ccb->ccb_h.func_code` 变量进行 `switch`，该变量包含表示要执行 I/O 操作的常量。在本章的其余部分，我将详细介绍最常见的常量/操作。
 - en: Note
+  id: totrans-108
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: For the complete list of constants/operations, see the `xpt_opcode` enumeration
     defined in the `<cam/cam_ccb.h>` header.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于常量/操作的完整列表，请参阅 `<cam/cam_ccb.h>` 头文件中定义的 `xpt_opcode` 枚举。
 - en: XPT_PATH_INQ
+  id: totrans-110
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: XPT_PATH_INQ
 - en: The `XPT_PATH_INQ` constant specifies a path inquiry operation, which returns
     the SIM and HBA properties. Action routines that are passed `XPT_PATH_INQ` simply
     fill in a `ccb_pathinq` structure and then return.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: '`XPT_PATH_INQ` 常量指定了一个路径查询操作，它返回 SIM 和 HBA 属性。传递给 `XPT_PATH_INQ` 的操作例程简单地填充一个
+    `ccb_pathinq` 结构体然后返回。'
 - en: '`struct ccb_pathinq` is defined in the `<cam/cam_ccb.h>` header as follows:'
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: '`struct ccb_pathinq` 在 `<cam/cam_ccb.h>` 头文件中定义如下：'
 - en: '[PRE12]'
+  id: totrans-113
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'Here is an example `XPT_PATH_INQ` operation (taken from [Example 14-1](ch14s02.html#mfi_underscore_cam.c
     "Example 14-1. mfi_cam.c")):'
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是一个 `XPT_PATH_INQ` 操作的示例（摘自 [示例 14-1](ch14s02.html#mfi_underscore_cam.c "示例
+    14-1. mfi_cam.c"))：
 - en: '[PRE13]'
+  id: totrans-115
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: Notice that the `ccb_pathinq` structure is provided by the ![](httpatomoreillycomsourcenostarchimages1137499.png)
     CCB. Moreover, notice that the ![](httpatomoreillycomsourcenostarchimages1137503.png)
     success or ![](httpatomoreillycomsourcenostarchimages1137507.png) failure of any
     operation is returned in ![](httpatomoreillycomsourcenostarchimages1137501.png)
     ![](httpatomoreillycomsourcenostarchimages1137505.png) `ccb_h.status`.
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意到 `ccb_pathinq` 结构体是由 ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    CCB 提供的。此外，注意到任何操作的 ![](httpatomoreillycomsourcenostarchimages1137503.png) 成功或
+    ![](httpatomoreillycomsourcenostarchimages1137507.png) 失败都返回在 ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    ![](httpatomoreillycomsourcenostarchimages1137505.png) `ccb_h.status` 中。
 - en: XPT_RESET_BUS
+  id: totrans-117
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: XPT_RESET_BUS
 - en: 'The `XPT_RESET_BUS` constant specifies a bus reset operation. As you’d expect,
     `XPT_RESET_BUS` is horrifically hardware specific. Here is a minimalist implementation
     (taken from [Example 14-1](ch14s02.html#mfi_underscore_cam.c "Example 14-1. mfi_cam.c")):'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: '`XPT_RESET_BUS` 常量指定了一个总线重置操作。正如你所预期的那样，`XPT_RESET_BUS` 非常特定于硬件。以下是一个最小化实现（摘自
+    [示例 14-1](ch14s02.html#mfi_underscore_cam.c "示例 14-1. mfi_cam.c"))：'
 - en: '[PRE14]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `sim` is the bus
     to reset. Unsurprisingly, minimalist implementations forgo any “real” work and
     simply return ![](httpatomoreillycomsourcenostarchimages1137501.png) success.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，![](httpatomoreillycomsourcenostarchimages1137499.png) `sim` 是要重置的总线。不出所料，最小化实现放弃了任何“真实”的工作，并简单地返回
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) 成功。
 - en: Many SIMs use a minimalist implementation. A “proper” implementation is out
     of the scope of this book.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 许多 SIM 使用最小化实现。一个“正确”的实现超出了本书的范围。
 - en: XPT_GET_TRAN_SETTINGS
+  id: totrans-122
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: XPT_GET_TRAN_SETTINGS
 - en: The `XPT_GET_TRAN_SETTINGS` constant denotes an I/O operation that returns the
     current transfer settings or the user-defined upper limits. Action routines that
     are passed `XPT_GET_TRAN_SETTINGS` simply fill in a `ccb_trans_settings` structure
     and then return.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: '`XPT_GET_TRAN_SETTINGS` 常量表示一个返回当前传输设置或用户定义的上限的 I/O 操作。传递给 `XPT_GET_TRAN_SETTINGS`
+    的操作例程简单地填充一个 `ccb_trans_settings` 结构体然后返回。'
 - en: '`struct ccb_trans_settings` is defined in `<cam/cam_ccb.h>` like so:'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: '`struct ccb_trans_settings` 定义在 `<cam/cam_ccb.h>` 中，如下所示：'
 - en: '[PRE15]'
+  id: totrans-125
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'As you can see, `ccb_trans_settings` marshals a ![](httpatomoreillycomsourcenostarchimages1137499.png)
     protocol structure and five ![](httpatomoreillycomsourcenostarchimages1137501.png)
     transport-specific structures. These structures are defined in `<cam/cam_ccb.h>`
     like so:'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，`ccb_trans_settings` 将一个 ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    协议结构体和五个 ![](httpatomoreillycomsourcenostarchimages1137501.png) 传输特定结构体打包。这些结构体在
+    `<cam/cam_ccb.h>` 中定义如下：
 - en: '[PRE16]'
+  id: totrans-127
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'Here is an example `XPT_GET_TRAN_SETTINGS` operation (taken from [Example 14-1](ch14s02.html#mfi_underscore_cam.c
     "Example 14-1. mfi_cam.c")):'
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是一个 `XPT_GET_TRAN_SETTINGS` 操作的示例（摘自 [示例 14-1](ch14s02.html#mfi_underscore_cam.c
+    "示例 14-1. mfi_cam.c"))：
 - en: '[PRE17]'
+  id: totrans-129
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: Notice that the ![](httpatomoreillycomsourcenostarchimages1137501.png) `ccb_trans_settings`
     structure is provided by the ![](httpatomoreillycomsourcenostarchimages1137499.png)
     CCB. Naturally, only the fields applicable to the HBA are filled in.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意到 ![](httpatomoreillycomsourcenostarchimages1137501.png) `ccb_trans_settings`
+    结构体是由 ![](httpatomoreillycomsourcenostarchimages1137499.png) CCB 提供的。自然地，只有适用于
+    HBA 的字段被填充。
 - en: XPT_SET_TRAN_SETTINGS
+  id: totrans-131
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: XPT_SET_TRAN_SETTINGS
 - en: 'As you’d expect, `XPT_SET_TRAN_SETTINGS` is the opposite of `XPT_GET_TRAN_SETTINGS`.
     That is, `XPT_SET_TRAN_SETTINGS` changes the current transfer settings based on
     a `ccb_trans_settings` structure. Unsurprisingly, not all SIMs support this operation.
     For example:'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如你所预期的那样，`XPT_SET_TRAN_SETTINGS` 是 `XPT_GET_TRAN_SETTINGS` 的反义。也就是说，`XPT_SET_TRAN_SETTINGS`
+    根据一个 `ccb_trans_settings` 结构体更改当前的传输设置。不出所料，并非所有 SIM 都支持此操作。例如：
 - en: '[PRE18]'
+  id: totrans-133
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: This function states that `XPT_SET_TRAN_SETTINGS` is ![](httpatomoreillycomsourcenostarchimages1137499.png)
     not available. Note that a “proper” implementation is hardware specific and not
     covered in this book.
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数声明 `XPT_SET_TRAN_SETTINGS` ![图片](httpatomoreillycomsourcenostarchimages1137499.png)
+    不可用。请注意，“正确”的实现是特定于硬件的，且本书未涉及。
 - en: XPT_SCSI_IO
+  id: totrans-135
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: XPT_SCSI_IO
 - en: 'The `XPT_SCSI_IO` constant denotes an I/O operation that issues a SCSI command
     to a device. The particulars of this SCSI command are stored in two structures:
     `ccb_scsiio` and `ccb_hdr`.'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: '`XPT_SCSI_IO` 常量表示向设备发出 SCSI 命令的 I/O 操作。这个 SCSI 命令的详细信息存储在两个结构中：`ccb_scsiio`
+    和 `ccb_hdr`。'
 - en: '`struct ccb_scsiio` is defined in `<cam/cam_ccb.h>` like so:'
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: '`struct ccb_scsiio` 在 `<cam/cam_ccb.h>` 中定义如下：'
 - en: '[PRE19]'
+  id: totrans-138
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: '`struct ccb_hdr` is also defined in `<cam/cam_ccb.h>`, like so:'
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: '`struct ccb_hdr` 也在 `<cam/cam_ccb.h>` 中定义，如下所示：'
 - en: '[PRE20]'
+  id: totrans-140
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: '`struct ccb_hdr` should seem familiar—it’s used to return the ![](httpatomoreillycomsourcenostarchimages1137499.png)
     completion status in every I/O operation.'
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: '`struct ccb_hdr` 应该看起来很熟悉——它用于在每次 I/O 操作中返回 ![图片](httpatomoreillycomsourcenostarchimages1137499.png)
+    完成状态。'
 - en: 'The following is an example `XPT_SCSI_IO` operation (taken from [Example 14-1](ch14s02.html#mfi_underscore_cam.c
     "Example 14-1. mfi_cam.c")):'
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是一个示例 `XPT_SCSI_IO` 操作（取自 [示例 14-1](ch14s02.html#mfi_underscore_cam.c "示例
+    14-1. mfi_cam.c"))：
 - en: '[PRE21]'
+  id: totrans-143
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: This operation begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
     checking that the SCSI command length is acceptable. Then it determines whether
     the SCSI command uses ![](httpatomoreillycomsourcenostarchimages1137503.png) physical
@@ -636,99 +983,153 @@
     invalid arguments). Then `ccb_h->ccb_mfip_ptr` is ![](httpatomoreillycomsourcenostarchimages1137511.png)
     set to the software context and `mfi_startio` is ![](httpatomoreillycomsourcenostarchimages1137513.png)
     called.
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 此操作首先 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 检查 SCSI 命令长度是否可接受。然后确定
+    SCSI 命令是否使用 ![图片](httpatomoreillycomsourcenostarchimages1137503.png) 物理地址或 ![图片](httpatomoreillycomsourcenostarchimages1137507.png)
+    散列/聚集段来 ![图片](httpatomoreillycomsourcenostarchimages1137501.png) 传输数据。如果使用任一，此操作
+    ![图片](httpatomoreillycomsourcenostarchimages1137505.png) ![图片](httpatomoreillycomsourcenostarchimages1137509.png)
+    将退出（因为它接收了无效的参数）。然后 `ccb_h->ccb_mfip_ptr` 被设置为软件上下文，并调用 `mfi_startio`。
 - en: Note
+  id: totrans-145
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The `mfi_startio` function is what actually issues the SCSI command.
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mfi_startio` 函数实际上是发出 SCSI 命令的函数。'
 - en: Recall from [mfip_start Function](ch14s02.html#mfip_underscore_start_function
     "mfip_start Function") in [mfip_poll Function](ch14s02.html#mfip_underscore_poll_function
     "mfip_poll Function") that `mfi_startio` calls `mfip_start` to transform the SCSI
     command into a hardware-specific command.
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 从 [mfip_start 函数](ch14s02.html#mfip_underscore_start_function "mfip_start 函数")
+    和 [mfip_poll 函数](ch14s02.html#mfip_underscore_poll_function "mfip_poll 函数") 中回忆起，`mfi_startio`
+    调用 `mfip_start` 将 SCSI 命令转换为特定于硬件的命令。
 - en: '[PRE22]'
+  id: totrans-148
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: Notice that `struct ccb_hdr` lists the target’s ![](httpatomoreillycomsourcenostarchimages1137499.png)
     device ID and ![](httpatomoreillycomsourcenostarchimages1137501.png) logical unit
     number. It also lists whether the SCSI command transfers data ![](httpatomoreillycomsourcenostarchimages1137513.png)
     in, ![](httpatomoreillycomsourcenostarchimages1137515.png) out, or ![](httpatomoreillycomsourcenostarchimages1137517.png)
     nothing. Note that `XPT_SCSI_IO` operations are seen from the SIM’s point of view.
     Therefore, “in” means from the device, and “out” means to the device.
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意到 `struct ccb_hdr` 列出了目标设备的 ![图片](httpatomoreillycomsourcenostarchimages1137499.png)
+    设备 ID 和 ![图片](httpatomoreillycomsourcenostarchimages1137501.png) 逻辑单元号。它还列出了 SCSI
+    命令是否在 ![图片](httpatomoreillycomsourcenostarchimages1137513.png) 输入、![图片](httpatomoreillycomsourcenostarchimages1137515.png)
+    输出或 ![图片](httpatomoreillycomsourcenostarchimages1137517.png) 无操作中传输数据。请注意，`XPT_SCSI_IO`
+    操作是从 SIM 的角度看到的。因此，“输入”意味着来自设备，“输出”意味着到设备。
 - en: The `ccb_scsiio` structure maintains the ![](httpatomoreillycomsourcenostarchimages1137509.png)
     data to transfer and its ![](httpatomoreillycomsourcenostarchimages1137511.png)
     length. It also maintains the SCSI command (through a ![](httpatomoreillycomsourcenostarchimages1137503.png)
     pointer or a ![](httpatomoreillycomsourcenostarchimages1137507.png) buffer) and
     the command’s ![](httpatomoreillycomsourcenostarchimages1137505.png) length.
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ccb_scsiio`结构维护要传输的数据及其长度。它还维护SCSI命令（通过一个![图片](httpatomoreillycomsourcenostarchimages1137503.png)指针或一个![图片](httpatomoreillycomsourcenostarchimages1137507.png)缓冲区）以及命令的![图片](httpatomoreillycomsourcenostarchimages1137505.png)长度。'
 - en: Note
+  id: totrans-151
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Once more, the hardware-specific command constructed above is issued to the
     target device via `mfi_startio`.
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 再次强调，上面构建的针对特定硬件的命令是通过`mfi_startio`向目标设备发出的。
 - en: Recall that as soon as a device completes a hardware-specific command, it sends
     an interrupt, which causes the done routine (`mfip_done` in this case) to execute.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 回想一下，一旦设备完成针对特定硬件的命令，它会发送一个中断，这会导致完成例程（在这种情况下是`mfip_done`）执行。
 - en: '[PRE23]'
+  id: totrans-154
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: Notice that if the hardware-specific command ![](httpatomoreillycomsourcenostarchimages1137499.png)
     returns an error, the ![](httpatomoreillycomsourcenostarchimages1137503.png) error
     information (or sense data) is ![](httpatomoreillycomsourcenostarchimages1137501.png)
     copied to the `ccb_scsiio` structure’s ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `sense_data` field.
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，如果针对特定硬件的命令![图片](httpatomoreillycomsourcenostarchimages1137499.png)返回错误，![图片](httpatomoreillycomsourcenostarchimages1137503.png)错误信息（或感应数据）会被![图片](httpatomoreillycomsourcenostarchimages1137501.png)复制到`ccb_scsiio`结构的![图片](httpatomoreillycomsourcenostarchimages1137505.png)`sense_data`字段。
 - en: At this point in the game, the unexplained parts of this function should be
     obvious.
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 在游戏进行到这一点时，这个函数中未解释的部分应该是显而易见的。
 - en: XPT_RESET_DEV
+  id: totrans-157
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: XPT_RESET_DEV
 - en: 'The `XPT_RESET_DEV` constant specifies a device reset operation. Unsurprisingly,
     `XPT_RESET_DEV` is fairly hardware specific. Here is a simple `XPT_RESET_DEV`
     operation (taken from *bt.c*):'
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: '`XPT_RESET_DEV`常量指定了一个设备重置操作。不出所料，`XPT_RESET_DEV`相当特定于硬件。以下是一个简单的`XPT_RESET_DEV`操作（来自*bt.c*）：'
 - en: Note
+  id: totrans-159
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The *bt.c* source file is part of the `bt(4)` code base.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bt.c`源文件是`bt(4)`代码库的一部分。'
 - en: '[PRE24]'
+  id: totrans-161
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: Given that a hardware-specific command must be issued to reset this device,
     `XPT_RESET_DEV` simply ![](httpatomoreillycomsourcenostarchimages1137499.png)
     cascades into `XPT_SCSI_IO`.
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于必须发出一个针对特定硬件的命令来重置此设备，`XPT_RESET_DEV`简单地通过![图片](httpatomoreillycomsourcenostarchimages1137499.png)级联到`XPT_SCSI_IO`。
 - en: While not shown here, it should be stressed that all operations conclude by
     appending their completion status to their CCB and then calling `xpt_done(ccb)`.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然这里没有展示，但应强调所有操作都是通过将它们的完成状态附加到它们的CCB（Completion Command Block）然后调用`xpt_done(ccb)`来结束的。
 - en: Conclusion
+  id: totrans-164
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: This chapter concentrated heavily on HBA drivers, or SIMs, because they’re the
     most commonly written CAM-related driver. Of course, there’s more to CAM than
     what’s been shown here. You could conceivably write an entire book on CAM!
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章重点介绍了HBA驱动程序，或SIMs，因为它们是最常见的CAM相关驱动程序。当然，CAM的内容远不止这里所展示的。你甚至可以写一本关于CAM的整本书！

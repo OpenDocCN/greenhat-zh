@@ -1,557 +1,806 @@
 - en: Chapter 15. USB Drivers
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第15章。USB驱动程序
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
 - en: '*Universal Serial Bus (USB)* is a connection protocol between a host controller
     (such as a personal computer) and a peripheral device. It was designed to replace
     a wide range of slow buses—the parallel port, serial port, and PS/2 connector—with
     a single bus that all devices could connect to (Corbet et al., 2005).'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: '*通用串行总线（USB）*是主机控制器（如个人计算机）和外围设备之间的连接协议。它被设计用来用一个所有设备都能连接的单总线来替换多种慢速总线——并行端口、串行端口和PS/2连接器（Corbet等，2005）。'
 - en: As described in the official USB documentation, available at [http://www.usb.org/developers/](http://www.usb.org/developers/),
     USB devices are hideously complex. Fortunately, FreeBSD provides a *USB module*
     to handle most of the complexity. This chapter describes the interactions between
     the USB module and drivers. But first, some background on USB devices is needed.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 如官方USB文档所述，文档可在[http://www.usb.org/developers/](http://www.usb.org/developers/)找到，USB设备极其复杂。幸运的是，FreeBSD提供了一个*USB模块*来处理大部分复杂性。本章描述了USB模块和驱动程序之间的交互。但首先，需要了解一些关于USB设备的基础知识。
 - en: About USB Devices
+  id: totrans-4
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 关于USB设备的信息
 - en: 'Communication between a USB host controller and a USB device occurs through
     a pipe (Orwick and Smith, 2007). A *pipe* connects the host controller to an endpoint
     on a device. USB devices can have up to 32 endpoints. Each *endpoint* performs
     a specific communication-related operation for a device, such as receiving commands
     or transferring data. An endpoint can be one of four types:'
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: USB主机控制器和USB设备之间的通信通过管道（Orwick和Smith，2007）进行。一个*管道*将主机控制器连接到设备上的一个端点。USB设备可以有最多32个端点。每个*端点*为设备执行特定的通信相关操作，例如接收命令或传输数据。一个端点可以是四种类型之一：
 - en: Control
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 控制
 - en: Interrupt
+  id: totrans-7
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 中断
 - en: Bulk
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 批量
 - en: Isochronous
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 等时
 - en: '*Control endpoints* are used to send and receive information of a control nature
     (Oney, 2003). They are commonly used for configuring the device, issuing device
     commands, retrieving device information, and so on. Control transactions are guaranteed
     to succeed by the USB protocol. All USB devices have a control endpoint named
     endpoint 0.'
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: '*控制端点*用于发送和接收控制性质的信息（Oney，2003）。它们通常用于配置设备、发出设备命令、检索设备信息等。USB协议保证控制事务能够成功执行。所有USB设备都有一个名为端点0的控制端点。'
 - en: '*Interrupt endpoints* transfer small amounts of data at a fixed rate. See,
     USB devices cannot interrupt their host in the traditional sense—they don’t have
     an asynchronous interrupt. Instead, USB devices provide interrupt endpoints, which
     are polled periodically. These endpoints are the main transport method for USB
     keyboards and mice (Corbet et al., 2005). Interrupt transactions are guaranteed
     to succeed by the USB protocol.'
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: '*中断端点*以固定速率传输少量数据。请注意，USB设备在传统意义上不能中断其主机——它们没有异步中断。相反，USB设备提供中断端点，这些端点被定期轮询。这些端点是USB键盘和鼠标（Corbet等，2005）的主要传输方法。USB协议保证中断事务能够成功执行。'
 - en: '*Bulk endpoints* transfer large amounts of data. Bulk transactions are lossless.
     However, they are not guaranteed by the USB protocol to complete in a specific
     amount of time. Bulk endpoints are common on printers, mass storage devices, and
     network devices.'
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: '*批量端点*传输大量数据。批量事务是无损的。然而，USB协议不保证在特定时间内完成。批量端点在打印机、大容量存储设备和网络设备上很常见。'
 - en: '*Isochronous endpoints* periodically transfer large amounts of data. Isochronous
     transactions can be lossy. As such, these endpoints are used in devices that can
     handle data loss but rely on keeping a constant stream of data flowing, such as
     audio and video devices (Corbet et al., 2005).'
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: '*等时端点*定期传输大量数据。等时事务可能会丢失数据。因此，这些端点用于可以处理数据丢失但依赖于保持数据流恒定的设备，例如音频和视频设备（Corbet等，2005）。'
 - en: More About USB Devices
+  id: totrans-14
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 更多关于USB设备的信息
 - en: The endpoints on a USB device are grouped into *interfaces*. For example, a
     USB speaker might define one group of endpoints as the interface for the buttons
     and another group of endpoints as the interface for the audio stream.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: USB设备上的端点被分组为*接口*。例如，一个USB扬声器可能定义一组端点作为按钮的接口，另一组端点作为音频流的接口。
 - en: All interfaces have one or more alternate settings. An *alternate setting* defines
     the parameters of the interface. For example, a lossy audio stream interface may
     have several alternate settings that provide increasing levels of audio quality
     at the cost of additional bandwidth. Naturally, only one alternate setting can
     be active at a time.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有接口都有一个或多个备用设置。一个 *备用设置* 定义了接口的参数。例如，一个有损音频流接口可能有几个备用设置，这些设置以增加带宽为代价提供不断提高的音频质量。自然地，一次只能有一个备用设置处于活动状态。
 - en: Note
+  id: totrans-17
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The term “alternate setting” is kind of a misnomer, as the default interface
     setting is the first alternate setting.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: “备用设置”这个术语有点误导，因为默认接口设置是第一个备用设置。
 - en: '[Figure 15-1](ch15s02.html#an_example_usb_device_layout "Figure 15-1. An example
     USB device layout") depicts the relationship between endpoints, interfaces, and
     alternate settings.^([[10](#ftn.CHP-15-FN-1)])'
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: '[图15-1](ch15s02.html#an_example_usb_device_layout "图15-1. 一个USB设备布局示例") 展示了端点、接口和备用设置之间的关系.^([[10](#ftn.CHP-15-FN-1)])'
 - en: '![An example USB device layout](httpatomoreillycomsourcenostarchimages1137521.png.jpg)'
+  id: totrans-20
   prefs: []
   type: TYPE_IMG
+  zh: '![一个USB设备布局示例](httpatomoreillycomsourcenostarchimages1137521.png.jpg)'
 - en: Figure 15-1. An example USB device layout
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 图15-1. 一个USB设备布局示例
 - en: As you can see, an endpoint cannot be shared among interfaces, but it can be
     used in multiple alternate settings within one interface. Also, each alternate
     setting can have a different number of endpoints. Note that endpoint 0, the default
     control endpoint, is not part of any interface.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，端点不能在接口之间共享，但可以在一个接口的多个备用设置中使用。此外，每个备用设置可以有不同数量的端点。请注意，端点0，默认的控制端点，不属于任何接口。
 - en: A group of interfaces is known as a *device configuration*, or simply a *configuration*.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 一组接口被称为 *设备配置*，或简单地称为 *配置*。
 - en: '* * *'
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[10](#CHP-15-FN-1)]) [Figure 15-1](ch15s02.html#an_example_usb_device_layout
     "Figure 15-1. An example USB device layout") is adapted from *Developing Drivers
     with the Windows Driver Foundation* by Penny Orwick and Guy Smith (Microsoft Press,
     2007).
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[10](#CHP-15-FN-1)]) [图15-1](ch15s02.html#an_example_usb_device_layout "图15-1.
+    一个USB设备布局示例") 来自彭妮·奥里克和盖·史密斯合著的《使用Windows Driver Foundation开发驱动程序》（Microsoft Press，2007年）。
 - en: USB Configuration Structures
+  id: totrans-26
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: USB 配置结构
 - en: 'In FreeBSD, `usb_config` structures are used to find and communicate with individual
     endpoints. `struct usb_config` is defined in the `<dev/usb/usbdi.h>` header as
     follows:'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 在FreeBSD中，使用 `usb_config` 结构来查找和与单个端点进行通信。`struct usb_config` 在 `<dev/usb/usbdi.h>`
+    头文件中定义如下：
 - en: '[PRE0]'
+  id: totrans-28
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: Many of the fields in `struct usb_config` must be initialized by a USB driver.
     These fields are described in the following sections.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: '`struct usb_config` 中的许多字段必须由 USB 驱动程序初始化。这些字段将在以下章节中描述。'
 - en: Mandatory Fields
+  id: totrans-30
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 必需字段
 - en: The `type` field specifies the endpoint type. Valid values for this field are
     `UE_CONTROL`, `UE_BULK`, `UE_INTERRUPT`, and `UE_ISOCHRONOUS`.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: '`type` 字段指定端点类型。此字段的有效值包括 `UE_CONTROL`、`UE_BULK`、`UE_INTERRUPT` 和 `UE_ISOCHRONOUS`。'
 - en: The `endpoint` field specifies the endpoint number. A value of `UE_ADDR_ANY`
     suggests that the endpoint number is unimportant—the other fields are used to
     find the correct endpoint.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: '`endpoint` 字段指定端点号。`UE_ADDR_ANY` 的值表示端点号不重要——其他字段用于找到正确的端点。'
 - en: The `direction` field specifies the endpoint direction. Valid values for this
     field are shown in [Table 15-1](ch15s03.html#usb_endpoint_direction_symbolic_constant
     "Table 15-1. USB Endpoint Direction Symbolic Constants").
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: '`direction` 字段指定端点方向。此字段的有效值显示在 [表15-1](ch15s03.html#usb_endpoint_direction_symbolic_constant
+    "表15-1. USB 端点方向符号常量") 中。'
 - en: Table 15-1. USB Endpoint Direction Symbolic Constants
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 表15-1. USB 端点方向符号常量
 - en: '| Constant | Description |'
+  id: totrans-35
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-36
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `UE_DIR_IN` | Stipulates that the endpoint be an IN endpoint; that is, the
     endpoint transfers data to the host from the device |'
+  id: totrans-37
   prefs: []
   type: TYPE_TB
+  zh: '| `UE_DIR_IN` | 指定端点为 IN 端点；即端点从设备向主机传输数据 |'
 - en: '| `UE_DIR_OUT` | Stipulates that the endpoint be an OUT endpoint; that is,
     the endpoint transfers data to the device from the host |'
+  id: totrans-38
   prefs: []
   type: TYPE_TB
+  zh: '| `UE_DIR_OUT` | 指定端点为 OUT 端点；即端点从主机向设备传输数据 |'
 - en: '| `UE_DIR_ANY` | Stipulates that the endpoint support bidirectional transfers
     |'
+  id: totrans-39
   prefs: []
   type: TYPE_TB
+  zh: '| `UE_DIR_ANY` | 指定端点支持双向传输 |'
 - en: Note
+  id: totrans-40
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The direction of an endpoint is from the host’s perspective.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 端点的方向是从主机的角度来指定的。
 - en: The `callback` field denotes a mandatory callback function. This function is
     executed before and after the endpoint specified by `type`, `endpoint`, and `direction`
     transfers data. We’ll discuss this function further in [USB Transfers (in FreeBSD)](ch15s04.html
     "USB Transfers (in FreeBSD)") in [USB Transfers (in FreeBSD)](ch15s04.html "USB
     Transfers (in FreeBSD)").
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: '`callback`字段表示一个强制性的回调函数。该函数在由`type`、`endpoint`和`direction`指定的端点传输数据之前和之后执行。我们将在[USB传输（在FreeBSD中）](ch15s04.html
+    "USB传输（在FreeBSD中)")中进一步讨论此函数。'
 - en: The `bufsize` field denotes the buffer size for the endpoint specified by `type`,
     `endpoint`, and `direction`. As you would expect, `bufsize` is used for `type`
     transactions.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bufsize`字段表示由`type`、`endpoint`和`direction`指定的端点的缓冲区大小。正如你所期望的，`bufsize`用于`type`交易。'
 - en: As this section’s heading implies, the preceding fields must be defined in every
     `usb_config` structure.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 如本节标题所暗示的，前面的字段必须在每个`usb_config`结构中定义。
 - en: Optional Fields
+  id: totrans-45
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 可选字段
 - en: The `timeout` field sets the transaction timeout in milliseconds. If `timeout`
     is `0` or undefined and `type` is `UE_ISOCHRONOUS`, then a timeout of 250 ms will
     be used.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: '`timeout`字段设置交易超时以毫秒为单位。如果`timeout`为`0`或未定义，并且`type`是`UE_ISOCHRONOUS`，则将使用250毫秒的超时。'
 - en: The `interval` field’s meaning is based on the value of `type`. [Table 15-2](ch15s03.html#intervalas_purpose_open_parenthesis_base
     "Table 15-2. interval’s Purpose (Based on Endpoint Type)") details `interval`’s
     purpose (based on `type`).
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: '`interval`字段的意义基于`type`的值。[表15-2](ch15s03.html#intervalas_purpose_open_parenthesis_base
+    "表15-2. 间隔的目的（基于端点类型)")详细说明了`interval`的用途（基于`type`）。'
 - en: Table 15-2. interval’s Purpose (Based on Endpoint Type)
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 表15-2. 间隔的目的（基于端点类型）
 - en: '| Endpoint Type | What interval Does |'
+  id: totrans-49
   prefs: []
   type: TYPE_TB
+  zh: '| 端点类型 | 间隔设置什么 |'
 - en: '| --- | --- |'
+  id: totrans-50
   prefs: []
   type: TYPE_TB
+  zh: '| --- | ---'
 - en: '| `UE_CONTROL` | `interval` sets the transaction delay in milliseconds; in
     other words, `interval` milliseconds must pass before a control transaction can
     occur |'
+  id: totrans-51
   prefs: []
   type: TYPE_TB
+  zh: '| `UE_CONTROL` | `interval`设置交易延迟以毫秒为单位；换句话说，在控制交易发生之前必须经过`interval`毫秒 |'
 - en: '| `UE_INTERRUPT` | `interval` sets the polling rate in milliseconds; in other
     words, the host controller will poll the interrupt endpoint every `interval` milliseconds;
     if `interval` is `0` or undefined, then the endpoint’s default polling rate will
     be used |'
+  id: totrans-52
   prefs: []
   type: TYPE_TB
+  zh: '| `UE_INTERRUPT` | `interval`设置以毫秒为单位的轮询速率；换句话说，主机控制器将每隔`interval`毫秒轮询中断端点；如果`interval`为`0`或未定义，则使用端点的默认轮询速率
+    |'
 - en: '| `UE_BULK` | `interval` does nothing for bulk endpoints |'
+  id: totrans-53
   prefs: []
   type: TYPE_TB
+  zh: '| `UE_BULK` | 对于批量端点，`interval`不起作用 |'
 - en: '| `UE_ISOCHRONOUS` | `interval` does nothing for isochronous endpoints |'
+  id: totrans-54
   prefs: []
   type: TYPE_TB
+  zh: '| `UE_ISOCHRONOUS` | 对于等时端点，`interval`不起作用 |'
 - en: The `frames` field denotes the maximum number of USB frames that the endpoint
     specified by `type`, `endpoint`, and `direction` supports. In FreeBSD, *USB frames*
     are simply “data packets” that travel to or from an endpoint. USB frames are composed
     of one or more *USB packets*, which actually contain the data.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: '`frames`字段表示由`type`、`endpoint`和`direction`指定的端点支持的USB帧的最大数量。在FreeBSD中，*USB帧*仅仅是“数据包”，它们从一个端点传送到另一个端点。USB帧由一个或多个*USB数据包*组成，这些数据包实际上包含数据。'
 - en: The `ep_index` field demands a non-negative integer. If multiple endpoints are
     identified by type, endpoint, and direction—which can occur when endpoint is `UE_ADDR_ANY`—the
     value of `ep_index` will be used to select one.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ep_index`字段要求一个非负整数。如果有多个端点通过类型、端点和方向被识别——当端点是`UE_ADDR_ANY`时可能会发生这种情况——则`ep_index`的值将用于选择一个。'
 - en: The `if_index` field specifies the interface number (based on the `ifaces` argument
     passed to `usbd_transfer_setup`, which is described in [USB Configuration Structure
     Management Routines](ch15s05.html "USB Configuration Structure Management Routines")
     in [USB Configuration Structure Management Routines](ch15s05.html "USB Configuration
     Structure Management Routines")).
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: '`if_index`字段指定接口号（基于传递给`usbd_transfer_setup`的`ifaces`参数，该参数在[USB配置结构管理例程](ch15s05.html
+    "USB配置结构管理例程")中描述）。'
 - en: USB Transfer Flags
+  id: totrans-58
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: USB传输标志
 - en: The `flags` field sets the transactional properties for the endpoint specified
     by `type`, `endpoint`, and `direction`. This field expects a `usb_xfer_flags`
     structure.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: '`flags`字段设置由`type`、`endpoint`和`direction`指定的端点的交易属性。该字段期望一个`usb_xfer_flags`结构。'
 - en: '`struct usb_xfer_flags` is defined in the `<dev/usb/usbdi.h>` header as follows:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: '`struct usb_xfer_flags`在`<dev/usb/usbdi.h>`头文件中定义如下：'
 - en: '[PRE1]'
+  id: totrans-61
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: All of the fields in struct `usb_xfer_flags` are optional. These fields are
     1-bit and function as flags. They are detailed in [Table 15-3](ch15s03.html#usb_transfer_flags-id1
     "Table 15-3. USB Transfer Flags").
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: struct `usb_xfer_flags` 中的所有字段都是可选的。这些字段是1位的，并作为标志使用。它们在[表15-3](ch15s03.html#usb_transfer_flags-id1
+    "表15-3. USB传输标志")中详细说明。
 - en: Table 15-3. USB Transfer Flags
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 表15-3. USB传输标志
 - en: '| Flag | Description |'
+  id: totrans-64
   prefs: []
   type: TYPE_TB
+  zh: '| 标志 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-65
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `force_short_xfer` | Causes a short transfer; *short transfers* basically
     dispatch a short USB packet, which tends to indicate “end of transaction;” this
     flag can be set anytime |'
+  id: totrans-66
   prefs: []
   type: TYPE_TB
+  zh: '| `force_short_xfer` | 导致短传输；*短传输*基本上发送一个短的USB数据包，这通常表示“事务结束；”此标志可以在任何时候设置
+    |'
 - en: '| `short_xfer_ok` | Indicates that it is okay to receive short transfers; this
     flag can be set anytime |'
+  id: totrans-67
   prefs: []
   type: TYPE_TB
+  zh: '| `short_xfer_ok` | 表示接收短传输是可以接受的；此标志可以在任何时候设置 |'
 - en: '| `short_frames_ok` | Indicates that it is okay to receive gobs of short USB
     frames; this flag can only affect `UE_INTERRUPT` and `UE_BULK` endpoints; it can
     be set anytime |'
+  id: totrans-68
   prefs: []
   type: TYPE_TB
+  zh: '| `short_frames_ok` | 表示接收大量短USB帧是可以接受的；此标志只能影响`UE_INTERRUPT`和`UE_BULK`端点；它可以在任何时候设置
+    |'
 - en: '| `pipe_bof` | Causes any failed USB transactions to remain first in their
     queue; this guarantees that all transactions complete in FIFO order; this flag
     can be set anytime |'
+  id: totrans-69
   prefs: []
   type: TYPE_TB
+  zh: '| `pipe_bof` | 导致任何失败的USB事务都保留在其队列中的第一个位置；这保证了所有事务都按FIFO顺序完成；此标志可以在任何时候设置 |'
 - en: '| `proxy_buffer` | Rounds `bufsize` up to the maximum USB frame size; this
     flag cannot be set after driver initialization |'
+  id: totrans-70
   prefs: []
   type: TYPE_TB
+  zh: '| `proxy_buffer` | 将`bufsize`向上舍入到最大的USB帧大小；此标志在驱动程序初始化后不能设置 |'
 - en: '| `ext_buffer` | Indicates that an external DMA buffer will be used for all
     transactions; this flag cannot be set after driver initialization |'
+  id: totrans-71
   prefs: []
   type: TYPE_TB
+  zh: '| `ext_buffer` | 表示所有事务都将使用外部DMA缓冲区；此标志在驱动程序初始化后不能设置 |'
 - en: '| `manual_status` | Stops the handshake/status stage from occurring in control
     transactions; this flag can be set anytime |'
+  id: totrans-72
   prefs: []
   type: TYPE_TB
+  zh: '| `manual_status` | 停止在控制事务中发生握手/状态阶段；此标志可以在任何时候设置 |'
 - en: '| `no_pipe_ok` | Causes `USB_ERR_NO_PIPE` errors to be ignored; this flag cannot
     be set after driver initialization |'
+  id: totrans-73
   prefs: []
   type: TYPE_TB
+  zh: '| `no_pipe_ok` | 导致忽略`USB_ERR_NO_PIPE`错误；此标志在驱动程序初始化后不能设置 |'
 - en: '| `stall_pipe` | Causes the endpoint specified by `type`, `endpoint`, and `direction`
     to “stall” before each transaction; this flag can be set anytime |'
+  id: totrans-74
   prefs: []
   type: TYPE_TB
+  zh: '| `stall_pipe` | 导致在每次事务之前，由`type`、`endpoint`和`direction`指定的端点“停滞”；此标志可以在任何时候设置
+    |'
 - en: Note
+  id: totrans-75
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: If you don’t understand some of these descriptions, don’t worry; I’ll expand
     on them later.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你对这些描述中的某些内容不理解，不要担心；我会在稍后详细说明。
 - en: USB Transfers (in FreeBSD)
+  id: totrans-77
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: USB 传输（在 FreeBSD 中）
 - en: 'Recall that `callback` is executed before and after the endpoint specified
     by `type`, `endpoint`, and `direction` transfers data. Below is its function prototype:'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 记住，`callback`在由`type`、`endpoint`和`direction`指定的端点传输数据之前和之后执行。下面是其函数原型：
 - en: '[PRE2]'
+  id: totrans-79
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `struct usb_xfer
     *` contains the transfer state:'
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，![](httpatomoreillycomsourcenostarchimages1137499.png) `struct usb_xfer
+    *` 包含传输状态：
 - en: '[PRE3]'
+  id: totrans-81
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: Generally, you’d use `struct usb_xfer *` in a `switch` statement to provide
     a code block for each transfer state. Some example code should help clarify what
     I mean.
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，你会在`switch`语句中使用`struct usb_xfer *`来为每个传输状态提供一个代码块。一些示例代码可以帮助阐明我的意思。
 - en: Note
+  id: totrans-83
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Just concentrate on the structure of this code and ignore what it does.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 只关注代码的结构，忽略它的功能。
 - en: '[PRE4]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Notice how ![](httpatomoreillycomsourcenostarchimages1137499.png) `struct usb_xfer
     *` is used as the ![](httpatomoreillycomsourcenostarchimages1137501.png) expression
     for the `switch` statement (as you would expect, the macro `USB_GET_STATE` returns
     the transfer state).
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意如何使用 ![](httpatomoreillycomsourcenostarchimages1137499.png) `struct usb_xfer
+    *` 作为`switch`语句的表达式（正如你所期望的，宏`USB_GET_STATE`返回传输状态）。
 - en: The constant ![](httpatomoreillycomsourcenostarchimages1137503.png) `USB_ST_SETUP`
     is set when `callback` is executed before a data transfer. This case handles any
     pre-transfer operations. It always ends with ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `usbd_transfer_submit`, which starts the data transfer.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 当在数据传输之前执行`callback`时，将常量 ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `USB_ST_SETUP` 设置。这种情况处理任何传输前的操作。它总是以 ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `usbd_transfer_submit` 结束，这启动数据传输。
 - en: The constant ![](httpatomoreillycomsourcenostarchimages1137507.png) `USB_ST_TRANSFERRED`
     is set when `callback` is executed after a data transfer. This case performs any
     post-transfer actions, such as ![](httpatomoreillycomsourcenostarchimages1137509.png)
     ![](httpatomoreillycomsourcenostarchimages1137511.png) ![](httpatomoreillycomsourcenostarchimages1137513.png)
     printing log messages.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
 - en: USB Configuration Structure Management Routines
+  id: totrans-89
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: 'The FreeBSD kernel provides the following functions for working with `usb_config`
     structures:'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE5]'
+  id: totrans-91
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: The `usbd_transfer_setup` function takes an ![](httpatomoreillycomsourcenostarchimages1137501.png)
     array of `usb_config` structures and sets up an ![](httpatomoreillycomsourcenostarchimages1137499.png)
     array of `usb_xfer` structures. The ![](httpatomoreillycomsourcenostarchimages1137503.png)
     `n_setup` argument denotes the number of elements in the arrays.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-93
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: As you’ll see, a `usb_xfer` structure is required to initiate a USB data transfer.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
 - en: The `usbd_transfer_unsetup` function destroys an ![](httpatomoreillycomsourcenostarchimages1137505.png)
     array of `usb_xfer` structures. The ![](httpatomoreillycomsourcenostarchimages1137507.png)
     `n_setup` argument denotes the number of elements in the array.
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
 - en: The `usbd_transfer_start` function takes a ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `usb_xfer` structure and starts a USB transfer (that is, it executes `callback`
     with `USB_ST_SETUP` set).
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
 - en: The `usbd_transfer_stop` function stops any transfers associated with the ![](httpatomoreillycomsourcenostarchimages1137511.png)
     `xfer` argument (that is, it executes `callback` with `USB_ST_ERROR` set).
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
 - en: The `usbd_transfer_drain` function is like `usbd_transfer_stop`, but it waits
     for `callback` to complete before returning.
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
 - en: USB Methods Structure
+  id: totrans-99
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: A `usb_fifo_methods` structure defines a USB driver’s entry points. You can
     think of `struct usb_fifo_methods` as `struct cdevsw`, but for USB drivers.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
 - en: '`struct usb_fifo_methods` is defined in the `<dev/usb/usbdi.h>` header as follows:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE6]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'The FreeBSD kernel provides the following functions for working with `usb_fifo_methods`
     structures:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE7]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: The `usb_fifo_attach` function creates a USB device node under */dev*. If successful,
     a magic cookie is saved in ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `f_sc`.
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
 - en: The `usb_fifo_detach` function takes a ![](httpatomoreillycomsourcenostarchimages1137501.png)
     cookie created by `usb_fifo_attach` and destroys its associated USB device node.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
 - en: Tying Everything Together
+  id: totrans-107
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: Now that you’re familiar with the `usb_*` structures and their management routines,
     let’s dissect a real-world USB driver.
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
 - en: '[Example 15-1](ch15s07.html#ulpt.c "Example 15-1. ulpt.c") provides a terse,
     source-level overview of `ulpt(4)`, the USB printer driver.'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-110
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: To improve readability, some of the variables and functions presented in this
     section have been renamed and restructured from their counterparts in the FreeBSD
     source.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
 - en: Example 15-1. ulpt.c
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE8]'
+  id: totrans-113
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'Note that [Example 15-1](ch15s07.html#ulpt.c "Example 15-1. ulpt.c") defines
     three `usb_config` structures. Therefore, `ulpt(4)` communicates with three endpoints:
     a ![](httpatomoreillycomsourcenostarchimages1137507.png) bulk OUT, a ![](httpatomoreillycomsourcenostarchimages1137509.png)
     bulk IN, and the ![](httpatomoreillycomsourcenostarchimages1137511.png) default
     control endpoint.'
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意到[示例15-1](ch15s07.html#ulpt.c "示例15-1. ulpt.c")定义了三个`usb_config`结构。因此，`ulpt(4)`与三个端点通信：一个`httpatomoreillycomsourcenostarchimages1137507.png`批量OUT，一个`httpatomoreillycomsourcenostarchimages1137509.png`批量IN，以及`httpatomoreillycomsourcenostarchimages1137511.png`默认控制端点。
 - en: 'Also, note that [Example 15-1](ch15s07.html#ulpt.c "Example 15-1. ulpt.c")
     defines two ![](httpatomoreillycomsourcenostarchimages1137499.png) ![](httpatomoreillycomsourcenostarchimages1137503.png)
     `usb_fifo_methods` structures. So, `ulpt(4)` provides two device nodes: ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `ulpt%d` and ![](httpatomoreillycomsourcenostarchimages1137505.png) `unlpt%d`
     (where `%d` is the unit number). As you’ll see, the `ulpt%d` device node resets
     the printer when opened, whereas `unlpt%d` does not.'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，注意[示例15-1](ch15s07.html#ulpt.c "示例15-1. ulpt.c")定义了两个`httpatomoreillycomsourcenostarchimages1137499.png`和`httpatomoreillycomsourcenostarchimages1137503.png`的`usb_fifo_methods`结构。因此，`ulpt(4)`提供了两个设备节点：`httpatomoreillycomsourcenostarchimages1137501.png``ulpt%d`和`httpatomoreillycomsourcenostarchimages1137505.png``unlpt%d`（其中`%d`是单元号）。正如您将看到的，`ulpt%d`设备节点在打开时重置打印机，而`unlpt%d`则不会。
 - en: Now, let’s discuss the functions found in [Example 15-1](ch15s07.html#ulpt.c
     "Example 15-1. ulpt.c").
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们讨论[示例15-1](ch15s07.html#ulpt.c "示例15-1. ulpt.c")中找到的函数。
 - en: ulpt_probe Function
+  id: totrans-117
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_probe函数
 - en: 'The `ulpt_probe` function is the `device_probe` implementation for `ulpt(4)`.
     Here is its function definition:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulpt_probe`函数是`ulpt(4)`的`device_probe`实现。以下是它的函数定义：'
 - en: '[PRE9]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137501.png) ensures
     that the USB host controller is in host mode, which is needed to initiate data
     transfers. Then `ulpt_probe` ![](httpatomoreillycomsourcenostarchimages1137503.png)
     determines whether `dev` is a USB printer.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个函数首先确保USB主机控制器处于主机模式，这是启动数据传输所需的。然后`ulpt_probe`确定`dev`是否是USB打印机。
 - en: Incidentally, ![](httpatomoreillycomsourcenostarchimages1137499.png) `struct
     usb_attach_arg` contains the printer’s instance variables.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 顺便说一下，`struct usb_attach_arg`包含打印机的实例变量。
 - en: ulpt_attach Function
+  id: totrans-122
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_attach函数
 - en: 'The `ulpt_attach` function is the `device_attach` implementation for `ulpt(4)`.
     Here is its function definition:'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulpt_attach`函数是`ulpt(4)`的`device_attach`实现。以下是它的函数定义：'
 - en: '[PRE10]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: This function can be split into three parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
     sets the verbose description of `dev` by calling `device_set_usb_desc(dev)`. Then
     it ![](httpatomoreillycomsourcenostarchimages1137501.png) initializes `ulpt(4)`’s
     `callout` structure.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个函数可以分为三个部分。第一部分通过调用`device_set_usb_desc(dev)`来设置`dev`的详细描述。然后它初始化`ulpt(4)`的`callout`结构。
 - en: Note
+  id: totrans-126
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: All USB devices contain a textual description of themselves, which is why `device_set_usb_desc`
     just takes a `device_t` argument.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有USB设备都包含对自己文本描述，这就是为什么`device_set_usb_desc`只接受一个`device_t`参数。
 - en: The second part essentially ![](httpatomoreillycomsourcenostarchimages1137507.png)
     iterates through the alternate settings for interface number ![](httpatomoreillycomsourcenostarchimages1137503.png)
     `uaa->info.bIfaceNum`, until the alternate setting that supports ![](httpatomoreillycomsourcenostarchimages1137505.png)
@@ -559,8 +808,10 @@
     mode is not alternate setting 0, then ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `usbd_set_alt_interface_index` is called to instate this alternate setting. Alternate
     setting 0 does not need to be instated, because it’s used by default.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二部分基本上通过`httpatomoreillycomsourcenostarchimages1137507.png`迭代接口号`uaa->info.bIfaceNum`的备用设置，直到找到支持`httpatomoreillycomsourcenostarchimages1137505.png`双向模式的备用设置。如果支持双向模式的备用设置不是备用设置0，则调用`usbd_set_alt_interface_index`来设置这个备用设置。备用设置0不需要设置，因为它默认使用。
 - en: Finally, the third part ![](httpatomoreillycomsourcenostarchimages1137511.png)
     initializes the USB transfers, ![](httpatomoreillycomsourcenostarchimages1137513.png)
     ![](httpatomoreillycomsourcenostarchimages1137515.png) creates `ulpt(4)`’s device
@@ -568,19 +819,31 @@
     (which we’ll walk through in [ulpt_watchdog Function](ch15s07.html#ulpt_underscore_watchdog_function
     "ulpt_watchdog Function") in [ulpt_watchdog Function](ch15s07.html#ulpt_underscore_watchdog_function
     "ulpt_watchdog Function")).
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，第三部分 ![USB 转移初始化](httpatomoreillycomsourcenostarchimages1137511.png) 初始化
+    USB 转移， ![创建设备节点](httpatomoreillycomsourcenostarchimages1137513.png) ![ulp(4)
+    的设备节点](httpatomoreillycomsourcenostarchimages1137515.png) 被创建，并调用 ![ulp_watchdog](httpatomoreillycomsourcenostarchimages1137517.png)
+    `ulp_watchdog`（我们将在 [ulp_watchdog 函数](ch15s07.html#ulp_underscore_watchdog_function
+    "ulp_watchdog 函数") 中进行讲解）。
 - en: ulpt_detach Function
+  id: totrans-130
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_detach 函数
 - en: 'The `ulpt_detach` function is the `device_detach` implementation for `ulpt(4)`.
     Here is its function definition:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulpt_detach` 函数是 `device_detach` 对 `ulpt(4)` 的实现。以下是它的函数定义：'
 - en: '[PRE11]'
+  id: totrans-132
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: This function starts by ![](httpatomoreillycomsourcenostarchimages1137499.png)
     ![](httpatomoreillycomsourcenostarchimages1137501.png) destroying its device nodes.
     Then it ![](httpatomoreillycomsourcenostarchimages1137503.png) stops the callout
@@ -588,66 +851,103 @@
     USB transfers, ![](httpatomoreillycomsourcenostarchimages1137507.png) drains the
     callout function, and ![](httpatomoreillycomsourcenostarchimages1137509.png) destroys
     its mutex.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先 ![销毁其设备节点](httpatomoreillycomsourcenostarchimages1137499.png) ![和](httpatomoreillycomsourcenostarchimages1137501.png)
+    ![停止调用函数](httpatomoreillycomsourcenostarchimages1137503.png)， ![拆除 USB 转移](httpatomoreillycomsourcenostarchimages1137505.png)，
+    ![清空调用函数](httpatomoreillycomsourcenostarchimages1137507.png)， ![销毁其互斥锁](httpatomoreillycomsourcenostarchimages1137509.png)。
 - en: ulpt_open Function
+  id: totrans-134
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_open 函数
 - en: 'The `ulpt_open` function is the `ulpt%d` device node’s open routine. Here is
     its function definition:'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulp_open` 函数是 `ulp%d` 设备节点的打开例程。以下是它的函数定义：'
 - en: '[PRE12]'
+  id: totrans-136
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: This function first calls ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `ulpt_reset` to reset the printer. Then ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `unlpt_open` is called to (actually) open the printer.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先调用 ![ulp_reset](httpatomoreillycomsourcenostarchimages1137499.png) `ulp_reset`
+    来重置打印机。然后 ![unlpt_open](httpatomoreillycomsourcenostarchimages1137501.png) `unlpt_open`
+    被调用以（实际上）打开打印机。
 - en: ulpt_reset Function
+  id: totrans-138
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_reset 函数
 - en: 'As mentioned in the previous section, the `ulpt_reset` function resets the
     printer. Here is its function definition:'
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前节所述，`ulp_reset` 函数用于重置打印机。以下是它的函数定义：
 - en: '[PRE13]'
+  id: totrans-140
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: This function starts by defining a ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `usb_device_request` structure to ![](httpatomoreillycomsourcenostarchimages1137501.png)
     reset the printer. It then ![](httpatomoreillycomsourcenostarchimages1137505.png)
     transmits the reset request to the printer.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先定义一个 ![usb_device_request 结构](httpatomoreillycomsourcenostarchimages1137499.png)
+    来 ![重置打印机](httpatomoreillycomsourcenostarchimages1137501.png)。然后 ![发送重置请求到打印机](httpatomoreillycomsourcenostarchimages1137505.png)。
 - en: Note that some printers typify a reset request as ![](httpatomoreillycomsourcenostarchimages1137503.png)
     `UT_WRITE_CLASS_OTHER` and some typify it as ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `UT_WRITE_CLASS_INTERFACE`. Thus, `ulpt_reset` transmits the reset request a ![](httpatomoreillycomsourcenostarchimages1137511.png)
     second time if the first request ![](httpatomoreillycomsourcenostarchimages1137507.png)
     fails.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，一些打印机将重置请求典型化为 ![UT_WRITE_CLASS_OTHER](httpatomoreillycomsourcenostarchimages1137503.png)
+    和一些典型化为 ![UT_WRITE_CLASS_INTERFACE](httpatomoreillycomsourcenostarchimages1137509.png)。因此，如果第一次请求
+    ![失败](httpatomoreillycomsourcenostarchimages1137507.png)，`ulpt_reset` 将第二次发送重置请求。
 - en: unlpt_open Function
+  id: totrans-143
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: unlpt_open 函数
 - en: 'The `unlpt_open` function is the `unlpt%d` device node’s open routine. Here
     is its function definition:'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: '`unlpt_open` 函数是 `unlpt%d` 设备节点的打开例程。以下是它的函数定义：'
 - en: Note
+  id: totrans-145
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: You’ll recall that this function is also called at the end of `ulpt_open`.
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 你会记得，此函数也在 `ulp_open` 的末尾被调用。
 - en: '[PRE14]'
+  id: totrans-147
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) tests
     the value of `sc->sc_fflags`. If it does not equal 0, which implies that another
     process has opened the printer, the error code `EBUSY` is returned. Next, `unlpt_open`
@@ -657,74 +957,109 @@
     Then, a clear-stall request is ![](httpatomoreillycomsourcenostarchimages1137503.png)
     ![](httpatomoreillycomsourcenostarchimages1137511.png) issued to the appropriate
     endpoint.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先测试 `sc->sc_fflags` 的值。如果不等于 0，这意味着另一个进程已经打开了打印机，将返回错误代码 `EBUSY`。接下来，`unlpt_open`
+    确定我们是打开打印机来读取还是写入——答案存储在 `sc->sc_fflags` 中。然后，向适当的端点发出清除阻塞请求。
 - en: Note
+  id: totrans-149
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Any errors that a USB device detects in its own functionality, not counting
     transmission errors, cause the device to “stall” the endpoint for its current
     transaction (Oney, 2003). Control endpoints clear their stalls automatically,
     but other endpoint types require a clear-stall request. Naturally, stalled endpoints
     cannot perform any transactions.
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: USB 设备在其自身功能中检测到的任何错误（不包括传输错误），都会导致设备“阻塞”其当前事务的端点（Oney，2003）。控制端点会自动清除其阻塞，但其他端点类型需要清除阻塞请求。自然，阻塞的端点无法执行任何事务。
 - en: Next, memory for the read or write is ![](httpatomoreillycomsourcenostarchimages1137505.png)
     ![](httpatomoreillycomsourcenostarchimages1137513.png) allocated. Afterward, the
     `fifo` argument is ![](httpatomoreillycomsourcenostarchimages1137507.png) ![](httpatomoreillycomsourcenostarchimages1137515.png)
     stored in `sc->sc_fifo_open`.
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，为读取或写入分配内存。之后，将 `fifo` 参数存储在 `sc->sc_fifo_open` 中。
 - en: ulpt_close Function
+  id: totrans-152
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_close 函数
 - en: 'The `ulpt_close` function is the close routine for `ulpt%d` and `unlpt%d`.
     Here is its function definition:'
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulpt_close` 函数是 `ulpt%d` 和 `unlpt%d` 的关闭例程。以下是它的函数定义：'
 - en: '[PRE15]'
+  id: totrans-154
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: This function starts by ![](httpatomoreillycomsourcenostarchimages1137499.png)
     clearing `sc->sc_fflags`. Then it ![](httpatomoreillycomsourcenostarchimages1137501.png)
     releases the memory allocated in `unlpt_open`.
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先清除 `sc->sc_fflags`。然后释放 `unlpt_open` 中分配的内存。
 - en: ulpt_ioctl Function
+  id: totrans-156
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_ioctl 函数
 - en: 'The `ulpt_ioctl` function is the ioctl routine for `ulpt%d` and `unlpt%d`.
     Here is its function definition:'
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulpt_ioctl` 函数是 `ulpt%d` 和 `unlpt%d` 的 ioctl 例程。以下是它的函数定义：'
 - en: '[PRE16]'
+  id: totrans-158
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: As you can see, `ulpt(4)` does ![](httpatomoreillycomsourcenostarchimages1137499.png)
     not support ioctl.
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，`ulpt(4)` 不支持 ioctl。
 - en: ulpt_watchdog Function
+  id: totrans-160
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_watchdog 函数
 - en: 'The `ulpt_watchdog` function periodically checks the printer’s status. Here
     is its function definition:'
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulpt_watchdog` 函数定期检查打印机的状态。以下是它的函数定义：'
 - en: Note
+  id: totrans-162
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: You’ll recall that this function is called at the end of `ulpt_attach`.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 您会记得这个函数是在 `ulpt_attach` 的末尾被调用的。
 - en: '[PRE17]'
+  id: totrans-164
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) ensures
     that the printer is not open. Then it ![](httpatomoreillycomsourcenostarchimages1137501.png)
     starts a transaction with the ![](httpatomoreillycomsourcenostarchimages1137503.png)
@@ -734,92 +1069,147 @@
     in [Example 15-1](ch15s07.html#ulpt.c "Example 15-1. ulpt.c")). Finally, ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `ulpt_watchdog` is ![](httpatomoreillycomsourcenostarchimages1137505.png) rescheduled
     to execute after ![](httpatomoreillycomsourcenostarchimages1137507.png) 1 second.
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 确保打印机未打开。然后它
+    ![图片](httpatomoreillycomsourcenostarchimages1137501.png) 与默认控制端点 ![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    开始一个事务（以检索打印机的状态）。回想一下 ![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    `usbd_transfer_start` 只执行一个回调。在这种情况下，该回调是 `ulpt_status_callback`（为了确认，请参阅 [示例
+    15-1](ch15s07.html#ulpt.c "示例 15-1. ulpt.c") 中的第三个 `usb_config` 结构）。最后，![图片](httpatomoreillycomsourcenostarchimages1137509.png)
+    `ulpt_watchdog` 被重新安排在 1 秒后执行。
 - en: ulpt_start_read Function
+  id: totrans-166
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_start_read 函数
 - en: 'The `ulpt_start_read` function is executed when a process reads from `ulpt%d`
     or `unlpt%d` (for verification, see their `usb_fifo_methods` structures). Here
     is its function definition:'
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: 当进程从 `ulpt%d` 或 `unlpt%d` 读取时，会执行 `ulpt_start_read` 函数（为了验证，请参阅它们的 `usb_fifo_methods`
+    结构）。以下是它的函数定义：
 - en: '[PRE18]'
+  id: totrans-168
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: This function simply ![](httpatomoreillycomsourcenostarchimages1137499.png)
     starts a transaction with the printer’s ![](httpatomoreillycomsourcenostarchimages1137501.png)
     bulk IN endpoint. Note that the callback for a bulk IN endpoint is `ulpt_read_callback`
     (for confirmation, see the second `usb_config` structure in [Example 15-1](ch15s07.html#ulpt.c
     "Example 15-1. ulpt.c")).
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 简单地与打印机的 ![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    批量 IN 端点开始一个事务。请注意，批量 IN 端点的回调是 `ulpt_read_callback`（为了确认，请参阅 [示例 15-1](ch15s07.html#ulpt.c
+    "示例 15-1. ulpt.c") 中的第二个 `usb_config` 结构）。
 - en: ulpt_stop_read Function
+  id: totrans-170
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_stop_read 函数
 - en: 'The `ulpt_stop_read` function is called when a process stops reading from `ulpt%d`
     or `unlpt%d`. Here is its function definition:'
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: 当进程停止从 `ulpt%d` 或 `unlpt%d` 读取时，会调用 `ulpt_stop_read` 函数。以下是它的函数定义：
 - en: '[PRE19]'
+  id: totrans-172
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: This function ![](httpatomoreillycomsourcenostarchimages1137499.png) stops any
     transactions associated with the printer’s ![](httpatomoreillycomsourcenostarchimages1137501.png)
     bulk IN endpoint.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 停止与打印机 ![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    的批量 IN 端点相关的任何事务。
 - en: ulpt_start_write Function
+  id: totrans-174
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_start_write 函数
 - en: 'The `ulpt_start_write` function is executed when a process writes to `ulpt%d`
     or `unlpt%d`. Here is its function definition:'
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: 当进程向 `ulpt%d` 或 `unlpt%d` 写入时，会执行 `ulpt_start_write` 函数。以下是它的函数定义：
 - en: '[PRE20]'
+  id: totrans-176
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: This function simply ![](httpatomoreillycomsourcenostarchimages1137499.png)
     starts a transaction with the printer’s ![](httpatomoreillycomsourcenostarchimages1137501.png)
     bulk OUT endpoint. Note that the callback for a bulk OUT endpoint is `ulpt_write_callback`
     (for confirmation, see the first `usb_config` structure in [Example 15-1](ch15s07.html#ulpt.c
     "Example 15-1. ulpt.c")).
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 简单地与打印机的 ![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    批量 OUT 端点开始一个事务。请注意，批量 OUT 端点的回调是 `ulpt_write_callback`（为了确认，请参阅 [示例 15-1](ch15s07.html#ulpt.c
+    "示例 15-1. ulpt.c") 中的第一个 `usb_config` 结构）。
 - en: ulpt_stop_write Function
+  id: totrans-178
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_stop_write 函数
 - en: 'The `ulpt_stop_write` function is executed when a process stops writing to
     `ulpt%d` or `unlpt%d`. Here is its function definition:'
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 当进程停止向 `ulpt%d` 或 `unlpt%d` 写入时，会执行 `ulpt_stop_write` 函数。以下是它的函数定义：
 - en: '[PRE21]'
+  id: totrans-180
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: This function ![](httpatomoreillycomsourcenostarchimages1137499.png) stops any
     transactions associated with the printer’s ![](httpatomoreillycomsourcenostarchimages1137501.png)
     bulk OUT endpoint.
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 停止与打印机 ![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    的批量 OUT 端点相关的任何事务。
 - en: ulpt_write_callback Function
+  id: totrans-182
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_write_callback 函数
 - en: The `ulpt_write_callback` function transfers data from user space to the printer
     (to be printed). Recall that this function is the callback for a bulk OUT endpoint,
     so it’s executed before and after a bulk OUT transfers data.
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulpt_write_callback` 函数将数据从用户空间传输到打印机（以供打印）。回想一下，此函数是批量 OUT 端点的回调，因此它在批量 OUT
+    传输数据之前和之后执行。'
 - en: 'The following is the function definition for `ulpt_write_callback`:'
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是对 `ulpt_write_callback` 的函数定义：
 - en: '[PRE22]'
+  id: totrans-185
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137503.png) copies
     *foo* bytes from ![](httpatomoreillycomsourcenostarchimages1137505.png) user space
     to ![](httpatomoreillycomsourcenostarchimages1137507.png) kernel space. At most,
@@ -829,44 +1219,68 @@
     length is ![](httpatomoreillycomsourcenostarchimages1137513.png) set. Then, the
     data copied from user space is ![](httpatomoreillycomsourcenostarchimages1137517.png)
     sent to the printer.
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先 ![httpatomoreillycomsourcenostarchimages1137503.png] 将 *foo* 字节从 ![httpatomoreillycomsourcenostarchimages1137505.png]
+    用户空间复制到 ![httpatomoreillycomsourcenostarchimages1137507.png] 内核空间。最多复制 ![httpatomoreillycomsourcenostarchimages1137509.png]
+    `max` 字节的数据。实际复制的字节数返回在 ![httpatomoreillycomsourcenostarchimages1137511.png] `actual`
+    中。接下来，设置 ![httpatomoreillycomsourcenostarchimages1137515.png] 传输长度 ![httpatomoreillycomsourcenostarchimages1137513.png]。然后，将用户空间复制的数据
+    ![httpatomoreillycomsourcenostarchimages1137517.png] 发送到打印机。
 - en: Note
+  id: totrans-187
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: In the preceding paragraph, *foo* is a placeholder, because I don’t know how
     many bytes are copied until `usb_fifo_get_data` returns.
+  id: totrans-188
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的段落中，*foo* 是占位符，因为我不知道 `usb_fifo_get_data` 返回之前复制了多少字节。
 - en: Note that the ![](httpatomoreillycomsourcenostarchimages1137499.png) `USB_ST_SETUP`
     case and the ![](httpatomoreillycomsourcenostarchimages1137501.png) `USB_ST_TRANSFERRED`
     case are identical. This is because you can print more data than the maximum transfer
     length. Thus, this function “loops” until all the data is sent.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，![httpatomoreillycomsourcenostarchimages1137499.png] `USB_ST_SETUP` 情况和 ![httpatomoreillycomsourcenostarchimages1137501.png]
+    `USB_ST_TRANSFERRED` 情况是相同的。这是因为你可以打印比最大传输长度更多的数据。因此，这个函数“循环”直到所有数据都发送完毕。
 - en: ulpt_read_callback Function
+  id: totrans-190
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_read_callback 函数
 - en: The `ulpt_read_callback` function gets data from the printer. Recall that this
     function is the callback for a bulk IN endpoint, so it’s executed before and after
     a bulk IN transfers data.
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulpt_read_callback` 函数从打印机获取数据。回想一下，这个函数是批量 IN 端点的回调函数，因此它在批量 IN 传输数据之前和之后执行。'
 - en: 'The following is the function definition for `ulpt_read_callback`:'
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是对 `ulpt_read_callback` 函数的定义：
 - en: '[PRE23]'
+  id: totrans-193
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137513.png) ensures
     that there’s room in user space for the printer’s data. Next, the maximum transfer
     length is ![](httpatomoreillycomsourcenostarchimages1137515.png) specified. Then
     data from the printer is ![](httpatomoreillycomsourcenostarchimages1137517.png)
     retrieved.
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先 ![httpatomoreillycomsourcenostarchimages1137513.png] 确保用户空间有足够的空间来存储打印机的数据。接下来，指定最大传输长度
+    ![httpatomoreillycomsourcenostarchimages1137515.png]。然后从打印机检索数据。
 - en: After a transfer is ![](httpatomoreillycomsourcenostarchimages1137499.png) complete,
     the printer’s data is ![](httpatomoreillycomsourcenostarchimages1137507.png) copied
     from ![](httpatomoreillycomsourcenostarchimages1137511.png) kernel space to ![](httpatomoreillycomsourcenostarchimages1137509.png)
@@ -874,31 +1288,48 @@
     nothing is returned ![](httpatomoreillycomsourcenostarchimages1137503.png) four
     times in a row, transfer throttling is ![](httpatomoreillycomsourcenostarchimages1137505.png)
     enabled.
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 在传输完成后 ![httpatomoreillycomsourcenostarchimages1137499.png]，打印机的数据 ![httpatomoreillycomsourcenostarchimages1137507.png]
+    从 ![httpatomoreillycomsourcenostarchimages1137511.png] 内核空间复制到 ![httpatomoreillycomsourcenostarchimages1137509.png]
+    用户空间。请注意，如果 ![httpatomoreillycomsourcenostarchimages1137501.png] 连续四次没有任何返回 ![httpatomoreillycomsourcenostarchimages1137503.png]，则启用传输节流
+    ![httpatomoreillycomsourcenostarchimages1137505.png]。
 - en: Note
+  id: totrans-196
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Some USB devices cannot handle multiple rapid transfer requests, so staggering
     or throttling of transfers is required.
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些 USB 设备无法处理多个快速传输请求，因此需要交错或节流传输。
 - en: ulpt_status_callback Function
+  id: totrans-198
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: ulpt_status_callback 函数
 - en: The `ulpt_status_callback` function returns the printer’s current status. Recall
     that this function is the callback for the default control endpoint, so it’s executed
     before and after any transactions with endpoint 0.
+  id: totrans-199
   prefs: []
   type: TYPE_NORMAL
+  zh: '`ulpt_status_callback` 函数返回打印机的当前状态。回想一下，这个函数是默认控制端点的回调函数，因此它在与端点 0 的任何事务之前和之后执行。'
 - en: 'The following is the function definition for `ulpt_status_callback`:'
+  id: totrans-200
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是对 `ulpt_status_callback` 函数的定义：
 - en: '[PRE24]'
+  id: totrans-201
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: This function first constructs a ![](httpatomoreillycomsourcenostarchimages1137499.png)
     get status request. It then ![](httpatomoreillycomsourcenostarchimages1137501.png)
     plunks the ![](httpatomoreillycomsourcenostarchimages1137505.png) request into
@@ -908,21 +1339,31 @@
     two USB frames. The ![](httpatomoreillycomsourcenostarchimages1137507.png) first
     contains the get status request. The ![](httpatomoreillycomsourcenostarchimages1137509.png)
     second will hold the printer’s status.
+  id: totrans-202
   prefs: []
   type: TYPE_NORMAL
+  zh: 此功能首先构建一个![httpatomoreillycomsourcenostarchimages1137499.png]获取状态请求。然后![httpatomoreillycomsourcenostarchimages1137501.png]将![httpatomoreillycomsourcenostarchimages1137505.png]请求放入![httpatomoreillycomsourcenostarchimages1137503.png]DMA缓冲区。不久之后，请求![httpatomoreillycomsourcenostarchimages1137513.png]被发送到打印机。有趣的是，这个交易涉及![httpatomoreillycomsourcenostarchimages1137511.png]两个USB帧。![httpatomoreillycomsourcenostarchimages1137507.png]第一个包含获取状态请求。![httpatomoreillycomsourcenostarchimages1137509.png]第二个将保存打印机的状态。
 - en: After a transaction is ![](httpatomoreillycomsourcenostarchimages1137515.png)
     complete, the printer’s status is ![](httpatomoreillycomsourcenostarchimages1137517.png)
     plucked from the DMA buffer.
+  id: totrans-203
   prefs: []
   type: TYPE_NORMAL
+  zh: 交易完成后![httpatomoreillycomsourcenostarchimages1137515.png]，打印机的状态![httpatomoreillycomsourcenostarchimages1137517.png]从DMA缓冲区中提取。
 - en: The remainder of this function should be self-explanatory.
+  id: totrans-204
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数剩余部分应不言自明。
 - en: Conclusion
+  id: totrans-205
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: This chapter was basically a primer on USB devices and drivers. For more information,
     see the official documentation, available at [http://www.usb.org/developers/](http://www.usb.org/developers/).
+  id: totrans-206
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章基本上是关于USB设备和驱动程序的基础教程。更多信息，请参阅官方文档，可在[http://www.usb.org/developers/](http://www.usb.org/developers/)找到。
