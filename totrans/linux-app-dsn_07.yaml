@@ -1,23 +1,33 @@
 - en: '![](../images/115-1.jpg)'
+  id: totrans-0
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/115-1.jpg)'
 - en: '[**LADDIE EVENT HANDLING**](toc.html#chapter7)'
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**LADDIE事件处理**](toc.html#chapter7)'
 - en: '![](../images/as.jpg)'
+  id: totrans-2
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/as.jpg)'
 - en: Your appliance needs to respond when alarms or other critical events occur.
     Whether it’s CPU temperature, battery level, low disk space, or paper level, something
     is going to occur that requires action from your appliance.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 当警报或其他关键事件发生时，你的设备需要做出响应。无论是CPU温度、电池水平、磁盘空间不足还是纸张水平，都会发生需要设备采取行动的情况。
 - en: The idea of having a general purpose event-handling system is, surprisingly,
     not common in Linux. Too often the need for event handling is not apparent until
     near the end of system testing of the appliance, so it is usually addressed as
     an afterthought—with ad hoc and poorly integrated code.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 拥有一个通用事件处理系统的想法，在Linux中出人意料地并不常见。通常，事件处理的需求直到设备系统测试接近尾声时才变得明显，因此它通常被视为一个事后考虑——使用临时和整合不良的代码。
 - en: The authors have built enough Linux appliances to know that we should build
     event handling into the core of our design for Laddie. As part of the Laddie project,
     we built our own event-handling system that uses logging to capture the events
@@ -26,35 +36,51 @@
     complete examples of its use. This chapter may be of value even if you choose
     not to use logmuxd, since it shows the kinds of processing needed for any event-aware
     appliance.
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 作者构建了足够的Linux设备，知道我们应该将事件处理集成到Laddie设计的核心中。作为Laddie项目的一部分，我们构建了自己的事件处理系统，该系统使用日志记录来捕获感兴趣的事件。我们的事件处理守护进程称为logmuxd，本章解释了为什么我们构建它，描述了其特性，展示了其主要表格，并给出了其使用的完整示例。即使你选择不使用logmuxd，本章也可能有价值，因为它展示了任何事件感知设备所需的处理类型。
 - en: This chapter discusses event handling in the context of logging, but bear in
     mind that the goal is event handling, and logging is just the mechanism used to
     reach that goal.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章讨论了在日志记录背景下的事件处理，但请记住，目标是事件处理，而日志记录只是达到该目标的一种机制。
 - en: 'We’ve organized this chapter into the following sections:'
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将本章组织成以下部分：
 - en: Rationale for a New Event-Handling System
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 新事件处理系统的原因
 - en: Features and Capabilities of logmuxd
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: logmuxd的功能和特性
 - en: Configuring logmuxd
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 配置logmuxd
 - en: Examples Using logmuxd
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用logmuxd的示例
 - en: '[**Rationale for a New Event-Handling System**](toc.html#chapter7.1)'
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**新事件处理系统的原因**](toc.html#chapter7.1)'
 - en: 'We’ve found that the only code we’ve ever delivered on time and bug free was
     code that we did not write. That is, our most successful projects were the ones
     in which we were most able to avoid writing new code. New code always has bugs,
@@ -62,15 +88,19 @@
     to do event handling? There are really two parts to the answer: why we chose to
     use logging as the mechanism, and why we chose not to use an existing logging
     system.'
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们发现，我们唯一按时且无错误交付的代码是我们没有编写的代码。也就是说，我们最成功的项目是我们能够最大限度地避免编写新代码的项目。新代码总是有错误的，新代码总是延迟的。那么，我们为什么决定编写一个用于事件处理的日志守护进程呢？答案实际上有两个部分：为什么我们选择使用日志作为机制，以及为什么我们选择不使用现有的日志系统。
 - en: Chapter 6 explains why we think logging is the right mechanism for event reporting.
     All events that are of interest to us are already captured by, or can easily be
     captured by, syslog messages. There are syslog libraries for almost every programming
     language, and syslog is well understood, fairly secure, and is both CPU and memory
     efficient.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 第6章解释了为什么我们认为日志是事件报告的正确机制。对我们感兴趣的所有事件都已由syslog消息捕获，或者可以轻松地被捕获。几乎每种编程语言都有syslog库，syslog被广泛理解，相当安全，并且CPU和内存效率都很高。
 - en: A distant second to syslog for event handling is D-Bus, an open source package
     often used to distribute desktop events. D-Bus offers libraries and an API that
     allows processes to exchange messages, provided that both processes are D-Bus
@@ -78,162 +108,236 @@
     to add D-Bus support.) However, D-Bus does not offer the same breadth of languages
     that syslog offers, and D-Bus usually requires two running daemons, which makes
     it relatively RAM and CPU intensive (compared to syslog).
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 在事件处理方面，D-Bus（一个常用于分发桌面事件的开源软件包）排在syslog之后，是一个远程的第二选择。D-Bus提供了库和API，允许进程交换消息，前提是两个进程都支持D-Bus。（正因为如此，使用syslog的旧应用程序必须重写以添加D-Bus支持。）然而，D-Bus并不提供与syslog相同范围的语言支持，并且D-Bus通常需要两个运行中的守护进程，这使得它相对于syslog来说在RAM和CPU使用上更为密集。
 - en: '**NOTE**'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: '**注意**'
 - en: '*D-Bus comes standard on most Linux desktops, but it’s probably inappropriate
     for event handling on most Linux appliances.*'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: '*D-Bus 在大多数 Linux 桌面上是标准配置，但在大多数 Linux 设备上处理事件可能不太合适。*'
 - en: If syslog is the event reporting mechanism, then why not use the syslog daemon
     for event handling? The major feature that we found missing from the currently
     available logging systems was the ability to easily duplicate log messages and
     broadcast them on accepted TCP connections.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果 syslog 是事件报告机制，那么为什么不使用 syslog 守护进程来处理事件呢？我们发现目前可用的日志系统缺少的主要功能是轻松复制日志消息并在接受的
+    TCP 连接上广播它们。
 - en: The Laddie Alarm System needs to have Laddie alarm messages routed to several
     running programs and UIs. Figure 7-1 illustrates a typical case. When an alarm
     occurs, ladd sends a log message to report the event. We need to send a copy of
     the resulting log message to every CLI that has logging enabled and to every web
     page that is looking at the system status. The problem is that we don’t know beforehand
     how many of each of these interfaces are open.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: Laddie 警报系统需要将 Laddie 警报消息路由到多个正在运行的程序和用户界面。图 7-1 展示了一个典型情况。当发生警报时，ladd 发送一个日志消息来报告事件。我们需要将生成的日志消息的副本发送到每个启用了日志记录的
+    CLI 和每个查看系统状态的网页。问题是我们在事先不知道有多少个这样的接口是打开的。
 - en: Our new logging daemon, logmuxd, solves this problem by allowing us to route
     messages to many destinations, even if those destinations are transitory. No other
     logging system supports multiple, transitory destinations. When ladd detects an
     alarm, it sends a log using syslog(); then logmuxd captures the event, rewrites
     it if needed, and multiplexes it out to each of the accepted TCP connections.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们的新日志守护进程 logmuxd 通过允许我们将消息路由到多个目的地来解决此问题，即使这些目的地是临时的。没有其他日志系统支持多个临时的目的地。当
+    ladd 检测到警报时，它使用 syslog() 发送日志；然后 logmuxd 捕获事件，如果需要则重写它，并将其多路复用到每个接受的 TCP 连接。
 - en: '![](../images/117-1.jpg)'
+  id: totrans-21
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/117-1.jpg)'
 - en: '*Figure 7-1: The need for a multiplexing log daemon*'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: '*图 7-1：需要多路复用日志守护进程*'
 - en: We decided to invest the time to build a new logging system for event handling
     because we wanted the ability to capture, rewrite, and route event reports from
     all applications and daemons on the appliance. As an appliance designer, you may
     find that your appliance needs to capture event reports from many sources and
     route the messages to many destinations. If so, you should consider using logmuxd
     in your appliance.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们决定投入时间构建一个新的日志系统用于事件处理，因为我们希望能够捕获、重写和路由来自设备上所有应用程序和守护进程的事件报告。作为一个设备设计师，您可能会发现您的设备需要从许多来源捕获事件报告并将消息路由到多个目的地。如果是这样，您应该考虑在您的设备中使用
+    logmuxd。
 - en: '[**Features and Capabilities of logmuxd**](toc.html#chapter7.2)'
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**logmuxd 的功能和特性**](toc.html#chapter7.2)'
 - en: We want logmuxd to work either with an existing syslogd installation or as a
     replacement for it. That is, we need to be able to read and write messages in
     the syslog style of angle brackets surrounding an integer. We want our logging
     daemon to support many types of input and many types of destinations, to be able
     to route based on a regex, and to be able to rewrite a log message before forwarding
     it on to its destination.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们希望 logmuxd 能够与现有的 syslogd 安装一起工作，或者作为它的替代品。也就是说，我们需要能够以整数周围的角度括号风格读取和写入消息。我们希望我们的日志守护进程能够支持许多类型的输入和许多类型的输出，能够根据正则表达式进行路由，并且能够在将其转发到目的地之前重写日志消息。
 - en: Each destination has its own set of routing and rewriting rules. This is similar
     to syslogd and means that you may have otherwise identical filters with the output
     of each filter going to a different destination.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个目的地都有自己的路由和重写规则集。这类似于 syslogd，这意味着您可能有其他完全相同的过滤器，每个过滤器的输出都发送到不同的目的地。
 - en: Filters use the regex() library for pattern matching and for extracting relevant
     fields from the log messages. Messages can optionally be rewritten using the fields
     extracted from the regex pattern.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 过滤器使用 regex() 库进行模式匹配和从日志消息中提取相关字段。消息可以选择使用从正则表达式模式中提取的字段进行重写。
 - en: Figure 7-2 presents the overall architecture of logmuxd. In the next section
     we discuss each of the blocks in this diagram.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 7-2 展示了 logmuxd 的整体架构。在下一节中，我们将讨论此图中每个块。
 - en: '![](../images/117-2.jpg)'
+  id: totrans-29
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/117-2.jpg)'
 - en: '*Figure 7-2: Architecture of logmuxd*'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: '*图 7-2：logmuxd 的架构*'
 - en: The use of logmuxd might be easier to understand if we start with a list of
     its configuration tables¹ grouped according to the three processing blocks shown
     in Figure 7-2\. Table 7-1 doesn’t describe all of the tables in detail, so you
     might want to use the RTA table editor to examine them more closely.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们从一个根据图7-2中显示的三个处理块分组其配置表的logmuxd配置表列表开始，可能会更容易理解logmuxd的使用。表7-1并没有详细描述所有表，因此您可能想使用RTA表编辑器更仔细地检查它们。
 - en: '**Table 7-1:** Configuration Tables Grouped According to Processing Block'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: '**表7-1:** 根据处理块分组的配置表'
 - en: '![](../images/118-1.jpg)'
+  id: totrans-33
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/118-1.jpg)'
 - en: logmuxd has several limitations. It does not have any flood filtering (for example,
     syslog’s “Last message repeated 10 billion times”). It uses regex, which gives
     it a lot of power and flexibility, but at the expense of CPU cycles. Finally,
     it is a relatively new logging daemon and is still in flux to a certain degree,
     as new features are added and as bugs are found and fixed.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: logmuxd有几个限制。它没有任何洪水过滤（例如，syslog的“最后一条消息重复了10亿次”）。它使用正则表达式，这给它带来了很多功能和灵活性，但代价是CPU周期。最后，它是一个相对较新的日志守护进程，并且在某种程度上仍在变化，因为新功能被添加，以及发现和修复了错误。
 - en: You can overcome most of the limitations of logmuxd by pairing it with syslogd.
     Configure syslogd to output all messages to a FIFO, and configure logmuxd to read
     from the FIFO and to filter and rewrite only those few messages that you want
     to capture for further processing.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以通过将syslogd与logmuxd配对来克服logmuxd的大部分限制。配置syslogd将所有消息输出到FIFO，并配置logmuxd从FIFO读取，并仅过滤和重写您想要捕获以进行进一步处理的少量消息。
 - en: '[**Configuring logmuxd**](toc.html#chapter7.3)'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**配置logmuxd**](toc.html#chapter7.3)'
 - en: RTA tables store the configuration and statistics for logmuxd. The following
     discussion describes the tables, and the examples in the next section give the
     SQL for using them.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: RTA表存储logmuxd的配置和统计信息。以下讨论了这些表，下一节的示例给出了使用它们的SQL语句。
 - en: '[***logmuxd Sources***](toc.html#chapter7.4)'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***logmuxd源***](toc.html#chapter7.4)'
 - en: You tell logmuxd about your event sources by describing them in the four editable
     fields in logmuxd’s MuxIn table. These fields are source, port, type, and term.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以通过在logmuxd的MuxIn表中的四个可编辑字段中描述它们来告诉logmuxd关于您的事件源。这些字段是源、端口、类型和术语。
 - en: The *source* field contains the filename if the source is a file, pipe, or Unix
     socket, or the IP address if the source is a UDP or TCP socket.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: '*源*字段包含如果源是文件、管道或Unix套接字，则为文件名；如果源是UDP或TCP套接字，则为IP地址。'
 - en: The *port* field contains the port number for UDP and TCP sockets and is ignored
     for sources with an entry from a filesystem.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: '*端口*字段包含UDP和TCP套接字的端口号，对于来自文件系统的源则忽略。'
 - en: The *type* field specifies one of the six possible types for the source. Table
     7-2 describes the six source types.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: '*类型*字段指定了源可能的六种类型之一。表7-2描述了这六种源类型。'
 - en: '**Table 7-2:** Six Possible Source Types'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: '**表7-2:** 六种可能的源类型'
 - en: '![](../images/119-1.jpg)'
+  id: totrans-44
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/119-1.jpg)'
 - en: The *term* field specifies how the source terminates log messages. A zero indicates
     that log messages are terminated with a null character. Messages from syslog use
     a null terminator. A one indicates that each read() on the source will receive
     a complete message. This termination is used on UDP sockets, for example. A two
     indicates that a newline terminates the message. Newline termination is used for
     tail -f types of sources.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: '*术语*字段指定了源如何终止日志消息。零表示日志消息以空字符终止。syslog的消息使用空字符终止。一表示每次从源读取()将接收到一个完整的消息。这种终止方式用于UDP套接字等。二表示换行符终止消息。换行符终止用于类似tail
+    -f类型的源。'
 - en: The MuxIn table also has read-only fields that hold usage statistics, error
     statistics, and the file descriptor for the source. For more information on these
     fields, use the RTA table editor to examine them on a running Laddie appliance.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: MuxIn表也包含只读字段，用于存储使用统计信息、错误统计信息和源文件的文件描述符。有关这些字段的更多信息，请使用RTA表编辑器在运行的Laddie设备上检查它们。
 - en: Two other logmuxd tables are associated with message input processing. The Rawlog
     table acts as a FIFO to hold the 10 most recent messages. This is useful when
     debugging filters or monitoring the raw input to the logger. The Accpt table holds
     the file descriptor and other information needed by accepted TCP connections and
     by open Unix sockets. There are no configurable fields in either Rawlog or Accpt.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 与消息输入处理相关的其他两个 logmuxd 表。Rawlog 表充当 FIFO，用于保存最近的 10 条消息。这在调试过滤器或监控记录器的原始输入时很有用。Accpt
+    表保存由接受的 TCP 连接和打开的 Unix 套接字所需的数据文件描述符和其他信息。Rawlog 和 Accpt 中都没有可配置的字段。
 - en: '[***logmuxd Filters and Rewriting***](toc.html#chapter7.5)'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***logmuxd 过滤器和重写功能***](toc.html#chapter7.5)'
 - en: 'One of the main reasons to use logmuxd is that it rewrites messages and forwards
     them on to another process. For example, when a user sets a test alarm in a zone,
     ladd sends the log message “User set alarm on zone *n, zone_name”* (where *n*
@@ -242,23 +346,35 @@
     can only display 16 characters, so we use the rewriting capability of logmuxd
     to rewrite the message to fit on the LCD display. The original message is rewritten
     from this:'
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 logmuxd 的主要理由之一是它可以重写消息并将它们转发到另一个进程。例如，当用户在区域中设置测试警报时，ladd 会发送日志消息“用户在区域
+    *n, 区域名称”*（其中 *n* 和 *zone_name* 分别被区域编号和用户指定的名称替换）。我们希望这条日志消息出现在前面板的 LCD 显示屏上，但
+    LCD 显示屏只能显示 16 个字符，因此我们使用 logmuxd 的重写功能将消息重写以适应 LCD 显示屏。原始消息的重写如下：
 - en: 'Aug 12 22:28:31 ladd[3820]: User set alarm on zone 5, Refrigerator'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 'Aug 12 22:28:31 ladd[3820]: 用户在区域 5 设置了警报，冰箱'
 - en: 'to this:'
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 到如下：
 - en: 22:28 Usr set 5
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 22:28 用户设置 5
 - en: All of the configuration data to recognize and rewrite a log message is contained
     in the Filters table. This table contains the type and name of the destination,
     the regular expression to match, and an snprintf() format string for the rewritten
     message. Let’s look at each of these fields in turn.
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 识别和重写日志消息的所有配置数据都包含在 Filters 表中。此表包含目标类型和名称、匹配的正则表达式以及重写消息的 snprintf() 格式字符串。让我们依次查看这些字段。
 - en: 'Two fields are used to specify the destination: *desttype* and *destname*.
     There is a separate table for each type of destination. This is necessary because,
     for example, an email destination needs different configuration information than
@@ -266,14 +382,21 @@
     table are set by the desttype field. There are nine valid destination types. The
     types for 1 and 2 are not included in Table 7-3, since they are strictly source
     types.'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 用于指定目标的有两个字段：*desttype* 和 *destname*。每种目标类型都有一个单独的表。这是必要的，因为例如，电子邮件目标需要与 SNMP
+    钩子目标不同的配置信息。目标类型及其目标表由 desttype 字段设置。有九种有效的目标类型。类型 1 和 2 不包含在表 7-3 中，因为它们是严格的目标类型。
 - en: '**Table 7-3:** The Nine Valid Destination Types'
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: '**表 7-3：九种有效的目标类型**'
 - en: '![](../images/120-1.jpg)'
+  id: totrans-56
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/120-1.jpg)'
 - en: There can be several distinct destinations described in each of the destination
     tables. Each destination has its own unique name (a destname) in one of the destination
     tables. For example, if you have two different SNMP destinations, you may call
@@ -281,22 +404,30 @@
     you can define different routing and rewriting rules for them. To link a filter
     in the Filters table to a specific destination, you need to specify both the destination
     type and destination name.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个目标表中可以描述几个不同的目标。每个目标在其目标表中的一个唯一名称（destname）。例如，如果您有两个不同的 SNMP 目标，您可能将其中一个称为
+    *allsnmp*，另一个称为 *laddiesnmp*。通过给它们不同的名称，您可以定义不同的路由和重写规则。要将 Filters 表中的过滤器链接到特定目标，您需要指定目标类型和目标名称。
 - en: Logmuxd routes messages based on the message’s facility, log level, and on a
     text pattern match. These three corresponding fields in the Filters table are
     *facility*, *level*, and *regex*. The facilities and log levels are the same as
     those defined for syslogd. The regex pattern is a regular expression used for
     both pattern matching and subpattern extraction.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: Logmuxd 根据消息的设施、日志级别和文本模式匹配来路由消息。Filters 表中的这三个对应字段是 *facility*、*level* 和 *regex*。设施和日志级别与为
+    syslogd 定义的相同。regex 模式是一个用于模式匹配和子模式提取的正则表达式。
 - en: The regex library is a good choice for pattern matching and extraction, since
     the patterns can be precompiled to improve the speed of the pattern match, and
     regex lets you easily extract subpatterns from the search pattern. In our use
     of logmuxd, we’ve found that we don’t really need to know too much about regex
     patterns. The following example illustrates most of what you need to know.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 正则表达式库是进行模式匹配和提取的好选择，因为模式可以预先编译以提高模式匹配的速度，并且正则表达式让你能够轻松地从搜索模式中提取子模式。在我们使用logmuxd的过程中，我们发现我们实际上并不需要了解太多的正则表达式模式。以下示例说明了你需要了解的大部分内容。
 - en: 'Say that you are processing the event of a train’s arrival at a station, and
     the log message is *Train from San Jose arriving on Track number 15*. To rewrite
     this message as *San Jose : 15*, you need to extract both the city and the track
@@ -306,142 +437,206 @@
     If you put parentheses around a pattern, regex makes that pattern available separately
     in the regex output. The following is a regex pattern to match the message and
     extract the city and train number.'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: '假设你正在处理火车到达车站的事件，并且日志消息是*从San Jose开来的火车到达轨道编号15*。要将此消息重写为*San Jose : 15*，你需要提取城市和轨道编号。捕获城市的正则表达式模式是*[A-Za-z
+    -]+*。这个模式匹配至少一个大小写字母、一个空格或一个连字符的任意组合。轨道编号的模式只是*[0-9]+*。这里有个技巧：如果你在一个模式周围加上括号，正则表达式会使得该模式在正则表达式输出中作为单独的部分可用。以下是一个匹配消息并提取城市和火车编号的正则表达式模式。'
 - en: Train from ([A-Za-z -]+) arriving on Track number ([0-9]+)
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: Train from ([A-Za-z -]+) arriving on Track number ([0-9]+)
 - en: The Filter table’s *rewrite* field contains the snprintf() format string used
     to rewrite the log message. The format string contains text of your choosing and
     can contain the strings extracted from the regex pattern. The matches to the regex
     patterns are available as explicit parameters to the snprintf(). Table 7-4 lists
     the parameters available to you.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 过滤表中的*重写*字段包含用于重写日志消息的snprintf()格式字符串。格式字符串包含你选择的文本，并且可以包含从正则表达式模式中提取的字符串。正则表达式模式的匹配结果可以作为snprintf()的显式参数使用。表7-4列出了可用的参数。
 - en: '**Table 7-4:** Available Parameters to the snprintf()'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: '**表7-4:** 可用于snprintf()的参数'
 - en: '![](../images/121-1.jpg)'
+  id: totrans-64
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/121-1.jpg)'
 - en: 'Continuing the example above, you can get the message *San Jose : 15* with
     a rewrite format string of *%1$s : %2$s*.'
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: '继续上面的例子，你可以使用重写格式字符串*%1$s : %2$s*来获取消息*San Jose : 15*。'
 - en: You can add a date and time to your rewritten message by including *%11$s* in
     your rewrite string. The format of the date and time is set by the *time_fmt*
     field, which is passed to strftime() for the conversion. Common examples of time_fmt
     include *%F %T*, which gives a date and time display of *YYYY-MM-DD hh:mm:ss*,
     and *%R*, which displays only the time as *hh:mm*.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以通过在重写字符串中包含*%11$s*来向重写消息中添加日期和时间。日期和时间的格式由*time_fmt*字段设置，该字段传递给strftime()进行转换。time_fmt的常见示例包括*%F
+    %T*，它给出日期和时间的显示为*YYYY-MM-DD hh:mm:ss*，以及*%R*，它只显示时间为*hh:mm*。
 - en: The explicit parameter for a newline is handy, since it can be difficult to
     get a newline character into an RTA table. Remember, to PostgreSQL, a \n is a
     two-character string with a backslash and the letter *n*.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 新行的显式参数很方便，因为将换行符放入RTA表中可能很困难。记住，对于PostgreSQL来说，\n是一个由反斜杠和字母*n*组成的两个字符字符串。
 - en: We’ll show more examples of regex pattern matching and message rewriting in
     the section “Examples Using logmuxd” on page 98.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将在第98页的“使用logmuxd的示例”部分展示更多正则表达式模式匹配和消息重写的例子。
 - en: '[***logmuxd Destinations***](toc.html#chapter7.6)'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***logmuxd 目标地址***](toc.html#chapter7.6)'
 - en: Each type of destination has a table to hold the parameters unique to that type.
     You can easily figure out most of the tables and their content by browsing them
     with the RTA table editor, but three destination tables deserve some additional
     comments.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 每种类型的目标都有一个表来存储该类型独有的参数。你可以通过使用RTA表编辑器浏览它们来轻松地了解大多数表及其内容，但有三张目标表需要一些额外的说明。
 - en: The *MailDest* table has a *subject* field that contains the subject of the
     email message to send. The *to_list* field is a space-separated list of recipients
     of the email. For security reasons, the only characters allowed in to_list are
     alpha-numerics, periods, underscores, at signs (@), and spaces. If you are going
     to use email as a destination, be sure to run Sendmail, Postfix, or another mail
     transfer agent on your appliance.
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: '*MailDest* 表格有一个包含要发送的电子邮件消息主题的 *subject* 字段。*to_list* 字段是分隔的收件人列表。出于安全原因，to_list中只允许使用字母数字、点、下划线、at符号（@）和空格。如果您打算使用电子邮件作为目标，请确保在您的设备上运行Sendmail、Postfix或其他邮件传输代理。'
 - en: The *SnmpDest* table contains the name of the destination, the IP address of
     the SNMP trap daemon, the community string for the SNMP daemon, the port number,
     and the type of trap to send (version 2 trap or version 2 inform). The values
     in these fields are passed as parameters to the snmptrap command, which actually
     sends the trap.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: '*SnmpDest* 表格包含目标名称、SNMP陷阱守护进程的IP地址、SNMP守护进程的社区字符串、端口号以及要发送的陷阱类型（版本2陷阱或版本2通知）。这些字段中的值作为参数传递给snmptrap命令，该命令实际上发送陷阱。'
 - en: The *TblDest* table holds 20 log messages, with the most recent message always
     at the top of the table. In Laddie we use this table to hold the log messages
     that we make visible to the end user.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: '*TblDest* 表格包含20条日志消息，最新消息始终位于表格顶部。在Laddie中，我们使用此表格来存储我们向最终用户显示的日志消息。'
 - en: '[**Examples Using logmuxd**](toc.html#chapter7.7)'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**使用logmuxd的示例**](toc.html#chapter7.7)'
 - en: Let’s go over a few examples to help clarify how to use logmuxd.
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们通过几个示例来帮助阐明如何使用logmuxd。
 - en: '[***Example 1: A logmuxd Demonstration***](toc.html#chapter7.8)'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***示例 1：logmuxd 演示***](toc.html#chapter7.8)'
 - en: In the previous sections, you saw that one of the nice features of the Laddie
     Alarm System is that when an alarm occurs, all of the UIs are updated to reflect
     the new alarm and the new system status. This demonstration shows how to see the
     log messages that are distributed to all of the UIs.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的章节中，您可以看到Laddie警报系统的一个优点是，当发生警报时，所有用户界面都会更新以反映新的警报和新的系统状态。本演示展示了如何查看分发到所有用户界面的日志消息。
 - en: Boot the Laddie CD. After the system is up, verify that you can see Laddie’s
     web interface on the web browser of another PC.
+  id: totrans-78
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 启动Laddie CD。系统启动后，请验证您是否可以在另一台PC的网页浏览器中看到Laddie的网页界面。
 - en: 'On Laddie, logmuxd is configured to broadcast alarm system events down all
     accepted TCP connections to port 4444\. Open a terminal window and telnet to port
     4444 on the Laddie PC. For example:'
+  id: totrans-79
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在Laddie上，logmuxd被配置为将警报系统事件广播到所有接受的TCP连接的4444端口。打开一个终端窗口并telnet到Laddie PC上的4444端口。例如：
 - en: telnet 192.168.1.11 4444
+  id: totrans-80
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: telnet 192.168.1.11 4444
 - en: Use the web interface to test a few zones, and then clear all the alarms. Your
     telnet session should display log messages similar to the ones below.
+  id: totrans-81
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用网页界面测试几个区域，然后清除所有警报。您的telnet会话应显示类似于以下日志消息。
 - en: 2007-10-07 12:03:35 User set alarm on zone 2, Back Door
+  id: totrans-82
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 2007-10-07 12:03:35 用户在区域2，后门设置了警报。
 - en: '2007-10-07 12:03:35'
+  id: totrans-83
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: '2007-10-07 12:03:35'
 - en: 'Alarm system status: alarm 2007-10-07 12:03:37'
+  id: totrans-84
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 警报系统状态：警报 2007-10-07 12:03:37
 - en: User set alarm on zone 3, Garage
+  id: totrans-85
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 用户在区域3，车库设置了警报。
 - en: 2007-10-07 12:03:38 User cleared alarm on zone 2, Back Door
+  id: totrans-86
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 2007-10-07 12:03:38 用户在区域2，后门清除了警报。
 - en: 2007-10-07 12:03:40 User cleared alarm on zone 3, Garage
+  id: totrans-87
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 2007-10-07 12:03:40 用户在区域3，车库清除了警报。
 - en: '2007-10-07 12:03:40 Alarm system status: safe'
+  id: totrans-88
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 2007-10-07 12:03:40 警报系统状态：安全
 - en: As simple as this example is, it shows logmuxd’s ability to multiplex log messages.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管这个示例很简单，但它展示了logmuxd多路复用日志消息的能力。
 - en: '[***Example 2: logmuxd and Accepted TCP Connections***](toc.html#chapter7.9)'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***示例 2：logmuxd 和接受的TCP连接***](toc.html#chapter7.9)'
 - en: 'Our rationale for building a new logger was that we wanted the ability to open
     a TCP connection to the logging daemon and have log messages delivered to us over
     that connection. The last example showed us this ability in action, and in this
@@ -450,243 +645,377 @@
     and a telnet connection to logmuxd to view the rewritten log messages. In this
     example we are going to rewrite log messages of the form “Train arriving from
     *city_name* on track *track_number*” to the form “*city_name* : *track_number*”.'
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: '我们构建新 logger 的理由是我们想要能够打开到日志守护进程的 TCP 连接，并且通过该连接将日志消息发送给我们。最后一个示例展示了这一功能，在本例中我们看到如何配置
+    logmuxd 以接受 TCP 连接。我们使用 logmuxd 替换 syslogd，使用 logger 命令生成“火车到达”消息，并通过 telnet 连接到
+    logmuxd 来查看重写的日志消息。在本例中，我们将形式为“Train arriving from *city_name* on track *track_number*”的日志消息重写为“*city_name*
+    : *track_number*”。'
 - en: You can copy the source from the CD and build logmuxd on your development system,
     or you can boot the Laddie CD and use its running version of logmuxd. Don’t worry
     about changing the logmuxd tables on Laddie, a reboot will restore them to their
     original state. We are going to use psql for the table updates, but you can also
     use the table editor, if you wish. Figure 7-3 illustrates the data flow in this
     example.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以从 CD 复制源代码并在您的开发系统上构建 logmuxd，或者您可以从 Laddie CD 启动并使用其运行的 logmuxd 版本。不用担心更改
+    Laddie 上的 logmuxd 表，重启将恢复到原始状态。我们将使用 psql 进行表更新，但您也可以使用表编辑器，如果您愿意的话。图 7-3 展示了本例中的数据流。
 - en: '![](../images/123-1.jpg)'
+  id: totrans-93
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/123-1.jpg)'
 - en: '*Figure 7-3: A logmuxd example using telnet*'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: '*图 7-3：使用 telnet 的 logmuxd 示例*'
 - en: 'The basic steps in the configuration are:'
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 配置的基本步骤如下：
 - en: Configure logmuxd to accept syslog messages from /dev/log. Verify the setup.
+  id: totrans-96
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 配置 logmuxd 以接受来自 /dev/log 的 syslog 消息。验证设置。
 - en: Configure logmuxd to recognize and rewrite “train arriving” messages.
+  id: totrans-97
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 配置 logmuxd 以识别和重写“火车到达”消息。
 - en: Configure logmuxd to accept TCP connections on port 3333.
+  id: totrans-98
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 配置 logmuxd 以在端口 3333 上接受 TCP 连接。
 - en: Use logger and telnet to verify that messages are distributed to connections
     to TCP port 3333.
+  id: totrans-99
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用 logger 和 telnet 验证消息是否被分发到 TCP 端口 3333 的连接。
 - en: 'We start by clearing the configuration in all of the tables that we are going
     to use. Using the console or telnet, log in on the PC that is running logmuxd
     (the PC booted from the book’s CD). The RTA interface on logmuxd listens on port
     8887; you can start the SQL session and clear the tables with these commands:'
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们首先清除我们将要使用的所有表中的配置。使用控制台或 telnet 登录运行 logmuxd 的 PC（从本书的 CD 启动的 PC）。logmuxd
+    上的 RTA 接口监听端口 8887；您可以使用以下命令启动 SQL 会话并清除表：
 - en: '![](../images/123-2.jpg)'
+  id: totrans-101
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/123-2.jpg)'
 - en: '**MuxIn**'
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: '**MuxIn**'
 - en: We want logmuxd to replace syslogd in this example, so we need to configure
     it to listen at the Unix socket /dev/log and to read log messages in the syslog
     style. We specify the source as /dev/log, the type as 6 (syslog format), and the
     log message terminator as 0 (null character between messages).
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本例中，我们希望 logmuxd 替换 syslogd，因此我们需要配置它监听 Unix 套接字 /dev/log 并以 syslog 风格读取日志消息。我们指定源为
+    /dev/log，类型为 6（syslog 格式），日志消息终止符为 0（消息之间的空字符）。
 - en: UPDATE MuxIn SET source = "/dev/log", type = *6,* term = 0 LIMIT 1;
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: UPDATE MuxIn SET source = "/dev/log", type = *6,* term = 0 LIMIT 1;
 - en: If everything is working at this point, the above command opened a Unix socket
     on /dev/log, and a display of the MuxIn table should show a valid file descriptor
     for our source. (A netstat command should also show the /dev/log socket.)
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果一切正常，上述命令在 /dev/log 上打开了一个 Unix 套接字，并且 MuxIn 表的显示应该显示我们源的有效文件描述符。（netstat
+    命令也应该显示 /dev/log 套接字。）
 - en: SELECT source, fd FROM MuxIn;
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: SELECT source, fd FROM MuxIn;
 - en: 'If we are now listening on /dev/log, we should be able to see log messages
     sent with logger. Open another terminal window and telnet into the PC running
     logmuxd a second time. Issue the following command in the new window:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们现在正在监听 /dev/log，我们应该能够看到使用 logger 发送的日志消息。打开另一个终端窗口，并第二次 telnet 到运行 logmuxd
+    的 PC。在新窗口中输入以下命令：
 - en: logger "Hello, world!"
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: logger "Hello, world!"
 - en: Verify that logmuxd received the message by looking at the Rawlog table.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过查看 Rawlog 表来验证 logmuxd 是否接收到了消息。
 - en: SELECT source, log FROM Rawlog;
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: SELECT source, log FROM Rawlog;
 - en: '**Filters**'
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: '**Filters**'
 - en: Continuing with the example, we are going to use the first row in Filters, but
     we are going to update it one or two columns at a time so that we can better explain
     just those columns.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 继续以上示例，我们将使用过滤器中的第一行，但我们将逐列更新它，以便更好地解释这些列。
 - en: '**desttype**'
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: '**desttype**'
 - en: You may recall that the desttype is an integer that implicitly selects which
     of the destination tables this filter will use as its destination. A desttype
     of 3 is used for accepted TCP connections.
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能还记得，desttype是一个整数，它隐式地选择这个过滤器将使用哪个目的地表作为其目的地。desttype为3用于已接受的TCP连接。
 - en: '**destname**'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: '**destname**'
 - en: There may be multiple, independent destinations within a destination table.
     We need some way to distinguish one destination from another, so we give each
     destination a name. The destype in the Filter table selects which destination
     table to use, and the destname selects which row in that table to use. For this
     example we will assign a name of *example_2.*
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 在目的地表中可能存在多个独立的目的地。我们需要一种方法来区分一个目的地与另一个目的地，因此我们给每个目的地起一个名字。过滤器表中的destype用于选择使用哪个目的地表，而destname用于选择使用该表中的哪一行。在这个例子中，我们将分配一个名为*example_2*的名字。
 - en: UPDATE Filters SET desttype = 3, destname = "example_2" LIMIT 1;
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: UPDATE Filters SET desttype = 3, destname = "example_2" LIMIT 1;
 - en: '**regex**'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: '**regex**'
 - en: If we combine the regex pattern we built when we first looked at the train arrival
     example with some simple SQL, we get the command to set the regex pattern in our
     filter.
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们将我们在查看列车到达示例时构建的正则表达式模式与一些简单的SQL结合起来，我们就可以得到设置过滤器中正则表达式模式的命令。
 - en: UPDATE Filters SET regex =
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: UPDATE Filters SET regex =
 - en: '"Train from ([A-Za-z -]+) arriving on Track number ([0-9]+)" LIMIT 1;'
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: '"Train from ([A-Za-z -]+) arriving on Track number ([0-9]+)" LIMIT 1;'
 - en: '**level and facility**'
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: '**level and facility**'
 - en: The logmuxd daemon routes based on the level and facility of the incoming log
     message. In this example we do not care which level and facility were used to
     send the message, so we set the level to a high value, and we clear the facility
     mask.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: The logmuxd守护进程根据传入日志消息的级别和设施进行路由。在这个例子中，我们不在乎用于发送消息的级别和设施是哪个，所以我们设置级别为一个高值，并清除设施掩码。
 - en: UPDATE Filters SET level = 15, facility = 0 LIMIT 1;
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: UPDATE Filters SET level = 15, facility = 0 LIMIT 1;
 - en: At this point in our example, we can test the pattern-matching ability of our
     regex pattern. Use the terminal with the bash prompt to issue the following command.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我们的例子中，此时我们可以测试我们的正则表达式模式的模式匹配能力。使用带有bash提示符的终端发出以下命令。
 - en: logger "Train from Phoenix arriving on Track number 22"
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: logger "凤凰城开往的列车到达轨道号码22"
 - en: Verify that the count of matches in our filter has gone up by one.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 验证我们的过滤器中匹配的数量是否增加了一个。
 - en: SELECT * FROM Filters LIMIT 1;
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: SELECT * FROM Filters LIMIT 1;
 - en: Repeat the above two steps a few times using different city names and track
     numbers. Issue a few logger commands where the pattern does not quite match, and
     verify that the count does not increment.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 重复上述两个步骤几次，使用不同的城市名称和跟踪号码。发出几个日志命令，其中模式不完全匹配，并验证计数没有增加。
 - en: '**rewrite**'
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: '**重写**'
 - en: 'You may recall that the magic of regex patterns is that you can extract a subpattern
     by placing parenthesis around it. Here, we are extracting the city name and the
     track number and rewriting them as *city_name : track_number.* The regex subpatterns
     are available to the rewriting string as *%1$s to %9$s.* We want the first two
     patterns, and we want to add a newline to the output, so we set the rewrite string
     with the command:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: '你可能还记得，正则表达式模式的魔力在于你可以通过在其周围放置括号来提取子模式。在这里，我们正在提取城市名称和轨道号码，并将它们重写为*city_name
+    : track_number.* 正则表达式子模式作为*%1$s到%9$s*可用。我们想要前两个模式，并且我们想要在输出中添加一个换行符，所以我们使用以下命令设置重写字符串：'
 - en: 'UPDATE Filters SET rewrite = "%1$s : %2$s %12$s" LIMIT 1;'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 'UPDATE Filters SET rewrite = "%1$s : %2$s %12$s" LIMIT 1;'
 - en: We are done with the Filters table and can now finish the configuration by editing
     the NetDest table.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经完成了Filters表的配置，现在可以通过编辑NetDest表来完成配置。
 - en: '**NetDest**'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: '**NetDest**'
 - en: 'We want to set up a TCP socket listening on port 3333\. Let’s give everyone
     on the network access to the port by binding to 0.0.0.0\. The name of this network
     destination should be example_2, and the type of this network destination should
     be an accepted TCP connection, which is type 3:'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们希望设置一个监听端口3333的TCP套接字。让我们通过绑定到0.0.0.0来让网络上的每个人都能访问该端口。这个网络目的地的名字应该是example_2，而这个网络目的地的类型应该是已接受的TCP连接，即类型3：
 - en: UPDATE NetDest SET destname = "example_2", dest = "0.0.0.0", port = 3333, type
     = 3 LIMIT 1;
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: UPDATE NetDest SET destname = "example_2", dest = "0.0.0.0", port = 3333, type
+    = 3 LIMIT 1;
 - en: If all has gone well, there should be a listening socket on port 3333\. Use
     netstat -nat to verify that the port is open and bound to the right address. Use
     the following SQL to see the file descriptor of the socket.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果一切顺利，应该在端口3333上有一个监听套接字。使用netstat -nat来验证端口是否打开并绑定到正确的地址。使用以下SQL语句查看套接字的文件描述符。
 - en: SELECT * FROM NetDest LIMIT 1;
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: SELECT * FROM NetDest LIMIT 1;
 - en: 'We can now verify the whole system. Open a third terminal window and connect
     to port 3333\. Your command might look something like this:'
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们现在可以验证整个系统。打开第三个终端窗口并连接到端口号3333。你的命令可能看起来像这样：
 - en: telnet 192.168.1.99 3333
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: telnet 192.168.1.99 3333
 - en: 'You should now be able to verify that logmuxd has accepted your telnet connection.
     Enter the following on the terminal, still at the psql prompt:'
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 你现在应该能够验证logmuxd已经接受你的telnet连接。在psql提示符下，输入以下内容：
 - en: SELECT * FROM AccptDest;
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: SELECT * FROM AccptDest;
 - en: 'It should all be working. Enter the following on a terminal with the bash prompt:'
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 应该一切正常。在带有bash提示符的终端中输入以下内容：
 - en: logger "Train from Phoenix arriving on Track number 22"
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: logger "从凤凰城开来的火车到达22号轨道"
 - en: logger "Train from San Jose arriving on Track number 15"
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: logger "从圣何塞开来的火车到达15号轨道"
 - en: logger "Train from San Francisco arriving on Track number 9"
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: logger "从旧金山开来的火车到达9号轨道"
 - en: 'Verify that the city and track number are extracted and displayed on the connection
     to port 3333\. Your output should appear as:'
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 验证城市和轨道号是否已从连接到端口号3333的连接中提取并显示。你的输出应该如下所示：
 - en: 'Phoenix : 22'
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 凤凰城：22
 - en: 'San Jose : 15'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 圣何塞：15
 - en: 'San Francisco : 9'
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: 旧金山：9
 - en: This has been a long example, but it has illustrated both how to configure logmuxd
     and how to debug that configuration.
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是一个很长的例子，但它已经说明了如何配置logmuxd以及如何调试该配置。
 - en: '[***Example 3: logmuxd and SNMP Traps***](toc.html#chapter7.10)'
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: '[***示例 3：logmuxd 和 SNMP 陷阱***](toc.html#chapter7.10)'
 - en: The *Simple Network Management Protocol (SNMP)* is an Internet standard that
     is used to manage network devices such as routers. The protocol has commands to
     read and write values (GET and SET) as well as *traps,* which are its equivalent
@@ -695,31 +1024,45 @@
     log messages into SNMP traps. (SNMP and traps are covered in detail in later chapters,
     and you might want to delay going through this example until after reading those
     chapters.)
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: '*简单网络管理协议 (SNMP)* 是一个互联网标准，用于管理网络设备，如路由器。该协议具有读取和写入值（GET和SET）以及 *traps* 的命令，这是其日志消息的等效。网络设备通常需要在特定事件发生时发送SNMP陷阱。本例展示了如何使用logmuxd将syslog风格的日志消息转换为SNMP陷阱。（SNMP和陷阱将在后面的章节中详细说明，你可能想在阅读这些章节之后再进行此示例。）'
 - en: The Laddie Alarm System sends SNMP trap messages when the system enters or leaves
     an alarm state. To send the SNMP traps, logmuxd uses a helper application, snmptrap.
     The snmptrap command sends SNMP traps in the same manner that logger sends syslog
     messages.
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 当系统进入或离开警报状态时，Laddie警报系统会发送SNMP陷阱消息。为了发送SNMP陷阱，logmuxd使用一个辅助应用程序，snmptrap。snmptrap命令以与logger发送syslog消息相同的方式发送SNMP陷阱。
 - en: You may recall that ladd uses syslog to send logs similar to the following when
     a zone goes into alarm.
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能还记得，当区域进入警报状态时，ladd使用syslog发送类似以下的日志。
 - en: Alarm set on zone *2,* Back Door
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 在区域 *2*，后门设置了警报
 - en: User set alarm on zone *3,* Garage
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 用户在区域 *3*，车库设置了警报
 - en: The snmptrap commands corresponding to the above two log messages are shown
     below.
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是对应上述两个日志消息的snmptrap命令。
 - en: '![](../images/126-1.jpg)'
+  id: totrans-159
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/126-1.jpg)'
 - en: In the above lines, *public* is the community name, and it comes from the SnmpDest
     table since it is specific to the destination. The same is true for *snmp_mgr:162,*
     which is the destination name (or IP address) and the port number used by snmptrapd.
@@ -727,8 +1070,11 @@
     it an SNMP version 2 *inform.* The SnmpDest fields for destination name, port,
     community string, and type of trap to send should all appear in your UI, since
     the end user must configure these with values that match the end user’s installation.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 在上述行中，*public* 是团体名称，它来自SnmpDest表，因为它是特定于目的地的。对于 *snmp_mgr:162*，它也是目的名称（或IP地址）和snmptrapd使用的端口号。如果SnmpDest的类型字段设置为3，则命令中会添加一个-Ci，使其成为SNMP版本2
+    *inform*。目的名称、端口、团体字符串和要发送的陷阱类型字段都应该出现在你的UI中，因为最终用户必须使用与最终用户安装匹配的值来配置这些。
 - en: You can use the name of the trap if your MIB is installed and accessible to
     the snmptrap command. If the MIB is not installed, you need to put the full, numeric
     object ID (OID) of the trap on the command line. The two single quotes in the
@@ -736,33 +1082,49 @@
     Be sure to read the man page for snmptrap to learn more about the command and
     its options. The SNMP chapters in this book will answer many of your questions
     regarding SNMP and its event notification system, traps.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您的MIB已安装并且可以通过snmptrap命令访问，您可以使用陷阱的名称。如果MIB未安装，您需要在命令行上放置陷阱的完整、数字对象ID（OID）。命令行中的两个单引号告诉snmptrap命令在陷阱中发送当前运行时间。务必阅读snmptrap的手册页，以了解更多关于该命令及其选项的信息。本书中的SNMP章节将回答您关于SNMP及其事件通知系统（陷阱）的许多问题。
 - en: 'Information about the SNMP trap server comes from user information entered
     into the SnmpDest table. Some information for the traps must be extracted from
     the log messages. For example, to send our SNMP traps, we need to translate these:'
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于SNMP陷阱服务器的信息来自SnmpDest表中输入的用户信息。对于某些陷阱信息必须从日志消息中提取。例如，为了发送我们的SNMP陷阱，我们需要将这些翻译成：
 - en: Alarm set on zone *2,* Back Door
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 在区域*2*，后门上设置警报
 - en: User set alarm on zone *3,* Garage
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 在区域*3*，Garage上设置用户警报
 - en: 'into these:'
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 转换为：
 - en: ladAlarm ladTrapZoneId i 2 ladTrapZoneName s "Back Door"
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: ladAlarm ladTrapZoneId i 2 ladTrapZoneName s "Back Door"
 - en: ladTestAlarm ladTrapZoneId i 3 ladTrapZoneName s "Garage"
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: ladTestAlarm ladTrapZoneId i 3 ladTrapZoneName s "Garage"
 - en: This is where regex pattern matching and rewriting come into play. Using the
     regex patterns given in the train station example above, you have everything you
     need to fill in the tables.
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 这就是正则表达式模式匹配和重写发挥作用的地方。使用上面火车站示例中给出的正则表达式模式，您已经拥有了填充表格所需的一切。
 - en: The destination type 9 indicates an SNMP destination, and the name we’ve given
     this destination is snmp_monitor. We need two rows from the Filters table, one
     row for the “User set” message that is sent when a user tests a zone, and another
@@ -770,54 +1132,79 @@
     1 and 2 so that we don’t overwrite row 0, which was used in the previous example.
     We show the configuration here using SQL, but the table editor would work just
     as well.
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: 目标类型9表示SNMP目标，我们给这个目标起的名字是snmp_monitor。我们需要从Filters表中获取两行，一行用于用户测试区域时发送的“用户设置”消息，另一行用于由真实警报生成的“警报设置”消息。我们使用Filters表中的第1行和第2行，这样就不会覆盖之前例子中使用的第0行。我们在这里使用SQL展示配置，但表编辑器同样适用。
 - en: '![](../images/127-1.jpg)'
+  id: totrans-170
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/127-1.jpg)'
 - en: '![](../images/128-1.jpg)'
+  id: totrans-171
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/128-1.jpg)'
 - en: The values in the SnmpDest table are specific to the network computer that is
     configured to receive the traps, so you should provide user access to these values
     from one or more of your UIs. (The Laddie web interface lets you specify where
     to send Laddie’s SNMP traps.) In this example we set the values manually using
     SQL. Let’s assume that the trap destination is on a network host named snmp_host.
+  id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: SnmpDest表中的值针对配置为接收陷阱的网络计算机是特定的，因此您应该从您的UI之一或多个中提供对这些值的用户访问。（Laddie网页界面允许您指定发送Laddie的SNMP陷阱的位置。）在这个例子中，我们使用SQL手动设置这些值。假设陷阱目的地在一个名为snmp_host的网络主机上。
 - en: '![](../images/128-2.jpg)'
+  id: totrans-173
   prefs: []
   type: TYPE_IMG
+  zh: '![](../images/128-2.jpg)'
 - en: You can test this configuration by running snmptrapd on one of your network
     hosts. (See Chapter 13 for details.)
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以通过在您的网络主机之一上运行snmptrapd来测试此配置。（有关详细信息，请参阅第13章。）
 - en: '[**Summary**](toc.html#chapter7.11)'
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: '[**摘要**](toc.html#chapter7.11)'
 - en: Traditional logging handles an event by putting the report of the event (the
     log message) into one or more files on disk. A better approach is to examine each
     event individually and then decide how best to handle it. Making your appliance
     aware of events and able to respond to those events is one of the best things
     you can do for your customers.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 传统日志处理事件的方法是将事件的报告（日志消息）放入磁盘上的一个或多个文件中。更好的方法是单独检查每个事件，然后决定如何最好地处理它。使您的设备能够意识到事件并能够对这些事件做出响应，是您可以为您的客户做的最好的事情之一。
 - en: In earlier chapters we showed you how to use the PostgreSQL protocol and API
     for control and status of your appliance. But control and status is only half
     of the solution—in this chapter we presented event handling, the other half of
     a successful appliance design.
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的章节中，我们向您展示了如何使用PostgreSQL协议和API来控制和管理您的设备。但控制和状态只是解决方案的一半——在本章中，我们介绍了事件处理，这是成功设备设计的另一半。
 - en: __________________
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: __________________
 - en: ¹ Other programming books might give configuration as a file format or set of
     subroutine calls. Instead, we present logmuxd configuration in terms of its RTA
     table interface. You should now think of all status and configuration information
     in terms of how it would appear in an RTA table.
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 其他编程书籍可能会将配置作为文件格式或一系列子程序调用给出。相反，我们以 logmuxd 的 RTA 表接口来展示其配置。你现在应该将所有状态和配置信息视为它们在
+    RTA 表中呈现的方式。
 - en: ² If the SNMP GET and SET commands correspond to the SQL SELECT and UPDATE commands,
     then the SNMP Management Information Base (MIB) corresponds to a database table.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果 SNMP 的 GET 和 SET 命令对应于 SQL 的 SELECT 和 UPDATE 命令，那么 SNMP 管理信息库（MIB）对应于数据库表。
