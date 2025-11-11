@@ -1,287 +1,425 @@
 - en: Chapter 8. The Ringtone Massacre
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第8章。铃声大屠杀
 - en: Note
+  id: totrans-1
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Saturday, March 21, 2009*'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: '*2009年3月21日，星期六*'
 - en: '*Dear Diary*,'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: '*亲爱的日记*，'
 - en: Last week a good friend of mine loaned me his jailbroken,^([[82](ch08s05.html#ftn.CHP-8-FN-1)])
     first-generation iPhone. I was very excited. Ever since Apple announced the iPhone,
     I had wanted to see if I could find a bug in the device, but until last week I
     had never had access to one.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 上周，我的一个好朋友借给我他的越狱的、第一代iPhone。我非常兴奋。自从苹果公司宣布iPhone以来，我就想看看我能否在设备中找到漏洞，但直到上周我从未有机会接触到一台。
 - en: 8.1 Vulnerability Discovery
+  id: totrans-5
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 8.1 漏洞发现
 - en: I finally had an iPhone to play with, and I wanted to search for bugs. But where
     to start? The first thing I did was make a list of installed applications and
     libraries that seemed most likely to have bugs. The MobileSafari browser, the
     MobileMail app, and the audio libraries were at the top of the list. I decided
     that the audio libraries were the most promising targets since these libraries
     do a lot of parsing and are heavily used on the phone, so I tried my luck on them.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 我终于有一部iPhone可以玩了，我想寻找漏洞。但要从哪里开始呢？我首先列出了安装的应用程序和库，这些应用程序和库似乎最有可能存在漏洞。MobileSafari浏览器、MobileMail应用程序和音频库排在最前面。我决定音频库是最有希望的靶标，因为这些库执行了很多解析，并且在手机上被大量使用，所以我尝试了它们。
 - en: 'I performed the following steps when searching the iPhone audio libraries for
     a bug:'
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 在搜索iPhone音频库以寻找漏洞时，我执行了以下步骤：
 - en: Note
+  id: totrans-8
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*I used a first-generation iPhone with firmware 2.2.1 (5H11) as platform for
     all the following steps*.'
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: '*我使用了一台固件为2.2.1（5H11）的第一代iPhone作为所有以下步骤的平台*。'
 - en: 'Step 1: Research the iPhone’s audio capabilities.'
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第1步：研究iPhone的音频功能。
 - en: 'Step 2: Build a simple fuzzer and fuzz the phone.'
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第2步：构建一个简单的模糊器并模糊手机。
 - en: Note
+  id: totrans-12
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: I installed all the necessary tools—like the Bash, OpenSSH, and the GNU debugger—on
     the iPhone using Cydia.^([[83](ch08s05.html#ftn.CHP-8-FN-2)])
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 我使用Cydia在iPhone上安装了所有必要的工具——如Bash、OpenSSH和GNU调试器^([[83](ch08s05.html#ftn.CHP-8-FN-2)])。
 - en: 'Step 1: Research the iPhone’s Audio Capabilities'
+  id: totrans-14
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第1步：研究iPhone的音频功能
 - en: 'The iPhone, with its iPod-based roots, is a powerful audio-capable device.
     Three frameworks available on the phone provide different levels of sound functionality:
     the Core Audio,^([[84](ch08s05.html#ftn.CHP-8-FN-3)]) Celestial, and Audio Toolbox^([[85](ch08s05.html#ftn.CHP-8-FN-4)])
     frameworks. In addition, the iPhone runs an audio daemon called `mediaserverd`,
     which aggregates the sound output of all applications and governs events such
     as volume and ringer-switch changes.'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 基于iPod的iPhone是一款功能强大的音频设备。手机上提供了三个框架，提供了不同级别的声音功能：Core Audio框架^([[84](ch08s05.html#ftn.CHP-8-FN-3)]),
+    Celestial框架^([[85](ch08s05.html#ftn.CHP-8-FN-4)]), 和Audio Toolbox框架。此外，iPhone运行一个名为`mediaserverd`的音频守护进程，它聚合了所有应用程序的声音输出，并管理诸如音量和静音切换等事件。
 - en: 'Step 2: Build a Simple Fuzzer and Fuzz the Phone'
+  id: totrans-16
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第2步：构建一个简单的模糊器并模糊手机
 - en: 'The iPhone’s audio system with all its different frameworks seemed a bit complicated,
     so I decided to start by building a simple fuzzer to search for obvious bugs.
     The fuzzer that I built does the following:'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: iPhone的音频系统及其所有不同的框架似乎有点复杂，所以我决定先构建一个简单的模糊器来搜索明显的漏洞。我构建的模糊器执行以下操作：
 - en: 'On a Linux host: Prepares the test cases by mutating a sample target file.'
+  id: totrans-18
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在Linux主机上：通过变异一个样本目标文件来准备测试用例。
 - en: 'On a Linux host: Serves these test cases via a web server.'
+  id: totrans-19
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在Linux主机上：通过Web服务器提供这些测试用例。
 - en: 'On the iPhone: Opens the test cases in MobileSafari.'
+  id: totrans-20
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在iPhone上：在MobileSafari中打开测试用例。
 - en: 'On the iPhone: Monitors `mediaserverd` for faults.'
+  id: totrans-21
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在iPhone上：监控`mediaserverd`的故障。
 - en: 'On the iPhone: In the event a fault is uncovered, logs the findings.'
+  id: totrans-22
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在iPhone上：如果在设备中发现故障，则记录发现情况。
 - en: Repeats these steps.
+  id: totrans-23
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 重复这些步骤。
 - en: 'I created the following simple, mutation-based file fuzzer to prepare the test
     cases on a Linux host:'
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 我创建了一个简单的、基于变异的文件模糊器，用于在Linux主机上准备测试用例：
 - en: Example 8-1. The code I wrote to prepare test cases on the Linux host (*fuzz.c*)
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例8-1. 我在Linux主机上准备测试用例所写的代码（*fuzz.c*）
 - en: '[PRE0]'
+  id: totrans-26
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'The fuzzer from [Example 8-1](ch08.html#the_code_i_wrote_to_prepare_test "Example 8-1. The
     code I wrote to prepare test cases on the Linux host (fuzz.c)") takes four arguments:
     the size of the sample target file, the file offset to manipulate, a 1-byte value
     that gets written to the given file offset, and the name of the target file. After
     writing the fuzzer, I compiled it:'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例8-1中的模糊器接受四个参数：样本目标文件的大小、要操作的文件偏移量、写入给定文件偏移量的1字节值以及目标文件的名称。在编写模糊器后，我编译了它：
 - en: '[PRE1]'
+  id: totrans-28
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'I then began fuzzing files of the *Advanced Audio Coding*^([[86](ch08s05.html#ftn.CHP-8-FN-5)])
     (*AAC*) format, which is the default audio format used on the iPhone. I chose
     the standard iPhone ringtone, named *Alarm.m4r*, as a sample target file:'
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 我随后开始模糊化*高级音频编码*^([[86](ch08s05.html#ftn.CHP-8-FN-5)]) (*AAC*)格式的文件，这是iPhone上使用的默认音频格式。我选择了标准的iPhone铃声，命名为*Alarm.m4r*，作为样本目标文件：
 - en: '[PRE2]'
+  id: totrans-30
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'I typed the following line into the terminal to get the size of the test-case
     file:'
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 我在终端中输入以下行以获取测试用例文件的大小：
 - en: '[PRE3]'
+  id: totrans-32
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'The command-line options below instruct the fuzzer to replace the byte at file
     offset 4 with `0xff` (decimal 255):'
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 下面的命令行选项指示fuzzer将文件偏移量4处的字节替换为`0xff`（十进制255）：
 - en: '[PRE4]'
+  id: totrans-34
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'I then verified the result with the help of `xxd`:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 我随后使用`xxd`的帮助验证了结果：
 - en: '[PRE5]'
+  id: totrans-36
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'The output shows that file offset 4 (file offsets are counted starting with
     0) was replaced with the expected value (`0xff`). Next, I created a bash script
     to automate the file mutation:'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 输出显示，文件偏移量4（文件偏移量从0开始计数）被替换为预期的值（`0xff`）。接下来，我创建了一个bash脚本来自动化文件变异：
 - en: Example 8-2. The bash script I created to automate file mutation (*go.sh*)
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例8-2. 我创建的用于自动化文件变异的bash脚本 (*go.sh*)
 - en: '[PRE6]'
+  id: totrans-39
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'This script, which is just a wrapper for the fuzzer illustrated in [Example 8-1](ch08.html#the_code_i_wrote_to_prepare_test
     "Example 8-1. The code I wrote to prepare test cases on the Linux host (fuzz.c)"),
     automatically creates four test cases of the target file *Alarm.m4r* (see line
     20). Starting at file offset 0 (see line 7), the first 4 bytes of the target file
     (see line 10) are each replaced with a `0xff` (see line 13). When executed, the
     script produced the following output:'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 此脚本只是[示例8-1](ch08.html#the_code_i_wrote_to_prepare_test "示例8-1. 我为在Linux主机上准备测试用例编写的代码
+    (fuzz.c)")中展示的fuzzer的包装器，它自动创建了目标文件*Alarm.m4r*（见第20行）的四个测试用例。从文件偏移量0（见第7行）开始，目标文件的前4个字节（见第10行）分别被替换为`0xff`（见第13行）。当执行脚本时，生成了以下输出：
 - en: '[PRE7]'
+  id: totrans-41
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'I then verified the created test cases:'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 我随后验证了创建的测试用例：
 - en: '[PRE8]'
+  id: totrans-43
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: As the output shows, the fuzzer worked as expected and modified the appropriate
     byte in each test-case file. One important fact I haven’t mentioned yet is that
     the script in [Example 8-2](ch08.html#the_bash_script_i_created_to_automate "Example 8-2. The
     bash script I created to automate file mutation (go.sh)") changes the file extension
     of the alarm ringtone from *.m4r* to *.m4a* (see line 20). This is necessary because
     MobileSafari doesn’t support the *.m4r* file extension used by iPhone ringtones.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 如输出所示，fuzzer按预期工作，并在每个测试用例文件中修改了适当的字节。我还没有提到的一个重要事实是，[示例8-2](ch08.html#the_bash_script_i_created_to_automate
+    "示例8-2. 我创建的用于自动化文件变异的bash脚本 (go.sh)")中的脚本将闹钟铃声的文件扩展名从*.m4r*更改为*.m4a*（见第20行）。这是必要的，因为MobileSafari不支持iPhone铃声使用的*.m4r*文件扩展名。
 - en: I copied the modified and unmodified alarm ringtone files into the web root
     directory of the Apache webserver that I had installed on the Linux host. I changed
     the file extension of the alarm ringtone from *.m4r* to *.m4a* and pointed MobileSafari
     to the URL of the unmodified ringtone.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 我将修改后的和未修改的闹钟铃声文件复制到了我安装在Linux主机上的Apache web服务器的主目录中。我将闹钟铃声的文件扩展名从*.m4r*更改为*.m4a*，并将MobileSafari指向未修改铃声的URL。
 - en: As illustrated in [Figure 8-1](ch08.html#playing_the_unmodified_alarm.m4a_with_mo
     "Figure 8-1. Playing the unmodified Alarm.m4a with MobileSafari"), the unmodified
     target file *Alarm.m4a* successfully played on the phone in MobileSafari. I then
     pointed the browser to the URL of the first modified test-case file, named *file0.m4a*.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 如[图8-1](ch08.html#playing_the_unmodified_alarm.m4a_with_mo "图8-1. 使用MobileSafari播放未修改的Alarm.m4a")所示，未修改的目标文件*Alarm.m4a*在MobileSafari中成功播放。然后，我将浏览器指向第一个修改后的测试用例文件的URL，该文件名为*file0.m4a*。
 - en: '[Figure 8-2](ch08.html#playing_the_modified_test-case_file_open "Figure 8-2. Playing
     the modified test-case file (file0.m4a)") shows that MobileSafari opens the modified
     file but isn’t able to parse it correctly.'
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: '[图8-2](ch08.html#playing_the_modified_test-case_file_open "图8-2. 播放修改后的测试用例文件
+    (file0.m4a)")显示，MobileSafari可以打开修改后的文件，但不能正确解析它。'
 - en: '![Playing the unmodified Alarm.m4a with MobileSafari](httpatomoreillycomsourcenostarchimages939331.png.jpg)'
+  id: totrans-48
   prefs: []
   type: TYPE_IMG
+  zh: '![使用MobileSafari播放未修改的Alarm.m4a](httpatomoreillycomsourcenostarchimages939331.png.jpg)'
 - en: Figure 8-1. Playing the unmodified *Alarm.m4a* with MobileSafari
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 图8-1. 使用MobileSafari播放未修改的*Alarm.m4a*
 - en: '![Playing the modified test-case file (file0.m4a)](httpatomoreillycomsourcenostarchimages939333.png.jpg)'
+  id: totrans-50
   prefs: []
   type: TYPE_IMG
+  zh: '![播放修改后的测试用例文件 (file0.m4a)](httpatomoreillycomsourcenostarchimages939333.png.jpg)'
 - en: Figure 8-2. Playing the modified test-case file (*file0.m4a*)
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 图8-2. 播放修改后的测试用例文件(*file0.m4a*)
 - en: 'So what had I achieved so far? I was able to prepare audio-file test cases
     via mutation, launch MobileSafari, and instruct it to load the test cases. At
     this point, I wanted to find a way to automatically open the test-case files in
     MobileSafari one by one while monitoring `mediaserverd` for faults. I created
     this small Bash script to do the job on the phone:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，我取得了什么成就呢？我能够通过变异准备音频文件测试用例，启动 MobileSafari，并指导它加载测试用例。在这个阶段，我想找到一种方法，在监控
+    `mediaserverd` 错误的同时，自动逐个打开 MobileSafari 中的测试用例文件。为此，我在手机上创建了这个小 Bash 脚本来完成这项工作：
 - en: Example 8-3. Code to automatically open test cases while monitoring `mediaserverd`
     for faults (*audiofuzzer.sh*)
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 8-3. 在监控 `mediaserverd` 错误的同时自动打开测试用例的代码 (*audiofuzzer.sh*)
 - en: '[PRE9]'
+  id: totrans-54
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'The Bash script illustrated in [Example 8-3](ch08.html#code_to_automatically_open_test_cases
     "Example 8-3. Code to automatically open test cases while monitoring mediaserverd
     for faults (audiofuzzer.sh)") works this way:'
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 8-3](ch08.html#code_to_automatically_open_test_cases "示例 8-3. 在监控 mediaserverd
+    错误的同时自动打开测试用例的代码 (audiofuzzer.sh)") 中展示的 Bash 脚本是这样工作的：'
 - en: Line 3 displays the IP address of the web server that hosts the test cases.
+  id: totrans-56
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第 3 行显示托管测试用例的网页服务器的 IP 地址。
 - en: Lines 9 and 10 restart `mediaserverd` and kill all running MobileSafari instances
     in order to create a clean environment.
+  id: totrans-57
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第 9 行和第 10 行重启 `mediaserverd` 并终止所有运行的 MobileSafari 实例，以创建一个干净的环境。
 - en: Line 14 copies the process ID of the `mediaserverd` audio daemon into the variable
     `origpid`.
+  id: totrans-58
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第 14 行将 `mediaserverd` 音频守护进程的进程 ID 复制到变量 `origpid`。
 - en: Line 21 contains the main loop that is executed for each test case.
+  id: totrans-59
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第 21 行包含为每个测试用例执行的主要循环。
 - en: Lines 23–34 restart the `mediaserverd` after every 10 test cases. Fuzzing the
     iPhone can be tedious, since some components, including `mediaserverd`, are prone
     to hangs.
+  id: totrans-60
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第 23–34 行在每 10 个测试用例之后重启 `mediaserverd`。模糊测试 iPhone 可能会很繁琐，因为一些组件，包括 `mediaserverd`，容易挂起。
 - en: Line 38 launches the individual test cases hosted on the web server using the
     `openURL` tool.^([[87](ch08s05.html#ftn.CHP-8-FN-6)])
+  id: totrans-61
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第 38 行使用 `openURL` 工具启动托管在网页服务器上的单个测试用例.^([[87](ch08s05.html#ftn.CHP-8-FN-6)])
 - en: Line 40 copies the current process ID of the `mediaserverd` audio daemon into
     the variable `currpid`.
+  id: totrans-62
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第 40 行将 `mediaserverd` 音频守护进程的当前进程 ID 复制到变量 `currpid`。
 - en: Line 42 compares the saved process ID of `mediaserverd` (see line 14) and the
     current process ID of the daemon. The two process IDs differ when `mediaserverd`
     has encountered a fault and restarted while processing one of the test cases.
     This finding is logged to the phone’s terminal (see line 44). The script will
     also send a GET request to the web server that includes the text “`BUG_FOUND`”
     as well as the name of the file that crashed `mediaserverd` (see line 45).
+  id: totrans-63
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第 42 行比较保存的 `mediaserverd` 进程 ID（见第 14 行）和守护进程的当前进程 ID。当 `mediaserverd` 在处理某个测试用例时遇到故障并重新启动时，这两个进程
+    ID 会不同。这个发现被记录到手机的终端（见第 44 行）。脚本还会向包含文本“`BUG_FOUND`”以及导致 `mediaserverd` 崩溃的文件名的网页服务器发送
+    GET 请求（见第 45 行）。
 - en: Line 51 kills the current instance of MobileSafari after each test-case run.
+  id: totrans-64
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第 51 行在每次测试用例运行后终止当前的 MobileSafari 实例。
 - en: After I implemented this little script, I created 1,000 mutations of the *Alarm.m4r*
     ringtone starting at file offset 0, copied them to the web root directory of the
     web server, and started the *audiofuzzer.sh* script on the iPhone. From time to
@@ -292,148 +430,226 @@
     for faults (audiofuzzer.sh)"), and continue fuzzing. Fuzzing the iPhone can be
     such a pain . . . but it was worth it! In addition to the memory leaks that froze
     the phone, I also found a bunch of crashes due to memory corruption.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我实现了这个小脚本之后，我从文件偏移量 0 开始创建了 1,000 个 *Alarm.m4r* 铃声的变异版本，将它们复制到网页服务器的根目录，并在
+    iPhone 上启动了 *audiofuzzer.sh* 脚本。由于内存泄漏，手机时不时地崩溃。每次发生这种情况，我不得不重新启动手机，从网页服务器的访问日志中提取最后一个处理的测试用例的文件名，调整
+    [示例 8-3](ch08.html#code_to_automatically_open_test_cases "示例 8-3. 在监控 mediaserverd
+    错误的同时自动打开测试用例的代码 (audiofuzzer.sh)") 中的第 18 行，然后继续模糊测试。模糊测试 iPhone 可能会非常痛苦……但这是值得的！除了导致手机冻结的内存泄漏之外，我还发现了一堆由于内存损坏导致的崩溃。
 - en: 8.2 Crash Analysis and Exploitation
+  id: totrans-66
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 8.2 崩溃分析和利用
 - en: After the fuzzer had finished processing the test cases, I searched the access
     logfile of the web server for “`BUG_FOUND`” entries.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 在模糊器处理完测试用例后，我搜索了Web服务器的访问日志文件中的“`BUG_FOUND`”条目。
 - en: '[PRE10]'
+  id: totrans-68
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'As shown in the excerpt of the logfile, `mediaserverd` encountered a fault
     while attempting to play the test-case files 40, 41, and 42\. To analyze the crashes,
     I rebooted the phone and attached the GNU debugger (see Section B.4) to `mediaserverd`:'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 如日志文件摘录所示，`mediaserverd`在尝试播放测试用例文件40、41和42时遇到了故障。为了分析崩溃，我重新启动了手机并将GNU调试器（见B.4节）附加到`mediaserverd`：
 - en: Note
+  id: totrans-70
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*The iPhone, like most mobile devices, uses an ARM CPU. This is important because
     the ARM assembly language is vastly different from Intel assembly*.'
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: '*iPhone，像大多数移动设备一样，使用ARM CPU。这一点很重要，因为ARM汇编语言与Intel汇编语言大不相同*。'
 - en: '[PRE11]'
+  id: totrans-72
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: 'After I started gdb, I used the following command to retrieve the current process
     ID of `mediaserverd`:'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我启动gdb后，我使用了以下命令来检索`mediaserverd`的当前进程ID：
 - en: '[PRE12]'
+  id: totrans-74
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'I then loaded the `mediaserverd` binary into the debugger and attached it to
     the process:'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后我将`mediaserverd`二进制文件加载到调试器中，并将其附加到进程：
 - en: '[PRE13]'
+  id: totrans-76
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'Before I continued the execution of `mediaserverd`, I used the `follow-fork-mode`
     command to instruct the debugger to follow the child process instead of the parent
     process:'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我继续执行`mediaserverd`之前，我使用了`follow-fork-mode`命令来指示调试器跟踪子进程而不是父进程：
 - en: '[PRE14]'
+  id: totrans-78
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'I opened MobileSafari on the phone and pointed it to the URL of test-case file
     number 40 (*file40.m4a*). The debugger produced the following result:'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 我在手机上打开了MobileSafari，并将其指向测试用例文件编号40（*file40.m4a*）的URL。调试器产生了以下结果：
 - en: '[PRE15]'
+  id: totrans-80
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: The crash occurred when `mediaserverd` tried to access memory at address `0x01302000`.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 崩溃发生在`mediaserverd`尝试访问地址`0x01302000`的内存时。
 - en: '[PRE16]'
+  id: totrans-82
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'As the debugger output shows, `mediaserverd` crashed while trying to reference
     an unmapped memory location. To further analyze the crash, I printed the current
     call stack:'
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 如调试器输出所示，`mediaserverd`在尝试引用未映射的内存位置时崩溃。为了进一步分析崩溃，我打印了当前的调用堆栈：
 - en: '[PRE17]'
+  id: totrans-84
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'This output was intriguing. The address of stack frame #2 had an unusual value
     (`0x00000072`), which seemed to indicate that the stack had become corrupted.
     I used the following command to print the last instruction that was executed in
     `MP4AudioStream::ParseHeader()` (see stack frame #1):'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个输出很吸引人。堆栈帧#2的地址有一个不寻常的值（`0x00000072`），这似乎表明堆栈已经损坏。我使用了以下命令来打印在`MP4AudioStream::ParseHeader()`中执行的最后一个指令（见堆栈帧#1）：
 - en: '[PRE18]'
+  id: totrans-86
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: The last instruction executed in `MP4AudioStream::ParseHeader()` was a call
     to `memcpy()`, which must have caused the crash. At this time, the bug had exhibited
     all the characteristics of a stack buffer overflow vulnerability (see Section
     A.1).
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 在`MP4AudioStream::ParseHeader()`中执行的最后一个指令是调用`memcpy()`，这肯定导致了崩溃。此时，该错误已经表现出堆缓冲区溢出漏洞的所有特征（见A.1节）。
 - en: 'I stopped the debugging session and rebooted the device. After the phone started,
     I attached the debugger to `mediaserverd` again, and this time I also defined
     a breakpoint at the `memcpy()` call in `MP4AudioStream::ParseHeader()` in order
     to evaluate the function arguments supplied to `memcpy()`:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 我停止了调试会话并重新启动了设备。手机启动后，我再次将调试器附加到`mediaserverd`，这次我还定义了一个在`MP4AudioStream::ParseHeader()`中的`memcpy()`调用处的断点，以便评估传递给`memcpy()`的函数参数：
 - en: '[PRE19]'
+  id: totrans-89
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'I opened test case number 40 (*file40.m4a*) in MobileSafari in order to trigger
     the breakpoint:'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 我在MobileSafari中打开了测试用例编号40（*file40.m4a*），以便触发断点：
 - en: '[PRE20]'
+  id: totrans-91
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: The arguments of `memcpy()` are usually stored in the registers `r0` (destination
     buffer), `r1` (source buffer), and `r2` (bytes to copy). I asked the debugger
     for the current values of those registers.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: '`memcpy()`的参数通常存储在寄存器`r0`（目标缓冲区）、`r1`（源缓冲区）和`r2`（要复制的字节数）中。我向调试器请求了这些寄存器的当前值。'
 - en: '[PRE21]'
+  id: totrans-93
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'I also inspected the data pointed to by `r1` to see if the source data of `memcpy()`
     was user controllable:'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 我还检查了由`r1`指向的数据，以查看`memcpy()`的源数据是否受用户控制：
 - en: '[PRE22]'
+  id: totrans-95
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'I then searched test-case file number 40 for those values. I found them right
     at the beginning of the file in little-endian notation:'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后我在测试用例文件编号40中搜索这些值。我发现在文件的开始处就找到了它们，以小端表示法表示：
 - en: '[PRE23]'
+  id: totrans-97
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'So I could control the source data of the memory copy. I continued the execution
     of `mediaserverd` and got the following output in the debugger:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，我可以控制内存复制的源数据。我继续执行`mediaserverd`，并在调试器中获得了以下输出：
 - en: '[PRE24]'
+  id: totrans-99
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: '`Mediaserverd` crashed again while trying to access unmapped memory. It seemed
     that the size argument supplied to `memcpy()` was too big, so the function tried
     to copy audio-file data beyond the end of the stack. At this point I stopped the
     debugger and opened the test-case file that had actually caused the crash (*file40.m4a*)
     with a hex editor:'
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: '`Mediaserverd` 在尝试访问未映射的内存时再次崩溃。这似乎是因为提供给 `memcpy()` 的大小参数太大，所以函数试图在堆栈末尾之外复制音频文件数据。在此点，我停止了调试器，并使用十六进制编辑器打开了实际导致崩溃的测试用例文件
+    (*file40.m4a*)：'
 - en: '[PRE25]'
+  id: totrans-101
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: The manipulated byte (`0xff`) that caused the crash can be found at file offset
     40 (`0x28`). I consulted the *QuickTime File Format Specification*^([[88](ch08s05.html#ftn.CHP-8-FN-7)])
     to determine the role of that byte within the file structure. The byte was described
@@ -443,237 +659,374 @@
     onto the stack. To avoid the crash, I set the atom size to a smaller value. I
     changed the manipulated value at file offset 40 back to `0x00` and the byte value
     at offset 42 to `0x02`. I named the new file *file40_2.m4a*.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 导致崩溃的操作字节（`0xff`）可以在文件偏移量 40 (`0x28`) 处找到。我查阅了 *QuickTime 文件格式规范*^([[88](ch08s05.html#ftn.CHP-8-FN-7)])
+    以确定该字节在文件结构中的作用。该字节被描述为 *movie header atom* 的原子大小的一部分，因此模糊器必须已经改变了该原子的尺寸值。正如我之前提到的，提供给
+    `memcpy()` 的大小太大，所以 `mediaserverd` 在尝试将太多数据复制到堆栈上时崩溃。为了避免崩溃，我将原子大小设置为较小的值。我将文件偏移量
+    40 处的操作值改回 `0x00`，并将偏移量 42 处的字节值改为 `0x02`。我将新文件命名为 *file40_2.m4a*。
 - en: 'Here is the original test-case file 40 (*file40.m4a*):'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是原始测试用例文件 40 (*file40.m4a*)：
 - en: '[PRE26]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: 'And here is the new test-case file (*file40_2.m4a*) with changes underlined:'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是带有更改下划线的新测试用例文件 (*file40_2.m4a*)：
 - en: '[PRE27]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: I rebooted the device to get a clean environment, attached the debugger to `mediaserverd`
     again, and opened the new file in MobileSafari.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 我重新启动了设备以获得一个干净的环境，再次将调试器附加到 `mediaserverd` 上，并在 MobileSafari 中打开了新文件。
 - en: '[PRE28]'
+  id: totrans-108
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'This time the program counter (instruction pointer) was manipulated to point
     to address `0x00000072`. I then stopped the debugging session and started a new
     one while again setting a breakpoint at the `memcpy()` call in `MP4AudioStream::ParseHeader()`:'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 这次程序计数器（指令指针）被操作以指向地址 `0x00000072`。然后我停止了调试会话，并启动了一个新的调试会话，同时在 `MP4AudioStream::ParseHeader()`
+    中的 `memcpy()` 调用处再次设置了一个断点：
 - en: '[PRE29]'
+  id: totrans-110
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: 'When I opened the modified test-case file *file40_2.m4a* in MobileSafari, I
     got the following output in the debugger:'
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我在 MobileSafari 中打开修改后的测试用例文件 *file40_2.m4a* 时，在调试器中得到了以下输出：
 - en: '[PRE30]'
+  id: totrans-112
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: 'I printed the current call stack:'
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 我打印了当前的调用堆栈：
 - en: '[PRE31]'
+  id: totrans-114
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: 'The first stack frame on the list was the one I was looking for. I used the
     following command to display information about the current stack frame of `MP4AudioStream::ParseHeader()`:'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 列表中的第一个堆栈帧就是我正在寻找的。我使用以下命令来显示 `MP4AudioStream::ParseHeader()` 当前堆栈帧的信息：
 - en: '[PRE32]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: The most interesting information was the memory location where the program counter
     (`pc` register) was stored on the stack. As the debugger output shows, `pc` was
     saved at address `0x1301bfc` on the stack (see “`Saved registers`”).
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 最有趣的信息是程序计数器（`pc` 寄存器）在堆栈上的存储位置。正如调试器输出所示，`pc` 在堆栈上的地址 `0x1301bfc` 被保存（见“`Saved
+    registers`”）。
 - en: 'I then continued the execution of the process:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后我继续了进程的执行：
 - en: '[PRE33]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: After the crash, I looked at the stack location (memory address `0x1301bfc`)
     where the `MP4AudioStream::ParseHeader()` function expects to find its saved program
     counter.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 在崩溃后，我查看了 `MP4AudioStream::ParseHeader()` 函数期望找到其保存的程序计数器的堆栈位置（内存地址 `0x1301bfc`）。
 - en: '[PRE34]'
+  id: totrans-121
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: The debugger output shows that the saved instruction pointer was overwritten
     with the value `0x00000073`. When the function tried to return to its caller function,
     the manipulated value was assigned to the instruction pointer (`pc` register).
     Specifically, the value `0x00000072` was copied into the instruction pointer instead
     of the file value `0x00000073` due to the instruction alignment of the ARM CPU
     (instruction alignment on a 16-bit or 32-bit boundary).
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 调试器输出显示，保存的指令指针被覆盖为值 `0x00000073`。当函数尝试返回其调用函数时，被操作的价值被分配给指令指针（`pc` 寄存器）。具体来说，由于
+    ARM CPU 的指令对齐（指令对齐在 16 位或 32 位边界上），值 `0x00000072` 被复制到指令指针，而不是文件值 `0x00000073`。
 - en: 'My extremely simple fuzzer had indeed found a classic stack buffer overflow
     in the audio libraries of the iPhone. I searched the test-case file for the byte
     pattern of the debugger output and found the byte sequence at file offset 500
     in *file40_2.m4a*:'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 我的极其简单的模糊测试器确实在iPhone的音频库中找到了一个经典的堆栈缓冲区溢出错误。我在测试用例文件中搜索了调试器输出的字节模式，并在*file40_2.m4a*文件中的文件偏移量500处找到了字节序列：
 - en: '[PRE35]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: 'I then changed the underlined value above to `0x44444444` and named the new
     file *poc.m4a*:'
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 我然后将上面的下划线值改为`0x44444444`，并将新文件命名为*poc.m4a*：
 - en: '[PRE36]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: 'I attached the debugger to `mediaserverd` again and opened the new *poc.m4a*
     file in MobileSafari, which resulted in the following debugger output:'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 我再次将调试器附加到`mediaserverd`，并在MobileSafari中打开了新的*poc.m4a*文件，结果如下所示：
 - en: '[PRE37]'
+  id: totrans-128
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: Yay! At this point I had full control over the program counter.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 哈哈！在这个时候，我已经完全控制了程序计数器。
 - en: 8.3 Vulnerability Remediation
+  id: totrans-130
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 8.3 漏洞修复
 - en: Note
+  id: totrans-131
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 备注
 - en: '*Tuesday, February 2, 2010*'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: '*星期二，2010年2月2日*'
 - en: I informed Apple of the bug on October 4, 2009\. Today they released a new version
     of iPhone OS to address the vulnerability.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 我于2009年10月4日通知苹果公司有关该漏洞。今天他们发布了新的iPhone OS版本以解决该漏洞。
 - en: Note
+  id: totrans-134
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 备注
 - en: '*The vulnerability affects the iPhone as well as the iPod touch with iPhone
     OS prior version 3.1.3*.'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: '*该漏洞影响iPhone以及iPhone OS 3.1.3之前的iPod touch*。'
 - en: 'The bug was easy to find, so I’m sure that I wasn’t the only person who knew
     about it, but I seem to be the only one who informed Apple. More surprising: Apple
     didn’t find such a trivial bug on its own.'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个错误很容易找到，所以我确信我不是唯一知道这个错误的人，但似乎只有我通知了苹果公司。更令人惊讶的是：苹果公司自己并没有发现这样一个微不足道的错误。
 - en: 8.4 Lessons Learned
+  id: totrans-137
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 8.4 经验教训
 - en: 'As a bug hunter and iPhone user:'
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为一名漏洞猎人和iPhone用户：
 - en: Even dumb mutation-based fuzzers, like the one described in this chapter, can
     be quite effective.
+  id: totrans-139
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 即使是像本章中描述的那样基于愚蠢的突变模糊测试器，也可以相当有效。
 - en: Fuzzing the iPhone is tedious but worth it.
+  id: totrans-140
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 模糊测试iPhone虽然很繁琐，但值得。
 - en: Do not open untrusted (media) files on your iPhone.
+  id: totrans-141
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 不要在您的iPhone上打开不受信任的（媒体）文件。
 - en: 8.5 Addendum
+  id: totrans-142
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 8.5 补遗
 - en: Note
+  id: totrans-143
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 备注
 - en: '*Tuesday, February 2, 2010*'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: '*星期二，2010年2月2日*'
 - en: Since the vulnerability has been fixed and a new version of iPhone OS is available,
     I released a detailed security advisory on my website today.^([[89](ch08s05.html#ftn.CHP-8-FN-8)])
     The bug was assigned CVE-2010-0036\. [Figure 8-3](ch08s05.html#timeline_from_the_time_i_notified
     "Figure 8-3. Timeline from the time I notified Apple until I released a security
     advisory") shows a timeline of how the vulnerability was addressed.
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于漏洞已被修复，并且有新的iPhone OS版本可用，我今天在我的网站上发布了一份详细的安全警告.^([[89](ch08s05.html#ftn.CHP-8-FN-8)])
+    该漏洞被分配了CVE-2010-0036。图8-3([ch08s05.html#timeline_from_the_time_i_notified "图8-3.
+    从我通知苹果公司到发布安全警告的时间线"])显示了如何解决漏洞的时间线。
 - en: '![Timeline from the time I notified Apple until I released a security advisory](httpatomoreillycomsourcenostarchimages939335.png.jpg)'
+  id: totrans-146
   prefs: []
   type: TYPE_IMG
+  zh: '![从我通知苹果公司到发布安全警告的时间线](httpatomoreillycomsourcenostarchimages939335.png.jpg)'
 - en: Figure 8-3. Timeline from the time I notified Apple until I released a security
     advisory
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 图8-3. 从我通知苹果公司到发布安全警告的时间线
 - en: Notes
+  id: totrans-148
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 备注
 - en: ^([[82](#ftn.CHP-8-FN-1)])
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[82](#CHP-8-FN-1)])
 - en: ^([[83](#ftn.CHP-8-FN-2)])
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[83](#ftn.CHP-8-FN-2)])
 - en: ^([[84](#ftn.CHP-8-FN-3)])
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[84](#ftn.CHP-8-FN-3)])
 - en: ^([[85](#ftn.CHP-8-FN-4)])
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[85](#ftn.CHP-8-FN-4)])
 - en: ^([[86](#ftn.CHP-8-FN-5)])
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[86](#ftn.CHP-8-FN-5)])
 - en: ^([[87](#ftn.CHP-8-FN-6)])
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[87](#ftn.CHP-8-FN-6)])
 - en: ^([[88](#ftn.CHP-8-FN-7)])
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[88](#ftn.CHP-8-FN-7)])
 - en: ^([[89](#ftn.CHP-8-FN-8)])
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[89](#ftn.CHP-8-FN-8)])
 - en: '* * *'
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[82](#CHP-8-FN-1)]) See [http://en.wikipedia.org/wiki/IOS_jailbreaking](http://en.wikipedia.org/wiki/IOS_jailbreaking).
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[82](#CHP-8-FN-1)]) 请参阅 [http://en.wikipedia.org/wiki/IOS_jailbreaking](http://en.wikipedia.org/wiki/IOS_jailbreaking)。
 - en: ^([[83](#CHP-8-FN-2)]) See [http://cydia.saurik.com/](http://cydia.saurik.com/).
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[83](#CHP-8-FN-2)]) 请参阅 [http://cydia.saurik.com/](http://cydia.saurik.com/)。
 - en: '^([[84](#CHP-8-FN-3)]) See “iOS Developer Library: Core Audio Overview” at
     [http://developer.apple.com/library/ios/#documentation/MusicAudio/Conceptual/CoreAudioOverview/Introduction/Introduction.html](http://developer.apple.com/library/ios/#documentation/MusicAudio/Conceptual/CoreAudioOverview/Introduction/Introduction.html).'
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[84](#CHP-8-FN-3)]) 请参阅 [http://developer.apple.com/library/ios/#documentation/MusicAudio/Conceptual/CoreAudioOverview/Introduction/Introduction.html](http://developer.apple.com/library/ios/#documentation/MusicAudio/Conceptual/CoreAudioOverview/Introduction/Introduction.html)
+    中的“iOS开发者库：核心音频概述”。
 - en: '^([[85](#CHP-8-FN-4)]) See “iOS Developer Library: Audio Toolbox Framework
     Reference” at [http://developer.apple.com/library/ios/#documentation/MusicAudio/Reference/CAAudioTooboxRef/_index.html](http://developer.apple.com/library/ios/#documentation/MusicAudio/Reference/CAAudioTooboxRef/_index.html).'
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[85](#CHP-8-FN-4)]) 请参阅[iOS开发者库：音频工具箱框架参考](http://developer.apple.com/library/ios/#documentation/MusicAudio/Reference/CAAudioTooboxRef/_index.html)。
 - en: ^([[86](#CHP-8-FN-5)]) See [http://en.wikipedia.org/wiki/Advanced_Audio_Coding](http://en.wikipedia.org/wiki/Advanced_Audio_Coding).
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[86](#CHP-8-FN-5)]) 请参阅[高级音频编码](http://en.wikipedia.org/wiki/Advanced_Audio_Coding)。
 - en: ^([[87](#CHP-8-FN-6)]) See [http://ericasadun.com/ftp/EricaUtilities/](http://ericasadun.com/ftp/EricaUtilities/).
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[87](#CHP-8-FN-6)]) 请参阅[Erica Sadun的FTP站点](http://ericasadun.com/ftp/EricaUtilities/)。
 - en: ^([[88](#CHP-8-FN-7)]) The QuickTime File Format Specification is available
     at [http://developer.apple.com/mac/library/documentation/QuickTime/QTFF/QTFFPreface/qtffPreface.html](http://developer.apple.com/mac/library/documentation/QuickTime/QTFF/QTFFPreface/qtffPreface.html).
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[88](#CHP-8-FN-7)]) QuickTime文件格式规范可在[http://developer.apple.com/mac/library/documentation/QuickTime/QTFF/QTFFPreface/qtffPreface.html](http://developer.apple.com/mac/library/documentation/QuickTime/QTFF/QTFFPreface/qtffPreface.html)找到。
 - en: ^([[89](#CHP-8-FN-8)]) My security advisory that describes the details of the
     iPhone vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2010-002.txt](http://www.trapkit.de/advisories/TKADV2010-002.txt).
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[89](#CHP-8-FN-8)]) 描述iPhone漏洞详细信息的我的安全公告可在[http://www.trapkit.de/advisories/TKADV2010-002.txt](http://www.trapkit.de/advisories/TKADV2010-002.txt)找到。
