@@ -1,0 +1,2561 @@
+- en: Chapter 22. Advanced PF
+  id: totrans-0
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 第 22 章。高级 PF
+- en: '*Office net seems slow*'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*Office net 似乎很慢*'
+- en: '*thanks to bootleg film swapping.*'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*感谢地下电影交换*。'
+- en: '*Let’s stop that right quick!*'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*让我们立刻停止它！*'
+- en: '![](httpatomoreillycomsourcenostarchimages1616079.png) The previous chapter
+    covered the basics of the OpenBSD packet filter `pf(4)`. But, as I mentioned,
+    PF can manipulate packets in all kinds of ways beyond just permitting or denying
+    them, including the following:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '![图片](httpatomoreillycomsourcenostarchimages1616079.png) 上一章介绍了 OpenBSD 数据包过滤器
+    `pf(4)` 的基础知识。但是，正如我提到的，PF 可以以各种方式操作数据包，而不仅仅是允许或拒绝它们，包括以下内容：'
+- en: You can dynamically change the list of addresses to pass or block through outside
+    software, such as `dhcpd(8)` or `spamd(8)`.
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以通过外部软件，如 `dhcpd(8)` 或 `spamd(8)`，动态更改要传递或阻止的地址列表。
+- en: You can dynamically create sub-rulesets that let you set up very specific rules
+    for troublesome protocols without allowing more access than necessary.
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以动态创建子规则集，这样您可以为麻烦的协议设置非常具体的规则，而不会允许不必要的更多访问。
+- en: PF can provide NAT, letting you offer an entire network Internet access without
+    public IP addresses.
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: PF 可以提供 NAT，让您在没有公共 IP 地址的情况下为整个网络提供互联网访问。
+- en: You can redirect incoming traffic arbitrarily, and control how much bandwidth
+    you will let a service use.
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以任意重定向传入流量，并控制服务将使用的带宽量。
+- en: You can use PF logging.
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以使用 PF 记录。
+- en: This chapter covers each of these topics.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖了这些主题的每个方面。
+- en: Packet Filtering with Tables
+  id: totrans-11
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用表格进行数据包过滤
+- en: A *table* is a list of IPv4 and/or IPv6 addresses, much like a list. A table
+    is faster than a list, however, and uses less memory. If you have only a few addresses,
+    using a list is fine, but once you have more than a few, use a table.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*表格* 是 IPv4 和/或 IPv6 地址的列表，就像列表一样。然而，表格比列表更快，并且使用的内存更少。如果您只有几个地址，使用列表是可以的，但一旦地址超过几个，请使用表格。'
+- en: Interestingly, you can edit tables without reloading the filter rules, and several
+    programs use this feature to dynamically change how a server behaves. Some people
+    load lists of malware-laden computers into a table to block those hosts, or use
+    external programs to generate such lists. (“You’ve tried to send us four invalid
+    emails in a row? Good-bye!”) Tables can be kept permanently in external files,
+    or you can treat them as ephemera. It’s your choice.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有趣的是，您可以在不重新加载过滤器规则的情况下编辑表格，并且有几个程序使用此功能来动态更改服务器的行为。有些人将恶意软件感染的计算机列表加载到表格中，以阻止这些主机，或者使用外部程序生成此类列表。（“你连续四次尝试发送无效的电子邮件？再见！”）表格可以永久保存在外部文件中，或者您可以将其视为临时文件。这是您的选择。
+- en: Defining Tables
+  id: totrans-14
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 定义表格
+- en: You can create and manipulate tables entirely with `pfctl`, but that’s not as
+    common as defining the table within *pf.conf*. Give the table name in angle brackets,
+    and provide the initial members delimited by commas inside braces.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用 `pfctl` 完全创建和操作表格，但这不如在 *pf.conf* 中定义表格常见。在尖括号内给出表格名称，并在花括号内用逗号分隔的初始成员提供。
+- en: '[PRE0]'
+  id: totrans-16
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: In this case, the `management` table contains three IP addresses.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，`management` 表格包含三个 IP 地址。
+- en: If you want to define a table that `pfctl` cannot change, use the `const` keyword.
+    The following example defines a table for private (RFC 1918) address space. This
+    address space has been well defined for many years, so no one should alter it.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想定义 `pfctl` 无法更改的表格，请使用 `const` 关键字。以下示例定义了一个用于私有（RFC 1918）地址空间的表格。这个地址空间已经定义了多年，所以没有人应该更改它。
+- en: '[PRE1]'
+  id: totrans-19
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: If no rules reference a table, PF drops it. This makes sense for static rules,
+    but if you’re using anchors (discussed later this chapter), you might want to
+    retain the table for when rules reappear. Use the `persist` keyword to make a
+    table stick around even if it’s not used in a rule.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果没有规则引用表格，PF 会将其丢弃。这对于静态规则来说是有意义的，但如果您正在使用锚点（本章后面将讨论），您可能希望保留表格以备规则再次出现。使用
+    `persist` 关键字使表格即使在规则未使用的情况下也能保留。
+- en: '[PRE2]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Some tables contain enough addresses that you wouldn’t want to list them in
+    your configuration. For convenience, you can populate a table from a file, like
+    this:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些表格包含足够的地址，您可能不想在配置中列出它们。为了方便，您可以从文件中填充表格，如下所示：
+- en: '[PRE3]'
+  id: totrans-23
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: I have a script that updates the *fullbogons.txt* file every day. (*Bogons*
+    are addresses that should never appear in the global Internet routing table.)
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我有一个每天更新 *fullbogons.txt* 文件的脚本。(*Bogons* 是不应该出现在全球互联网路由表中的地址。)
+- en: 'The bogons list includes private address space, addresses reserved for experimentation
+    or documentation, addresses not assigned to any network, and addresses assigned
+    to other exotic purposes. Several organizations produce and update full bogon
+    lists. I use the bogons list at my border to weed out obvious garbage. The file
+    looks like this:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: bogons列表包括私有地址空间、为实验或文档保留的地址、未分配给任何网络的地址，以及分配给其他奇异用途的地址。几个组织生产和更新完整的bogon列表。我在我的边界处使用bogons列表来剔除明显的垃圾。文件看起来像这样：
+- en: '[PRE4]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: You can include individual addresses, but not dotted-quad netmasks. You can
+    use hostnames, but before `pfctl` feeds the rules to the kernel, it checks the
+    IP address or addresses of the host. This means that if a host changes its IP
+    address after you load the rules, PF will not know about the new IP address.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以包括单个地址，但不能包括点分十进制子网掩码。你可以使用主机名，但在`pfctl`将规则馈送到内核之前，它会检查主机的IP地址或地址。这意味着如果主机在加载规则后更改其IP地址，PF将不知道新的IP地址。
+- en: Using Tables
+  id: totrans-28
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用表格
+- en: Use the table in your firewall rules exactly as you would use an address or
+    list.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在防火墙规则中使用表格的方式，就像使用地址或列表一样。
+- en: '[PRE5]'
+  id: totrans-30
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: You can put multiple tables in a list.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在列表中放入多个表格。
+- en: '[PRE6]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Yes, a list is slower than a table. But if you maintain two different tables
+    in different ways, you probably want those tables separated. And if a list of
+    two items triggers firewall exhaustion, you really need more hardware.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 是的，列表比表格慢。但如果你以不同的方式维护两个不同的表格，你可能希望这些表格是分开的。而且如果两个项目的列表触发了防火墙耗尽，你真的需要更多的硬件。
+- en: Viewing Tables
+  id: totrans-34
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 查看表格
+- en: Tables have their own subset of `pfctl` commands. To see which tables are in
+    the kernel, use `pfctl -s Tables`. (Note that `Tables` begins with a capital `T`.)
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表格有自己的`pfctl`命令子集。要查看内核中有哪些表格，请使用`pfctl -s Tables`。（注意`Tables`以大写`T`开头。）
+- en: '[PRE7]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Why would you need to ask the kernel what tables it has? Because dynamic rules
+    can add and remove tables, as discussed in [Anchors](ch22.html#anchors "Anchors").
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为什么你需要询问内核它有哪些表格？因为动态规则可以添加和删除表格，如[锚点](ch22.html#anchors "锚点")中讨论的那样。
+- en: 'If you already know the table name, and you want to view the addresses within
+    the table, use the `-t` argument to specify a table name. The `-T` argument has
+    several subcommands, much like `-s`, but is for table operations. Here’s how to
+    examine the contents of the `scumbags` table:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你已经知道表格名称，并且想查看表格中的地址，请使用`-t`参数指定表格名称。`-T`参数有几个子命令，就像`-s`一样，但它是用于表格操作的。以下是如何检查`scumbags`表格的内容：
+- en: '[PRE8]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: For many table operations (`add`, `delete`, `replace`, and `test` as of right
+    now), you can add one or two `-v` options before the `-T` to increase verbosity.
+    If you work on multiple addresses simultaneously, adding verbosity shows details
+    of what the command did.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于许多表格操作（目前包括`add`、`delete`、`replace`和`test`），你可以在`-T`之前添加一个或两个`-v`选项来增加详细程度。如果你同时处理多个地址，增加详细程度会显示命令执行了什么。
+- en: Searching Tables
+  id: totrans-41
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 搜索表格
+- en: You can eyeball a table with four entries pretty easily, but if a table has
+    thousands of entries, you won’t want to page through it searching for an address.
+    You could use `grep(1)`, but that can fail because an address might be part of
+    a network that looks completely different. (I’m sure I *could* write a `grep`
+    expression that matches 10.0.0.0/8 if I enter 10.99.61.4, but I don’t want to
+    try it.) You can test an address to see if it’s in a table.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以很容易地查看有四个条目的表格，但如果一个表格有数千个条目，你不会想一页一页地搜索地址。你可以使用`grep(1)`，但这可能会失败，因为一个地址可能是一个看起来完全不同的网络的组成部分。（我确信如果我输入10.99.61.4，我可以写一个匹配10.0.0.0/8的`grep`表达式，但我不想尝试。）你可以测试一个地址，看看它是否在表格中。
+- en: '[PRE9]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: This address appears in the `fullbogons` table.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个地址出现在`fullbogons`表格中。
+- en: If you test multiple addresses in one command, use `-v` or `-vv` before `-T`
+    to see which addresses match and which don’t.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在一个命令中测试多个地址，请在`-T`之前使用`-v`或`-vv`来查看哪些地址匹配，哪些不匹配。
+- en: '[PRE10]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Using a single `-v` shows only matching addresses.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用单个`-v`只显示匹配的地址。
+- en: Changing Tables
+  id: totrans-48
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 更改表格
+- en: One important feature of tables is that you can dynamically alter them without
+    reloading the firewall rules. If you must add an address to a table, use `-T`’s
+    `add` command.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表格的一个重要特性是你可以动态地更改它们而不需要重新加载防火墙规则。如果你必须向表格中添加一个地址，请使用`-T`的`add`命令。
+- en: '[PRE11]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Add networks by specifying a netmask and multiple addresses in a single command.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过指定子网掩码和单个命令中的多个地址来添加网络。
+- en: '[PRE12]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: If you add addresses to a nonexistent table, PF automatically creates the table
+    (so now you know where that `scumbags` table came from).
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你向一个不存在的表格中添加地址，PF会自动创建该表格（所以现在你知道那个`scumbags`表格是从哪里来的）。
+- en: Add all the addresses in a file to a table with the `-f` argument.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`-f`参数将文件中的所有地址添加到表中。
+- en: '[PRE13]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: To remove addresses, use the `delete` command.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要删除地址，请使用`delete`命令。
+- en: '[PRE14]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: To completely remove all entries from a table, use `flush`.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要完全从表中删除所有条目，请使用`flush`。
+- en: '[PRE15]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: If emptying the table is not enough, and you want to completely remove it from
+    the rules, use `kill`.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果清空表还不够，并且你想完全从规则中删除它，请使用`kill`。
+- en: '[PRE16]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Tables and Automation
+  id: totrans-62
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 表和自动化
+- en: OpenBSD includes software that can adjust tables algorithmically. In [Chapter 16](ch16.html
+    "Chapter 16. Network Servers"), I mentioned the DHCP server’s ability to assign
+    leased, abandoned, and changed addresses to tables. You can use PF to assign different
+    rules to each group of addresses.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: OpenBSD包括可以算法调整表的软件。在[第16章](ch16.html "第16章。网络服务器")中，我提到了DHCP服务器将租用、废弃和更改的地址分配给表的能力。你可以使用PF为每个地址组分配不同的规则。
+- en: 'Assume you have `dhcpd(8)` add all leased IP addresses to the `leased` table,
+    abandoned addresses to the `abandoned` table, and changed addresses to the `changed`
+    table. Hosts with properly leased addresses can access the network, but hosts
+    with abandoned and changed addresses cannot. Here, interfaces in the office group
+    face the local network:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设你使用`dhcpd(8)`将所有租用的IP地址添加到`leased`表，废弃的地址添加到`abandoned`表，更改的地址添加到`changed`表。拥有正确租用地址的主机可以访问网络，但拥有废弃和更改地址的主机不能。在这里，办公室组中的接口面向本地网络：
+- en: '[PRE17]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: If someone decides to configure an address from the DHCP server as a static
+    address for their computer, they automatically lose access to the rest of the
+    network—problem solved. Other OpenBSD software, such as `spamd(8)`, has similar
+    features.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果有人决定将DHCP服务器中的地址配置为计算机的静态地址，他们就会自动失去对网络其余部分的访问——问题解决。其他OpenBSD软件，如`spamd(8)`，也有类似的功能。
+- en: At first glance, it might seem like this feature is ready for integration with
+    other programs. It’s fairly simple to write a script that parses a log, grabs
+    the IP addresses, and feeds those addresses to a table. Several years ago, I wrote
+    a script to take alerts from the Snort intrusion detection system and automatically
+    block attackers from the network. Without careful and skilled attention though,
+    Snort generates many false positives. My autoblocking script very effectively
+    created a denial-of-service attack against my own development team.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 乍一看，这个功能似乎已经准备好与其他程序集成。编写一个解析日志、抓取IP地址并将这些地址输入到表中的脚本是相当简单的。几年前，我编写了一个脚本，从Snort入侵检测系统中获取警报并自动阻止网络中的攻击者。然而，如果没有仔细和熟练的注意，Snort会产生许多误报。我的自动阻止脚本非常有效地对我的开发团队发起了拒绝服务攻击。
+- en: Be careful with automatically feeding PF tables to block traffic. It’s very
+    easy to harm desirable connectivity.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在自动向PF表输入以阻止流量时要小心。很容易损害所需的连接性。
+- en: Using NAT
+  id: totrans-69
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用NAT
+- en: One of the critical functions of a firewall is NAT. Use NAT to provide IPv4
+    network access to multiple machines but show only one public IPv4 address. Some
+    companies provide Internet access to thousands and thousands of machines via NAT.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 防火墙的一个关键功能是NAT。使用NAT为多台机器提供IPv4网络访问，但只显示一个公共IPv4地址。一些公司通过NAT为成千上万台机器提供互联网访问。
+- en: NAT is like making soup out of a bone—it stretches what you have so that it
+    covers more. Some protocols won’t work well with NAT. It really confuses anyone
+    who is trying to restrict access by IP address. And it can cause nightmares for
+    network forensics and troubleshooters. But NAT is the chosen solution for the
+    IPv4 address shortage.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: NAT就像用骨头熬汤——它拉伸了你所拥有的，使其覆盖更多。有些协议与NAT配合得不好。它确实会让人试图通过IP地址限制访问的人感到困惑。它还可能给网络取证和故障排除人员带来噩梦。但NAT是解决IPv4地址短缺的首选方案。
+- en: NAT is *not* intended as a security mechanism. There are minor security benefits,
+    but they are inadequate against today’s network threats. Relying on NAT for security
+    is chasing 10 boilermakers with a cup of black coffee before staggering out of
+    the pub to drive home. You might get away with it, but only by luck.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: NAT**不是**作为安全机制设计的。它有一些小的安全优势，但不足以抵御今天的网络威胁。依赖NAT进行安全就像在酒吧喝完一杯黑咖啡后追赶10个锅炉工回家一样。你可能侥幸逃脱，但这完全靠运气。
+- en: IPv6 was designed without NAT, but it was shoehorned in several years later
+    by popular demand. (IPv4 was originally designed without NAT as well, so IPv6
+    is just following tradition.) Note that an IPv6 address—even a globally unique
+    IPv6 address—does not mean or even imply “reachable from the world.” You can have
+    solid network separation without NAT. Avoiding NAT means using your packet filter
+    to protect your machines, with additional application proxies as needed.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: IPv6最初设计时没有NAT，但几年后由于市场需求而被迫加入。 (IPv4最初也是没有NAT设计的，所以IPv6只是遵循了传统。) 注意，一个IPv6地址——即使是全球唯一的IPv6地址——并不意味着或甚至暗示“可以从世界上任何地方访问。”
+    你可以在没有NAT的情况下实现稳固的网络隔离。避免使用NAT意味着使用你的数据包过滤器来保护你的机器，并在需要时使用额外的应用程序代理。
+- en: Private NAT Addresses
+  id: totrans-74
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 私有NAT地址
+- en: 'In theory, you can use any addresses behind your NAT device. If you use some
+    random IP addresses, though, you cannot exchange packets with whoever uses those
+    IP addresses out in the real world. It’s highly advisable to use some of the IP
+    addresses reserved for private use, generally referred to as “RFC 1918 addresses.”
+    These include the following IP addresses:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理论上，你可以使用NAT设备后面的任何地址。如果你使用一些随机的IP地址，那么你将无法与使用这些IP地址的现实中的人交换数据包。强烈建议使用为私有用途保留的一些IP地址，通常称为“RFC
+    1918地址。” 这些包括以下IP地址：
+- en: 10.0.0.0/8 (10.0.0.0-10.255.255.255)
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 10.0.0.0/8 (10.0.0.0-10.255.255.255)
+- en: 172.16.0.0/12 (172.16.0.0-172.31.255.255)
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 172.16.0.0/12 (172.16.0.0-172.31.255.255)
+- en: 192.168.0.0/16 (192.168.0.0-192.168.255.255)
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 192.168.0.0/16 (192.168.0.0-192.168.255.255)
+- en: You can subnet and rearrange those addresses any way you like, as long as you
+    don’t try to route them on the public Internet.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以按任何你喜欢的方式子网化和重新排列这些地址，只要你不尝试在公共互联网上路由它们。
+- en: You can use other IP addresses behind your NAT if you have a really good reason
+    for doing so. For example, RFC 5737 defines IPv4 addresses for use in documentation.
+    Like RFC 1918 addresses, RFC 5737 addresses should never appear on the public
+    Internet. I write documentation, so I use those addresses on my home and test
+    networks. It saves me from doing search and replace as I write books.^([[48](#ftn.id330960)])
+    There’s still no chance of those addresses appearing on other networks.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你有一个非常好的理由，你可以在NAT后面使用其他IP地址。例如，RFC 5737定义了用于文档的IPv4地址。像RFC 1918地址一样，RFC 5737地址永远不会出现在公共互联网上。因为我写文档，所以我在我家用网络和测试网络上使用这些地址。这让我在写书时节省了搜索和替换的时间.^([[48](#ftn.id330960)])
+    这些地址出现在其他网络上的可能性仍然为零。
+- en: Configuring NAT
+  id: totrans-81
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 配置NAT
+- en: 'Perhaps the most common form of NAT is for use in hiding a small network behind
+    a single IP address. You’ll find this in many homes and small businesses. Very
+    few home offices have internal routing and multiple subnets. For this example,
+    I have two interface groups: the Internet-facing `egress` group and the `lan`
+    group attached to my office.'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能最常见的一种NAT用途是隐藏一个小型网络在单个IP地址后面。你会在许多家庭和小型企业中找到这种情况。非常少的家庭办公室有内部路由和多个子网。在这个例子中，我有两个接口组：面向互联网的`egress`组和连接到我的办公室的`lan`组。
+- en: '[PRE18]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: The first part of this rule looks just like any other firewall rule permitting
+    the addresses on the `lan` interface access to everywhere, but the last two words
+    additionally configure NAT. The `nat-to` keyword tells PF to translate addresses
+    **2**. The `egress` that follows tells PF to hide the internal addresses behind
+    the addresses of the `egress` interfaces **1**. You could use an interface name
+    or a specific IP address here, but if you do, you must change your filter rules
+    when you change your server.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个规则的第一个部分看起来就像任何其他允许`lan`接口上的地址访问任何地方的防火墙规则，但最后两个词还额外配置了NAT。`nat-to`关键字告诉PF转换地址**2**。随后的`egress`告诉PF隐藏内部地址在`egress`接口的地址后面**1**。你在这里可以使用接口名称或特定的IP地址，但如果你这样做，你必须在你更改服务器时更改你的过滤规则。
+- en: In order to have PF recognize IP address changes from DHCP, put the interface
+    group name in parentheses.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了让PF识别从DHCP来的IP地址变化，请将接口组名称放在括号内。
+- en: '[PRE19]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Now load your firewall rules, enable IP forwarding, and suddenly, hosts on your
+    LAN will have access to the Internet through the firewall’s public address.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在加载你的防火墙规则，启用IP转发，突然之间，你的局域网主机将通过防火墙的公网地址访问互联网。
+- en: How NAT Works
+  id: totrans-88
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: NAT的工作原理
+- en: 'The easiest way to understand how address translation works is to look at the
+    state table (discussed in the previous chapter) after PF passes translated packets
+    back and forth. On the office network from machine 192.0.2.2, I ran this command:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理解地址转换工作原理的最简单方法是通过查看PF在来回传递转换后的数据包后状态表（在上一章中讨论过）。在办公室网络中，从机器192.0.2.2上，我运行了这个命令：
+- en: '[PRE20]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Several pings later, I checked the state table and found entries like this:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几次ping之后，我检查了状态表，并发现了如下条目：
+- en: '[PRE21]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: The first state represents a UDP connection from the firewall’s public address
+    **1** to the local DNS server **3**. This state entry includes the client’s private
+    IP address **2**, as well as the actual ports used by the client, the firewall,
+    and the DNS server.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一种状态表示从防火墙的公共地址**1**到本地DNS服务器**3**的UDP连接。此状态条目包括客户端的私有IP地址**2**，以及客户端、防火墙和DNS服务器实际使用的端口号。
+- en: The client initiated this state by sending a request from port 10853 on its
+    IP address to port 53 on the DNS server. When the packet passed through PF, OpenBSD
+    rewrote the packet so that it appeared to come from the address 203.0.113.5 on
+    port 55797 and sent it on to the DNS server. The DNS server sent its response
+    to the firewall’s public IP on port 55797\. When the reply arrived, the firewall
+    checked the state table, and found that UDP packets on port 55797 were part of
+    the state for the client. PF rewrote the packet’s destination address and forwarded
+    it to the client.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户端通过从其IP地址上的10853端口向DNS服务器的53端口发送请求来启动此状态。当数据包通过PF时，OpenBSD重写了数据包，使其看起来是从203.0.113.5地址的55797端口发出的，并将其发送到DNS服务器。DNS服务器将其响应发送到防火墙的公共IP地址的55797端口。当回复到达时，防火墙检查状态表，发现55797端口的UDP数据包是客户端状态的一部分。PF重写数据包的目标地址并将其转发到客户端。
+- en: The second state represents an ICMP connection. The state table encodes the
+    various ICMP codes used for a ping request as port numbers, and forwards responses
+    back to the client based on that information. Otherwise, it’s very similar to
+    the DNS example above it.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种状态表示一个ICMP连接。状态表将用于ping请求的各种ICMP代码编码为端口号，并根据该信息将响应转发回客户端。否则，它与上面的DNS示例非常相似。
+- en: In other words, NAT works by lying. PF lies to the client, telling it that it
+    has direct access to the public Internet. It lies to the external servers, giving
+    a false source address and port for client connections. PF uses the state table
+    to track its lies and keep everything consistent. These lies are convenient for
+    IPv4 address conservation, but they’re exactly why address translation complicates
+    troubleshooting and intrusion forensics.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，NAT通过撒谎来工作。PF向客户端撒谎，告诉它它可以直接访问公共互联网。它向外部服务器撒谎，为客户端连接提供一个虚假的源地址和端口号。PF使用状态表来跟踪它的谎言并保持一切一致。这些谎言对于IPv4地址的节约很有用，但它们正是地址转换使故障排除和入侵取证复杂化的原因。
+- en: Now that you understand the basics of NAT, let’s tell the network even more
+    complicated and interesting lies.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您已经了解了NAT的基本原理，让我们向网络讲述更多复杂和有趣的故事。
+- en: Multiple or Specific Public Addresses
+  id: totrans-98
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 多个或特定公共地址
+- en: You can use several public IP addresses for address translation. If you use
+    an interface group for the external address in your NAT rule, any addresses in
+    that interface group can become the public address of any connection. If you want
+    to be specific, list particular addresses.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用多个公共IP地址进行地址转换。如果您在NAT规则中使用接口组作为外部地址，该接口组中的任何地址都可以成为任何连接的公共地址。如果您想具体指定，请列出特定地址。
+- en: '[PRE22]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: I use this configuration when my firewall’s external interface has multiple
+    IP addresses and I want to conceal my desktop clients behind a single address
+    (although I probably would define and use a macro for the external address **1**).
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我的防火墙的外部接口有多个IP地址，并且我想将桌面客户端隐藏在单个地址后面时（尽管我可能还会定义并使用一个宏来定义和使用外部地址**1**），我会使用这个配置。
+- en: But how many public addresses do you need? The answer depends on your clients.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但您需要多少个公共地址？答案取决于您的客户端。
+- en: Port numbers range from 0 to 65535\. The bottom 1024 ports are generally used
+    for services on the localhost. Not all of those ports will be used on the localhost,
+    but a packet filter generally won’t use those ports for translated connections.
+    I’m lazy, so I’ll round off to 64,000 free ports.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 端口号范围从0到65535。底部的1024个端口通常用于localhost上的服务。并非所有这些端口都会在localhost上使用，但数据包过滤器通常不会使用这些端口进行转换连接。我很懒，所以我会四舍五入到64,000个空闲端口。
+- en: Even the most heavily loaded desktop client rarely can use as many as 100 outbound
+    connections simultaneously. Most will use far fewer, but again, I’m lazy, and
+    I want a worst-case scenario, so I’ll call it 100.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使是最繁忙的桌面客户端也很少能同时使用多达100个出站连接。大多数将使用更少的连接，但再次强调，我很懒，并且我想考虑最坏的情况，所以我会将其称为100。
+- en: One IP address can support 64,000 / 100 = 640 machines being pathological simultaneously.
+    Realistically, each client might have 10 simultaneous outbound connections, so
+    a public address could support 6,400 simultaneous clients. How many of your users
+    browse the Internet at the same time? The answer probably is not many. And if
+    you have thousands of users, you would probably benefit from implementing a caching
+    proxy, which would greatly reduce the number of connections.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个IP地址可以支持64,000 / 100 = 640台机器同时进行病理状态。实际上，每个客户端可能有10个同时的出站连接，因此一个公网地址可以支持6,400个同时客户端。有多少用户同时浏览互联网？答案可能不多。如果您有数千名用户，您可能从实现缓存代理中受益，这将大大减少连接数。
+- en: If you’re concerned about overflowing the number of client machines for one
+    address, watch your state table. Until you have multiple tens of thousands of
+    states for one public IP address, don’t worry.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您担心一个地址的客户机数量过多，请关注您的状态表。直到您有一个公网IP地址有数万个状态，您不必担心。
+- en: Specifying individual addresses in a NAT rule is most useful for bidirectional
+    NAT.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在NAT规则中指定单个地址对于双向NAT最有用。
+- en: Bidirectional NAT
+  id: totrans-108
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 双向NAT
+- en: Some applications work better if you dedicate a public IP address as the NAT
+    address for a specific private IP address. For example, if you have a server that
+    offers several different services on different ports, and you want to put it behind
+    your firewall, you might want to dedicate a single address to it. This is called
+    *bidirectional*, *one-to-one*, or *static* NAT. OpenBSD docs use “bidirectional,”
+    but the terms all mean the same thing.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您为特定的私有IP地址分配一个公网IP地址作为NAT地址，某些应用程序将运行得更好。例如，如果您有一个服务器在不同的端口上提供多种不同的服务，并且您想将其放在防火墙后面，您可能希望为它分配一个单独的地址。这被称为*双向*、*一对一*或*静态*
+    NAT。OpenBSD文档使用“双向”，但所有这些术语都意味着同一件事。
+- en: Configure bidirectional NAT with the `binat-to` keyword.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`binat-to`关键字配置双向NAT。
+- en: '[PRE23]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: PF dedicates the public IP address 203.0.113.6 for NAT services for the private
+    IP address 192.0.2.65.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PF为私有IP地址192.0.2.65的NAT服务分配了公网IP地址203.0.113.6。
+- en: 'If you use bidirectional NAT, be sure to specify a specific IP address for
+    your general NAT and consider using the following NAT rules:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用双向NAT，请确保为您的通用NAT指定一个特定的IP地址，并考虑使用以下NAT规则：
+- en: '[PRE24]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: The IP addresses on this LAN are hidden behind the IP addresses on the `egress`
+    interface. If 203.0.113.6 is an address on an `egress` interface, outbound packets
+    from the LAN might use it as a source address.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个局域网的IP地址隐藏在`egress`接口的IP地址后面。如果203.0.113.6是`egress`接口上的一个地址，那么局域网的外出数据包可能会将其用作源地址。
+- en: 'When I need bidirectional NAT, I usually write my NAT rules like this:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我需要双向NAT时，我通常会这样编写我的NAT规则：
+- en: '[PRE25]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: In this way, packets leaving my network are unambiguously translated. Only the
+    one specific server uses the IP address 203.0.113.6; all other hosts on my local
+    network use 203.0.113.5\. If I change IP addresses, I must reconfigure *pf.conf*,
+    but that’s a minor annoyance compared to troubleshooting network ambiguity.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样，离开我的网络的数据包会被明确地转换。只有特定的服务器使用IP地址203.0.113.6；我本地网络上的所有其他主机使用203.0.113.5。如果我更改IP地址，我必须重新配置*pf.conf*，但与解决网络模糊问题相比，这只是一个小的烦恼。
+- en: Bidirectional NAT and Security
+  id: totrans-119
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 双向NAT和安全
+- en: The use of bidirectional NAT, and allowing the redirection of connections, lets
+    you give people outside your network access to servers behind your firewall, and
+    every one of these gaps is a potential security hole. If you allow the world access
+    to your web servers, and an intruder compromises one of your servers, you have
+    a compromised machine inside your firewall. The firewall doesn’t really secure
+    the web servers; it just controls who can try to break into them and limits the
+    available attack vectors.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用双向NAT并允许连接重定向，可以让您让网络外的人访问您防火墙后面的服务器，而每一个这样的空隙都是一个潜在的安全漏洞。如果您允许全世界访问您的Web服务器，并且入侵者破坏了您的其中一台服务器，那么您防火墙内部就有了一台受损害的机器。防火墙并没有真正保护Web服务器；它只是控制谁可以尝试入侵，并限制了可用的攻击向量。
+- en: Packet Filtering, Bidirectional NAT, and Rule Order
+  id: totrans-121
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 数据包过滤、双向NAT和规则顺序
+- en: 'When writing packet-filtering rules for bidirectional NAT, the order in which
+    you list rules is important. Consider the following rules:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当为双向NAT编写数据包过滤规则时，您列出规则的顺序很重要。考虑以下规则：
+- en: '[PRE26]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: The first rule establishes static NAT for the host 192.0.2.2 on the LAN, hiding
+    it behind the public IP address 203.0.113.6\. All is well and good. The second
+    line permits connections to port 80 on the same host, or does it? Packets meant
+    for this server that arrive on the firewall’s `egress` interface won’t be addressed
+    to 192.0.2.2; they’ll be addressed to the public NAT address, or 203.0.113.6\.
+    They won’t match this rule, so they are discarded.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一条规则为局域网上的主机192.0.2.2建立了静态NAT，隐藏在公共IP地址203.0.113.6后面。一切顺利。第二条规则允许连接到同一主机的80端口，或者不是吗？到达防火墙`出口`接口的针对此服务器的数据包不会地址到192.0.2.2；它们会被地址到公共NAT地址，即203.0.113.6。它们不会匹配此规则，因此会被丢弃。
+- en: In order to permit connections from the world to the web server behind this
+    firewall, permit packets sent to the proper port on the public address.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了允许来自世界各地的连接到这个防火墙后面的Web服务器，允许发送到公共地址上正确端口的包。
+- en: '[PRE27]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'This translates 192.0.2.2 to the public address 203.0.113.6, and then allows
+    packets with a destination of port 80 on 203.0.113.6 to pass. You’ll see this
+    in the state table, like this:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将192.0.2.2转换为公共地址203.0.113.6，并允许目标为203.0.113.6端口80的数据包通过。你会在状态表中看到这一点，如下所示：
+- en: '[PRE28]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: The host 198.22.63.8 has connected to the server’s public IP address on port
+    80.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主机198.22.63.8已连接到服务器的公共IP地址80端口。
+- en: Why doesn’t this state entry have the hidden IP address in it? Because this
+    is a bidirectional NAT. PF can send port numbers through unaltered, so it can
+    track a little less information in the state table.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为什么这个状态条目中没有隐藏的IP地址？因为这是一个双向NAT。PF可以通过未修改的端口号发送，所以它可以在状态表中跟踪较少的信息。
+- en: The tricky thing here is that the rule order impacts how you filter, and you
+    must read your filtering rules carefully to see how address translation interacts
+    with packet filtering. I *always* write my rules so that I do address translation
+    before I filter. I consistently use the public IP address in the filter rules,
+    but sometimes that’s not practical. PF lets you write arbitrarily complex rules
+    mainly because the real world is arbitrarily complex. If you have trouble passing
+    traffic through NAT, read your rules very carefully.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里棘手的是规则顺序会影响你的过滤方式，你必须仔细阅读你的过滤规则，以了解地址转换如何与数据包过滤相互作用。我*总是*在过滤之前进行地址转换。我始终在过滤规则中使用公共IP地址，但有时这并不实用。PF允许你编写任意复杂的规则，主要是因为现实世界是任意复杂的。如果你在NAT中遇到流量传输问题，请仔细阅读你的规则。
+- en: To see a bidirectional NAT, look at the loaded rules.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看双向NAT，请查看加载的规则。
+- en: '[PRE29]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: The first rule gives the private IP address access to the public Internet, translated
+    to the specific IP address. The third rule passes traffic to the translated address.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一条规则允许私有IP地址访问公共互联网，并将其翻译为特定的IP地址。第三条规则将流量传递到翻译后的地址。
+- en: But what about the second rule, with that `rdr-to` stuff? That’s a redirection,
+    which is how PF implements static NAT.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但关于第二条规则，那个`rdr-to`是什么？这是一个重定向，这是PF实现静态NAT的方式。
+- en: Redirection
+  id: totrans-136
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 重定向
+- en: Bidirectional NAT is actually a combination of address translation and *redirection*;
+    in other words, it twists a connection intended for one IP or port to another.
+    In bidirectional NAT, all connections to the designated public IP address are
+    redirected to a different IP address. Sometimes you don’t want to twist all traffic
+    for an IP address—only a few ports. Sometimes you want to redirect one port one
+    way, but a different port elsewhere. Do this with redirection rules.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 双向NAT实际上是地址转换和*重定向*的组合；换句话说，它将一个IP或端口连接的方向扭转到另一个。在双向NAT中，所有连接到指定公共IP地址的连接都会被重定向到不同的IP地址。有时你不想扭转一个IP地址的所有流量——只是几个端口。有时你希望一个端口单向重定向，但在其他地方使用不同的端口。可以通过重定向规则来实现这一点。
+- en: 'Suppose you have one public IP address: 203.0.113.5\. You want port 80 on that
+    IP address routed to your web server at 192.0.2.2, ports 25 and 110 to your mail
+    server at 192.0.2.3, and port 443 to your e-commerce server at 192.0.2.4\. PF
+    lets you choose where to send each port via redirection by using a standard packet-filtering
+    rule and adding the `rdr-to` redirection keyword.'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设你有一个公共IP地址：203.0.113.5。你希望该IP地址上的80端口路由到你的Web服务器192.0.2.2，端口25和110路由到你的邮件服务器192.0.2.3，端口443路由到你的电子商务服务器192.0.2.4。PF允许你通过使用标准的包过滤规则并添加`rdr-to`重定向关键字来选择每个端口的发送位置。
+- en: '[PRE30]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: These rules declare that any connection coming to the `egress` interface group
+    (the interface facing the public Internet, with a default route going over it)
+    can be redirected in three different ways. The first rule directs port 80 requests
+    to one internal server. The second rule directs requests for ports 25 and 110
+    to the second server. The last rule redirects requests for port 443 to the third
+    server. One public IP address is now providing services to the world from three
+    different servers.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些规则声明，任何连接到 `egress` 接口组（面向公共互联网的接口，默认路由通过它）都可以以三种不同的方式进行重定向。第一条规则将端口 80 请求导向一个内部服务器。第二条规则将端口
+    25 和 110 的请求导向第二个服务器。最后一条规则将端口 443 的请求重定向到第三个服务器。现在一个公共 IP 地址正在从三个不同的服务器向世界提供服务。
+- en: 'All port redirection rules must include a protocol, because specifying a TCP/IP
+    port works only if you’re forwarding a protocol that includes port numbers, such
+    as TCP or UDP. If you want to forward both TCP and UDP ports, you must specify
+    both protocols. For example, DNS uses port 53 on both TCP and UDP. Here’s a rule
+    that forwards both of these protocols’ port 53 to the internal server 192.0.2.5:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有端口重定向规则都必须包含一个协议，因为指定 TCP/IP 端口仅在转发包含端口号的协议时才有效，例如 TCP 或 UDP。如果你想要转发 TCP 和
+    UDP 端口，你必须指定这两个协议。例如，DNS 在 TCP 和 UDP 上都使用端口 53。以下是一个将这两个协议的端口 53 重定向到内部服务器 192.0.2.5
+    的规则：
+- en: '[PRE31]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: Pick a port, say where you want it to go, and PF will redirect it as you please.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择一个端口，指定你希望它去往的地方，PF 将按照你的意愿进行重定向。
+- en: Note
+  id: totrans-144
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'You’ve learned how bidirectional NAT combines redirection and address translation.
+    The in-kernel PF engine doesn’t actually know anything about this beastie called
+    “bidirectional NAT.” `pfctl(8)` translates the `binat` rule into two separate
+    rules: one for translation and one for redirection.'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你已经学习了双向 NAT 如何结合重定向和地址转换。内核中的 PF 引擎实际上对这种被称为“双向 NAT”的东西一无所知。`pfctl(8)` 将 `binat`
+    规则转换为两个独立的规则：一个用于转换，一个用于重定向。
+- en: Multiple Addresses and Interface Groups
+  id: totrans-146
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 多个地址和接口组
+- en: All of the preceding discussion makes sense when you have only one public IP
+    address. But what happens when you have multiple addresses?
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有的前述讨论在你只有一个公共 IP 地址时是有意义的。但是，当你有多个地址时会发生什么呢？
+- en: 'Remember that using an interface group in *pf.conf* tells `pfctl` to create
+    a matching rule for every IP address in the interface group. Suppose you have
+    three IP addresses on your `egress` interface: 203.0.113.5, 203.0.113.6, and 203.0.113.7\.
+    You write this *pf.conf* rule:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住，在 *pf.conf* 中使用接口组会告诉 `pfctl` 为接口组中的每个 IP 地址创建一个匹配规则。假设你的 `egress` 接口上有三个
+    IP 地址：203.0.113.5、203.0.113.6 和 203.0.113.7。你将编写以下 *pf.conf* 规则：
+- en: '[PRE32]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: Load this rule into the kernel with `pfctl`, and what do you get?
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `pfctl` 将此规则加载到内核中，你会得到什么？
+- en: '[PRE33]'
+  id: totrans-151
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: Any connection to port 80 on any of these IP addresses is directed to port 80
+    on the same server. This might be useful in some environments, but that’s not
+    what most of us want. If you have multiple IP addresses, and you want to redirect
+    a port on only one IP address, you must specify the interface name and the public
+    IP address.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任何连接到这些 IP 地址上的端口 80 的连接都将被导向同一服务器的端口 80。这可能在某些环境中很有用，但这不是我们大多数人想要的。如果你有多个 IP
+    地址，并且只想在其中一个 IP 地址上重定向端口，你必须指定接口名称和公共 IP 地址。
+- en: '[PRE34]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: This doesn’t expand; it doesn’t have any interface groups, lists of addresses,
+    variables, or macros. When `pfctl` parses this, it loads only one PF rule into
+    the kernel.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这不会扩展；它没有任何接口组、地址列表、变量或宏。当 `pfctl` 解析时，它只将一个 PF 规则加载到内核中。
+- en: Port Manipulation and Ranges
+  id: totrans-155
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 端口操作和范围
+- en: As you redirect ports from one machine to another, you can change the port.
+    The following example takes requests to TCP port 2222 on the firewall and redirects
+    them to port 22 on a machine inside the firewall.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你从一个机器重定向端口到另一个机器时，你可以更改端口。以下示例将防火墙上的 TCP 端口 2222 的请求重定向到防火墙内机器的端口 22。
+- en: '[PRE35]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: This is a reasonable way to offer SSH services to several machines inside the
+    firewall on only one IP address, and to give each machine its own port.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一种合理的方式，在只有一个 IP 地址的情况下向防火墙内的多台机器提供 SSH 服务，并为每台机器分配其自己的端口。
+- en: If you have specific source addresses that you want to abuse, you can give them
+    special port redirections by source IP address.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你有一些特定的源地址想要滥用，你可以通过源 IP 地址给予它们特殊的端口重定向。
+- en: '[PRE36]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: Every HTTP connection from the IP addresses in 198.51.100.0/24 will be redirected
+    to one server, while every other connection will be directed elsewhere. (To redirect
+    connections for many source addresses, use a table for the source address.)
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自198.51.100.0/24 IP地址的每个HTTP连接都将被重定向到一台服务器，而其他所有连接将被导向其他地方。（要为多个源地址重定向连接，请使用源地址表。）
+- en: PF can also redirect entire ranges of ports using the same logical operators
+    used for filtering ports. One obvious thing to do is to redirect a range of ports
+    to a single machine. NFS is a prime example, as it requires TCP port 111, as well
+    as all TCP and UDP ports from 1024 to 65535.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PF还可以使用与过滤端口相同的逻辑运算符重定向整个端口范围。一个明显的做法是将端口范围重定向到单个机器。NFS是一个很好的例子，因为它需要TCP端口111，以及从1024到65535的所有TCP和UDP端口。
+- en: '[PRE37]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: Recall from [Chapter 21](ch21.html "Chapter 21. Packet Filtering") that a colon
+    between port numbers indicates a range of ports. This rule passes ports 1024 through
+    65535, inclusive. Admittedly, certain NFS implementations can be restricted to
+    use either TCP or UDP, and that’s a great big gaping hole in your packet filter.
+    But NFS uses random high-numbered ports that come and go very quickly, and cannot
+    be effectively filtered or restricted at the packet level.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回想一下[第21章](ch21.html "第21章。包过滤")，端口号之间的冒号表示端口范围。此规则通过1024到65535的端口，包括端口号。诚然，某些NFS实现可以限制使用TCP或UDP，这在你的包过滤器中是一个很大的漏洞。但NFS使用随机的高编号端口，这些端口来去非常快，无法在包级别上进行有效过滤或限制。
+- en: You can also funnel an entire range of ports to one port on one machine.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以将整个端口范围引导到一台机器上的一个端口。
+- en: '[PRE38]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: I’ve used this to point random traffic at a web page that says “Go away. You
+    cannot use this service.”
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我曾用它将随机流量指向一个显示“走开。你不能使用此服务。”的网页。
+- en: Transparent Interception
+  id: totrans-168
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 透明拦截
+- en: Traffic interception is similar to redirection in that PF intercepts traffic
+    bound for one port and steers it to a port on the local machine. Traffic interception
+    is one way to implement a transparent proxy. Use the `divert-to` keyword to tell
+    PF to steer any matching packets to a local server.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 流量拦截与重定向类似，PF拦截指向一个端口的流量并将其引导到本地机器上的一个端口。流量拦截是实现透明代理的一种方式。使用`divert-to`关键字告诉PF将任何匹配的包引导到本地服务器。
+- en: '[PRE39]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: Any traffic from the local LAN to port 80 will be diverted to port 3129 on the
+    firewall. Port 3129 is usually used by the Squid caching proxy (*/usr/ports/www/squid*).
+    If you choose to implement a caching proxy like Squid, you’ll probably want to
+    redirect several ports to the cache. (We’ll take a closer look at diverting connections
+    in [FTP and PF](ch22.html#ftp_and_pf "FTP and PF").)
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自本地局域网到端口80的任何流量都将被重定向到防火墙上的端口3129。端口3129通常由Squid缓存代理（*/usr/ports/www/squid*）使用。如果你选择实现像Squid这样的缓存代理，你可能希望将多个端口重定向到缓存。（我们将在[FTP和PF](ch22.html#ftp_and_pf
+    "FTP and PF")中更详细地查看连接的重定向。）
+- en: Anchors
+  id: totrans-172
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 锚点
+- en: In PF, an *anchor* is a sub-ruleset at a specific point in the filter rules
+    that you can change without reloading the rules. It’s a spot marked “insert rules
+    here,” letting you dynamically add and remove filter rules, tables, and other
+    PF configurations.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在PF中，*锚点*是过滤器规则中特定点的子规则集，你可以更改它而无需重新加载规则。这是一个标记为“在此处插入规则”的位置，让你可以动态添加和删除过滤器规则、表以及其他PF配置。
+- en: The most common users of anchors are software programs. Human beings or sysadmins
+    should probably just edit *pf.conf* and reload the rules.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锚点的最常见用户是软件程序。人类或系统管理员可能只需编辑*pf.conf*并重新加载规则。
+- en: OpenBSD includes several programs that take advantage of anchors, however, including
+    the FTP proxy `ftp-proxy(8)`, the authenticated firewall access system `authpf(8)`,
+    and the load balancer `relayd(8)`. You could also use anchors to trigger conditional
+    evaluation of rules.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: OpenBSD包括几个利用锚点的程序，包括FTP代理`ftp-proxy(8)`、认证防火墙访问系统`authpf(8)`和负载均衡器`relayd(8)`。你也可以使用锚点来触发规则的条件评估。
+- en: A ruleset with an anchor might look something like the following, where the
+    interface group `egress` faces the Internet, and the interface group `lan` faces
+    a small office with the addresses 192.0.2.0/24.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 带有锚点的规则集可能看起来像以下示例，其中接口组`egress`面向互联网，而接口组`lan`面向具有地址192.0.2.0/24的小办公室。
+- en: '[PRE40]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: These rules block all traffic by default. Incoming traffic is allowed to a specific
+    address on ports 25 and 80 because those are the mail and web servers. There’s
+    an anchor in the middle of the rules. I don’t yet know what’s in the `antivirus`
+    anchor, but any rules in it are processed next. Finally, a small subnet of the
+    addresses is allowed out.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些规则默认阻止所有流量。入站流量允许访问端口 25 和 80 的特定地址，因为那些是邮件和 Web 服务器。规则中间有一个锚点。我还不知道 `antivirus`
+    锚点中有什么，但其中的任何规则都会被处理。最后，允许一小部分地址的子网流出。
+- en: Now let’s add some rules to the anchor.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们向锚点添加一些规则。
+- en: Adding Rules to Anchors
+  id: totrans-180
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 向锚点添加规则
+- en: You can insert rules into anchors from a file, within *pf.conf* itself, or via
+    `pfctl`.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以从文件中、在 *pf.conf* 本身或通过 `pfctl` 将规则插入到锚点中。
+- en: Anchor Rules from Files
+  id: totrans-182
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 文件中的锚点规则
+- en: Adding rules to an anchor from a file is a good way to initialize your anchor
+    when first starting the packet filter. You can set base rules here that you can
+    expand later. Give the filename in *pf.conf*.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从文件向锚点添加规则是初始化数据包过滤器时锚点的好方法。您可以在其中设置基本规则，稍后可以扩展。在 *pf.conf* 中提供文件名。
+- en: '[PRE41]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'I created an */etc/pf/* directory because I didn’t want to have a whole bunch
+    of PF configuration files scattered throughout */etc*. I’m easily confused, after
+    all. This file contains PF rules like this:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我创建了一个 */etc/pf/* 目录，因为我不想在 */etc* 中散布大量的 PF 配置文件。毕竟，我很容易混淆。这个文件包含如下 PF 规则：
+- en: '[PRE42]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: This is one way to load basic rules into an anchor when you start PF.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是在启动 PF 时将基本规则加载到锚点的一种方法。
+- en: 'If you were paying attention, you probably noticed that my first example anchor
+    had a `/*` after its name. This example doesn’t. I’ll explain why in [Nested Anchors:
+    /*](ch22.html#nested_anchors "Nested Anchors: /*").'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '如果你注意到了，我的第一个例子锚点后面有一个 `/*`。这个例子没有。我会在[嵌套锚点: /*](ch22.html#nested_anchors "嵌套锚点:
+    /*")中解释原因。'
+- en: Anchor Rules in pf.conf
+  id: totrans-189
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: pf.conf 中的锚点规则
+- en: You can place anchor rules directly inside *pf.conf*. If you don’t intend to
+    dynamically alter the rules, you don’t even need to name the anchor. Just use
+    curly braces to define the beginning and end of the anchor.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以直接在 *pf.conf* 中放置锚点规则。如果您不打算动态更改规则，甚至不需要命名锚点。只需使用花括号来定义锚点的开始和结束即可。
+- en: '[PRE43]'
+  id: totrans-191
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: This is just slightly more complicated than the anchors in the default *pf.conf*.
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这只是比默认 *pf.conf* 中的锚点稍微复杂一点。
+- en: Why would you want to do this? Read [Conditional Filtering](ch22.html#conditional_filtering
+    "Conditional Filtering").
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为什么你想这么做？请阅读[条件过滤](ch22.html#conditional_filtering "条件过滤")。
+- en: Anchor Rules via pfctl
+  id: totrans-194
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 通过 pfctl 的锚点规则
+- en: To dynamically alter anchor rules with `pfctl`, you need the name of the anchor
+    and the rule you want to put in its place. For example, suppose I want to add
+    a rule to the `antivirus` anchor in the first anchor example.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用 `pfctl` 动态更改锚点规则，您需要锚点的名称和您想要放入其位置的规则。例如，假设我想向第一个锚点示例中的 `antivirus` 锚点添加一个规则。
+- en: '[PRE44]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: Let’s look at this command slightly backwards. The `-a` argument to `pfctl`
+    specifies an anchor name—in this case, the `antivirus` anchor **3**. The `-f`
+    argument normally gives a filename that contains the new anchor rule, much like
+    `-f` when loading a PF ruleset, but rather than a path to a file, I use a single
+    dash that tells `pfctl` to read the new rule from standard input, or the command
+    line **4**. I start everything by echoing the rule to be added **1**, and then
+    piping that into `pfctl` **2**.
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们稍微从后往前看这个命令。`pfctl` 的 `-a` 参数指定了一个锚点名称——在这个例子中是 `antivirus` 锚点 **3**。`-f`
+    参数通常提供一个包含新锚点规则的文件名，就像加载 PF 规则集时的 `-f` 一样，但与指向文件的路径不同，我使用一个单独的短横线来告诉 `pfctl` 从标准输入或命令行读取新规则
+    **4**。我通过回显要添加的规则 **1** 来开始一切，然后将它管道化到 `pfctl` **2**。
+- en: Taken as a whole, this adds the rule `block in from 203.0.113.8 to any` to the
+    anchor `antivirus`.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总体来说，这会将规则 `block in from 203.0.113.8 to any` 添加到 `antivirus` 锚点。
+- en: You could also write the new rule to a file, and tell `pfctl` to load the rules
+    from that file into the anchor.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您也可以将新规则写入文件，并告诉 `pfctl` 从该文件加载规则到锚点中。
+- en: '[PRE45]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: If you’re writing rules to a file to load them into an anchor, however, chances
+    are you’re better off editing *pf.conf*.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如果您正在将规则写入文件以将其加载到锚点中，那么编辑 *pf.conf* 可能会更好。
+- en: Note
+  id: totrans-202
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Adding a rule to an anchor erases any rules already in the anchor. If you have
+    a software package that updates anchor rules, your software needs to handle this
+    behavior. If your desired behavior can be accomplished using a list of IP addresses,
+    consider using a table instead of an anchor.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 向锚点添加规则会擦除锚点中已有的任何规则。如果你有一个更新锚点规则的软件包，你的软件需要处理这种行为。如果你的期望行为可以通过 IP 地址列表实现，考虑使用表格而不是锚点。
+- en: Viewing and Flushing Anchors
+  id: totrans-204
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 查看和清除锚点
+- en: Use the `pfctl` view (`-s`), flush (`-F`), and load (`-f`) commands on anchors
+    by specifying the anchor name with `-a`.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `pfctl` 查看锚点（`-s`）、清除（`-F`）和加载（`-f`）命令，通过指定锚点名称使用 `-a`。
+- en: '[PRE46]'
+  id: totrans-206
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: To erase the rules from an anchor, flush the rules in the anchor.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要擦除锚点中的规则，请清除锚点中的规则。
+- en: '[PRE47]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: Your anchor is now empty.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的锚点现在是空的。
+- en: Rulesets within anchors are completely separate from each other, and also from
+    the main ruleset. Flushing all the rules in a specific anchor does not affect
+    the rules in any other anchor, or the rules in the main ruleset. For that matter,
+    flushing the rules in the main ruleset does not impact the rules in the anchor.
+    To destroy an anchor, you must remove everything in the anchor, including any
+    child anchors.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锚点内的规则集完全相互独立，也独立于主规则集。清除特定锚点中的所有规则不会影响任何其他锚点中的规则，或主规则集中的规则。就这个而言，清除主规则集中的规则也不会影响锚点中的规则。要销毁一个锚点，你必须移除锚点中的所有内容，包括任何子锚点。
+- en: “Child anchors?” I hear you cry. “What are you babbling about *now*, dude?”
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: “子锚点？”我听到你喊道。“你现在在胡说些什么，伙计？”
+- en: Conditional Filtering
+  id: totrans-212
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 条件过滤
+- en: 'Consider the following *pf.conf* snippet:'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑以下 *pf.conf* 片段：
+- en: '[PRE48]'
+  id: totrans-214
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: The `office/*` anchor has a filter condition after it, and only traffic that
+    matches the filter condition will pass through the anchor. In this case, only
+    packets that come from the `lan` interface group will pass through the rules within
+    the anchor. Your rules within the anchor might be easier to write, simply because
+    everything in the anchor is already known to be originating from the `lan` interfaces.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`office/*` 锚点后面有一个过滤条件，只有符合过滤条件的流量才能通过该锚点。在这种情况下，只有来自 `lan` 接口组的包才能通过锚点内的规则。你锚点内的规则可能更容易编写，仅仅因为锚点内的一切已知都来自
+    `lan` 接口。'
+- en: If your packet filter is very heavily loaded, you might be able to reduce the
+    amount of time it spends processing packets by careful conditional filtering.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的包过滤器负载非常重，你可能可以通过仔细的条件过滤来减少它处理数据包所花费的时间。
+- en: 'Nested Anchors: /*'
+  id: totrans-217
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: '嵌套锚点: /*'
+- en: Anchors can contain other anchors.
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锚点可以包含其他锚点。
+- en: '[PRE49]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: Only traffic that passes into the `office` anchor can pass through the `ftp-proxy`
+    anchor. The FTP proxy can have its own sub-anchors as well. In fact, you might
+    have several layers of anchors to support a complicated protocol, such as FTP.
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 只有通过 `office` 锚点的流量才能通过 `ftp-proxy` 锚点。FTP 代理也可以有自己的子锚点。实际上，你可能需要多层锚点来支持复杂的协议，如
+    FTP。
+- en: This is where the `/*` after some anchor names comes in. An anchor name without
+    this is executed all by itself. By adding the `/*`, you tell PF to evaluate all
+    sub-anchors within this anchor, in alphabetical order.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是为什么某些锚点名称后面跟有 `/*` 的原因。没有这个的锚点名称会独立执行。通过添加 `/*`，你告诉 PF 按字母顺序评估此锚点内的所有子锚点。
+- en: Anchors and sub-anchors deliberately resemble a filesystem. You can have a file
+    */office* or a directory */office/* containing more files. If you list the files
+    in a directory, they appear in alphabetical order. Anchors work much the same
+    way.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锚点和子锚点故意模仿文件系统。你可以有一个文件 */office* 或一个包含更多文件的目录 */office/*。如果你列出目录中的文件，它们会按字母顺序显示。锚点的工作方式与此类似。
+- en: 'All of this anchor stuff is very theoretical. How about a practical example?
+    Read on to see how PF uses anchors to handle that most annoying of network protocols:
+    FTP.'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些锚点内容都是非常理论性的。那么，有没有一个实际例子呢？继续阅读，看看 PF 如何使用锚点来处理最令人烦恼的网络协议：FTP。
+- en: FTP and PF
+  id: totrans-224
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: FTP 和 PF
+- en: Most modern application protocols run over a single network connection. If you
+    make a web request, your browser opens a connection to the server on port 80,
+    requests information, and receives the answer, all on the same connection. SSH
+    opens a single connection on port 22 and exchanges all information over that port,
+    even if you tunnel a hundred other protocols inside it. Experience and experiments
+    with older protocols taught the wisdom of this approach. FTP is an older protocol,
+    and it provides a wealth of experience on how not to do things.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数现代应用程序协议都运行在单个网络连接上。如果你发起一个网页请求，你的浏览器会打开到服务器的80号端口的连接，请求信息，并接收答案，所有这些都在同一个连接上完成。SSH在22号端口打开一个单独的连接，并在此端口上交换所有信息，即使你在其中隧道了一百种其他协议。对旧协议的经验和实验教会了我们这种方法的好处。FTP是一个较旧的协议，它提供了大量关于如何不做事的经验。
+- en: The original version of FTP (today called *active FTP*) required the client
+    to connect to the server on port 21\. The server would then open a connection
+    back to the client, from port 20 to some random high-numbered port on the client
+    for sending information. The connection from server to client is called the *data
+    connection*, or the *back channel*. The FTP client and server agree on the ports
+    to be used and how the second connection will be used. On a network protocol level,
+    however, no connection exists between the client’s connection to port 21 and the
+    server’s connection from port 20, so there’s no way for a firewall to use stateful
+    inspection to sort out if such a connection is allowed. Worse, if the client is
+    behind a NAT device, there’s no way to determine to which private IP address the
+    firewall should route an incoming FTP data request.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: FTP的原始版本（今天称为*主动FTP*）要求客户端连接到服务器的21号端口。然后服务器会从20号端口打开一个连接回客户端，连接到客户端的某个随机高编号端口以发送信息。从服务器到客户端的连接被称为*数据连接*或*反向通道*。FTP客户端和服务器就使用的端口以及第二个连接的用途达成一致。然而，在网络协议层面，客户端连接到21号端口和服务器从20号端口连接之间不存在连接，因此防火墙无法使用状态检测来区分这种连接是否被允许。更糟糕的是，如果客户端位于NAT设备后面，就无法确定防火墙应将传入的FTP数据请求路由到哪个私有IP地址。
+- en: '*Passive FTP* is an updated version of the FTP protocol where the client initiates
+    both TCP connections. All modern clients and servers support passive FTP. The
+    differences between active and passive FTP spark endless rounds of user education
+    and increased help-desk load, especially if you’re trying to use FTP through a
+    web browser. (And if anyone is going to break my help desk staff, it’s going to
+    be me!) Active FTP simplified firewall rules, because the firewall didn’t need
+    to allow the back channel. Unfortunately, the creators of passive FTP called the
+    modified protocol FTP. Clients don’t care about active or passive, they just want
+    “this FTP thing” to work, regardless of the actual protocol underlying it.'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*被动FTP* 是FTP协议的一个更新版本，其中客户端初始化了两个TCP连接。所有现代客户端和服务器都支持被动FTP。主动FTP和被动FTP之间的差异引发了用户教育的无尽循环和帮助台工作量的增加，尤其是在尝试通过网页浏览器使用FTP时。（如果有人要破坏我的帮助台工作人员，那肯定是我自己！）主动FTP简化了防火墙规则，因为防火墙不需要允许反向通道。不幸的是，被动FTP的创造者将修改后的协议称为FTP。客户端不在乎主动还是被动，他们只想“这个FTP东西”能工作，不管它背后的实际协议是什么。'
+- en: To complicate things, some FTP servers and clients implement something between
+    active and passive FTP. The FTP protocol has been around for decades (it predates
+    TCP/IP), and people have tweaked and “improved” it for years. Getting a random
+    combination of FTP server and client through a random NAT device and a packet
+    filter can cause nightmares, or at least require opening a wide range of TCP ports.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使事情更加复杂，一些FTP服务器和客户端在主动和被动FTP之间实现了某种折中方案。FTP协议已经存在了几十年（它早于TCP/IP），人们多年来一直在对其进行调整和“改进”。通过一个随机的NAT设备和数据包过滤器将一个随机的FTP服务器和客户端组合在一起可能会引起噩梦，或者至少需要打开广泛的TCP端口。
+- en: 'OpenBSD and PF get around this problem by including an FTP application proxy,
+    `ftp-proxy(8)`. When a client makes an FTP request, PF intercepts the request
+    and reroutes it to the application proxy. The proxy tracks the FTP protocol transactions,
+    uses anchors to insert the appropriate rules into the firewall, and removes the
+    rules when the transfer finishes. Strictly speaking, `ftp-proxy` isn’t a traditional
+    proxy. Data doesn’t actually go through `ftp-proxy`; the “proxy” adjusts the firewall
+    rules so that traffic can pass. The proxy requires two parts: a running `ftp-proxy`
+    instance and the redirect rules.'
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: OpenBSD和PF通过包含一个FTP应用程序代理`ftp-proxy(8)`来解决这个问题。当客户端发起FTP请求时，PF拦截请求并将其重定向到应用程序代理。代理跟踪FTP协议事务，使用锚点将适当的规则插入防火墙，并在传输完成后删除规则。严格来说，`ftp-proxy`不是一个传统的代理。数据实际上并没有通过`ftp-proxy`；这个“代理”调整防火墙规则以便流量可以通过。代理需要两个部分：一个运行的`ftp-proxy`实例和重定向规则。
+- en: Configuring ftp-proxy(8)
+  id: totrans-230
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 配置ftp-proxy(8)
+- en: Like any other OpenBSD daemon, `ftp-proxy` is enabled in */etc/rc.conf.local*.
+    There’s no configuration file—only command-line arguments. By default, `ftp-proxy`
+    automatically listens on port 8021 on the loopback interface. It’s very rare for
+    me to add any command-line arguments for `ftp-proxy` for routine use.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就像任何其他OpenBSD守护进程一样，`ftp-proxy`在`/etc/rc.conf.local`中启用。没有配置文件——只有命令行参数。默认情况下，`ftp-proxy`自动监听回环接口上的8021端口。我很少为常规使用添加任何`ftp-proxy`命令行参数。
+- en: '[PRE50]'
+  id: totrans-232
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: If I’m debugging a problem, however, I might run `ftp-proxy` in the foreground,
+    in debugging mode. Doing this shows me all FTP transactions as they occur.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如果我在调试问题，我可能会在调试模式下前台运行`ftp-proxy`。这样做会显示所有发生的FTP事务。
+- en: '[PRE51]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: This displays everything that passes through the FTP proxy, including the ports
+    used for the data channel back to the client. Press CTRL-C to stop `ftp-proxy`.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这显示了通过FTP代理的所有内容，包括返回客户端的数据通道使用的端口。按CTRL-C停止`ftp-proxy`。
+- en: The most common problem I have with `ftp-proxy` is that nothing appears in the
+    debugging terminal. That means that the firewall isn’t diverting any traffic to
+    the proxy. Check your *pf.conf* file to verify that you have the necessary rules
+    to support the FTP proxy.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我与`ftp-proxy`最常见的问题是调试终端中没有显示任何内容。这意味着防火墙没有将任何流量重定向到代理。检查你的`pf.conf`文件以验证你是否有了支持FTP代理的必要规则。
+- en: PF Configuration and the FTP Proxy
+  id: totrans-237
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: PF配置和FTP代理
+- en: 'PF must know to send FTP requests to `ftp-proxy`. There’s a good example configuration
+    in the default *pf.conf* file:'
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PF必须知道将FTP请求发送到`ftp-proxy`。默认的`pf.conf`文件中有一个很好的配置示例：
+- en: '[PRE52]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Here’s where we use anchors. The `ftp-proxy/*` anchor can contain sub-rulesets.
+    The `ftp-proxy` daemon modifies these anchors on the fly to configure the necessary
+    traffic or data connections. The second rule declares that PF will divert any
+    traffic addressed to the FTP port (21 as per */etc/services*) to port 8021 on
+    the localhost. The third rule says that the firewall host can send TCP port 21
+    traffic to any other host. This rule contains a new term, `(self)`, which is PF
+    shorthand for “all IP addresses on the localhost.”
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是我们使用锚点的地方。`ftp-proxy/*`锚点可以包含子规则集。`ftp-proxy`守护进程会动态修改这些锚点以配置必要的流量或数据连接。第二个规则声明PF会将任何指向FTP端口（21，根据`/etc/services`）的流量重定向到本地主机的8021端口。第三个规则表示防火墙主机可以将TCP端口21流量发送到任何其他主机。此规则包含一个新术语`(self)`，它是PF对“本地主机上的所有IP地址”的简称。
+- en: How can you be sure this works? First, find an FTP server that supports active
+    FTP. Open your FTP client and log in to the server, going through the firewall.
+    Once you log in, use the `pasv` command at the FTP prompt. This command turns
+    passive mode on and off. If the server doesn’t recognize `pasv`, it supports only
+    passive FTP. Find another FTP server for this test. Once the FTP server reports
+    that “passive mode is off,” list the contents of a directory. Directory listings,
+    like data files, come over the data channel.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你如何确保这能工作？首先，找到一个支持主动FTP的FTP服务器。打开你的FTP客户端并登录到服务器，通过防火墙。一旦登录，在FTP提示符下使用`pasv`命令。此命令打开或关闭被动模式。如果服务器不识别`pasv`，则它只支持被动FTP。为此测试找到另一个FTP服务器。一旦FTP服务器报告“被动模式已关闭”，列出目录内容。目录列表，就像数据文件一样，通过数据通道传输。
+- en: During the data transfer of an active FTP connection, you should see rules in
+    the `ftp-proxy/*` anchor.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一个活跃的FTP连接的数据传输过程中，你应该在`ftp-proxy/*`锚点中看到规则。
+- en: '[PRE53]'
+  id: totrans-243
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: The rules created by `ftp-proxy` are very specific. They permit only one connection,
+    from a particular server to a particular client, with address translation rules
+    to make each side think it’s actually talking to the proper client or server.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ftp-proxy` 创建的规则非常具体。它们只允许一个连接，从一个特定的服务器到特定的客户端，并使用地址转换规则使每一方都认为它实际上在与正确的客户端或服务器通信。'
+- en: Note
+  id: totrans-245
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: To learn how to restrict your clients to using only anonymous FTP, or how to
+    use `ftp-proxy` to permit inbound FTP access to a server inside your firewall,
+    read the `ftp-proxy(8)` man page.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要了解如何限制你的客户端只使用匿名FTP，或者如何使用`ftp-proxy`允许防火墙内的服务器进行入站FTP访问，请阅读`ftp-proxy(8)`手册页。
+- en: Bandwidth Management
+  id: totrans-247
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 带宽管理
+- en: One common task for a network perimeter device is bandwidth management. Network
+    managers must control how much bandwidth is used for certain tasks, and must also
+    reserve bandwidth for vital functions. If one of your minions loads the latest
+    blockbuster comic book movie on the web server, you must be able to make an SSH
+    connection to the server, find out why your server is overloaded, and fix the
+    problem. PF includes the ALTQ bandwidth management system.
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络边界设备的一个常见任务是带宽管理。网络管理员必须控制用于特定任务的带宽量，还必须为关键功能预留带宽。如果你的一个下属在Web服务器上加载最新的热门漫画电影，你必须能够通过SSH连接到服务器，找出为什么你的服务器过载，并解决问题。PF包括ALTQ带宽管理系统。
+- en: The most important thing to remember about bandwidth management is that you
+    cannot control how much traffic other people send you. You can stop traffic at
+    the point it enters your network. You can send hints that the bandwidth is saturated.
+    You can arbitrarily restrict bandwidth *from* your servers. But nothing you do
+    can stop 10,000 people a second from clicking a link to that server. You cannot
+    prevent a distributed denial-of-service attack from saturating your inbound bandwidth.
+    The best you can do is control how you respond to those requests.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于带宽管理，最重要的是记住你不能控制别人发送给你的流量量。你可以在流量进入你的网络时停止它。你可以发送带宽饱和的提示。你可以随意限制来自你的服务器的带宽。但无论你做什么，都无法阻止每秒10,000人点击链接到那个服务器。你无法阻止分布式拒绝服务攻击使你的入站带宽饱和。你能做的最好的事情就是控制你如何响应这些请求。
+- en: When I run content farms, I usually put dedicated bandwidth control machines
+    in front of my servers. This setup controls how much traffic actually reaches
+    my server network, reduces load on the servers in case of a sudden spike, and
+    prevents one overly busy customer from taking down other customers on the same
+    server.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我运行内容农场时，我通常在我的服务器前面放置专门的带宽控制机器。这种设置控制了多少流量实际上到达我的服务器网络，在流量突然激增时减轻服务器的负载，并防止一个过于繁忙的客户使同一服务器上的其他客户崩溃。
+- en: Queues for Bandwidth Management
+  id: totrans-251
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 带宽管理队列
+- en: ALTQ manages bandwidth by *queues*. A queue is a list of packets waiting to
+    be processed.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ALTQ通过**队列**来管理带宽。队列是一系列等待处理的分组。
+- en: By dividing your bandwidth into separate queues, and processing those queues
+    as you configure, you can manage server bandwidth. Queues are somewhat like the
+    checkout lines at the grocery store; some lines are for 10 packets or less and
+    get you out quickly, and others are for people who shop once a month and fill
+    up three carts. You can define just about any characteristics for queues, as if
+    you could create a “meats only” or “white wine with fish” register.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过将你的带宽分成单独的队列，并按照你的配置处理这些队列，你可以管理服务器带宽。队列有点像杂货店的结账队列；一些队列是为10个或更少的分组设计的，可以让你快速结账，而其他队列是为每月购物一次并装满三个购物车的人设计的。你可以为队列定义几乎任何特性，就像你可以创建一个“仅肉类”或“白葡萄酒配鱼”的收银台一样。
+- en: Engineers have defined many different queuing algorithms, and the most proper
+    queue method for a given situation is a topic that sparks heated discussions.
+    TCP/IP quality-of-service queue handling is one of those topics that make angelic
+    children cry. By default, all BSD-based systems use first-in, first-out (FIFO)
+    queuing, where packets are processed in the order in which they are received.
+    Newer packets wait in a queue until older packets move on.
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 工程师们定义了许多不同的队列算法，而对于特定情况最合适的队列方法是一个引发激烈讨论的话题。TCP/IP服务质量队列处理是那些让孩子们哭泣的话题之一。默认情况下，所有基于BSD的系统都使用先进先出（FIFO）队列，其中分组按照接收的顺序进行处理。较新的分组会等待在队列中，直到较旧的分组移动。
+- en: OpenBSD also supports priority queuing (PRIQ or prio), where the kernel considers
+    packets of certain types to have “priority” and processes them first. This means
+    that if you assign web packets highest priority, all web packets jump to the head
+    of the queue. Packets of lower priority might never be processed at all under
+    this scheme. These days, just about everything supports priority queuing, especially
+    switches. The goal of priority queuing is to reduce latency for specific traffic,
+    such as voice or video, paying for that reduced latency by increasing the latency
+    of less urgent traffic.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: OpenBSD还支持优先级队列（PRIQ或prio），其中内核将某些类型的数据包视为“优先”并首先处理它们。这意味着如果您将网页数据包分配最高优先级，所有网页数据包都会跳到队列的头部。在优先级队列方案下，低优先级的数据包可能根本不会被处理。如今，几乎所有东西都支持优先级队列，尤其是交换机。优先级队列的目标是减少特定流量（如语音或视频）的延迟，通过增加不那么紧急流量的延迟来支付这种减少的延迟。
+- en: 'However, in most operational settings where you must regulate bandwidth, class-based
+    queuing (CBQ) is appropriate. CBQ allows the network administrator to allocate
+    a certain amount of bandwidth to different types of traffic through hierarchical
+    classes. Each class has its own queue, with its own bandwidth characteristics.
+    You can assign different sorts of traffic to different classes: SSH to one class,
+    HTTP and HTTPS to another, and so on. One of the nice features of CBQ is that
+    its hierarchical nature allows lower classes to borrow available bandwidth from
+    classes above them.'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，在大多数需要调节带宽的操作环境中，基于类的队列（CBQ）是合适的。CBQ允许网络管理员通过分层类为不同类型的流量分配一定量的带宽。每个类都有自己的队列，具有自己的带宽特性。您可以将不同类型的流量分配到不同的类中：将SSH分配到一个类，将HTTP和HTTPS分配到另一个类，等等。CBQ的一个优点是其分层特性允许低级队列从高级队列借用可用带宽。
+- en: As I find CBQ appropriate for most environments, I focus on it here. Once you
+    master CBQ, if you need PRIQ, you’ll find it easy to understand.
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我发现CBQ适用于大多数环境，所以我在这里重点介绍它。一旦您掌握了CBQ，如果您需要PRIQ，您会发现它很容易理解。
+- en: Parent Queue Definitions
+  id: totrans-258
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 父队列定义
+- en: Queuing starts with defining the parent queue. All other queues are children
+    of the parent queue. The parent queue is attached to a network interface, most
+    commonly the Internet-facing interface. Place your queue definitions in *pf.conf*.
+    I put queues at the top of the file, before any packet-filtering rules.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 队列配置从定义父队列开始。所有其他队列都是父队列的子队列。父队列连接到网络接口，通常是面向互联网的接口。将您的队列定义放在*pf.conf*文件中。我把队列放在文件顶部，在所有数据包过滤规则之前。
+- en: 'Here’s how you define a parent queue on an interface:'
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接口上定义父队列的方法如下：
+- en: '[PRE54]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: Start all ALTQ parent queue definitions with the `altq` keyword **1**, and then
+    give the interface to which this queue is attached **2**. (Each interface can
+    have no more than one parent queue.) Then give the queue type you’re using **3**.
+    For CBQ queuing, the queue type is always `cbq`.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有ALTQ父队列定义都以`altq`关键字**1**开始，然后指定此队列所连接的接口**2**。（每个接口最多只能有一个父队列。）然后指定您正在使用的队列类型**3**。对于CBQ队列，队列类型始终是`cbq`。
+- en: 'Now define the total amount of bandwidth in the parent queue **4**. This is
+    not the same as the amount of bandwidth the interface can pass, but the amount
+    of bandwidth you reasonably expect to pass upstream. If your OpenBSD machine has
+    a gigabit network card, but you have only 10 megabits of bandwidth to the Internet,
+    use `10Mb` as your bandwidth (or fiddle with the bandwidth value until you hit
+    your actually usable allocation). You can use the following case-sensitive abbreviations
+    for bandwidth:'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在定义父队列中的总带宽**4**。这不同于接口可以传输的带宽量，而是您合理预期的上游传输带宽量。如果您的OpenBSD机器有一个千兆网卡，但您只有10兆的互联网带宽，则使用`10Mb`作为您的带宽（或者调整带宽值，直到达到实际可用的分配）。您可以使用以下区分大小写的带宽缩写：
+- en: '****`b`****. bits per second'
+  id: totrans-264
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '****`b`****.每秒比特'
+- en: '****`Kb`****. kilobits per second'
+  id: totrans-265
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '****`Kb`****.每秒千比特'
+- en: '****`Mb`****. megabits per second'
+  id: totrans-266
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '****`Mb`****.每秒兆比特'
+- en: '****`Gb`****. gigabits per second'
+  id: totrans-267
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '****`Gb`****.每秒千兆比特'
+- en: The optional `qlimit` parameter gives the number of packets the queue can hold
+    **5**. The default value is `50`, which suffices for almost all cases. I recommend
+    not setting `qlimit` unless specific debugging shows that you need a larger queue
+    size.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可选的`qlimit`参数指定队列可以持有的数据包数量**5**。默认值是`50`，对于几乎所有情况都足够了。我建议除非特定的调试显示您需要更大的队列大小，否则不要设置`qlimit`。
+- en: This example includes the token bucket regulator size configuration because
+    `tbrsize` lets you dictate how quickly packets can be transmitted **6**. ALTQ
+    defaults to transmitting packets as fast as the wire permits. As with `qlimit`,
+    I recommend not setting `tbrsize` unless you encounter a problem.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此示例包括令牌桶调节器大小配置，因为 `tbrsize` 允许你指定数据包可以传输的速度 **6**。ALTQ 默认以线缆允许的速度传输数据包。与 `qlimit`
+    一样，除非你遇到问题，否则我建议不要设置 `tbrsize`。
+- en: Next, identify this as a parent queue **7**, and define child queues `queue1`
+    **8** and `queue2` **9**.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，将其标识为父队列 **7**，并定义子队列 `queue1` **8** 和 `queue2` **9**。
+- en: 'Here’s how to configure a parent queue with a 50-megabit uplink, with the child
+    queues `ssh`, `web`, and `mgmt`:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是如何配置一个具有 50 兆比特上行链路的父队列，并定义子队列 `ssh`、`web` 和 `mgmt`：
+- en: '[PRE55]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: The `tbrsize` and `qlim` keywords are not set, so they’re at their defaults.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`tbrsize` 和 `qlim` 关键字未设置，因此它们处于默认状态。'
+- en: Child Queue Definitions
+  id: totrans-274
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 子队列定义
+- en: 'Once you have a parent queue, you can define child queues. Define CBQ queues
+    with the following syntax:'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦你有一个父队列，你就可以定义子队列。使用以下语法定义 CBQ 队列：
+- en: '[PRE56]'
+  id: totrans-276
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: Each queue needs a name **1**, defined in the parent queue definition, of 15
+    characters or less. The names don’t need to be unique—you could use a queue of
+    the same name on a different interface—but I recommend that you use unique names.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个队列都需要一个名称 **1**，在父队列定义中定义，长度不超过15个字符。名称不需要唯一——你可以在不同的接口上使用相同名称的队列——但我建议使用唯一的名称。
+- en: The interface is the specific interface to which this queue is applied **2**.
+    If you don’t define an interface, traffic that passes through any interface can
+    be assigned to this queue.
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接口是应用此队列的特定接口 **2**。如果你没有定义接口，通过任何接口传输的流量都可以分配到这个队列。
+- en: The `bandwidth` term uses the same bandwidth labels that the parent queue uses,
+    but the total bandwidth assigned to all child queues cannot exceed the total amount
+    of bandwidth available on the parent queue **3**. You can also use a percentage
+    value for bandwidth, indicating the percentage of the parent queue that this queue
+    can consume. Bandwidth and queue are the only mandatory terms in a child queue
+    description.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`bandwidth` 术语使用与父队列相同的带宽标签，但分配给所有子队列的总带宽不能超过父队列上可用的总带宽 **3**。你也可以使用百分比值来表示带宽，表示此队列可以消耗父队列的百分比。带宽和队列是子队列描述中的唯一强制术语。'
+- en: 'The following defines the `ssh` child queue and gives it a bandwidth of 2 megabits:'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下定义了 `ssh` 子队列并给它分配了 2 兆比特的带宽：
+- en: '[PRE57]'
+  id: totrans-281
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: 'Here’s a child queue called `web`, which is allowed to use three-quarters of
+    the parent queue bandwidth:'
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有一个名为 `web` 的子队列，它被允许使用父队列带宽的三分之四：
+- en: '[PRE58]'
+  id: totrans-283
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: You can assign a priority to a queue **4**. CBQ priorities run from `0` to `7`,
+    with `7` being the highest. The default priority is `1`. A CBQ queue with a higher
+    priority does not run to the exclusion of other queues, but PF processes it more
+    quickly than other queues.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以为队列分配一个优先级 **4**。CBQ 优先级从 `0` 到 `7`，`7` 是最高的。默认优先级是 `1`。具有更高优先级的 CBQ 队列不会排除其他队列，但
+    PF 会比其他队列更快地处理它。
+- en: As with a parent queue, you can assign a `qlimit` to a child queue **5**, but
+    don’t do this unless you have a specific problem that can be solved with this
+    value.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与父队列一样，你可以给子队列分配一个 `qlimit` **5**，但除非你有特定的问题需要用这个值来解决，否则不要这样做。
+- en: You can assign options to a CBQ child queue **6**. We’ll look at these options
+    in the next section.
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以为 CBQ 子队列分配选项 **6**。我们将在下一节中查看这些选项。
+- en: Finally, child queues can have their own children. Define a queue’s children
+    in the queue **7**. You’ll see an example of this in [A CBQ Ruleset](ch22.html#a_cbq_ruleset
+    "A CBQ Ruleset").
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，子队列可以有它们自己的子队列。在队列 **7** 中定义一个队列的子队列。你将在 [CBQ 规则集](ch22.html#a_cbq_ruleset
+    "CBQ 规则集") 中看到一个例子。
+- en: Queue Options
+  id: totrans-288
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 队列选项
+- en: Modify how a child queue processes packets by assigning options to a queue.
+    Options let you decide how the queue should respond to a variety of network conditions
+    and bandwidth availability.
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过为队列分配选项来修改子队列处理数据包的方式。选项让你决定队列应该如何响应各种网络条件和带宽可用性。
+- en: Default
+  id: totrans-290
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 默认
+- en: Every parent queue must have one and only one default child. If a packet crossing
+    a queued interface is assigned to no other queue, it is assigned to the default
+    queue.
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个父队列必须有一个且仅有一个默认子队列。如果一个跨越队列接口的数据包没有被分配到其他队列，它将被分配到默认队列。
+- en: Random Early Detection
+  id: totrans-292
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 随机早期检测
+- en: Random early detection (RED) is a method for handling packet loss when a queue
+    starts to fill up. As the queue fills up, more and more packets are dropped. RED
+    randomly chooses packets to drop. The net effect is that short transfers, such
+    as HTTP requests and interactive SSH sessions, respond more quickly, while large
+    data transfers become slower.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随机早期检测（RED）是一种处理队列开始填满时的数据包丢失的方法。随着队列的填满，越来越多的数据包被丢弃。RED随机选择数据包进行丢弃。结果是，短传输，如HTTP请求和交互式SSH会话，响应更快，而大数据传输则变慢。
+- en: TCP clients and servers react to dropped packets by reducing their throughput.
+    UDP, ICMP, and other protocols don’t have any built-in reaction to packet loss.
+    Using RED on queues expected to carry TCP is sensible, but not on queues for other
+    protocols.
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TCP客户端和服务器通过减少吞吐量来对丢弃的数据包做出反应。UDP、ICMP和其他协议没有内置的针对数据包丢失的反应。在预期携带TCP的队列上使用RED是合理的，但不是在其他协议的队列上。
+- en: Explicit Congestion Notification
+  id: totrans-295
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 显式拥塞通知
+- en: Explicit Congestion Notification (ECN) is a modification to RED that sets flags
+    in the packet rather than dropping the packet. If a device recognizes the ECN
+    flag, it will reduce transmission rates.
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显式拥塞通知（ECN）是对RED的一种修改，它是在数据包中设置标志而不是丢弃数据包。如果一个设备识别到ECN标志，它将降低传输速率。
+- en: Not all platforms understand ECN, however, and many that can recognize ECN disable
+    it by default. Microsoft’s Windows Vista and newer, Apple OS X, FreeBSD, and OpenBSD
+    can support ECN, but disable it by default. Newer Linux versions support ECN if
+    the other host requests it. I have successfully used ECN, in corporate environments
+    where I could make the support guys enable ECN on the desktops.
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，并非所有平台都理解ECN，而且许多可以识别ECN的平台默认禁用它。微软的Windows Vista及更高版本、Apple OS X、FreeBSD和OpenBSD可以支持ECN，但默认禁用。较新的Linux版本如果其他主机请求，则支持ECN。我在企业环境中成功使用了ECN，在那里我可以让支持人员启用桌面上的ECN。
+- en: Unless you know the operating systems in use and can control their settings,
+    stick with standard RED.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除非你知道正在使用的操作系统并且可以控制它们的设置，否则请坚持使用标准的RED。
+- en: borrow
+  id: totrans-299
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: borrow
+- en: The `borrow` option is available only in CBQ. A queue with borrow set may borrow
+    bandwidth from its parent queue, if the bandwidth is available. For example, you
+    might have a queue that reserves 20 percent of your bandwidth for VoIP. If you
+    don’t have that much VoIP traffic at any particular moment, the parent will have
+    excess bandwidth. Other queues could borrow bandwidth from that allocation. When
+    your VoIP traffic spikes, however, PF revokes the bandwidth loan, and the VoIP
+    traffic gets what’s reserved for it.
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`borrow`选项仅在CBQ中可用。如果父队列有可用带宽，设置了borrow的队列可以从父队列借用带宽。例如，你可能有一个为VoIP保留20%带宽的队列。如果你在任何特定时刻没有那么多VoIP流量，父队列将有额外的带宽。其他队列可以从这个分配中借用带宽。然而，当你的VoIP流量激增时，PF会撤销带宽贷款，VoIP流量将获得为其预留的带宽。'
+- en: Use the `borrow` option on the queues that you want to permit to borrow bandwidth,
+    not on the queues whose bandwidth might be borrowed.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在你想要允许借用带宽的队列上使用`borrow`选项，而不是在可能借用带宽的队列上。
+- en: A CBQ Ruleset
+  id: totrans-302
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: CBQ规则集
+- en: 'Before configuring queues, figure out how you want to divide your bandwidth.
+    While you could use bits per second to manage bandwidth, for most of us, percentages
+    are easier to deal with. Here’s how you might divide Internet bandwidth for a
+    company with a 10-megabit link. Start by making a list of your desired bandwidth
+    reservations, and then assign a name to each category, like this:'
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在配置队列之前，确定你想要如何划分你的带宽。虽然你可以使用每秒比特数来管理带宽，但对于我们大多数人来说，百分比更容易处理。以下是一个公司10兆比特链路互联网带宽的划分方法。首先列出你想要的带宽预留列表，然后为每个类别分配一个名称，如下所示：
+- en: 5 percent for SSH (`ssh`)
+  id: totrans-304
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SSH（`ssh`）占5%
+- en: 50 percent for inbound traffic to our e-commerce server, with RED (`web`)
+  id: totrans-305
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们电子商务服务器的入站流量为50%，使用RED（`web`）
+- en: 5 percent for inbound VoIP, high priority (`voip`)
+  id: totrans-306
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 高优先级的入站VoIP占5%（`voip`）
+- en: 40 percent for other traffic, including DNS, SMTP, and so on
+  id: totrans-307
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 其他流量，包括DNS、SMTP等占40%
+- en: All of these queues can borrow from the parent queue.
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些队列都可以从父队列借用带宽。
+- en: Start by defining the parent queue.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先定义父队列。
+- en: '[PRE59]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: This parent queue is attached to interface `em0`, and has 10 megabits of bandwidth
+    and four child queues. Leave all the other options alone.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个父队列连接到接口`em0`，有10兆比特的带宽和四个子队列。保留所有其他选项不变。
+- en: Now define the first child queue.
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在定义第一个子队列。
+- en: '[PRE60]'
+  id: totrans-313
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: Start with the queue name and the bandwidth percentage you’ve chosen. This percentage
+    is calculated from the parent of this particular queue, so it’s about 5 percent
+    of 10 megabits, or 500 kilobits per second. That should be plenty to log in remotely
+    and fix any problems. Adding the `borrow` option lets you use more bandwidth for
+    SSH if it’s available.
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从队列名称和您选择的带宽百分比开始。此百分比是从特定队列的父队列计算的，因此大约是10兆比特的5%，即每秒500千比特。这应该足够用于远程登录和修复任何问题。添加`borrow`选项可以让您在可用的情况下使用更多带宽。
+- en: Building from this example, you can define the other child queues.
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这个示例开始，您可以定义其他子队列。
+- en: '[PRE61]'
+  id: totrans-316
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: The other queue is your default. Any traffic that isn’t assigned its own queue
+    is assigned to this queue.
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个队列是您的默认队列。任何未分配到其自己队列的流量都将分配到这个队列。
+- en: Assigning Traffic to Queues
+  id: totrans-318
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 将流量分配到队列
+- en: 'Assign traffic to a queue with the `queue` keyword at the end of a packet-filtering
+    rule. To allow all SSH (port 22) traffic into the network and assign it to the
+    queue named `ssh`, use a rule like this:'
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`queue`关键字在数据包过滤规则末尾将流量分配到队列。要允许所有SSH（端口22）流量进入网络并将其分配到名为`ssh`的队列，请使用如下规则：
+- en: '[PRE62]'
+  id: totrans-320
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: Using the match Keyword
+  id: totrans-321
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用`match`关键字
+- en: 'Sometimes you must classify traffic without filtering it. The previous example
+    let you assign inbound SSH traffic to the `ssh` queue, but what if you want to
+    capture outbound SSH as well? Consider the following rule snippet:'
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时您必须对流量进行分类而不进行过滤。前面的示例允许您将传入的SSH流量分配到`ssh`队列，但您想同时捕获出站的SSH怎么办？考虑以下规则片段：
+- en: '[PRE63]'
+  id: totrans-323
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: This allows hosts in the `customers` table to connect to hosts in the `sshservers`
+    table on port 22\. The second rule allows the local network to send any traffic,
+    or any protocol. Some of that outbound traffic will be SSH traffic. Should you
+    write a separate rule just for queuing traffic?
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这允许`customers`表中的主机通过端口22连接到`sshservers`表中的主机。第二条规则允许本地网络发送任何流量或任何协议。其中一些出站流量将是SSH流量。您是否需要为排队流量单独编写一条规则？
+- en: 'This is where the `match` keyword comes in. Using `match`, you can change how
+    PF classifies traffic without changing how it filters traffic. Here’s how to send
+    all TCP port 22 traffic to the `ssh` queue, without changing any filtering characteristics:'
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是`match`关键字发挥作用的地方。使用`match`，您可以更改PF如何分类流量，而无需更改其过滤方式。以下是如何将所有TCP端口22的流量发送到`ssh`队列，而无需更改任何过滤特性：
+- en: '[PRE64]'
+  id: totrans-326
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: The first rule matches all traffic on TCP port 22 and assigns it to the `ssh`
+    queue. The rules that follow control who can send and receive SSH connections.
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一条规则匹配所有TCP端口22的流量并将其分配到`ssh`队列。接下来的规则控制谁可以发送和接收SSH连接。
+- en: Viewing Queues
+  id: totrans-328
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 查看队列
+- en: To view the queues currently in the packet filter, run `pfctl -s queues`.
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看当前在数据包过滤器中的队列，请运行 `pfctl -s queues`。
+- en: '[PRE65]'
+  id: totrans-330
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: Adding `-v` gives you a brief snapshot of the state of each queue. For a constantly
+    updating view of all queues, including how much traffic is borrowed from each,
+    what gets dropped, and so on, use `-vvsq` or `systat queues` instead.
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`-v`选项可以为您提供每个队列状态的简要快照。要查看所有队列的持续更新视图，包括从每个队列借用多少流量、丢弃了什么等，请使用`-vvsq`或`systat
+    queues`。
+- en: PF Edges
+  id: totrans-332
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: PF边缘
+- en: 'This section covers a couple tidbits of PF configuration that don’t quite fit
+    anywhere else: include files and the `quick` keyword.'
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节涵盖了几个PF配置的细节，它们不太适合其他地方：包含文件和`quick`关键字。
+- en: Using Include Files
+  id: totrans-334
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用包含文件
+- en: Sometimes splitting a configuration file into multiple pieces simplifies your
+    work. Do this with an `include` statement in *pf.conf*.
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时将配置文件拆分成多个部分可以简化您的工作。在`pf.conf`中使用`include`语句来完成此操作。
+- en: '[PRE66]'
+  id: totrans-336
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: I do this when I need to manage several PF machines with unique configurations,
+    but certain pieces are identical. The *management-addresses* file defines a table
+    listing all hosts and networks that can connect via SSH, make SNMP queries, as
+    so on. When one of those addresses change, I copy this file to all of my PF hosts
+    and reload the packet-filtering rules.
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我需要管理具有独特配置但某些部分相同的多个PF机器时，我会这样做。`management-addresses`文件定义了一个表，列出了可以通过SSH连接、执行SNMP查询等操作的所有主机和网络。当这些地址中的任何一个发生变化时，我会将此文件复制到所有PF主机并重新加载数据包过滤规则。
+- en: Skipping Matches with quick
+  id: totrans-338
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用快速跳过比赛
+- en: 'PF processes packet-filtering rules in order, and the last matching rule wins,
+    which can complicate designing a ruleset that supports exactly the access you
+    desire. If you find yourself stuck, use the `quick` keyword to abort processing
+    the rest of the rules for matching packets. Here’s an example:'
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PF 按顺序处理数据包过滤规则，最后一个匹配的规则生效，这可能会使设计支持所需精确访问的规则集变得复杂。如果你发现自己陷入了困境，可以使用 `quick`
+    关键字来终止匹配数据包的其余规则的处理。以下是一个示例：
+- en: '[PRE67]'
+  id: totrans-340
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: The first rule permits traffic to the host(s) in the macro `$sshserver` on port
+    22\. The second rule drops all TCP port 22 traffic. The `quick` keyword in the
+    first rule says, “When a packet matches this rule, follow this rule and do not
+    process any more rules.” In this case, the SSH connection will be permitted.
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一条规则允许流量访问端口 22 上的宏 `$sshserver` 主机。第二条规则丢弃所有端口 22 的 TCP 流量。第一条规则中的 `quick`
+    关键字表示，“当一个数据包匹配此规则时，遵循此规则，并不要处理任何更多规则。”在这种情况下，SSH 连接将被允许。
+- en: The `quick` keyword is especially useful in anchors, where rules added for a
+    special purpose by an automated process like `ftp-proxy(8)` might be overridden
+    by later rules meant for unrelated purposes.
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`quick` 关键字在锚点中特别有用，因为自动化过程（如 `ftp-proxy(8)`）为特殊目的添加的规则可能会被后来为无关目的添加的规则覆盖。'
+- en: The purist in me wants to insist that all static rulesets be written without
+    using `quick`. While strictly speaking that’s true, sometimes avoiding `quick`
+    creates rulesets that are difficult to interpret. A ruleset you can easily understand
+    is more secure than something baroque but syntactically pure.
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我内心那个纯粹主义者想要坚持认为所有静态规则集都应该不使用 `quick` 来编写。虽然从严格意义上来说这是正确的，但有时避免使用 `quick` 可能会创建难以理解的规则集。一个容易理解的规则集比那些复杂但语法纯熟的规则集更安全。
+- en: Logging PF
+  id: totrans-344
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 记录PF日志
+- en: Tell PF to log packets with the `log` keyword in a rule.
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在规则中使用 `log` 关键字告诉 PF 记录数据包。
+- en: '[PRE68]'
+  id: totrans-346
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: Without additional setup, however, those logs just go to the PF log device `pflog0`.
+    To successfully log PF messages, you must run the packet filter logger `pflogd(8)`.
+    If you start PF at boot, `pflogd` is automatically started with it. Otherwise,
+    you must start it on the command line.
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如果没有额外的设置，这些日志将直接发送到 PF 日志设备 `pflog0`。要成功记录 PF 消息，你必须运行数据包过滤器记录器 `pflogd(8)`。如果你在引导时启动
+    PF，`pflogd` 会自动启动。否则，你必须通过命令行启动它。
+- en: One thing to remember is that if you’re using stateful inspection, only the
+    first packet that triggers a rule is logged. Other packets that are part of the
+    same state are not logged. To log all packets in a stateful connection, give the
+    `all` modifier to the `log` keyword, but beware because this can generate very
+    large logs.
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要记住的一点是，如果你正在使用状态检测，只有触发规则的第一数据包会被记录。属于同一状态的其它数据包不会被记录。若要记录状态连接中的所有数据包，给 `log`
+    关键字添加 `all` 修饰符，但请注意，这可能会生成非常大的日志。
+- en: '[PRE69]'
+  id: totrans-349
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: Logging is especially useful when troubleshooting connection problems. If packets
+    are being blocked when you think they should be passed, add logging to your `block`
+    statements to see which rule is stopping the traffic.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记录日志在解决连接问题时特别有用。如果你认为应该允许通过的数据包被阻止了，请在你的 `block` 语句中添加记录，以查看哪个规则阻止了流量。
+- en: I don’t recommend logging everything, especially because logs can grow quite
+    large. Log selectively. For example, perhaps you don’t care which websites your
+    local users visit, but do want to know about incoming traffic. And be sure to
+    exclude your firewall logging traffic from your packet filter logs, or you’ll
+    quickly find that PF is logging the transmission of the logs of the log transmissions,
+    which are logs of transmitting the logs, from when you transmitted the logs …
+    yadda yadda yadda.
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我不推荐记录所有内容，尤其是因为日志可能会变得相当大。有选择性地记录。例如，你可能不关心本地用户访问了哪些网站，但确实想了解传入流量。并且确保排除防火墙日志流量从你的数据包过滤器日志中，否则你很快会发现
+    PF 正在记录日志传输的传输，这些是传输日志的日志，从你传输日志的那一刻起……等等等等。
+- en: Reading PF Logs
+  id: totrans-352
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 阅读PF日志
+- en: PF logs in the `tcpdump(8)` binary format. Use `tcpdump` to examine the data.
+    To just dump everything in the log, tell `tcpdump` to read the log file.
+  id: totrans-353
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PF 以 `tcpdump(8)` 二进制格式记录日志。使用 `tcpdump` 来检查数据。若要仅将日志中的所有内容输出，告诉 `tcpdump` 读取日志文件。
+- en: '[PRE70]'
+  id: totrans-354
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: This can generate a huge amount of output. See [Filtering tcpdump](ch22.html#filtering_tcpdump
+    "Filtering tcpdump") for some hints.
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这可能会生成大量输出。参见 [过滤 tcpdump](ch22.html#filtering_tcpdump "过滤 tcpdump") 获取一些提示。
+- en: Real-Time Log Access
+  id: totrans-356
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 实时日志访问
+- en: The entries in */var/log/pflog* are not added in real time; `pflogd(8)` buffers
+    its records until writing a log message is worthwhile. To see PF logs in real
+    time, attach `tcpdump` to the `pflog0` interface with the `-i` flag.
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*/var/log/pflog* 中的条目不是实时添加的；`pflogd(8)` 会缓冲其记录，直到写入日志信息变得有意义。要实时查看 PF 日志，请使用
+    `-i` 标志将 `tcpdump` 连接到 `pflog0` 接口。'
+- en: '[PRE71]'
+  id: totrans-358
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: Depending on how much traffic you’re logging, this might also produce an overwhelming
+    amount of information. You must filter `tcpdump` to make it useful. Or if you
+    pretend you missed my earlier warning about log sizes, you can devise a one-liner
+    that uses `logger` to send your PF logs as text to `syslog`.
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据你记录的流量大小，这可能会产生大量令人难以承受的信息。你必须过滤 `tcpdump` 以使其变得有用。或者，如果你假装错过了我之前关于日志大小的警告，你可以编写一个单行命令，使用
+    `logger` 将你的 PF 日志作为文本发送到 `syslog`。
+- en: Filtering tcpdump
+  id: totrans-360
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 过滤 tcpdump
+- en: Every system administrator should know how to use `tcpdump`. Here’s your motivation
+    for doing so.
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个系统管理员都应该知道如何使用 `tcpdump`。这是你这样做的原因。
+- en: When troubleshooting a problem with a particular connection, you probably don’t
+    care about every packet passing through the filter. You care about traffic to
+    or from a particular host. Specify an IP address with the `ip` or `ip6` expression.
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你遇到特定连接的问题时，你可能不关心通过过滤器的每个数据包。你关心的是特定主机的流量。使用 `ip` 或 `ip6` 表达式指定一个 IP 地址。
+- en: '[PRE72]'
+  id: totrans-363
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: This will display only traffic to and from this particular host.
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将仅显示与此特定主机之间的流量。
+- en: To narrow things further and see only the traffic between two hosts, combine
+    the hosts with the `and` keyword.
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了进一步缩小范围并仅查看两个主机之间的流量，请使用 `and` 关键字结合主机。
+- en: '[PRE73]'
+  id: totrans-366
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: Maybe you’re interested in only a specific port, on a specific address. Use
+    the `tcp` or `udp` keyword and the port number to filter on that.
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也许你只对特定地址上的特定端口感兴趣。使用 `tcp` 或 `udp` 关键字和端口号进行过滤。
+- en: '[PRE74]'
+  id: totrans-368
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: Read the `tcpdump(8)` man page for an exhaustive list of innumerable other filtering
+    options.
+  id: totrans-369
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取 `tcpdump(8)` 手册页，以获取无数其他过滤选项的详尽列表。
+- en: If using `tcpdump` doesn’t appeal to you, consider the `pflow(4)` NetFlow exporter.
+    Network flow is a complicated topic, but the book *Network Flow Analysis* (No
+    Starch Press, 2010) might help you.
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你不喜欢使用 `tcpdump`，可以考虑使用 `pflow(4)` NetFlow 导出器。网络流是一个复杂的话题，但书籍 *网络流分析*（No
+    Starch Press，2010）可能对你有所帮助。
+- en: Ruleset Tracing
+  id: totrans-371
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 规则集跟踪
+- en: Sometimes, knowing whether a packet passed or failed isn’t enough. You know
+    that a packet was blocked, but not why. You want to watch the packet pass through
+    the rules and see which rules affect it.
+  id: totrans-372
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候，知道一个数据包是否通过或失败并不足够。你知道数据包被阻止了，但不知道原因。你想要观察数据包通过规则，并看到哪些规则影响了它。
+- en: 'Suppose an internal host 192.0.2.226 cannot connect to the external host 203.0.113.34\.
+    The log would show that the packet is blocked, but not why. You can specifically
+    have PF log matching rules. Add a line like this to the top of your *pf.conf*
+    file:'
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设内部主机 192.0.2.226 无法连接到外部主机 203.0.113.34。日志将显示数据包被阻止，但不会显示原因。你可以特别让 PF 记录匹配规则。在你的
+    *pf.conf* 文件顶部添加如下一行：
+- en: '[PRE75]'
+  id: totrans-374
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: This is a standard packet-filtering rule. You could use an individual IP address,
+    a port number, or any other legal packet filter terms. Reload your packet-filtering
+    rules.
+  id: totrans-375
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个标准的包过滤规则。你可以使用单个 IP 地址、端口号或其他任何合法的包过滤术语。重新加载你的包过滤规则。
+- en: Turn on `tcpdump`, and filter based on one of the IP addresses in your `match`
+    statement. If you’re using NAT, filter on the IP address that doesn’t change.
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 打开 `tcpdump`，并根据你的 `match` 语句中的一个 IP 地址进行过滤。如果你使用 NAT，请过滤不改变的 IP 地址。
+- en: '[PRE76]'
+  id: totrans-377
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: While I won’t go through all the annoying details of reading `tcpdump` output,
+    you can see that PF logs the rule numbers that this data connection matches, and
+    whether the rule passes or blocks the connection. If the connection involves NAT,
+    you’ll see the actual and translated IP addresses.
+  id: totrans-378
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然我不会详细介绍阅读 `tcpdump` 输出的所有烦人细节，但你可以看到 PF 会记录与这个数据连接匹配的规则编号，以及规则是允许还是阻止了连接。如果连接涉及
+    NAT，你将看到实际和转换后的 IP 地址。
+- en: At this point, you know enough about PF to protect a small network. If you need
+    more, definitely check out *The Book of PF, 2nd edition* (No Starch Press, 2010).
+  id: totrans-379
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，你已经了解了足够多的 PF 知识来保护一个小型网络。如果你需要更多，请务必查看 *PF 书籍，第 2 版*（No Starch Press，2010）。
+- en: Now let’s look at some of the more exotic edges of OpenBSD.
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们看看 OpenBSD 中一些更奇特的功能。
+- en: '* * *'
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '* * *'
+- en: ^([[48](#id330960)]) Can Lucas configure a highly available firewall cluster
+    in a day? Yep. Can he search and replace IP addresses in a text file without screwing
+    everything up? Nope.
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([[48](#id330960)]) 洛卡斯能在一天内配置一个高可用防火墙集群吗？是的。他能在不搞砸一切的情况下在文本文件中搜索和替换IP地址吗？不行。
