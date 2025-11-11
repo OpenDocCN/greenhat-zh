@@ -1,31 +1,42 @@
 - en: 'Chapter 12. HVM: BEYOND PARAVIRTUALIZATION'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第12章。HVM：超越Para虚拟化
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
 - en: 'Throughout this book, we''ve described the standard Xen virtualization technique,
     *paravirtualization*. Paravirtualization is a wonderful thing—as we''ve already
     outlined, it allows excellent performance and strong isolation, two goals that
     are difficult to achieve simultaneously. (See [Chapter 1](ch01.html "Chapter 1. XEN:
     A HIGH-LEVEL OVERVIEW") for more on this topic.)'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在整本书中，我们描述了标准的Xen虚拟化技术，*Para虚拟化*。Para虚拟化是一件好事——正如我们之前概述的，它允许卓越的性能和强大的隔离，这两个目标很难同时实现。（有关更多关于这个主题的内容，请参阅[第1章](ch01.html
+    "第1章。XEN：高级概述")。）
 - en: However, paravirtualization requires a modified operating system. Although porting
     an OS to Xen is relatively painless, by the standards of such things, it's not
     a trivial task, and it has the obvious limitation of being impossible with closed
     source operating systems. (While the Xen team did port Windows to Xen during the
     development process, no *released* version of Windows can run under Xen in paravirtualized
     mode.)
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，Para虚拟化需要修改过的操作系统。尽管将操作系统移植到Xen相对容易，但按照这类工作的标准，这并不是一个简单的任务，并且它有一个明显的限制，那就是在封闭源代码的操作系统上无法实现。（虽然Xen团队在开发过程中将Windows移植到了Xen上，但没有任何*发布*版本的Windows可以在Xen上以Para虚拟化模式运行。）
 - en: One way around this is to add extensions to the processor so that it supports
     virtualization in hardware, allowing unmodified operating systems to run on the
     "bare metal," yet in a virtualized environment. Both Intel and AMD have done precisely
     that by extending the x86 architecture.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 一种解决方法是为处理器添加扩展，使其支持硬件虚拟化，从而允许未经修改的操作系统在“裸机”上运行，但仍然是在虚拟化环境中。英特尔和AMD都通过扩展x86架构实现了这一点。
 - en: Intel uses the term *VT-x* to refer to the virtualization extensions for x86.^([[73](#ftn.CHP-12-FNOTE-1)])
     (*VT-i* is Itanium's hardware virtualization. For our purposes, it's basically
     identical to VT-x. We will not discuss VT-i separately.^([[74](#ftn.CHP-12-FNOTE-2)]))
@@ -33,26 +44,35 @@
     Most of the Xen-related documentation that you might find refers to the extensions
     by their internal code name, *Pacifica*, but you'll also see the AMD marketing
     term *SVM*, for *secure virtual machine*.
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 英特尔使用*VT-x*这个术语来指代x86的虚拟化扩展。[^([73](#ftn.CHP-12-FNOTE-1))] (*VT-i*是安腾的硬件虚拟化。就我们的目的而言，它与VT-x基本相同。我们不会单独讨论VT-i。[^([74](#ftn.CHP-12-FNOTE-2))])
+    AMD同样有一套虚拟化扩展。[^([75](#ftn.CHP-12-FNOTE-3))] 你可能找到的大部分与Xen相关的文档都提到了这些扩展的内部代码名称*Pacifica*，但你也会看到AMD的市场术语*SVM*，代表*安全虚拟机*。
 - en: Although VT-x and Pacifica are implemented slightly differently, we can gloss
     over the low-level implementation details and focus on capabilities. Both of these
     are supported by Xen. Both will allow you to run an unmodified operating system
     as a domU. Both of these will suffer a significant performance penalty on I/O.
     Although there are differences between the two, the differences are hidden behind
     an abstraction layer.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然VT-x和Pacifica的实现略有不同，但我们可以忽略低级实现细节，专注于功能。这两个都由Xen支持。这两个都允许你以domU的形式运行未经修改的操作系统。这两个在I/O上都会遭受重大的性能损失。尽管两者之间有差异，但这些差异被抽象层所隐藏。
 - en: Properly speaking, it's this abstraction layer that we refer to as HVM (hardware
     virtual machine)—a cross-platform way of hiding tedious implementation details
     from the system administrator. So, in this chapter, we'll focus on the HVM interface
     and how to use it rather than on the specifics of either Intel's or AMD's technologies.
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 正确地说，我们所说的这个抽象层就是HVM（硬件虚拟机）——一种跨平台的方式，可以隐藏繁琐的实现细节给系统管理员。因此，在本章中，我们将重点关注HVM接口及其使用方法，而不是英特尔或AMD技术的具体细节。
 - en: Principles of HVM
+  id: totrans-8
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: HVM原理
 - en: 'If you think back to the "concentric ring" security model that we introduced
     in [Chapter 1](ch01.html "Chapter 1. XEN: A HIGH-LEVEL OVERVIEW"), you can characterize
     the HVM extensions as adding a *ring –1* inside (that is, with superior privileges
@@ -63,8 +83,10 @@
     call actually goes to ring –1 rather than the actual hardware, where the hypervisor
     will intercept it, pause the virtual machine, perform the call, and then resume
     the domU when the call is done.'
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你回顾一下我们在[第1章](ch01.html "第1章。XEN：高级概述")中介绍的“同心环”安全模型，你可以将HVM扩展描述为在环0内部添加了一个*环-1*（即，具有比环0更高的权限）。新的处理器操作码，对虚拟机不可见，用于在超级特权模式和正常模式之间切换。未经修改的操作系统在环0中运行，并按常规操作，不知道它和硬件之间还有另一层。当它执行特权系统调用时，调用实际上会转到环-1而不是实际硬件，此时虚拟机管理程序会拦截它，暂停虚拟机，执行调用，并在调用完成后恢复domU。
 - en: Xen also has to handle memory a bit differently to accommodate unmodified guests.
     Because these unmodified guests aren't aware of Xen's memory structure, the hypervisor
     needs to use shadow page tables that present the illusion of contiguous physical
@@ -79,31 +101,42 @@
     to the page tables are intercepted and redirected to the shadow. While the guest
     runs, it reads its shadow page tables directly, while the hardware uses the pretranslated
     version supplied to it by the hypervisor.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen还必须以不同的方式处理内存，以适应未经修改的虚拟机。因为这些未经修改的虚拟机不了解Xen的内存结构，虚拟机管理程序需要使用影子页面表，这些页面表呈现从地址0开始的连续物理内存的假象，而不是Xen感知操作系统支持的离散物理页面表。这些影子是硬件使用的页面表的内存副本，如图[图12-1](ch12.html#all_guest_page_table_writes_are_intercep
+    "图12-1。所有虚拟机页面表写入都被虚拟机管理程序拦截并转到影子页面表。当执行上下文切换到虚拟机时，虚拟机管理程序将影子页面表中找到的伪物理地址转换为机器物理地址，并更新硬件以使用转换后的页面表，然后虚拟机直接访问这些页面表。")所示。尝试读取和写入页面表的尝试会被拦截并重定向到影子。在虚拟机运行期间，它直接读取其影子页面表，而硬件使用虚拟机管理程序提供的预先转换的版本。
 - en: '![All guest page table writes are intercepted by the hypervisor and go to the
     shadow page tables. When the execution context switches to the guest, the hypervisor
     translates pseudophysical addresses found in the shadow page tables to machine
     physical addresses and updates the hardware to use the translated page tables,
     which the guest then accesses directly.](httpatomoreillycomsourcenostarchimages333241.png.jpg)'
+  id: totrans-11
   prefs: []
   type: TYPE_IMG
+  zh: '![所有虚拟机页面表写入都被虚拟机管理程序拦截并转到影子页面表。当执行上下文切换到虚拟机时，虚拟机管理程序将影子页面表中找到的伪物理地址转换为机器物理地址，并更新硬件以使用转换后的页面表，然后虚拟机直接访问这些页面表。](httpatomoreillycomsourcenostarchimages333241.png.jpg)'
 - en: Figure 12-1. All guest page table writes are intercepted by the hypervisor and
     go to the shadow page tables. When the execution context switches to the guest,
     the hypervisor translates pseudophysical addresses found in the shadow page tables
     to machine physical addresses and updates the hardware to use the translated page
     tables, which the guest then accesses directly.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 图12-1。所有虚拟机页面表写入都被虚拟机管理程序拦截并转到影子页面表。当执行上下文切换到虚拟机时，虚拟机管理程序将影子页面表中找到的伪物理地址转换为机器物理地址，并更新硬件以使用转换后的页面表，然后虚拟机直接访问这些页面表。
 - en: Device Access with HVM
+  id: totrans-13
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: HVM设备访问
 - en: Of course, if you've been paying attention thus far, you're probably asking
     how the HVM domain can access devices if it hasn't been modified to use the Xen
     virtual block and network devices. Excellent question!
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，如果你到目前为止一直很关注，你可能想知道HVM域如果没有修改为使用Xen虚拟块和网络设备，如何访问设备。这是一个很好的问题！
 - en: 'The answer is twofold: First, during boot, Xen uses an emulated BIOS to provide
     simulations of standard PC devices, including disk, network, and framebuffer.
     This BIOS comes from the open source Bochs emulator at [http://bochs.sourceforge.net/](http://bochs.sourceforge.net/).
@@ -111,56 +144,80 @@
     or Ethernet devices using native drivers, those devices are emulated using code
     originally found in the QEMU emulator. A userspace program, `qemu-dm`, handles
     translations between the native and emulated models of device access.'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 答案有两个：首先，在引导过程中，Xen使用模拟的BIOS来提供标准PC设备的模拟，包括磁盘、网络和帧缓冲区。这个BIOS来自开源的Bochs模拟器[http://bochs.sourceforge.net/](http://bochs.sourceforge.net/)。其次，在系统引导后，当domU期望使用原生驱动程序访问SCSI、IDE或以太网设备时，这些设备使用QEMU模拟器中找到的代码进行模拟。一个用户空间程序`qemu-dm`处理原生和模拟设备访问模型之间的转换。
 - en: HVM Device Performance
+  id: totrans-16
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: HVM设备性能
 - en: This sort of translation, where we have to mediate hardware access by breaking
     out of virtualized mode using a software device emulation and then reentering
     the virtualized OS, is one of the trade-offs involved in running unmodified operating
     systems.^([[76](#ftn.CHP-12-FNOTE-4)]) Rather than simply querying the host machine
     for information using a lightweight page-flipping system, HVM domains access devices
     precisely as if they were physical hardware. This is quite slow.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种类型的转换，其中我们必须通过使用软件设备模拟退出虚拟化模式并重新进入虚拟化操作系统来调解硬件访问，是运行未经修改的操作系统所涉及到的权衡之一。[^[[76](#ftn.CHP-12-FNOTE-4)])
+    而不是简单地使用轻量级页面翻转系统查询宿主机的信息，HVM域访问设备就像它们是物理硬件一样精确。这相当慢。
 - en: Both AMD and Intel have done work aimed at letting guests use hardware directly,
     using an IOMMU (I/O Memory Management Unit) to translate domain-virtual addresses
     into the real PCI address space, just as the processor's MMU handles the translations
     for virtual memory.^([[77](#ftn.CHP-12-FNOTE-5)]) However, this isn't likely to
     replace the emulated devices any time soon.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: AMD和Intel都进行了工作，旨在让虚拟机直接使用硬件，使用IOMMU（I/O内存管理单元）将域虚拟地址转换为真实的PCI地址空间，就像处理器的MMU处理虚拟内存的转换一样。[^[[77](#ftn.CHP-12-FNOTE-5)])
+    然而，这不太可能在不久的将来取代模拟设备。
 - en: HVM and SMP
+  id: totrans-19
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: HVM和SMP
 - en: SMP (symmetric multiprocessing) works with HVM just as with paravirtualized
     domains. Each virtual processor has its own control structure, which can in turn
     be serviced by any of the machine's physical processors. In this case, by *physical
     processors* we mean logical processors as seen by the machine, including the virtual
     processors presented by SMT (simultaneous multithreading or hyperthreading).
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: SMP（对称多处理）与HVM一起工作，就像与虚拟化域一样。每个虚拟处理器都有自己的控制结构，这反过来又可以被机器的任何物理处理器服务。在这种情况下，我们所说的*物理处理器*是指机器看到的逻辑处理器，包括由SMT（同时多线程或超线程）提供的虚拟处理器。
 - en: 'To turn on SMP, include the following in the config file:'
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 要启用SMP，请在配置文件中包含以下内容：
 - en: '[PRE0]'
+  id: totrans-22
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: (Where *n* is an integer greater than one. A single CPU does not imply SMP.
     Quite the opposite, in fact.)
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: （其中*n*是一个大于1的整数。单个CPU并不意味着SMP。事实上，恰恰相反。）
 - en: Note
+  id: totrans-24
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Although you can specify more CPUs than actually exist in the box, performance
     will… suffer. We strongly advise against it*.'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: '*尽管您可以指定比实际存在的CPU更多的CPU，但性能将会…受到影响。我们强烈建议不要这样做*。'
 - en: Just as in paravirtualized domains, SMP works by providing a VCPU abstraction
     for each virtual CPU in the domain, as shown in [Figure 12-2](ch12.html#as_each_domains_time_allocation_comes_up
     "Figure 12-2. As each domain's time allocation comes up, its VCPU's processor
@@ -168,103 +225,148 @@
     VCPU control structure are handled by the hypervisor."). Each VCPU can run on
     any physical CPU in the machine. Xen's CPU-pinning mechanisms also work in the
     usual fashion.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 就像在虚拟化域中一样，SMP通过为域中的每个虚拟CPU提供VCPU抽象来实现，如图[图12-2](ch12.html#as_each_domains_time_allocation_comes_up
+    "图12-2. 当每个域的时间分配到来时，其VCPU的处理器状态被加载到PCPU以进行进一步执行。对VCPU控制结构的特权更新由虚拟机管理程序处理。")所示。每个VCPU都可以在机器的任何物理CPU上运行。Xen的CPU固定机制也按常规方式工作。
 - en: 'Unfortunately, SMP support isn''t perfect. In particular, time is a difficult
     problem with HVM and SMP. Clock synchronization seems to be entirely unhandled,
     leading to constant complaints from the kernel with one of our test systems (CentOS
     5, Xen version 3.0.3-rc5.el5, kernel 2.6.18-8.el5xen). Here''s an example:'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 很遗憾，SMP支持并不完美。特别是，在HVM和SMP中，时间同步似乎完全未被处理，导致我们的测试系统（CentOS 5，Xen版本3.0.3-rc5.el5，内核2.6.18-8.el5xen）的内核不断抱怨。以下是一个例子：
 - en: '[PRE1]'
+  id: totrans-28
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: '![As each domain''s time allocation comes up, its VCPU''s processor state is
     loaded onto the PCPU for further execution. Privileged updates to the VCPU control
     structure are handled by the hypervisor.](httpatomoreillycomsourcenostarchimages333243.png.jpg)'
+  id: totrans-29
   prefs: []
   type: TYPE_IMG
+  zh: '![随着每个域的时间分配到来，其VCPU的处理器状态被加载到PCPU上以进行进一步执行。对VCPU控制结构的特权更新由虚拟机管理程序处理。](httpatomoreillycomsourcenostarchimages333243.png.jpg)'
 - en: Figure 12-2. As each domain's time allocation comes up, its VCPU's processor
     state is loaded onto the PCPU for further execution. Privileged updates to the
     VCPU control structure are handled by the hypervisor.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 图12-2。随着每个域的时间分配到来，其VCPU的处理器状态被加载到PCPU上以进行进一步执行。对VCPU控制结构的特权更新由虚拟机管理程序处理。
 - en: One other symptom of the problem is in bogomips values reported by */proc/cpuinfo*—on
     a 2.4GHz core 2 duo system, we saw values ranging from 13.44 to 73400.32\. In
     the dom0, each core showed 5996.61—an expected value.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 该问题的另一个症状是*/proc/cpuinfo*报告的bogomips值——在一个2.4GHz核心2 Duo系统上，我们看到了从13.44到73400.32的范围。在dom0中，每个核心显示5996.61，这是一个预期的值。
 - en: Don't worry, this might be unsettling, but it's also harmless.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 别担心，这可能会让人不安，但它也是无害的。
 - en: HVM and Migration
+  id: totrans-33
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: HVM和迁移
 - en: HVM migration works as of Xen 3.1\. The migration support in HVM domains is
     based on that for paravirtualized domains but is extended to account for the fact
     that it takes place without the connivance of the guest OS. Instead, Xen itself
     pauses the VCPUs, while `xc_save` handles memory and CPU context. `qemu-dm` also
     takes a more active role, saving the state of emulated devices.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 从Xen 3.1开始，HVM迁移功能可用。HVM域中的迁移支持基于半虚拟化域的支持，但扩展以考虑它是在没有客户操作系统默许的情况下进行的。相反，Xen本身暂停VCPU，而`xc_save`处理内存和CPU上下文。`qemu-dm`也扮演了更积极的角色，保存模拟设备的状态。
 - en: The point of all this is that you can migrate HVM domains just like paravirtualized
     domains, using the same commands, with the same caveats. (In particular, remember
     that attempts to migrate an HVM domain to a physical machine that doesn't support
     HVM will fail ungracefully.)
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有这些的目的是，你可以像处理半虚拟化域一样迁移HVM域，使用相同的命令，但也要注意相同的风险。（特别是，记住尝试将HVM域迁移到不支持HVM的物理机器将不会优雅地失败。）
 - en: '* * *'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[73](#CHP-12-FNOTE-1)]) Intel has a nice introduction to their virtualization
     extensions at [http://www.intel.com/technology/itj/2006/v10i3/3-xen/1-abstract.htm](http://www.intel.com/technology/itj/2006/v10i3/3-xen/1-abstract.htm)
     and a promotional overview page at [http://www.intel.com/technology/platform-technology/virtualization/index.htm](http://www.intel.com/technology/platform-technology/virtualization/index.htm).
     They're worth reading.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[73](#CHP-12-FNOTE-1)]) 英特尔在[http://www.intel.com/technology/itj/2006/v10i3/3-xen/1-abstract.htm](http://www.intel.com/technology/itj/2006/v10i3/3-xen/1-abstract.htm)提供了一个关于他们虚拟化扩展的简介，并在[http://www.intel.com/technology/platform-technology/virtualization/index.htm](http://www.intel.com/technology/platform-technology/virtualization/index.htm)有一个促销概述页面。它们值得一读。
 - en: ^([[74](#CHP-12-FNOTE-2)]) Also, Gentle Reader, your humble authors lack a recent
     Itanium to play with. Please forward offers of hardware to [lsc@prgmr.com](mailto:lsc@prgmr.com).
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[74](#CHP-12-FNOTE-2)]) 此外，亲爱的读者，我们谦卑的作者们缺少一台最近的Itanium来玩耍。请将硬件提供的提议转发到[lsc@prgmr.com](mailto:lsc@prgmr.com)。
 - en: ^([[75](#CHP-12-FNOTE-3)]) AMD has a light introduction to their extensions
     at [http://developer.amd.com/TechnicalArticles/Articles/Pages/630200615.aspx](http://developer.amd.com/TechnicalArticles/Articles/Pages/630200615.aspx).
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[75](#CHP-12-FNOTE-3)]) AMD在[http://developer.amd.com/TechnicalArticles/Articles/Pages/630200615.aspx](http://developer.amd.com/TechnicalArticles/Articles/Pages/630200615.aspx)提供了他们扩展的简要介绍。
 - en: ^([[76](#CHP-12-FNOTE-4)]) As Intel points out, the actual implementation of
     HVM drivers is much better than this naïve model. For example, device access is
     asynchronous, meaning that the VM can do other things while waiting for I/O to
     complete.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[76](#CHP-12-FNOTE-4)]) 正如英特尔所指出的，HVM驱动程序的实现实际上比这个天真模型要好得多。例如，设备访问是异步的，这意味着虚拟机可以在等待I/O完成时做其他事情。
 - en: ^([[77](#CHP-12-FNOTE-5)]) There's an interesting paper on the topic at [http://developer.amd.com/assets/IOMMU-ben-yehuda.pdf](http://developer.amd.com/assets/IOMMU-ben-yehuda.pdf).
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[77](#CHP-12-FNOTE-5)]) 关于这个主题有一篇有趣的论文，可以在[http://developer.amd.com/assets/IOMMU-ben-yehuda.pdf](http://developer.amd.com/assets/IOMMU-ben-yehuda.pdf)找到。
 - en: Xen HVM vs. KVM
+  id: totrans-42
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Xen HVM 与 KVM
 - en: Of course, if your machine supports virtualization in hardware, you might be
     inclined to wonder what the point of Xen is, rather than, say, KVM or lguest.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，如果你的机器支持硬件虚拟化，你可能会想知道 Xen 的意义何在，而不是 KVM 或 lguest。
 - en: There are some excellent reasons to consider the idea. KVM and lguest are both
     easier to install and less invasive than Xen. They support strong virtualization
     with good performance.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 考虑这个想法有一些很好的理由。KVM 和 lguest 都比 Xen 更容易安装，侵入性也更小。它们支持强大的虚拟化，性能良好。
 - en: However, KVM is, at the moment, less mature than Xen. It's not (yet) as fast,
     even with the kernel accelerator. Xen also supports paravirtualization, whereas
     KVM does not. Xen PV offers a handy way of migrating domUs and a good way of multiplexing
     virtual machines—that is, expanding to a two-level VM hierarchy. But honestly,
     we haven't got much experience with KVM, and we've got quite a lot with Xen.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，目前 KVM 比 Xen 不成熟。即使有内核加速器，它也不够快。Xen 还支持全虚拟化，而 KVM 不支持。Xen PV 提供了一种方便的迁移 domUs
+    的方法，以及一种良好的虚拟机多路复用方法——即扩展到两级虚拟机层次结构。但说实话，我们没有多少 KVM 经验，而 Xen 我们有相当多的经验。
 - en: Similarly, lguest is smaller, lighter, and easier to install than Xen, but it
     doesn't support features like SMP or PAE (though 64-bit kernels are in development).
     Lguest also doesn't yet support suspend, resume, or migration.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 类似地，lguest 比 Xen 更小、更轻，安装也更简单，但它不支持像 SMP 或 PAE 这样的功能（尽管 64 位内核正在开发中）。Lguest
+    还不支持挂起、恢复或迁移。
 - en: Nonetheless, right now it's difficult to say which is better—all of these technologies
     are out there being actively developed. If you are truly silly, you might even
     decide to use some combination, running Xen hypervisors under KVM, with paravirtualized
@@ -272,101 +374,150 @@
     future deployments, perhaps when HVM-capable hardware becomes more common. These
     technologies are interesting and worth watching, but we'll stick to our usual
     "wait and see" policy.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管如此，目前很难说哪个更好——所有这些技术都在积极开发中。如果你真的很傻，你甚至可能会决定使用一些组合，在 KVM 下运行 Xen 虚拟机管理程序，并在其下运行全虚拟化域。或者你现在可以使用
+    Xen，但为未来的部署保留选择，比如当具有 HVM 功能的硬件变得更加普遍时。这些技术很有趣，值得关注，但我们将坚持我们通常的“观望”政策。
 - en: 'Indeed, Red Hat has opted to do exactly that, focusing its development efforts
     on a platform-independent interface layer, libvirt, allowing (we hope) for easy
     migration between virtualization options. See [Chapter 6](ch06.html "Chapter 6. DOMU
     MANAGEMENT: TOOLS AND FRONTENDS") for more on libvirt and its associated suite
     of management tools.'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 事实上，Red Hat 已经选择了这样做，将开发努力集中在平台无关的接口层 libvirt 上，希望（我们希望）能够轻松地在虚拟化选项之间迁移。有关 libvirt
+    及其相关管理工具套件的更多信息，请参阅[第 6 章](ch06.html "第 6 章。DOMU 管理：工具和前端")。
 - en: Working with HVM
+  id: totrans-49
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 与 HVM 一起工作
 - en: Regardless of what sort of hardware virtualization you want to use, the first
     thing to do is check whether your machine supports HVM. To find out if you've
     got a supported processor, check */proc/cpuinfo*. Processors that support VT-x
     will report `vmx` in the flags field, while Pacifica-enabled processors report
     `svm`.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 无论你想使用哪种硬件虚拟化，首先要做的是检查你的机器是否支持 HVM。要找出你是否有一个支持的处理器，检查 */proc/cpuinfo*。支持 VT-x
+    的处理器将在标志字段中报告 `vmx`，而启用 Pacifica 的处理器将报告 `svm`。
 - en: Even if you have a supported processor, many manufacturers have HVM turned off
     in the BIOS by default. Check `xm dmesg` to ensure that the hypervisor has found
     and enabled HVM support correctly—it should report "(XEN) VMXON is done" for each
     CPU in the machine. If it doesn't, poke about in the BIOS for an option to turn
     on hardware virtualization. On our boards, it's under *chipset* *features* and
     called *VT* *Technology*. Your machine may vary.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 即使你有支持的处理器，许多制造商在 BIOS 中默认关闭了 HVM。检查 `xm dmesg` 以确保虚拟机管理程序已正确找到并启用了 HVM 支持——它应该为机器中的每个
+    CPU 报告 "(XEN) VMXON is done"。如果没有，请在 BIOS 中寻找一个选项来打开硬件虚拟化。在我们的板上，它位于 *芯片组* *特性*
+    下，称为 *VT* *技术*。你的机器可能不同。
 - en: 'The hypervisor will also report capabilities under */sys*:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 虚拟机管理程序还会在 */sys* 下报告功能：
 - en: '[PRE2]'
+  id: totrans-53
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: In this case, the two "hvm" entries show that HVM is supported in both PAE and
     non-PAE modes.
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这种情况下，两个 "hvm" 条目表明 HVM 在 PAE 和非 PAE 模式下都受支持。
 - en: Note
+  id: totrans-55
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*One of the minor advantages of HVM is that it sidesteps the PAE-matching problem
     that we''ve been prone to harp on. You can run any mix of PAE and non-PAE kernels
     and hypervisors in HVM mode, although paravirtualized domains will still need
     to match PAE-ness, even on HVM-capable machines*.'
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: '*HVM 的小优点之一是它绕过了我们一直强调的 PAE 匹配问题。您可以在 HVM 模式下运行任何混合的 PAE 和非 PAE 内核和虚拟机管理程序，尽管虚拟化域仍然需要在
+    HVM 功能机上匹配 PAE*。'
 - en: Creating an HVM Domain
+  id: totrans-57
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 创建 HVM 域
 - en: When you've got the hypervisor and domain 0 running on an HVM-capable machine,
     creating an HVM domain is much like creating any Xen guest.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 当您在具有 HVM 功能的机器上运行虚拟机管理程序和域 0 时，创建 HVM 域与创建任何 Xen 客户端类似。
 - en: Here's a sample HVM config file. (It's got a snippet of Python at the beginning
     to set the appropriate library directory, borrowed from the sample configs distributed
     with Xen.)
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是一个 HVM 配置文件的示例。（它开头有一个 Python 片段，用于设置适当的库目录，这是从与 Xen 一起分发的示例配置中借用的。）
 - en: '[PRE3]'
+  id: totrans-60
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'Most of this is pretty standard stuff. It starts with a snippet of Python to
     choose the correct version of `qemu-dm`, then it launches into a standard domU
     config. The config file changes for HVM guests are approximately as follows:'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 其中大部分内容相当标准。它从一个 Python 片段开始，选择正确的 `qemu-dm` 版本，然后启动一个标准的 domU 配置。HVM 客户端的配置文件更改大约如下：
 - en: '[PRE4]'
+  id: totrans-62
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Note
+  id: totrans-63
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*There are other directives you can put in, but these are the ones that you
     can''t leave out*.'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: '*您还可以放入其他指令，但这些是您不能省略的指令*。'
 - en: Breaking this down, the domain builder changes from the default to HVM, while
     the devices change from the standard Xen paravirtualized devices to the QEMU emulated
     devices. Finally, the `kernel` line specifies an HVM loader that loads a kernel
     from within the HVM domain's filesystem, rather than the Linux kernel that would
     be specified in a PV configuration.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 分解来看，域构建器从默认模式切换到 HVM，同时设备从标准的 Xen 虚拟化设备切换到 QEMU 模拟设备。最后，`kernel` 行指定了一个 HVM
+    加载器，它从 HVM 域的文件系统中加载内核，而不是在 PV 配置中指定的 Linux 内核。
 - en: A DIGRESSION ON THE DOMAIN BUILDER
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于域构建器的插曲
 - en: Up until now, we've avoided discussing the domain builder, being content merely
     to gesture in its direction and note that it builds domains. For most purposes,
     it's enough to think of it as analogous to the standard bootloader.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，我们避免讨论域构建器，只是简单地指向它并指出它构建域。对于大多数目的来说，将其视为类似于标准引导加载器就足够了。
 - en: However, it has a much more difficult and involved task than a normal bootloader.
     When a Xen domU starts, it comes up in a radically different environment from
     the traditional PC "real mode." Because an operating system's already loaded,
@@ -374,290 +525,436 @@
     domain builder is to bring the new domain up to speed—to generate the mapping
     between domain-virtual and physical memory, load the VM kernel at the appropriate
     address, and install interrupt handlers.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，它比正常的引导加载器具有更困难且复杂得多的任务。当 Xen domU 启动时，它在一个与传统 PC “真实模式”截然不同的环境中启动。因为操作系统已经加载，处理器已经在启用分页的保护模式下。域构建器的任务是使新域达到速度——生成域虚拟内存与物理内存之间的映射，在适当的地址加载
+    VM 内核，并安装中断处理程序。
 - en: The default builder is linux, which builds a paravirtualized domain. (Usually
     Linux, but it'll work for most paravirtualized OSs.)
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认构建器是 linux，它构建一个基于虚拟化的域。（通常是 Linux，但它适用于大多数基于虚拟化的操作系统。）
 - en: The situation changes somewhat with HVM because the unmodified operating system
     isn't expecting to take off running on a fully booted machine. To keep the OS
     happy, the domain builder initializes a complete simulation of real mode, inserting
     hooks and installing an emulated BIOS into the appropriate regions of pseudophysical
     memory.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于 HVM 的存在，情况有所变化，因为未经修改的操作系统并不期望在完全启动的机器上运行。为了使操作系统满意，域构建器初始化一个完整的真实模式模拟，在伪物理内存的适当区域插入钩子和安装模拟的
+    BIOS。
 - en: Historically, the domain builder's been implementation-dependent, with a "vmx"
     builder for Intel and a similar "svm" builder for AMD. However, with the advent
     of HVM as an abstraction layer, the administrator can simply specify HVM and let
     Xen figure out the details.
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 从历史上看，域构建器的实现依赖于具体实现，对于英特尔有“vmx”构建器，对于 AMD 有类似的“svm”构建器。然而，随着 HVM 作为抽象层的出现，管理员可以简单地指定
+    HVM，让 Xen 解决细节。
 - en: We're already familiar with the `kernel` line, of course. The `device_model`
     line, however, is new. This option defines a userspace program that handles mediation
     between real and virtual devices. As far as we know, `qemu-dm` is the only option,
     but there's no reason that other device emulators couldn't be written.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，我们已经熟悉了`kernel`行。然而，`device_model`行是新的。此选项定义了一个用户空间程序，用于处理真实设备和虚拟设备之间的中介。据我们所知，`qemu-dm`是唯一选项，但并没有理由其他设备模拟器不能被编写。
 - en: There are some other directives that are only used by HVM domains.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 有些其他指令仅用于HVM域。
 - en: '[PRE5]'
+  id: totrans-74
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: The `shadow_memory` directive specifies the amount of memory to use for shadow
     page tables. (Shadow page tables, of course, are the aforementioned copies of
     the tables that map process-virtual memory to physical memory.) Xen advises allocating
     at least 2KB per MB of domain memory, and "a few" MB per virtual CPU. Note that
     this memory is *in addition* to the domU's allocation specified in the memory
     line.
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: '`shadow_memory`指令指定用于阴影页表要使用的内存量。（阴影页表，当然，是上述将进程虚拟内存映射到物理内存的表的副本。）Xen建议为每个MB的域内存分配至少2KB，并且每个虚拟CPU“几个”MB。请注意，此内存是*附加于*在内存行中指定的domU分配的。'
 - en: Finally we have the `boot` directive. The entire concept of boot order, of course,
     doesn't apply to standard Xen paravirtualized domains because the domain config
     file specifies either a kernel or a bootloader. However, because HVM emulates
     legacy BIOS functions, including the traditional bootstrap, Xen provides a mechanism
     to configure the boot order.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，我们有`boot`指令。当然，引导顺序的整个概念不适用于标准的Xen para-virtualized域，因为域配置文件指定了内核或引导加载程序。然而，由于HVM模拟了传统的引导功能，包括传统的引导程序，Xen提供了一个配置引导顺序的机制。
 - en: In that vein, it's worth noting that one advantage of HVM is that it can effectively
     duplicate the QEMU install procedure we've already described, with Xen instead
     of QEMU. To recap, this allows you to install in a strongly partitioned virtual
     machine, using the distro's own install tools, and end with a ready-to-run VM.
     We'll leave the details as an exercise to the reader, of course (we wouldn't want
     to take all the fun out of it).
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个方面，值得注意的是，HVM的一个优点是它可以有效地复制我们已描述的QEMU安装程序，用Xen代替QEMU。为了总结，这允许你在强分区虚拟机中安装，使用发行版的安装工具，并最终得到一个可运行的VM。当然，我们将细节留给读者作为练习（我们不想把所有的乐趣都夺走）。
 - en: 'Now that you''ve got the config file written, create the domain as usual:'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你已经写好了配置文件，按照常规创建域：
 - en: '[PRE6]'
+  id: totrans-79
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: Interacting with an HVM Domain
+  id: totrans-80
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 与HVM域交互
 - en: One of the first changes you might notice is that connecting to the console
     using `xm -c` doesn't work. The Xen console requires some infrastructure support
     to get working, which a PV-oblivious standard distro naturally doesn't have.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能会注意到的第一个变化是，使用`xm -c`连接到控制台不起作用。Xen控制台需要一些基础设施支持才能正常工作，而一个对PV无知的标准发行版自然没有这些支持。
 - en: So, while the machine is booting, let's chat for a bit about how you actually
     log in to your shiny new domain.
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，当机器正在启动时，让我们聊一聊你如何实际登录到你的闪亮新域。
 - en: As you're no doubt sick of us mentioning, HVM is founded on an idea of *total
     hardware simulation*. This means that when the machine boots, it loads an emulated
     VGA BIOS, which gets drawn into a graphics window.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所知，我们可能已经厌倦了提到，HVM基于一个*完全硬件模拟*的理念。这意味着当机器启动时，它会加载一个模拟的VGA BIOS，并将其绘制到图形窗口中。
 - en: 'Xen knows about two targets for its emulated VGA graphics: VNC and SDL. VNC
     is the familiar and well-beloved network windowing system from AT&T, while *SDL,
     Simple DirectMedia Layer*, is better known as a lightweight hardware-accelerated
     graphics option.'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen知道其模拟VGA图形的两个目标：VNC和SDL。VNC是来自AT&T的熟悉且深受喜爱的网络窗口系统，而*SDL，简单直接媒体层*更知名的是轻量级硬件加速图形选项。
 - en: We opted to stick with the VNC console for most of our Linux domUs to reap the
     benefits of network-centric computing.^([[78](#ftn.CHP-12-FNOTE-6)])
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们选择继续使用VNC控制台来为大多数Linux domU带来以网络为中心计算的好处。[^[[78](#ftn.CHP-12-FNOTE-6])]
 - en: 'Now that the domain is created, use VNC to access its console:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在域已经创建，使用VNC来访问其控制台：
 - en: '[PRE7]'
+  id: totrans-87
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: '(Or use whatever the IP address of the Xen machine is.) If you have more than
     one domU using the VNC console, append a display number—for example, to access
     the console of the second domU:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: (或者使用Xen机器的IP地址。)如果你有多个使用VNC控制台的domU，请附加一个显示编号——例如，要访问第二个domU的控制台：
 - en: '[PRE8]'
+  id: totrans-89
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: If the `vncunused=` option in the config file is set, the domain will take the
     first available display number. If not, it'll take the display number that corresponds
     to its domain number. We tend to leave it set, but unset is fine too.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果配置文件中的 `vncunused=` 选项被设置，域将采用第一个可用的显示编号。如果没有设置，它将采用与其域编号相对应的显示编号。我们倾向于将其设置为默认值，但未设置也是可以的。
 - en: Somewhat to our surprise, X11 worked quite well out of the box with the `vesa`
     driver, taking over the VNC framebuffer console and providing a usable display
     without further configuration.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 令我们有些惊讶的是，X11 使用 `vesa` 驱动程序直接工作得相当好，接管了 VNC 图形缓冲区控制台，并提供了无需进一步配置即可使用的显示。
 - en: Getting the Standard Xen Console to Work
+  id: totrans-92
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 让标准 Xen 控制台工作
 - en: 'Now, logging in via the graphical console is an irritating bit of overhead
     and, we would argue, overkill for a server. Fortunately, you can circumvent this
     by using the standard Xen emulated serial console. First, make sure that your
     domU config file (e.g., */etc/xen/leontes*) contains the following:'
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，通过图形控制台登录是一个令人烦恼的额外开销，我们可能会认为这对于服务器来说有点过度。幸运的是，你可以通过使用标准的 Xen 模拟串行控制台来规避这个问题。首先，确保你的
+    domU 配置文件（例如，*/etc/xen/leontes*）包含以下内容：
 - en: '[PRE9]'
+  id: totrans-94
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: This directive tells QEMU (and therefore Xen) to pass serial output to the Xen
     console.
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个指令告诉 QEMU（因此也告诉 Xen）将串行输出传递到 Xen 控制台。
 - en: 'Now the bootloader needs to be told to pass its messages to the `serial` line.
     Add the following to */boot/grub.conf* in the domU:'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在引导加载程序需要被告知将它的消息传递到 `serial` 线。在 domU 的 */boot/grub.conf* 中添加以下内容：
 - en: '[PRE10]'
+  id: totrans-97
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: These two lines give GRUB some settings for the serial port and tell it to actually
     use the serial port as its console.
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 这两条线为 GRUB 提供了串行端口的设置，并告诉它实际上使用串行端口作为其控制台。
 - en: 'Next, set up the kernel to output its boot information via serial:'
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，设置内核通过串行输出其引导信息：
 - en: '[PRE11]'
+  id: totrans-100
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: (If you're loading the Xen hypervisor in HVM mode—which is a perfectly reasonable
     thing to do—your *menu.lst* file will look a bit different, of course.)
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: （如果你在 HVM 模式下加载 Xen 虚拟机管理程序——这是一件完全合理的事情——你的 *menu.lst* 文件当然会有些不同。）
 - en: 'Finally, edit `inittab` to start a `getty` on the emulated `serial` line by
     adding a line like this:'
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，编辑 `inittab` 以通过添加类似以下内容的行在模拟的 `serial` 线上启动 `getty`：
 - en: '[PRE12]'
+  id: totrans-103
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: Boot the machine, and you should be able to see messages and log in via both
     `xm console` and VNC.
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 启动机器，你应该能够通过 `xm console` 和 VNC 看到消息并登录。
 - en: '* * *'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[78](#CHP-12-FNOTE-6)]) By which I mean, we didn't want to have to stand
     up and walk over to a test machine to access the console.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[78](#CHP-12-FNOTE-6)]) 我的意思是，我们不想站起来走到测试机器那里去访问控制台。
 - en: HVM Devices
+  id: totrans-107
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: HVM 设备
 - en: 'If you poke around in your new HVM domain, you''ll see devices like "QEMU harddisk,"
     or "RealTek Ethernet controller." These take the place of the corresponding Xen
     devices, like `xenblock` or `xennet`. Examine this `dmesg` output, for example:'
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你探索你的新 HVM 域，你会看到像“QEMU 硬盘”或“RealTek 网络控制器”这样的设备。这些取代了相应的 Xen 设备，如 `xenblock`
+    或 `xennet`。例如，检查这个 `dmesg` 输出：
 - en: '[PRE13]'
+  id: totrans-109
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'This shows the QEMU emulated hard drive. Further on, we see:'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 这显示了 QEMU 模拟的硬盘。进一步看，我们可以看到：
 - en: '[PRE14]'
+  id: totrans-111
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: The difference between PV and HVM domains doesn't end in the domU, either. With
     HVM domains, you'll see *tap* devices in the dom0.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: PV 和 HVM 域之间的区别不仅限于 domU。在 HVM 域中，你会在 dom0 中看到 *tap* 设备。
 - en: Think of the tap devices as QEMU analogues to the vifs discussed earlier—bits
     shoved into them come out on the virtual network devices in the domU. You can
     manage them just like vifs—adding them to bridges, configuring them down or up,
     and so on.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 将 tap 设备视为之前讨论过的 vifs 的 QEMU 类似物——推入它们的位会在 domU 的虚拟网络设备上输出。你可以像管理 vifs 一样管理它们——将它们添加到桥接，配置它们为开启或关闭，等等。
 - en: Paravirtualized Drivers
+  id: totrans-114
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 虚拟化驱动程序
 - en: 'The best solution to the problem of slow emulated HVM devices, in the context
     of Xen, is to use paravirtualized drivers that work on the same split-driver model
     as non-HVM domains—backend drivers in domain 0, with a small frontend driver in
     domU that communicates with the backend via event channels, using ring buffers
     and page flipping. (See [Chapter 1](ch01.html "Chapter 1. XEN: A HIGH-LEVEL OVERVIEW")
     for boring details on Xen''s split driver model.)'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Xen 的背景下，解决慢速模拟 HVM 设备问题的最佳方案是使用与非 HVM 域相同的分割驱动模型工作的虚拟化驱动程序——后端驱动程序在域 0 中，而在
+    domU 中有一个小的前端驱动程序，它通过事件通道与后端通信，使用环形缓冲区和页面翻转。（有关 Xen 分割驱动模型的枯燥细节，请参阅[第 1 章](ch01.html
+    "第 1 章。XEN：高级概述"。）
 - en: XenSource includes such drivers for Windows, of course. For users of open source
     Xen, Novell distributes an expensive driver package that performs the same function—paravirtualized
     device support for Windows. GPL drivers also exist for Windows on open source
     Xen (we discuss those in more detail in [Chapter 13](ch13.html "Chapter 13. XEN
     AND WINDOWS")).
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: XenSource 当然包括 Windows 的这些驱动程序。对于开源 Xen 的用户，Novell 分发了一个昂贵的驱动程序包，它执行相同的功能——为
+    Windows 提供虚拟化设备支持。开源 Xen 上也存在 GPL 驱动程序（我们将在 [第 13 章](ch13.html "第 13 章。XEN 和 WINDOWS")
+    中更详细地讨论这些）。
 - en: However, you can also build PV drivers for Linux HVM domains. These drivers
     are included with the Xen source tree in the *unmodified_drivers* directory. Unfortunately,
     the kernel API keeps changing, so the PV drivers might not compile against your
     kernel version (the drivers with Xen 3.1 refused to compile with kernel versions
     2.6.20 and above).
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，您也可以为 Linux HVM 域构建 PV 驱动程序。这些驱动程序包含在 Xen 源树中的 *unmodified_drivers* 目录中。不幸的是，内核
+    API 不断变化，因此 PV 驱动程序可能无法与您的内核版本编译（带有 Xen 3.1 的驱动程序拒绝与 2.6.20 及以上版本的内核编译）。
 - en: Compiling PV Drivers for HVM Linux
+  id: totrans-118
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 编译 HVM Linux 的 PV 驱动程序
 - en: Nonetheless, the best way to figure out if the drivers will work is to try it.
     Here's how we compiled our drivers out of a standard Xen source tree.
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管如此，确定驱动程序是否可行的最佳方式是尝试。以下是我们从标准 Xen 源树编译驱动程序的方法。
 - en: '[PRE15]'
+  id: totrans-120
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: This builds standard Xen devices as modules—install them into your modules tree
     and load them like any other driver, with `insmod` or `modprobe`. You'll wind
     up with four modules, one each for block and network devices, one for xenbus,
     and one for PCI emulation. Load xen-platform-pci first, then xenbus, then block
     and network.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将标准 Xen 设备作为模块构建——将它们安装到您的模块树中，并像任何其他驱动程序一样使用 `insmod` 或 `modprobe` 加载它们。您最终将得到四个模块，每个模块对应于块和网络设备，一个用于
+    xenbus，一个用于 PCI 仿真。首先加载 xen-platform-pci，然后是 xenbus，然后是块和网络。
 - en: '[PRE16]'
+  id: totrans-122
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: Because we were using Slackware as our domU, we then built a minimal kernel—without
     drivers for the emulated IDE or Realtek network card—and built an initrd with
     the Xen devices included.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于我们使用 Slackware 作为我们的 domU，因此我们构建了一个最小内核——没有为模拟 IDE 或 Realtek 网络卡提供驱动程序，并构建了一个包含
+    Xen 设备的 initrd。
 - en: We also needed to modify */etc/fstab* to refer to the Xen backend devices.
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们还需要修改 */etc/fstab* 以引用 Xen 后端设备。
 - en: 'Finally (this is starting to seem like a lot of trouble, isn''t it?) we edited
     the domain''s configuration to specify netfront and blkfront instead of the ioemu
     devices. We did this by changing the device lines:'
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后（这开始看起来像很多麻烦，不是吗？）我们编辑了域的配置，指定了 netfront 和 blkfront 而不是 ioemu 设备。我们通过更改设备行来完成这项工作：
 - en: '[PRE17]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'to:'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 到：
 - en: '[PRE18]'
+  id: totrans-128
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: and removing the `device_model=` line.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 并删除 `device_model=` 行。
 - en: Modify these directions to work with your setup, of course.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，修改这些说明以适应您的设置。
 - en: And, for Our Next Trick…
+  id: totrans-131
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 然后，为了我们的下一个技巧...
 - en: As always, there are some areas of ongoing work. Both Intel and AMD have announced
     successor techniques for dealing with guest page tables by adding a new level
     to the page table structure. AMD terms the concept *nested paging*, while Intel
     calls it *Extended Page Tables*. IOMMU development is another exciting area of
     research.
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 总是有些工作正在进行中。英特尔和 AMD 都已宣布了处理虚拟机页表的新技术，即在页表结构中添加一个新级别。AMD 将此概念称为 *嵌套分页*，而英特尔称之为
+    *扩展页表*。IOMMU 的发展是另一个令人兴奋的研究领域。
 - en: HVM is nice in general, but of course all of this is a prelude to [Chapter 13](ch13.html
     "Chapter 13. XEN AND WINDOWS"), where we'll apply all of this stuff to getting
     a virtual Windows machine up and running in HVM mode. Stay tuned!
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: HVM 在一般情况下很好，但当然所有这些都只是 [第 13 章](ch13.html "第 13 章。XEN 和 WINDOWS") 的序言，我们将应用所有这些内容来在
+    HVM 模式下启动和运行虚拟 Windows 机器。请保持关注！
