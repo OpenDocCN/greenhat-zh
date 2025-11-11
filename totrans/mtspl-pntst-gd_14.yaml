@@ -379,11 +379,13 @@
   id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 与前面讨论的fuzzer模块一样，这个漏洞利用连接并登录到![图片](../images/00005.gif)处的目标，使用![图片](../images/00006.gif)处的字符串`*A*s`作为初始缓冲区，并在![图片](../images/00007.gif)处附加四个`*C*s`以覆盖SEH。整个漏洞利用字符串在![图片](../images/00026.gif)处生成，然后发送到![图片](../images/00027.gif)处的目标。
 - en: Getting a Return Address
   id: totrans-51
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 获取返回地址
 - en: 'The next step is to locate a *POP-POP-RETN* sequence in *surgemail.exe*. To
     do so, copy the executable to a location on your Back|Track machine, and then
     use the `-p` switch with `msfpescan` to locate a suitable candidate, as in the
@@ -391,6 +393,7 @@
   id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 下一步是在`surgemail.exe`中定位一个`*POP-POP-RETN*`序列。为此，将可执行文件复制到您的Back|Track机器上的一个位置，然后使用`msfpescan`的`-p`开关查找合适的候选者，如下例所示：
 - en: '[PRE10]'
   id: totrans-53
   prefs: []
@@ -407,6 +410,7 @@
   id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 当`msfpescan`针对目标可执行文件运行时，它会读取机器代码，寻找与目标匹配的汇编指令（在这种情况下为`*POP-POP-RETN*`序列），并显示这些指令发生的内存地址。如您在列表中看到的，找到了多个地址。我们将使用输出末尾的地址，*0x0078517e*，来覆盖漏洞利用中的SEH。选择后，我们编辑漏洞模块的`'Targets'`部分以包含此地址，并编辑`exploit`部分以将其包含在要发送的缓冲区中，如下所示。
 - en: '[PRE11]'
   id: totrans-55
   prefs: []
@@ -420,6 +424,7 @@
   id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 要执行SEH的三个字节覆盖，我们将要添加到`'Targets'`块中的三个字节设置为![图片](../images/00002.gif)处的缓冲区，按小端序排列，如列表中加粗字体所示。（端序由目标CPU的架构确定，与Intel兼容的处理器使用小端序字节排列。）
 - en: At ![](../images/00004.gif) we replace the three *C*s in the `evil` string with
     `[target.ret].pack("A3")`, which will send the return address exactly as it is
     declared in the `'Targets'` block. When modifying many exploits that use a three-byte
@@ -431,6 +436,8 @@
   id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 在![图片](../images/00004.gif)处，我们将`evil`字符串中的三个`*C`s替换为`[target.ret].pack("A3")`，这将精确地发送与`'Targets'`块中声明的地址相同的返回地址。当修改使用三个字节覆盖的许多漏洞利用时，您可以声明目标地址（在这种情况下为`*0x0078517e*`），Metasploit
+    将在您使用 `[target.ret].pack('V')` 时自动正确排序字节。这种场景需要更细粒度的控制，因为如果我们发送空（00）字节，它将代表字符串的结尾，可能会阻止漏洞利用正常工作。
 - en: 'Now is a good time to run the exploit to make sure that it works properly.
     If you jump too far ahead when developing an exploit, you run the risk of making
     an error somewhere and having to do a lot of backtracking to find out what went
@@ -438,6 +445,7 @@
   id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在是运行漏洞利用以确保其正常工作的好时机。如果在开发漏洞利用时跳得太远，您可能会犯错误，并需要大量回溯以找出问题所在。以下是一个漏洞利用示例：
 - en: '[PRE12]'
   id: totrans-59
   prefs: []
@@ -450,6 +458,7 @@
   id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在![图片](../images/00002.gif)处使用的有效载荷`generic/debug_trap`实际上不会发送有效载荷。相反，它发送多个`\xCC`s，或断点，以调试漏洞利用的执行流程。这有助于确认您的shellcode已正确插入到漏洞利用中的正确位置。
 - en: After running the exploit, open the Immunity Debugger, as shown in [Figure 14-5](part0018.html#landing_in_the_pop-pop-retn_instructions),
     and at the crash select **View** ▸ **SEH chain**. Set a breakpoint by pressing
     F2, and then press shift-F9 to pass the exception to the application and step
