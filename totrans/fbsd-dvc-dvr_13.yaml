@@ -1,398 +1,598 @@
 - en: Chapter 13. Storage Drivers
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第 13 章. 存储驱动程序
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
 - en: In FreeBSD, *storage drivers* provide access to devices that transfer randomly
     accessible data in blocks (such as disk drives, flash memory, and so on). A *block*
     is a fixed-size chunk of data (Corbet et al., 2005). In this chapter I’ll discuss
     how to manage devices that employ block-centric I/O. To that end, some familiarity
     with disk and bio structures is needed, so that is where we’ll start.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 FreeBSD 中，*存储驱动程序*提供对以块形式传输随机访问数据的设备（如磁盘驱动器、闪存等）的访问。*块*是固定大小的数据块（Corbet 等人，2005
+    年）。在本章中，我将讨论如何管理采用以块为中心的 I/O 的设备。为此，需要对磁盘和 bio 结构有一定的了解，所以我们将从这里开始。
 - en: disk Structures
+  id: totrans-3
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 磁盘结构
 - en: 'A `disk` structure is the kernel’s representation of an individual disk-like
     storage device. It is defined in the `<geom/geom_disk.h>` header as follows:'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: '`disk` 结构是内核对单个类似磁盘的存储设备的表示。它在 `<geom/geom_disk.h>` 头文件中定义如下：'
 - en: '[PRE0]'
+  id: totrans-5
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: Many of the fields in `struct disk` must be initialized by a storage driver.
     These fields are described in the following sections.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: '`struct disk` 结构中的许多字段必须由存储驱动程序初始化。这些字段在以下章节中描述。'
 - en: Descriptive Fields
+  id: totrans-7
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 描述性字段
 - en: The `d_name` and `d_unit` fields specify the storage device’s name and unit
     number, respectively. These fields must be defined in every `disk` structure.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_name` 和 `d_unit` 字段分别指定存储设备的名称和单元号。这些字段必须在每个 `disk` 结构中定义。'
 - en: The `d_flags` field further qualifies the storage device’s characteristics.
     Valid values for this field are shown in [Table 13-1](ch13.html#disk_structure_symbolic_constants
     "Table 13-1. disk Structure Symbolic Constants").
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_flags` 字段进一步说明了存储设备的特性。此字段的有效值显示在[表 13-1](ch13.html#disk_structure_symbolic_constants
+    "表 13-1. disk 结构符号常量")中。'
 - en: Table 13-1. disk Structure Symbolic Constants
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 13-1. disk 结构符号常量
 - en: '| Constant | Description |'
+  id: totrans-11
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-12
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `DISKFLAG_NEEDSGIANT` | Indicates that the storage device needs to be protected
     by `Giant` |'
+  id: totrans-13
   prefs: []
   type: TYPE_TB
+  zh: '| `DISKFLAG_NEEDSGIANT` | 表示存储设备需要由 `Giant` 保护 |'
 - en: '| `DISKFLAG_CANDELETE` | Indicates that the storage device wants to be notified
     when a block is no longer required so that it can perform some special handling
     (for example, drivers for solid-state drives that support the `TRIM` command employ
     this flag) |'
+  id: totrans-14
   prefs: []
   type: TYPE_TB
+  zh: '| `DISKFLAG_CANDELETE` | 表示存储设备希望在不再需要块时收到通知，以便它可以执行一些特殊处理（例如，支持 `TRIM` 命令的固态驱动程序的驱动程序使用此标志）|'
 - en: '| `DISKFLAG_CANFLUSHCACHE` | Indicates that the storage device can flush its
     local write cache |'
+  id: totrans-15
   prefs: []
   type: TYPE_TB
+  zh: '| `DISKFLAG_CANFLUSHCACHE` | 表示存储设备可以刷新其本地写入缓存 |'
 - en: The `d_flags` field is optional and may be undefined.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_flags` 字段是可选的，可能未定义。'
 - en: Storage Device Methods
+  id: totrans-17
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 存储设备方法
 - en: The `d_open` field identifies the storage device’s open routine. If no function
     is provided, open will always succeed.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_open` 字段标识存储设备的打开例程。如果没有提供函数，打开将始终成功。'
 - en: The `d_close` field identifies the storage device’s close routine. If no function
     is provided, close will always succeed. The `d_close` routine should always terminate
     anything set up by the `d_open` routine.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_close` 字段标识存储设备的关闭例程。如果没有提供函数，关闭将始终成功。`d_close` 例程应始终终止由 `d_open` 例程设置的任何内容。'
 - en: The `d_strategy` field identifies the storage device’s strategy routine. *Strategy
     routines* are called to process block-centric reads, writes, and other I/O operations.
     Accordingly, `d_strategy` must be defined in every `disk` structure. I’ll discuss
     block-centric I/O and strategy routines in greater detail later.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_strategy` 字段标识存储设备的策略例程。*策略例程*用于处理以块为中心的读取、写入和其他 I/O 操作。因此，`d_strategy`
+    必须在每个 `disk` 结构中定义。我将在稍后更详细地讨论以块为中心的 I/O 和策略例程。'
 - en: The `d_ioctl` field identifies the storage device’s ioctl routine. This field
     is optional and may be undefined.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_ioctl` 字段标识存储设备的 ioctl 例程。此字段是可选的，可能未定义。'
 - en: The `d_dump` field identifies the storage device’s dump routine. *Dump routines*
     are called after a kernel panic to record the contents of physical memory to a
     storage device. Note that `d_dump` is optional and may be undefined.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_dump` 字段标识存储设备的转储例程。*转储例程*在内核恐慌后调用，以将物理内存的内容记录到存储设备。请注意，`d_dump` 是可选的，可能未定义。'
 - en: Mandatory Media Properties
+  id: totrans-23
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 强制性媒体属性
 - en: The `d_sectorsize` and `d_mediasize` fields specify the storage device’s sector
     and media size in bytes, respectively. These fields must be defined in every `disk`
     structure.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_sectorsize`和`d_mediasize`字段分别指定存储设备的扇区和媒体大小（以字节为单位）。这些字段必须在每个`磁盘`结构中定义。'
 - en: The `d_maxsize` field denotes the maximum size in bytes that an I/O operation,
     for the storage device, can be. This field must be defined in every `disk` structure.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_maxsize`字段表示存储设备I/O操作的最大字节数。此字段必须在每个`磁盘`结构中定义。'
 - en: Note that you can safely modify the values for `d_sectorsize`, `d_mediasize`,
     and `d_maxsize` in the `d_open` routine.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，您可以在`d_open`例程中安全地修改`d_sectorsize`、`d_mediasize`和`d_maxsize`的值。
 - en: Optional Media Properties
+  id: totrans-27
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 可选媒体属性
 - en: The `d_fwsectors` and `d_fwheads` fields identify the number of sectors and
     heads on the storage device. These fields are optional and may be undefined; however,
     certain platforms require these fields for disk partitioning.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_fwsectors`和`d_fwheads`字段标识存储设备上的扇区和磁头数量。这些字段是可选的，可能未定义；然而，某些平台要求这些字段用于磁盘分区。'
 - en: The `d_stripesize` field specifies the width of any natural request boundaries
     for the storage device (for example, the size of a stripe on a RAID-5 unit), and
     the `d_stripeoffset` field represents the location or offset to the first stripe.
     These fields are optional and may be undefined. For more on `d_stripesize` and
     `d_stripeoffset`, see */sys/geom/notes*.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_stripesize`字段指定了存储设备的任何自然请求边界宽度（例如，RAID-5单元上的条带大小），而`d_stripeoffset`字段表示第一个条带的位置或偏移。这些字段是可选的，可能未定义。有关`d_stripesize`和`d_stripeoffset`的更多信息，请参阅`/sys/geom/notes`。'
 - en: The `d_ident` field denotes the storage device’s serial number. This field is
     optional and may be undefined, but it’s good practice to define it.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_ident`字段表示存储设备的序列号。此字段是可选的，可能未定义，但定义它是良好的实践。'
 - en: Note that you can safely modify the abovementioned fields in the `d_open` routine.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，您可以在`d_open`例程中安全地修改上述字段。
 - en: Driver Private Data
+  id: totrans-32
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 驾驶员私有数据
 - en: The `d_drv1` field may be used by the storage driver to house data. Typically,
     `d_drv1` will contain a pointer to the storage driver’s `softc` structure.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_drv1`字段可能被存储驱动程序用来存放数据。通常，`d_drv1`将包含指向存储驱动程序`softc`结构的指针。'
 - en: disk Structure Management Routines
+  id: totrans-34
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 磁盘结构管理例程
 - en: 'The FreeBSD kernel provides the following functions for working with `disk`
     structures:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD内核为处理`磁盘`结构提供了以下函数：
 - en: '[PRE1]'
+  id: totrans-36
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: A `disk` structure is a dynamically allocated structure that’s owned by the
     kernel. That is, you cannot allocate a `struct disk` on your own. Instead, you
     must call `disk_alloc`.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: '`磁盘`结构是一个由内核拥有的动态分配的结构。也就是说，您不能自己分配一个`struct disk`。相反，您必须调用`disk_alloc`。'
 - en: Allocating a `disk` structure does not make the storage device available to
     the system. To do that, you must initialize the structure (by defining the necessary
     fields) and then call `disk_create`. The `version` argument must always be `DISK_VERSION`.
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 分配一个`磁盘`结构并不会使存储设备对系统可用。为了做到这一点，您必须初始化结构（通过定义必要的字段），然后调用`disk_create`。`version`参数必须始终为`DISK_VERSION`。
 - en: Note that as soon as `disk_create` returns, the device is “live” and its routines
     can be called at any time. Therefore, you should call `disk_create` only when
     your driver is completely ready to handle any operation.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，一旦`disk_create`返回，设备就是“活跃”的，并且可以在任何时间调用其例程。因此，您应该在您的驱动程序完全准备好处理任何操作时才调用`disk_create`。
 - en: When a `disk` structure is no longer needed, it should be freed with `disk_destroy`.
     You can destroy an opened `disk` structure. Of course, you’ll need to free any
     resources that were allocated during `d_open` afterward, as `d_close` can no longer
     be called.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 当不再需要`磁盘`结构时，应使用`disk_destroy`将其释放。您可以销毁一个已打开的`磁盘`结构。当然，之后您还需要释放在`d_open`期间分配的任何资源，因为`d_close`不能再被调用。
 - en: Block I/O Structures
+  id: totrans-41
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 块I/O结构
 - en: A `bio` structure represents a block-centric I/O request. Loosely speaking,
     when the kernel needs to transfer some data to or from a storage device, it puts
     together a `bio` structure to describe that operation; then it passes that structure
     to the appropriate driver.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个`bio`结构代表一个以块为中心的I/O请求。粗略地说，当内核需要将一些数据传输到或从存储设备时，它会组合一个`bio`结构来描述该操作；然后它将这个结构传递给适当的驱动程序。
 - en: '`struct bio` is defined in the `<sys/bio.h>` header as follows:'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: '`struct bio`在`<sys/bio.h>`头文件中定义如下：'
 - en: '[PRE2]'
+  id: totrans-44
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: We’ll examine `struct bio` in greater detail later. In the interim, you just
     need to remember that strategy routines are called to process newly received `bio`
     structures.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将在稍后更详细地检查 `struct bio`。在此期间，你只需记住，策略例程被调用以处理新接收到的 `bio` 结构。
 - en: Block I/O Queues
+  id: totrans-46
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 块 I/O 队列
 - en: All storage drivers maintain a *block I/O queue* to house any pending block-centric
     I/O requests. Generally speaking, these requests are stored in increasing or decreasing
     device-offset order so that when they are processed, the disk head will move in
     a single direction (instead of bouncing around) to maximize performance.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有存储驱动程序都维护一个 *块 I/O 队列* 来存放任何挂起的以块为中心的 I/O 请求。一般来说，这些请求按递增或递减的设备偏移量顺序存储，以便在处理时，磁盘头将沿单一方向移动（而不是弹跳），以最大化性能。
 - en: 'The FreeBSD kernel provides the following functions for working with block
     I/O queues:'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD 内核提供了以下函数用于处理块 I/O 队列：
 - en: '[PRE3]'
+  id: totrans-49
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: A block I/O queue is a statically allocated structure that’s owned by the driver.
     To initialize a block I/O queue, you must call `bioq_init`.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 块 I/O 队列是一个由驱动程序拥有的静态分配的结构。要初始化块 I/O 队列，你必须调用 `bioq_init`。
 - en: To perform an ordered insertion, call `bioq_disksort`. To return the head of
     the queue (that is, the next request to process), use `bioq_first`. Lastly, to
     return and remove the head of the queue, call `bioq_takefirst`.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 要执行有序插入，请调用 `bioq_disksort`。要返回队列头部（即下一个要处理的请求），使用 `bioq_first`。最后，要返回并移除队列头部，请调用
+    `bioq_takefirst`。
 - en: The abovementioned functions are the main methods for managing a block I/O queue.
     If a queue is manipulated using only these functions, it will contain at most
     one inversion point (that is, two sorted sequences).
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 上文提到的函数是管理块 I/O 队列的主要方法。如果仅使用这些函数来操作队列，则队列最多包含一个逆序点（即两个排序序列）。
 - en: The `bioq_insert_head` function inserts a request at the head of the queue.
     Additionally, it creates a “barrier” so that all subsequent insertions performed
     using `bioq_disksort` will end up after this request.
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bioq_insert_head` 函数在队列头部插入一个请求。此外，它创建一个“屏障”，使得使用 `bioq_disksort` 执行的所有后续插入都将在这个请求之后完成。'
 - en: The `bioq_insert_tail` function is similar to `bioq_insert_head`, but it inserts
     the request at the end of the queue. Note that `bioq_insert_tail` also creates
     a barrier.
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bioq_insert_tail` 函数与 `bioq_insert_head` 类似，但它将请求插入到队列的末尾。请注意，`bioq_insert_tail`
+    也会创建一个屏障。'
 - en: Generally speaking, you’d utilize a barrier to ensure that all preceding requests
     are serviced before continuing.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常情况下，你会使用一个屏障来确保在继续之前所有前面的请求都已得到处理。
 - en: The `bioq_remove` function removes a request from the queue. If `bioq_remove`
     is invoked on the head of the queue, its effect is identical to `bioq_takefirst`.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bioq_remove` 函数从队列中移除一个请求。如果 `bioq_remove` 在队列头部被调用，其效果等同于 `bioq_takefirst`。'
 - en: If a block I/O queue is manipulated using `bioq_insert_head`, `bioq_insert_tail`,
     or `bioq_remove`, it may contain multiple inversion points.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果使用 `bioq_insert_head`、`bioq_insert_tail` 或 `bioq_remove` 操作块 I/O 队列，它可能包含多个逆序点。
 - en: The `bioq_flush` function expunges all of the queued requests and causes them
     to return the error code `error`.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bioq_flush` 函数清除所有队列中的请求，并使它们返回错误代码 `error`。'
 - en: Note
+  id: totrans-59
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: For storage devices that incorporate request scheduling (such as SATA Native
     Command Queuing, SCSI Tagged Command Queuing, and so on), `bioq_disksort` is essentially
     pointless, as the devices will (re)sort the requests internally. In those cases,
     a straightforward FIFO block I/O queue that uses `bioq_insert_tail` will suffice.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于包含请求调度功能的存储设备（如 SATA 原生命令队列、SCSI 标记命令队列等），`bioq_disksort` 实际上是没有意义的，因为这些设备将（重新）内部排序请求。在这种情况下，使用
+    `bioq_insert_tail` 的简单先入先出 (FIFO) 块 I/O 队列就足够了。
 - en: Tying Everything Together
+  id: totrans-61
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 综合一切
 - en: Now that you’ve gained some familiarity with `disk` and `bio` structures, let’s
     dissect a real-world storage driver.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 既然你已经对 `disk` 和 `bio` 结构有了些了解，让我们剖析一个真实的存储驱动程序。
 - en: '[Example 13-1](ch13s05.html#at45d.c "Example 13-1. at45d.c") is the storage
     driver for Atmel’s AT45D series of DataFlash chips. DataFlash is Atmel’s serial
     interface for flash memory, employed on the Serial Peripheral Interface (SPI)
     bus. In short, [Example 13-1](ch13s05.html#at45d.c "Example 13-1. at45d.c") is
     a storage driver for flash memory on the SPI bus.'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 13-1](ch13s05.html#at45d.c "示例 13-1. at45d.c") 是 Atmel 的 AT45D 系列数据闪存芯片的存储驱动程序。DataFlash
+    是 Atmel 的串行接口闪存，用于串行外设接口 (SPI) 总线。简而言之，[示例 13-1](ch13s05.html#at45d.c "示例 13-1.
+    at45d.c") 是 SPI 总线上的闪存存储驱动程序。'
 - en: Note
+  id: totrans-64
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Take a quick look at this code and try to discern some of its structure. If
     you don’t understand all of it, don’t worry; an explanation follows.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 快速浏览一下这段代码，并尝试识别其结构。如果你不完全理解，不要担心；接下来的解释会详细说明。
 - en: Example 13-1. at45d.c
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 13-1. at45d.c
 - en: '[PRE4]'
+  id: totrans-67
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: The following sections describe the functions defined in [Example 13-1](ch13s05.html#at45d.c
     "Example 13-1. at45d.c") roughly in the order they would execute.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下部分将按它们执行的顺序大致描述 [示例 13-1](ch13s05.html#at45d.c "示例 13-1. at45d.c") 中定义的函数。
 - en: Incidentally, because ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `at45d_probe` and ![](httpatomoreillycomsourcenostarchimages1137501.png) `at45d_detach`
     are extremely rudimentary and because you’ve seen similar code elsewhere, I’ll
     omit discussing them.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 顺便提一下，因为 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) `at45d_probe`
+    和 ![图片](httpatomoreillycomsourcenostarchimages1137501.png) `at45d_detach` 非常基础，并且你已经在其他地方见过类似的代码，所以我会省略对它们的讨论。
 - en: at45d_attach Function
+  id: totrans-70
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: at45d_attach 函数
 - en: 'The `at45d_attach` function is the `device_attach` implementation for this
     storage driver. Here is its function definition (again):'
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: '`at45d_attach` 函数是这个存储驱动程序的 `device_attach` 实现。以下是它的函数定义（再次）：'
 - en: '[PRE5]'
+  id: totrans-72
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) initializes
     the mutex `at45d_mtx`, which will protect `at45d`’s block I/O queue. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png)
     schedules ![](httpatomoreillycomsourcenostarchimages1137501.png) `at45d_delayed_attach`
     to execute when interrupts are enabled.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 初始化互斥锁 `at45d_mtx`，它将保护
+    `at45d` 的块 I/O 队列。然后它 ![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    安排 ![图片](httpatomoreillycomsourcenostarchimages1137501.png) `at45d_delayed_attach`
+    在中断启用时执行。
 - en: Note
+  id: totrans-74
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: During the initial autoconfiguration phase (that is, right after the system
     boots), interrupts are disabled. However, some drivers (such as `at45d`) require
     interrupts for device initialization. In those cases, you’d use `config_intrhook_establish`,
     which schedules a function to execute as soon as interrupts are enabled but before
     root is mounted; if the system has already passed this point, the function is
     called immediately.
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 在初始自动配置阶段（即系统启动后），中断被禁用。然而，一些驱动程序（如 `at45d`）需要中断来进行设备初始化。在这种情况下，你会使用 `config_intrhook_establish`，它安排一个函数在启用中断但挂载根文件系统之前执行；如果系统已经过了这个点，函数会立即被调用。
 - en: at45d_delayed_attach Function
+  id: totrans-76
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: at45d_delayed_attach 函数
 - en: 'The `at45d_delayed_attach` function is, loosely speaking, the second half of
     `at45d_attach`. That is, it completes the device’s initialization. Here is its
     function definition (again):'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 从广义上讲，`at45d_delayed_attach` 函数是 `at45d_attach` 的后半部分。也就是说，它完成了设备的初始化。以下是它的函数定义（再次）：
 - en: '[PRE6]'
+  id: totrans-78
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: This function can be split into multiple parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
     gets the device’s manufacturer ID. Then `at45d_delayed_attach` ![](httpatomoreillycomsourcenostarchimages1137501.png)
     hangs until the device is ready. These two actions require interrupts to be enabled.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数可以分解为多个部分。首先 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 获取设备的制造商
+    ID。然后 `at45d_delayed_attach` ![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    等待设备准备就绪。这两个动作需要启用中断。
 - en: The second part ![](httpatomoreillycomsourcenostarchimages1137503.png) allocates
     and defines `at45d`’s `disk` structure, ![](httpatomoreillycomsourcenostarchimages1137505.png)
     initializes `at45d`’s block I/O queue, and ![](httpatomoreillycomsourcenostarchimages1137507.png)
     creates a new kernel process (to execute the ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `at45d_task` function).
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二部分 ![图片](httpatomoreillycomsourcenostarchimages1137503.png) 分配并定义 `at45d`
+    的 `disk` 结构，![图片](httpatomoreillycomsourcenostarchimages1137505.png) 初始化 `at45d`
+    的块 I/O 队列，并 ![图片](httpatomoreillycomsourcenostarchimages1137507.png) 创建一个新的内核进程（以执行
+    ![图片](httpatomoreillycomsourcenostarchimages1137509.png) `at45d_task` 函数）。
 - en: Finally, `at45d`’s device node is ![](httpatomoreillycomsourcenostarchimages1137511.png)
     created, and `at45d_delayed_attach` is ![](httpatomoreillycomsourcenostarchimages1137513.png)
     torn down.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，创建 `at45d` 的设备节点，并 ![图片](httpatomoreillycomsourcenostarchimages1137511.png)
+    拆卸 `at45d_delayed_attach`。
 - en: Note
+  id: totrans-82
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: During the boot process—before root is mounted—the system stalls until every
     function scheduled via `config_intrhook_establish` completes and tears itself
     down. In other words, if `at45d_delayed_attach` didn’t call `config_intrhook_disestablish`,
     the system would hang.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 在引导过程中——在挂载根文件系统之前——系统会停滞，直到通过 `config_intrhook_establish` 安排的每个函数都完成并自行拆解。换句话说，如果
+    `at45d_delayed_attach` 没有调用 `config_intrhook_disestablish`，系统将会挂起。
 - en: at45d_get_info Function
+  id: totrans-84
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: at45d_get_info 函数
 - en: 'The `at45d_get_info` function gets the storage device’s manufacturer ID. Here
     is its function definition (again):'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: '`at45d_get_info` 函数获取存储设备的制造商 ID。以下是它的函数定义（再次）：'
 - en: '[PRE7]'
+  id: totrans-86
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: This function begins by zeroing its ![](httpatomoreillycomsourcenostarchimages1137499.png)
     transmit and ![](httpatomoreillycomsourcenostarchimages1137501.png) receive buffers.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先将其 ![](httpatomoreillycomsourcenostarchimages1137499.png) 发送和 ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    接收缓冲区清零。
 - en: Note
+  id: totrans-88
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Every SPI data transfer is a full-duplex data transmission. That is, it always
     requires a transmit and receive buffer, because the master and slave both transmit
     data—even if the data to be sent is meaningless or garbage, it’s still transferred.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个SPI数据传输都是全双工数据传输。也就是说，它始终需要一个发送和接收缓冲区，因为主设备和从设备都会发送数据——即使要发送的数据是无意义的或垃圾数据，它仍然会被传输。
 - en: The remainder of this function ![](httpatomoreillycomsourcenostarchimages1137503.png)
     places `MANUFACTURER_ID` in the transmit buffer, sets up the `spi_command` structure
     (which denotes the ![](httpatomoreillycomsourcenostarchimages1137505.png) transmit
@@ -401,148 +601,228 @@
     data lengths), ![](httpatomoreillycomsourcenostarchimages1137513.png) initiates
     the data transfer, and finally ![](httpatomoreillycomsourcenostarchimages1137515.png)
     returns the manufacturer ID to the caller.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数的其余部分 ![](httpatomoreillycomsourcenostarchimages1137503.png) 将 `MANUFACTURER_ID`
+    放入发送缓冲区，设置 `spi_command` 结构（表示 ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    发送和 ![](httpatomoreillycomsourcenostarchimages1137507.png) 接收缓冲区及其 ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) 数据长度），![](httpatomoreillycomsourcenostarchimages1137513.png)
+    启动数据传输，并最终 ![](httpatomoreillycomsourcenostarchimages1137515.png) 将制造商 ID 返回给调用者。
 - en: at45d_wait_for_device_ready Function
+  id: totrans-91
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: at45d_wait_for_device_ready 函数
 - en: 'The `at45d_wait_for_device_ready` function “spins” until the storage device
     is ready. Here is its function definition (again):'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: '`at45d_wait_for_device_ready` 函数“空转”直到存储设备准备好。以下是它的函数定义（再次）：'
 - en: '[PRE8]'
+  id: totrans-93
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: This function continually calls ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `at45d_get_status` until `0x80`, which designates that the device is not busy
     and is ready to accept the next command, is returned.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数持续调用 ![](httpatomoreillycomsourcenostarchimages1137499.png) `at45d_get_status`
+    直到返回 `0x80`，这表示设备不忙且准备好接受下一个命令。
 - en: at45d_get_status Function
+  id: totrans-95
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: at45d_get_status 函数
 - en: 'The `at45d_get_status` function gets the storage device’s status. Here is its
     function definition (again):'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: '`at45d_get_status` 函数获取存储设备的状态。以下是它的函数定义（再次）：'
 - en: '[PRE9]'
+  id: totrans-97
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: As you can see, this function is nearly identical to the `at45d_get_info` function,
     except that it ![](httpatomoreillycomsourcenostarchimages1137499.png) employs
     a different command. As such, I’ll omit walking through it.
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，此函数几乎与 `at45d_get_info` 函数完全相同，只是它 ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    使用了不同的命令。因此，我将省略其详细说明。
 - en: at45d_strategy Function
+  id: totrans-99
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: at45d_strategy 函数
 - en: 'The `at45d_strategy` function is defined in `at45d_delayed_attach` as the `d_strategy`
     routine; it is executed anytime `at45d` receives a `bio` structure. Here is its
     function definition (again):'
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: '`at45d_strategy` 函数在 `at45d_delayed_attach` 中定义为 `d_strategy` 例程；每当 `at45d`
+    接收到一个 `bio` 结构时就会执行它。以下是它的函数定义（再次）：'
 - en: '[PRE10]'
+  id: totrans-101
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: This function simply takes a ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `bio` structure and ![](httpatomoreillycomsourcenostarchimages1137501.png) adds
     it to `at45d`’s block I/O queue. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png)
     gets `at45d_task` to actually process the `bio` structure(s).
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数只是接受一个 ![](httpatomoreillycomsourcenostarchimages1137499.png) `bio` 结构并将其
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) 添加到 `at45d` 的块 I/O 队列中。然后它
+    ![](httpatomoreillycomsourcenostarchimages1137503.png) 让 `at45d_task` 实际处理 `bio`
+    结构。
 - en: Note
+  id: totrans-103
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Most strategy routines do something similar. That is to say, they don’t actually
     process the `bio` structures; they only place them on the block I/O queue, and
     another function or thread sees to them.
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 大多数策略例程都做类似的事情。也就是说，它们实际上并不处理 `bio` 结构；它们只是将它们放置在块 I/O 队列中，然后另一个函数或线程来处理它们。
 - en: at45d_task Function
+  id: totrans-105
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: at45d_task 函数
 - en: 'As mentioned in the previous section, the `at45d_task` function processes the
     `bio` structures on `at45d`’s block I/O queue. Here is its function definition
     (again):'
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，`at45d_task` 函数处理 `at45d` 的块 I/O 队列中的 `bio` 结构。以下是它的函数定义（再次）：
 - en: '[PRE11]'
+  id: totrans-107
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: This function can be split into four parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
     determines whether `at45d`’s block I/O queue is empty. If so, `at45d_task` ![](httpatomoreillycomsourcenostarchimages1137501.png)
     sleeps; otherwise, it ![](httpatomoreillycomsourcenostarchimages1137503.png) acquires
     (and removes) the head of the queue. The second part determines whether the block-centric
     I/O request is a ![](httpatomoreillycomsourcenostarchimages1137507.png) read or
     a ![](httpatomoreillycomsourcenostarchimages1137509.png) write.
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个函数可以分为四个部分。第一部分 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 确定是否`at45d`的块I/O队列是空的。如果是，`at45d_task`
+    ![图片](httpatomoreillycomsourcenostarchimages1137501.png) 睡眠；否则，它 ![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    获取（并移除）队列的头部。第二部分确定块中心的I/O请求是 ![图片](httpatomoreillycomsourcenostarchimages1137507.png)
+    读取还是 ![图片](httpatomoreillycomsourcenostarchimages1137509.png) 写入。
 - en: Note
+  id: totrans-109
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Block-centric I/O requests are seen from the driver’s point of view. So, `BIO_READ`
     means reading *from* the device.
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 从驱动程序的角度来看，块中心的I/O请求。因此，`BIO_READ`表示从设备中读取。
 - en: The second part also ![](httpatomoreillycomsourcenostarchimages1137505.png)
     calculates the offset in `bio_data` (that is, the location in main memory) to
     read from or write to. This is crucial because each I/O operation transmits 1
     block of data, not 1 byte (that is, the abovementioned offset is a multiple of
     1 block).
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二部分同样计算了从`bio_data`（即主内存中的位置）读取或写入的偏移量 ![图片](httpatomoreillycomsourcenostarchimages1137505.png)。这一点至关重要，因为每个I/O操作传输的是1块数据，而不是1个字节（即上述偏移量是1块数据的倍数）。
 - en: 'In case you have trouble following the offset calculation, here is a brief
     description of each variable involved: The `ss` variable is the device’s sector
     size. The `bio_pblkno` variable is the first block of device memory to read from
     or write to, `end` is the last block, and `block` is the current block `at45d_task`
     is working with.'
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你在偏移量计算方面遇到困难，以下是每个涉及的变量的简要描述：`ss`变量是设备的扇区大小。`bio_pblkno`变量是读取或写入的第一个设备内存块，`end`是最后一个块，而`block`是`at45d_task`正在处理的当前块。
 - en: The third part sets up the `spi_command` structure and ![](httpatomoreillycomsourcenostarchimages1137511.png)
     initiates the data transfer. Finally, the fourth part ![](httpatomoreillycomsourcenostarchimages1137513.png)
     tells the kernel that the block-centric I/O request `bp` has been serviced.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三部分设置`spi_command`结构并 ![图片](httpatomoreillycomsourcenostarchimages1137511.png)
+    启动数据传输。最后，第四部分 ![图片](httpatomoreillycomsourcenostarchimages1137513.png) 告诉内核，块中心的I/O请求`bp`已成功处理。
 - en: Block I/O Completion Routines
+  id: totrans-114
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 块I/O完成例程
 - en: 'As seen in the previous section, after processing a block-centric I/O request,
     you must inform the kernel with:'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前文所述，在处理以块为中心的I/O请求后，你必须通过以下方式通知内核：
 - en: '[PRE12]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: The `biodone` function tells the kernel that the block-centric I/O request `bp`
     has been serviced successfully.
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: '`biodone`函数告诉内核，块中心的I/O请求`bp`已成功处理。'
 - en: The `biofinish` function is identical to `biodone`, except that it sets `bp`
     to return the error code `error` (that is to say, `biofinish` can tell the kernel
     that `bp` was invalid, successful, or unsuccessful).
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: '`biofinish`函数与`biodone`相同，除了它将`bp`设置为返回错误代码`error`（也就是说，`biofinish`可以告诉内核`bp`是无效的、成功的还是不成功的）。'
 - en: Note
+  id: totrans-119
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Typically, the `stat` argument is set to `NULL`. For more on `struct devstat`,
     see the `devstat(9)` manual page (though it’s somewhat antiquated).
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，`stat`参数设置为`NULL`。有关`struct devstat`的更多信息，请参阅`devstat(9)`手册页（尽管它有些过时）。
 - en: Conclusion
+  id: totrans-121
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: This chapter focused on implementing and understanding storage drivers. You
     learned how to manage both `disk` and `bio` structures and studied a real-world
     storage driver.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章重点介绍了存储驱动程序的实现和理解。你学习了如何管理`disk`和`bio`结构，并研究了一个实际的存储驱动程序。
