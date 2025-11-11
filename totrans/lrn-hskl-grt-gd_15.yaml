@@ -1,11 +1,15 @@
 - en: Chapter 15. Zippers
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第15章。Zipper
 - en: While Haskell’s purity comes with a whole bunch of benefits, it makes us tackle
     some problems differently than we would in impure languages.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然 Haskell 的纯净性带来了一大堆好处，但它让我们以不同于不纯净语言的方式处理一些问题。
 - en: Because of referential transparency, one value is as good as another in Haskell
     if it represents the same thing. So, if we have a tree full of fives (high fives,
     maybe?), and we want to change one of them into a six, we must have some way of
@@ -13,62 +17,91 @@
     it is in our tree. In impure languages, we could just note where the five is located
     in memory and change that. But in Haskell, one five is as good as another, so
     we can’t discriminate based on their location in memory.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于引用透明性，在 Haskell 中，如果一个值代表相同的东西，那么一个值和另一个值一样好。所以，如果我们有一棵满是五的树（可能是高五，也许？），并且我们想将其中一个改成六，我们必须有一种方法来确切地知道我们想要更改树中的哪个五。我们需要知道它在我们的树中的位置。在不纯净的语言中，我们只需记录五在内存中的位置并更改它。但在
+    Haskell 中，一个五和一个五一样好，所以我们不能根据它们在内存中的位置进行区分。
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802724.png.jpg)'
+  id: totrans-3
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802724.png.jpg)'
 - en: We also can’t really *change* anything. When we say that we “change a tree,”
     we actually mean that we take a tree and return a new one that’s similar to the
     original, but slightly different.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们也不能真正地 *更改* 任何东西。当我们说“更改树”时，我们实际上意味着我们取一棵树并返回一个与原始树相似但略有不同的新树。
 - en: One thing we can do is remember a path from the root of the tree to the element
     that we want to change. We could say, “Take this tree, go left, go right and then
     left again, and change the element that’s there.” While this works, it can be
     inefficient. If we want to later change an element that’s near the element that
     we previously changed, we need to walk all the way from the root of the tree to
     our element again!
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以做的事情之一是记住从树根到我们想要更改的元素的一条路径。我们可以说，“拿这棵树，向左走，向右走，然后再向左走，然后更改那里的元素。”虽然这可行，但可能不太高效。如果我们想稍后更改靠近之前更改的元素的元素，我们需要再次从树根走到我们的元素！
 - en: In this chapter, you’ll see how to take some data structure and equip it with
     something called a *zipper* to focus on a part of the data structure in a way
     that makes changing its elements easy and walking around it efficient. Nice!
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，你将看到如何将某些数据结构装备上一种称为 *zipper* 的东西，以便以使更改其元素变得容易和遍历它变得高效的方式关注数据结构的一部分。太棒了！
 - en: Taking a Walk
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 散步
 - en: 'As you learned in biology class, there are many different kinds of trees, so
     let’s pick a seed that we will use to plant ours. Here it is:'
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 就像你在生物课上学到的那样，有很多不同种类的树，所以让我们选择一个种子，我们将用它来种植我们的树。这里就是：
 - en: '[PRE0]'
+  id: totrans-9
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: Our tree is either empty or it’s a node that has an element and two subtrees.
     Here’s a fine example of such a tree, which I give to you, the reader, for free!
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们的树要么是空的，要么是一个包含元素和两个子树的节点。这里有一个很好的例子，我将它免费提供给你，读者！
 - en: '[PRE1]'
+  id: totrans-11
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'And here''s this tree represented graphically:'
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是图形表示的这棵树：
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802726.png.jpg)'
+  id: totrans-13
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802726.png.jpg)'
 - en: 'Notice that `W` in the tree there? Say we want to change it into a `P`. How
     would we go about doing that? Well, one way would be to pattern match on our tree
     until we find the element, by first going right and then left. Here’s the code
     for this:'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意树中的 `W` 吗？如果我们想把它改成 `P`，我们会怎么做？嗯，一种方法是对我们的树进行模式匹配，直到我们找到元素，首先向右走，然后向左走。这是这段代码：
 - en: '[PRE2]'
+  id: totrans-15
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: Yuck! Not only is this rather ugly, it’s also kind of confusing. What is actually
     happening here? Well, we pattern match on our tree and name its root element `x`
     (that becomes the `'P'` in the root) and its left subtree `l`. Instead of giving
@@ -76,17 +109,25 @@
     pattern matching until we reach the subtree whose root is our `'W'`. Once we’ve
     made the match, we rebuild the tree, but with the subtree that contained the `'W'`
     at its root now having a `'P'`.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 哎呀！这不仅相当难看，而且有点令人困惑。这里实际上发生了什么？嗯，我们在我们的树上进行模式匹配，并给它根元素命名为 `x`（它变成了根的 `'P'`），并给它左子树命名为
+    `l`。我们没有给它右子树命名，而是进一步对它进行模式匹配。我们继续进行这种模式匹配，直到我们达到根为 `'W'` 的子树。一旦我们进行了匹配，我们就重建树，但现在包含
+    `'W'` 的子树现在以 `'P'` 为根。
 - en: 'Is there a better way of doing this? How about if we make our function take
     a tree along with a list of directions. The directions will be either `L` or `R`,
     representing left or right, respectively, and we’ll change the element that we
     arrive at by following the supplied directions. Check it out:'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 有没有更好的方法来做这件事？如果我们让我们的函数接受一个树和一个方向列表会怎样。方向将是 `L` 或 `R`，分别代表左或右，我们将通过跟随提供的方向来更改我们到达的元素。看看这个：
 - en: '[PRE3]'
+  id: totrans-18
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: If the first element in the list of directions is `L`, we construct a new tree
     that’s like the old tree, but its left subtree has an element changed to `'P'`.
     When we recursively call `changeToP`, we give it only the tail of the list of
@@ -94,30 +135,44 @@
     an `R`. If the list of directions is empty, that means that we’re at our destination,
     so we return a tree that’s like the one supplied, except that it has `'P'` as
     its root element.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果方向列表的第一个元素是 `L`，我们将构建一个类似于旧树的新树，但其左子树有一个元素被更改为 `'P'`。当我们递归调用 `changeToP` 时，我们只给它方向列表的尾部，因为我们已经向左移动了。在
+    `R` 的情况下，我们做同样的事情。如果方向列表为空，这意味着我们已经到达了目的地，因此我们返回一个类似于提供的树，但它的根元素是 `'P'`。
 - en: 'To avoid printing out the whole tree, let’s make a function that takes a list
     of directions and tells us the element at the destination:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了避免打印整个树，让我们创建一个函数，它接受一个方向列表并告诉我们目的地的元素：
 - en: '[PRE4]'
+  id: totrans-21
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'This function is actually quite similar to `changeToP`. The difference is that
     instead of remembering stuff along the way and reconstructing the tree, it ignores
     everything except its destination. Here, we change the `''W''` to a `''P''` and
     see if the change in our new tree sticks:'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个函数实际上与 `changeToP` 非常相似。区别在于，它不是在途中记住东西并重建树，而是除了目的地之外忽略一切。在这里，我们将 `'W'` 更改为
+    `'P'`，并看看我们新树中的更改是否保持不变：
 - en: '[PRE5]'
+  id: totrans-23
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: This seems to work. In these functions, the list of directions acts as a sort
     of *focus*, because it pinpoints one exact subtree of our tree. A direction list
     of `[R]` focuses on the subtree that’s to the right of the root, for example.
     An empty direction list focuses on the main tree itself.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 这似乎有效。在这些函数中，方向列表充当一种 *焦点*，因为它精确地指出了我们的树中的一个子树。例如，方向列表 `[R]` 会聚焦于根右侧的子树。一个空的方向列表会聚焦于主树本身。
 - en: While this technique may seem cool, it can be rather inefficient, especially
     if we want to repeatedly change elements. Say we have a really huge tree and a
     long direction list that points to some element all the way at the bottom of the
@@ -125,90 +180,135 @@
     at the bottom. If we want to change another element that’s close to the element
     that we just changed, we need to start from the root of the tree and walk all
     the way to the bottom again. What a drag!
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然这个技术看起来很酷，但它可能相当低效，尤其是如果我们想要重复更改元素。比如说，我们有一个非常大的树和一个指向树底部的某个元素的长方向列表。我们使用方向列表在树上漫步并更改底部的元素。如果我们想要更改接近我们刚刚更改的元素的另一个元素，我们需要从树的根开始再次走到底部。真麻烦！
 - en: In the next section, we’ll find a better way of focusing on a subtree—one that
     allows us to efficiently switch focus to subtrees that are nearby.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一节中，我们将找到一种更好的方法来聚焦于子树——这种方法允许我们高效地切换到附近的子树。
 - en: A Trail of Breadcrumbs
+  id: totrans-27
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 路径标记的踪迹
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802728.png.jpg)'
+  id: totrans-28
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802728.png.jpg)'
 - en: For focusing on a subtree, we want something better than just a list of directions
     that we always follow from the root of our tree. Would it help if we started at
     the root of the tree and moved either left or right one step at a time, leaving
     “breadcrumbs” along the way? Using this approach, when we go left, we remember
     that we went left, and when we go right, we remember that we went right. Let’s
     try it.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了聚焦于一个子树，我们想要比仅仅遵循从树根开始的方向列表更好的东西。如果我们从树的根开始，一次向左或向右移动一步，并在路上留下“路径标记”会怎么样？使用这种方法，当我们向左移动时，我们会记住我们向左移动了，当我们向右移动时，我们会记住我们向右移动了。让我们试试。
 - en: To represent our breadcrumbs, we’ll also use a list of direction values (`L`
     and `R` values), but instead of calling it `Directions`, we’ll call it `Breadcrumbs`,
     because our directions will now be reversed as we leave them while going down
     our tree.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了表示我们的路径标记，我们也会使用一个方向值列表（`L` 和 `R` 值），但我们将不称之为 `Directions`，而是称之为 `Breadcrumbs`，因为当我们沿着树向下移动时，我们的方向将会被反转。
 - en: '[PRE6]'
+  id: totrans-31
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'Here’s a function that takes a tree and some breadcrumbs and moves to the left
     subtree while adding `L` to the head of the list that represents our breadcrumbs:'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是一个函数，它接受一个树和一些面包屑，并将移动到左子树，同时将 `L` 添加到表示我们的面包屑的列表的头部：
 - en: '[PRE7]'
+  id: totrans-33
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: We ignore the element at the root and the right subtree, and just return the
     left subtree along with the old breadcrumbs with `L` as the head.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们忽略根节点和右子树中的元素，只返回左子树以及带有 `L` 作为头部的旧面包屑。
 - en: 'Here’s a function to go right:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是一个向右走的函数：
 - en: '[PRE8]'
+  id: totrans-36
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: It works the same way as the one to go left.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 它的工作方式与向左走的方式相同。
 - en: Let’s use these functions to take our `freeTree` and go right and then left.
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们使用这些函数来将我们的 `freeTree` 向右走然后向左走。
 - en: '[PRE9]'
+  id: totrans-39
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802730.png.jpg)'
+  id: totrans-40
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802730.png.jpg)'
 - en: Now we have a tree that has `'W'` in its root, `'C'` in the root of its left
     subtree, and `'R'` in the root of its right subtree. The breadcrumbs are `[L,R]`,
     because we first went right and then went left.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们有一个根节点为 `'W'` 的树，其左子树的根节点为 `'C'`，其右子树的根节点为 `'R'`。面包屑是 `[L,R]`，因为我们首先向右走然后向左走。
 - en: 'To make walking along our tree clearer, we can use the `-:` function from [Chapter 13](ch13.html
     "Chapter 13. A Fistful of Monads") that we defined like so:'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了使沿着我们的树行走更清晰，我们可以使用来自[第13章](ch13.html "第13章。一袋莫纳德")的 `-:` 函数，我们定义如下：
 - en: '[PRE10]'
+  id: totrans-43
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'This allows us to apply functions to values by first writing the value, then
     a `-:`, and then the function. So, instead of `goRight (freeTree, [])`, we can
     write `(freeTree, []) -: goRight`. Using this form, we can rewrite the preceding
     example so that it’s more apparent that we’re going right and then left:'
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: '这允许我们通过首先写下值，然后一个 `-:`, 然后函数的方式来应用函数。所以，我们不再需要 `goRight (freeTree, [])`，而是可以写成
+    `(freeTree, []) -: goRight`。使用这种形式，我们可以重写前面的例子，使其更明显地表明我们先向右走然后向左走：'
 - en: '[PRE11]'
+  id: totrans-45
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: Going Back Up
+  id: totrans-46
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 向上走
 - en: What if we want to go back up in our tree? From our breadcrumbs, we know that
     the current tree is the left subtree of its parent and that it is the right subtree
     of its parent, and that’s all we know. The breadcrumbs don’t tell us enough about
@@ -216,369 +316,531 @@
     seem that apart from the direction that we took, a single breadcrumb should also
     contain all the other data we need to go back up. In this case, that’s the element
     in the parent tree along with its right subtree.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们想在我们的树中向上走呢？从我们的面包屑中，我们知道当前树是其父树的左子树，并且它是其父树的右子树，这就是我们所知道的一切。面包屑没有告诉我们足够关于当前子树的父树的信息，使我们能够向上走树。看起来除了我们采取的方向外，单个面包屑还应该包含我们返回时所需的所有其他数据。在这种情况下，那就是父树中的元素及其右子树。
 - en: In general, a single breadcrumb should contain all the data needed to reconstruct
     the parent node. So, it should have the information from all the paths that we
     didn’t take, and it should also know the direction that we did take. However,
     it must not contain the subtree on which we’re currently focusing. That’s because
     we already have that subtree in the first component of the tuple. If we also had
     it in the breadcrumb, we would have duplicate information.
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，单个面包屑应该包含重建父节点所需的所有数据。因此，它应该包含我们未采取的所有路径的信息，并且它还应该知道我们所采取的方向。然而，它必须不包含我们目前关注的子树。这是因为我们已经在元组的第一个组件中有了那个子树。如果我们也在面包屑中包含它，我们就会得到重复信息。
 - en: We don’t want duplicate information because if we were to change some elements
     in the subtree that we’re focusing on, the existing information in the breadcrumbs
     would be inconsistent with the changes that we made. The duplicate information
     becomes outdated as soon as we change something in our focus. It can also hog
     a lot of memory if our tree contains a lot of elements.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们不希望有重复的信息，因为如果我们改变我们关注的子树中的某些元素，面包屑中的现有信息将与我们所做的更改不一致。当我们改变我们的关注点时，重复信息就会过时。如果我们的树包含很多元素，它也可能占用大量的内存。
 - en: 'Let’s modify our breadcrumbs so that they also contain information about everything
     that we previously ignored when moving left and right. Instead of `Direction`,
     we’ll make a new data type:'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们修改我们的面包屑，使它们也包含我们在左右移动时之前忽略的所有信息。我们将不再使用 `Direction`，而将创建一个新的数据类型：
 - en: '[PRE12]'
+  id: totrans-51
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: Now, instead of just `L`, we have a `LeftCrumb`, which also contains the element
     in the node that we moved from and the right tree that we didn’t visit. Instead
     of `R`, we have `RightCrumb`, which contains the element in the node that we moved
     from and the left tree that we didn’t visit.
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我们不仅有`L`，还有包含从节点移动到的元素和未访问的右树的`LeftCrumb`。而不是`R`，我们有包含从节点移动到的元素和未访问的左树的`RightCrumb`。
 - en: These breadcrumbs now contain all the data needed to re-create the tree that
     we walked through. So, instead of just being normal breadcrumbs, they’re more
     like floppy disks that we leave as we go along, because they contain a lot more
     information than just the direction that we took.
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些面包屑现在包含了重新创建我们走过的树的所需所有数据。因此，它们不仅仅是普通的面包屑，更像是我们沿途留下的软盘，因为它们包含的信息比我们采取的方向要多得多。
 - en: In essence, every breadcrumb is now like a tree node with a hole in it. When
     we move deeper into a tree, the breadcrumb carries all the information that the
     node that we moved away from carried, *except* the subtree on which we chose to
     focus. It also needs to note where the hole is. In the case of a `LeftCrumb`,
     we know that we moved left, so the missing subtree is the left one.
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 从本质上讲，每个面包屑现在都像是一个有洞的树节点。当我们深入树中时，面包屑携带了从我们移动离开的节点所携带的所有信息，*除了*我们选择关注的子树。它还需要注意洞的位置。在`LeftCrumb`的情况下，我们知道我们向左移动，所以缺失的子树是左边的。
 - en: 'Let’s also change our `Breadcrumbs` type synonym to reflect this:'
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们也将我们的`Breadcrumbs`类型别名更改为反映这一点：
 - en: '[PRE13]'
+  id: totrans-56
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'Next up, we need to modify the `goLeft` and `goRight` functions to store information
     about the paths that we didn’t take in our breadcrumbs, instead of ignoring that
     information as they did before. Here’s `goLeft`:'
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，我们需要修改`goLeft`和`goRight`函数，在面包屑中存储我们未采取的路径信息，而不是像之前那样忽略这些信息。以下是`goLeft`：
 - en: '[PRE14]'
+  id: totrans-58
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: You can see that it’s very similar to our previous `goLeft`, but instead of
     just adding a `L` to the head of our list of breadcrumbs, we add a `LeftCrumb`
     to signify that we went left. We also equip our `LeftCrumb` with the element in
     the node that we moved from (that’s the `x`) and the right subtree that we chose
     not to visit.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以看到，它与我们的之前的`goLeft`非常相似，但我们不是仅仅在我们的面包屑列表的头部添加一个`L`，而是添加一个`LeftCrumb`来表示我们向左移动。我们还为我们的`LeftCrumb`配备了从节点移动到的元素（那就是`x`）和未访问的右子树。
 - en: Note that this function assumes that the current tree that’s under focus isn’t
     `Empty`. An empty tree doesn’t have any subtrees, so if we try to go left from
     an empty tree, an error will occur. This is because the pattern match on `Node`
     won’t succeed, and there’s no pattern that takes care of `Empty`.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，此函数假设当前焦点所在的树不是`Empty`。空树没有任何子树，因此如果我们尝试从一个空树向左移动，将会发生错误。这是因为对`Node`的模式匹配将不会成功，而且没有模式会处理`Empty`。
 - en: '`goRight` is similar:'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: '`goRight`类似：'
 - en: '[PRE15]'
+  id: totrans-62
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'We were previously able to go left and right. What we have now is the ability
     to actually go back up by remembering stuff about the parent nodes and the paths
     that we didn’t visit. Here’s the `goUp` function:'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们之前能够左右移动。我们现在拥有的能力是通过记住关于父节点和未访问路径的信息，实际上能够向上移动。下面是`goUp`函数：
 - en: '[PRE16]'
+  id: totrans-64
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802732.png.jpg)'
+  id: totrans-65
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802732.png.jpg)'
 - en: We’re focusing on the tree `t`, and we check the latest `Crumb`. If it’s a `LeftCrumb`,
     we construct a new tree using our tree `t` as the left subtree and using the information
     about the right subtree and element that we didn’t visit to fill out the rest
     of the `Node`. Because we “moved back” and picked up the last breadcrumb, then
     used it to re-create the parent tree, the new list doesn’t contain that breadcrumb.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们正在关注树`t`，并检查最新的`Crumb`。如果它是一个`LeftCrumb`，我们使用我们的树`t`作为左子树，并使用关于未访问的右子树和元素的详细信息来填充`Node`的其余部分。因为我们“返回”并拾取最后一个面包屑，然后使用它来重新创建父树，所以新的列表不包含那个面包屑。
 - en: Note that this function causes an error if we’re already at the top of a tree
     and we want to move up. Later on, we’ll use the `Maybe` monad to represent possible
     failure when moving focus.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，如果我们已经在树的顶部并且想要向上移动，这个函数会导致错误。稍后，我们将使用`Maybe` monad来表示移动焦点时可能出现的失败。
 - en: With a pair of `Tree a` and `Breadcrumbs a`, we have all the information we
     need to rebuild the whole tree, and we also have a focus on a subtree. This scheme
     enables us to easily move up, left, and right.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过一对`Tree a`和`Breadcrumbs a`，我们拥有了重建整个树所需的所有信息，并且我们还关注了一个子树。这种方案使我们能够轻松地向上、向左和向右移动。
 - en: 'A pair that contains a focused part of a data structure and its surroundings
     is called a *zipper*, because moving our focus up and down the data structure
     resembles the operation of a zipper on a pair of pants. So, it’s cool to make
     a type synonym as such:'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 包含数据结构的一部分及其周围环境的对称为*拉链*，因为将焦点在数据结构中上下移动类似于裤子拉链的操作。所以，创建一个类型同义词是很有趣的：
 - en: '[PRE17]'
+  id: totrans-70
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: I would prefer naming the type synonym `Focus`, because that makes it clearer
     that we’re focusing on a part of a data structure. But since the name `Zipper`
     is more widely used to describe such a setup, we’ll stick with it.
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 我更愿意将类型同义词命名为`Focus`，因为这使它更清楚地表明我们正在关注数据结构的一部分。但由于`Zipper`这个名字更广泛地用来描述这种设置，我们将坚持使用它。
 - en: Manipulating Trees Under Focus
+  id: totrans-72
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 在焦点下操作树
 - en: 'Now that we can move up and down, let’s make a function that modifies the element
     in the root of the subtree on which the zipper is focusing:'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们能够上下移动，让我们创建一个函数来修改拉链关注的子树根部的元素：
 - en: '[PRE18]'
+  id: totrans-74
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'If we’re focusing on a node, we modify its root element with the function `f`.
     If we’re focusing on an empty tree, we leave it as is. Now we can start off with
     a tree, move to anywhere we want, and modify an element, all while keeping focus
     on that element so that we can easily move further up or down. Here’s an example:'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们关注一个节点，我们使用函数`f`修改其根元素。如果我们关注一个空树，我们保持它不变。现在我们可以从一个树开始，移动到任何我们想要的地方，并修改一个元素，同时保持对该元素的焦点，这样我们就可以轻松地向上或向下移动。这里有一个例子：
 - en: '[PRE19]'
+  id: totrans-76
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'We go left, then right, and then modify the root element by replacing it with
     a `''P''`. This reads even better if we use `-:`:'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们向左走，然后向右走，然后通过将其替换为`'P'`来修改根元素。如果我们使用`-:`来写，这读起来更好：
 - en: '[PRE20]'
+  id: totrans-78
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'We can then move up if we want and replace an element with a mysterious `''X''`:'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，如果我们想的话，我们可以向上移动并用神秘的`'X'`替换一个元素：
 - en: '[PRE21]'
+  id: totrans-80
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'Or we can write it with `-:`:'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 或者我们可以用`-:`来写：
 - en: '[PRE22]'
+  id: totrans-82
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: Moving up is easy because the breadcrumbs that we leave form the part of the
     data structure that we’re not focusing on, but it’s inverted, sort of like turning
     a sock inside out. That’s why when we want to move up, we don’t need to start
     from the root and make our way down. We just take the top of our inverted tree,
     thereby uninverting a part of it and adding it to our focus.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 向上移动很容易，因为我们留下的面包屑构成了我们未关注的部分数据结构，但它被反转了，有点像把袜子翻过来。这就是为什么当我们想要向上移动时，我们不需要从根开始并向下走。我们只需取我们反转树的顶部，从而反转它的一部分并将其添加到我们的焦点中。
 - en: 'Each node has two subtrees, even if those subtrees are empty. So, if we’re
     focusing on an empty subtree, one thing we can do is to replace it with a nonempty
     subtree, thus attaching a tree to a leaf node. The code for this is simple:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个节点都有两个子树，即使这些子树是空的。所以，如果我们关注一个空子树，我们可以做的一件事是用非空子树替换它，从而将树附加到一个叶节点上。这个代码很简单：
 - en: '[PRE23]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'We take a tree and a zipper, and return a new zipper that has its focus replaced
     with the supplied tree. Not only can we extend trees this way by replacing empty
     subtrees with new trees, but we can also replace existing subtrees. Let’s attach
     a tree to the far left of our `freeTree`:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们取一个树和一个拉链，并返回一个新的拉链，其焦点被提供的树所替换。我们不仅可以通过用新树替换空子树来扩展树，还可以替换现有的子树。让我们将一个树附加到我们的`freeTree`的左侧：
 - en: '[PRE24]'
+  id: totrans-87
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: '`newFocus` is now focused on the tree that we just attached, and the rest of
     the tree lies inverted in the breadcrumbs. If we were to use `goUp` to walk all
     the way to the top of the tree, it would be the same tree as `freeTree`, but with
     an additional `''Z''` on its far left.'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: '`newFocus`现在关注的是我们刚刚附加的树，其余的树以反转的形式位于面包屑中。如果我们使用`goUp`走到树的顶端，它将是与`freeTree`相同的树，但在其左侧额外有一个`''Z''`。'
 - en: Going Straight to the Top, Where the Air Is Fresh and Clean!
+  id: totrans-89
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 直接走到顶部，那里空气清新、干净！
 - en: 'Making a function that walks all the way to the top of the tree, regardless
     of what we’re focusing on, is really easy. Here it is:'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 创建一个函数，使其能够走到树的顶端，无论我们关注的是什么，这实际上非常简单。下面是它的样子：
 - en: '[PRE25]'
+  id: totrans-91
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: If our trail of beefed-up breadcrumbs is empty, that means we’re already at
     the root of our tree, so we just return the current focus. Otherwise, we go up
     to get the focus of the parent node, and then recursively apply `topMost` to that.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们的增强面包屑轨迹为空，这意味着我们已经在树的根上了，所以我们只需返回当前的焦点。否则，我们向上移动以获取父节点的焦点，然后递归地应用`topMost`。
 - en: So, now we can walk around our tree, going left, right, and up, applying `modify`
     and `attach` as we travel. Then, when we’re finished with our modifications, we
     use `topMost` to focus on the root of our tree and see the changes that we’ve
     made in proper perspective.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，现在我们可以绕着我们的树走动，向左、向右和向上移动，在旅途中应用 `modify` 和 `attach`。然后，当我们完成我们的修改后，我们使用
+    `topMost` 来关注树的根，并从适当的视角看到我们所做的更改。
 - en: Focusing on Lists
+  id: totrans-94
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 专注于列表
 - en: 'Zippers can be used with pretty much any data structure, so it’s no surprise
     that they work with sublists of lists. After all, lists are pretty much like trees,
     except where a node in a tree has an element (or not) and several subtrees, a
     node in a list has an element and only a single sublist. When we implemented our
     own lists in [Chapter 7](ch07.html "Chapter 7. Making Our Own Types and Type Classes"),
     we defined our data type like so:'
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 展开器可以与几乎任何数据结构一起使用，所以它们可以与列表的子列表一起使用并不令人惊讶。毕竟，列表几乎就像树一样，除了树中的节点有一个元素（或没有）和几个子树，列表中的节点有一个元素和只有一个子列表。当我们实现了自己的列表时，在[第7章](ch07.html
+    "第7章。创建自己的类型和类型类")中，我们定义了我们的数据类型如下：
 - en: '[PRE26]'
+  id: totrans-96
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: Compare this with the definition of our binary tree, and it’s easy to see how
     lists can be viewed as trees where each node has only one subtree.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 将其与我们的二叉树定义进行比较，很容易看出列表可以被视为每个节点只有一个子树的树。
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802734.png.jpg)'
+  id: totrans-98
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802734.png.jpg)'
 - en: A list like `[1,2,3]` can be written as `1:2:3:[]`. It consists of the head
     of the list, which is `1`, and then the list’s tail, which is `2:3:[]`. `2:3:[]`
     also has a head, which is `2`, and a tail, which is `3:[]`. With `3:[]`, the `3`
     is the head, and the tail is the empty list `[]`.
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个像 `[1,2,3]` 这样的列表可以写成 `1:2:3:[]`。它由列表的头部组成，即 `1`，然后是列表的尾部，即 `2:3:[]`。`2:3:[]`
+    也有一个头部，即 `2`，和一个尾部，即 `3:[]`。对于 `3:[]`，`3` 是头部，而尾部是空列表 `[]`。
 - en: Let’s make a zipper for lists. To change the focus on sublists of a list, we
     move either forward or back (whereas with trees, we move up, left, or right).
     The focused part will be a subtree, and along with that, we’ll leave breadcrumbs
     as we move forward.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们为列表创建一个展开器。要改变对列表子列表的关注，我们可以向前或向后移动（而与树不同，我们可以向上、向左或向右移动）。关注的部分将是一个子树，并且随着我们的前进，我们将留下面包屑。
 - en: Now, what would a single breadcrumb for a list consist of? When we were dealing
     with binary trees, the breadcrumb needed to hold the element in the root of the
     parent node along with all the subtrees that we didn’t choose. It also had to
     remember if we went left or right. So, it needed to have all the information that
     a node has, except for the subtree on which we chose to focus.
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，一个列表的单个面包屑由什么组成？当我们处理二叉树时，面包屑需要保存父节点根部的元素以及我们没有选择的全部子树。它还必须记住我们是向左还是向右移动。因此，它需要拥有节点所拥有的所有信息，除了我们选择关注的子树。
 - en: Lists are simpler than trees. We don’t need to remember if we went left or right,
     because there’s only one way to go deeper into a list. Because there’s only one
     subtree to each node, we don’t need to remember the paths that we didn’t take
     either. It seems that all we must remember is the previous element. If we have
     a list like `[3,4,5]` and we know that the previous element was `2`, we can go
     back by just putting that element at the head of our list, getting `[2,3,4,5]`.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 列表比树简单。我们不需要记住我们是向左还是向右移动，因为进入列表的深度只有一种方式。因为每个节点只有一个子列表，所以我们也不需要记住我们没有走的路径。看起来我们只需要记住前一个元素。如果我们有一个像
+    `[3,4,5]` 的列表，并且我们知道前一个元素是 `2`，我们只需将那个元素放在列表的头部，就可以回退到 `[2,3,4,5]`。
 - en: Because a single breadcrumb here is just the element, we don’t really need to
     put it inside a data type, as we did when we made the `Crumb` data type for tree
     zippers.
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 因为这里的单个面包屑只是元素，所以我们实际上不需要将它放入数据类型中，就像我们在为树展开器创建 `Crumb` 数据类型时做的那样。
 - en: '[PRE27]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: 'The first list represents the list that we’re focusing on, and the second list
     is the list of breadcrumbs. Let’s make functions that go forward and backward
     in lists:'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 第一个列表代表我们关注的列表，第二个列表是面包屑列表。让我们创建在列表中向前和向后移动的函数：
 - en: '[PRE28]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'When we’re going forward, we focus on the tail of the current list and leave
     the head element as a breadcrumb. When we’re moving backward, we take the latest
     breadcrumb and put it at the beginning of the list. Here are these two functions
     in action:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们向前移动时，我们专注于当前列表的尾部，并将头部元素作为面包屑留下。当我们向后移动时，我们取最新的面包屑并将其放在列表的开头。这里有两个函数在起作用：
 - en: '[PRE29]'
+  id: totrans-108
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: You can see that the breadcrumbs in the case of lists are nothing more than
     a reversed part of your list. The element that we move away from always goes into
     the head of the breadcrumbs. Then it’s easy to move back by just taking that element
     from the head of the breadcrumbs and making it the head of our focus. This also
     makes it easier to see why we call this a *zipper*— it really looks like the slider
     of a zipper moving up and down.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以看到，在列表的情况下，面包屑不过是你的列表的反转部分。我们移动开来的元素总是进入面包屑的头部。然后，只需从面包屑的头部取出该元素并将其作为我们关注的头部，就可以轻松地返回。这也使得我们更容易理解为什么我们称之为
+    *zipper*——它确实看起来像拉链的滑块上下移动。
 - en: If you were making a text editor, you could use a list of strings to represent
     the lines of text that are currently opened, and you could then use a zipper so
     that you know on which line the cursor is currently focused. Using a zipper would
     also make it easier to insert new lines anywhere in the text or delete existing
     ones.
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你正在制作一个文本编辑器，你可以使用字符串列表来表示当前打开的文本行，然后你可以使用 zippers 来知道光标当前聚焦在哪一行。使用 zippers
+    也会使在文本中任何地方插入新行或删除现有行变得更加容易。
 - en: A Very Simple Filesystem
+  id: totrans-111
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 非常简单的文件系统
 - en: To demonstrate how zippers work, let’s use trees to represent a very simple
     filesystem. Then we can make a zipper for that filesystem, which will allow us
     to move between folders, just as we do when jumping around a real filesystem.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了演示如何使用 zippers，让我们用树来表示一个非常简单的文件系统。然后我们可以为该文件系统制作一个 zippers，这样我们就可以在文件夹之间移动，就像我们在真实文件系统中跳转一样。
 - en: 'The average hierarchical filesystem is mostly made up of files and folders.
     *Files* are units of data and have names. *Folders* are used to organize those
     files and can contain files or other folders. For our simple example, let’s say
     that an item in a filesystem is either one of these:'
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 平均的分层文件系统主要由文件和文件夹组成。*文件*是数据单元，并且有名称。*文件夹*用于组织这些文件，可以包含文件或其他文件夹。在我们的简单示例中，让我们假设文件系统中的项目是以下之一：
 - en: A file, which comes with a name and some data
+  id: totrans-114
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个文件，它带有名称和一些数据
 - en: A folder, which has a name and contains other items that are either files or
     folders themselves
+  id: totrans-115
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 一个文件夹，它有一个名称并包含其他项目，这些项目可以是文件或文件夹本身
 - en: 'Here’s a data type for this and some type synonyms, so we know what’s what:'
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里有一个数据类型和一些类型同义词，这样我们就可以知道是什么：
 - en: '[PRE30]'
+  id: totrans-117
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: A file comes with two strings, which represent its name and the data it holds.
     A folder comes with a string that is its name and a list of items. If that list
     is empty, then we have an empty folder.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个文件带有两个字符串，分别代表它的名称和它持有的数据。一个文件夹带有代表其名称的字符串和一个项目列表。如果该列表为空，则我们有一个空文件夹。
 - en: 'Here’s a folder with some files and subfolders (actually what my disk contains
     right now):'
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里有一个包含一些文件和子文件夹的文件夹（实际上是我现在的磁盘内容）：
 - en: '[PRE31]'
+  id: totrans-120
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: Making a Zipper for Our Filesystem
+  id: totrans-121
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 为我们的文件系统制作一个 Zipper
 - en: Now that we have a filesystem, all we need is a zipper so we can zip and zoom
     around it, and add, modify, and remove files and folders. As with binary trees
     and lists, our breadcrumbs will contain information about all the stuff that we
     chose not to visit. A single bread-crumb should store everything except the subtree
     on which we’re currently focusing. It should also note where the hole is, so that
     once we move back up, we can plug our previous focus into the hole.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们有了文件系统，我们需要的只是一个 zippers，这样我们就可以在它周围压缩和扩展，添加、修改和删除文件和文件夹。与二叉树和列表一样，我们的面包屑将包含关于我们没有访问的所有内容的详细信息。单个面包屑应该存储除了我们当前关注的子树之外的所有内容。它还应该记录洞的位置，这样一旦我们向上移动，我们就可以将我们之前的关注点插入到洞中。
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802736.png.jpg)'
+  id: totrans-123
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802736.png.jpg)'
 - en: In this case, a breadcrumb should be like a folder, only it should be missing
     the folder that we currently chose. “Why not like a file?” you ask? Well, because
     once we’re focusing on a file, we can’t move deeper into the filesystem, so it
     doesn’t make sense to leave a breadcrumb that says that we came from a file. A
     file is sort of like an empty tree.
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这种情况下，一个面包屑应该像文件夹一样，只是它应该缺少我们当前选择的文件夹。“为什么不像文件一样？”你可能会问？好吧，因为我们一旦专注于一个文件，我们就不能在文件系统中进一步深入，所以留下一个表明我们来自文件的面包屑是没有意义的。文件有点像空树。
 - en: If we’re focusing on the folder `"root"`, and we then focus on the file `"dijon_poupon.doc"`,
     what should the breadcrumb that we leave look like? Well, it should contain the
     name of its parent folder along with the items that come before and after the
@@ -586,50 +848,76 @@
     By keeping separate lists for the items that come before the item that we’re focusing
     on and for the items that come after it, we know exactly where to place it once
     we move back up. That way, we know the location of the hole.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们关注的是文件夹 `"root"`，然后关注文件 `"dijon_poupon.doc"`，我们留下的面包屑应该是什么样子？嗯，它应该包含其父文件夹的名称，以及我们关注的文件之前和之后的项目。所以，我们只需要一个
+    `Name` 和两个项目列表。通过为在我们关注的项之前和之后的项目保持单独的列表，我们知道一旦我们向上移动，它应该放在哪里。这样，我们就知道洞的位置。
 - en: 'Here’s our breadcrumb type for the filesystem:'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是我们的文件系统面包屑类型：
 - en: '[PRE32]'
+  id: totrans-127
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: 'And here’s a type synonym for our zipper:'
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是我们的拉链的同义词：
 - en: '[PRE33]'
+  id: totrans-129
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: 'Going back up in the hierarchy is very simple. We just take the latest breadcrumb
     and assemble a new focus from the current focus and breadcrumb, like so:'
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 在层次结构中向上回退非常简单。我们只需取最新的面包屑，并从当前焦点和面包屑中组装一个新的焦点，如下所示：
 - en: '[PRE34]'
+  id: totrans-131
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: Because our breadcrumb knew the parent folder’s name, as well as the items that
     came before our focused item in the folder (that’s `ls`) and the items that came
     after (that’s `rs`), moving up was easy.
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 因为我们的面包屑知道父文件夹的名称，以及文件夹中我们关注的项目之前的项目（那是 `ls`）和之后的项目（那是 `rs`），向上移动很容易。
 - en: 'How about going deeper into the filesystem? If we’re in the `"root"` and we
     want to focus on `"dijon_poupon.doc"`, the breadcrumb that we leave will include
     the name `"root"`, along with the items that precede `"dijon_poupon.doc"` and
     the ones that come after it. Here’s a function that, given a name, focuses on
     a file or folder that’s located in the current focused folder:'
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 想要深入文件系统吗？如果我们处于 `"root"`，并且想要关注 `"dijon_poupon.doc"`，我们留下的面包屑将包括名称 `"root"`，以及
+    `"dijon_poupon.doc"` 之前和之后的项目。这里有一个函数，给定一个名称，关注当前焦点文件夹中位于该名称的文件或文件夹：
 - en: '[PRE35]'
+  id: totrans-134
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: '`fsTo` takes a `Name` and a `FSZipper` and returns a new `FSZipper` that focuses
     on the file with the given name. That file must be in the current focused folder.
     This function doesn’t search all over the place—it just looks in the current folder.'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: '`fsTo` 接受一个 `Name` 和一个 `FSZipper`，并返回一个新的 `FSZipper`，该 `FSZipper` 关注具有给定名称的文件。该文件必须位于当前焦点文件夹中。这个函数不会到处搜索——它只是在当前文件夹中查找。'
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802738.png)'
+  id: totrans-136
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802738.png)'
 - en: First, we use `break` to break the list of items in a folder into those that
     precede the file that we’re searching for and those that come after it. `break`
     takes a predicate and a list and returns a pair of lists. The first list in the
@@ -637,184 +925,278 @@
     returns `True` for an item, it places that item and the rest of the list in the
     second item of the pair. We made an auxiliary function called `nameIs`, which
     takes a name and a filesystem item and returns `True` if the names match.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们使用 `break` 将文件夹中的项目列表拆分为我们正在搜索的文件之前的项目和之后的项目。`break` 接受一个谓词和一个列表，并返回一对列表。这对中的第一个列表包含谓词返回
+    `False` 的项目。然后，一旦谓词对一个项目返回 `True`，它将该项目以及列表的其余部分放在对的第二个项目中。我们创建了一个辅助函数 `nameIs`，它接受一个名称和一个文件系统项，如果名称匹配则返回
+    `True`。
 - en: Now `ls` is a list that contains the items that precede the item that we’re
     searching for, `item` is that very item, and `rs` is the list of items that come
     after it in its folder. Now that we have these, we just present the item that
     we got from `break` as the focus and build a breadcrumb that has all the data
     it needs.
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在 `ls` 是一个包含我们正在搜索的项目之前的项目列表，`item` 是那个项目本身，而 `rs` 是在其文件夹中跟随它的项目列表。现在我们有了这些，我们只需将
+    `break` 得到的项目作为焦点，并构建一个包含所有所需数据的面包屑。
 - en: Note that if the name we’re looking for isn’t in the folder, the pattern `item:rs`
     will try to match on an empty list, and we’ll get an error. And if our current
     focus is a file, rather than a folder, we get an error as well, and the program
     crashes.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，如果我们寻找的名称不在文件夹中，模式 `item:rs` 将尝试在空列表上匹配，并且我们会得到一个错误。而且如果我们的当前焦点是一个文件而不是文件夹，我们也会得到一个错误，程序会崩溃。
 - en: 'So, we can move up and down our filesystem. Let’s start at the root and walk
     to the file `"skull_man(scary).bmp"`:'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，我们可以上下移动我们的文件系统。让我们从根目录开始，走到文件 `"skull_man(scary).bmp"`：
 - en: '[PRE36]'
+  id: totrans-141
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: '`newFocus` is now a zipper that’s focused on the `"skull_man(scary).bmp"` file.
     Let’s get the first component of the zipper (the focus itself) and see if that’s
     really true:'
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: '`newFocus` 现在是一个聚焦于 `"skull_man(scary).bmp"` 文件的 zippers。让我们获取 zippers 的第一个组件（焦点本身）并看看这是否真的正确：'
 - en: '[PRE37]'
+  id: totrans-143
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: 'Let’s move up and focus on its neighboring file `"watermelon_smash.gif"`:'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: '让我们向上移动并关注其相邻的文件 `"watermelon_smash.gif"`:'
 - en: '[PRE38]'
+  id: totrans-145
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: Manipulating a Filesystem
+  id: totrans-146
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 操作文件系统
 - en: 'Now that we can navigate our filesystem, manipulating it is easy. Here’s a
     function that renames the currently focused file or folder:'
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们能够导航我们的文件系统，操作它变得容易。这里有一个函数可以重命名当前聚焦的文件或文件夹：
 - en: '[PRE39]'
+  id: totrans-148
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: 'Let’s rename our `"pics"` folder to `"cspi"`:'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: '让我们把 `"pics"` 文件夹重命名为 `"cspi"`:'
 - en: '[PRE40]'
+  id: totrans-150
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE40]'
 - en: We descended to the `"pics"` folder, renamed it, and then moved backup.
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们下到了 `"pics"` 文件夹，重命名了它，然后移动了备份。
 - en: 'How about a function that makes a new item in the current folder? Behold:'
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 那么一个在当前文件夹中创建新项目的函数呢？看这里：
 - en: '[PRE41]'
+  id: totrans-153
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE41]'
 - en: Easy as pie. Note that this would crash if we tried to add an item but were
     focusing on a file instead of a folder.
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 简单得就像馅饼一样。注意，如果我们试图添加一个项目但焦点在文件而不是文件夹上，这会导致崩溃。
 - en: 'Let’s add a file to our `"pics"` folder, and then move back up to the root:'
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们在 `"pics"` 文件夹中添加一个文件，然后向上移动到根目录：
 - en: '[PRE42]'
+  id: totrans-156
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE42]'
 - en: What’s really cool about all this is that when we modify our filesystem, our
     changes are not actually made in place, but instead, the function returns a whole
     new filesystem. That way, we have access to our old filesystem (in this case,
     `myDisk`), as well as the new one (the first component of `newFocus`).
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有这些真正酷的地方在于，当我们修改我们的文件系统时，我们的更改实际上并没有在原地做出，而是函数返回了一个全新的文件系统。这样，我们就可以访问我们的旧文件系统（在这种情况下，`myDisk`），以及新的一个（`newFocus`
+    的第一个组件）。
 - en: By using zippers, we get versioning for free. We can always refer to older versions
     of data structures, even after we’ve changed them. This isn’t unique to zippers,
     but it is a property of Haskell, because its data structures are immutable. With
     zippers, however, we get the ability to easily and efficiently walk around our
     data structures, so the persistence of Haskell’s data structures really begins
     to shine.
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过使用 zippers，我们免费获得版本控制。我们总是可以引用数据结构的旧版本，即使在我们更改它们之后。这不仅仅局限于 zippers，但它是 Haskell
+    的一个特性，因为它的数据结构是不可变的。然而，通过 zippers，我们得到了轻松高效地遍历数据结构的能力，因此 Haskell 数据结构的持久性真正开始闪耀。
 - en: Watch Your Step
+  id: totrans-159
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 小心脚下
 - en: 'So far, while walking through our data structures—whether they were binary
     trees, lists, or filesystems—we didn’t really care if we took a step too far and
     fell off. For instance, our `goLeft` function takes a zipper of a binary tree
     and moves the focus to its left subtree:'
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，在遍历我们的数据结构——无论是二叉树、列表还是文件系统——我们并不真的关心我们是否走得太远而跌倒了。例如，我们的 `goLeft` 函数接受一个二叉树的
+    zipping 并将焦点移动到其左子树：
 - en: '[PRE43]'
+  id: totrans-161
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE43]'
 - en: But what if the tree we’re stepping off from is an empty tree? What if it’s
     not a `Node`, but an `Empty`? In this case, we would get a runtime error, because
     the pattern match would fail, and we have not made a pattern to handle an empty
     tree, which doesn’t have any subtrees.
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 但如果我们离开的树是一个空树呢？如果它不是一个 `Node`，而是一个 `Empty` 呢？在这种情况下，我们会得到一个运行时错误，因为模式匹配会失败，我们没有为空树制作模式，而空树没有任何子树。
 - en: So far, we just assumed that we would never try to focus on the left subtree
     of an empty tree, as its left subtree doesn’t exist. But going to the left subtree
     of an empty tree doesn’t make much sense, and so far we’ve just conveniently ignored
     this.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，我们只是假设我们永远不会尝试关注空树的左子树，因为它的左子树不存在。但去空树的左子树并没有太多意义，而且到目前为止，我们只是方便地忽略了这一点。
 - en: 'Or what if we are already at the root of some tree and don’t have any breadcrumbs
     but still try to move up? The same thing would happen. It seems that when using
     zippers, any step could be our last (cue ominous music). In other words, any move
     can result in a success, but it can also result in a failure. Does that remind
     you of something? Of course: monads! More specifically, the `Maybe` monad, which
     adds a context of possible failure to normal values.'
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 或者如果我们已经到了某个树的根，没有面包屑但仍然试图向上移动呢？同样的事情会发生。似乎在使用 zippers 时，任何一步都可能成为我们的最后一步（提示：不祥的音乐）。换句话说，任何移动都可能成功，但也可能导致失败。这让你想起了什么吗？当然：monads！更具体地说，是
+    `Maybe` monad，它为正常值添加了可能的失败上下文。
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802740.png.jpg)'
+  id: totrans-165
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802740.png.jpg)'
 - en: Let’s use the `Maybe` monad to add a context of possible failure to our movements.
     We’re going to take the functions that work on our binary tree zipper and make
     them into monadic functions.
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们使用 `Maybe` 模态来给我们的移动添加一个可能失败的上下文。我们将把在二叉树 zippers 上工作的函数变成模态函数。
 - en: First, let’s take care of possible failure in `goLeft` and `goRight`. So far,
     the failure of functions that could fail was always reflected in their result,
     and this example is no different.
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，让我们处理 `goLeft` 和 `goRight` 的可能失败。到目前为止，可能失败的函数的失败总是反映在其结果中，这个例子也不例外。
 - en: 'Here are `goLeft` and `goRight` with an added possibility of failure:'
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是添加了失败可能性的 `goLeft` 和 `goRight`：
 - en: '[PRE44]'
+  id: totrans-169
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE44]'
 - en: Now, if we try to take a step to the left of an empty tree, we get a `Nothing`!
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，如果我们尝试在空树的一侧迈出一步，我们会得到一个 `Nothing`！
 - en: '[PRE45]'
+  id: totrans-171
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE45]'
 - en: 'Looks good! How about going up? The problem before happened if we tried to
     go up but we didn’t have any more breadcrumbs, which meant that we were already
     at the root of the tree. This is the `goUp` function that throws an error if we
     don’t keep within the bounds of our tree:'
+  id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: 看起来不错！那么向上走呢？之前的问题发生在我们尝试向上走但没有更多的面包屑时，这意味着我们已经到达了树的根。这是 `goUp` 函数，如果我们不保持在我们树的范围内，它会抛出一个错误：
 - en: '[PRE46]'
+  id: totrans-173
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE46]'
 - en: 'Let’s modify it to fail gracefully:'
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们修改它以优雅地失败：
 - en: '[PRE47]'
+  id: totrans-175
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE47]'
 - en: If we have breadcrumbs, everything is okay, and we return a successful new focus.
     If we don’t have breadcrumbs, we return a failure.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果我们有面包屑，一切正常，我们返回一个成功的新焦点。如果没有面包屑，我们返回一个失败。
 - en: 'Before, these functions took zippers and returned zippers, which meant that
     we could chain them like this to walk around:'
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 以前，这些函数接受 zippers 并返回 zippers，这意味着我们可以像这样将它们链接起来以进行遍历：
 - en: '[PRE48]'
+  id: totrans-178
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE48]'
 - en: But now, instead of returning `Zipper a`, they return `Maybe (Zipper a)`, and
     chaining functions like this won’t work. We had a similar problem when we were
     dealing with our tightrope walker in [Chapter 13](ch13.html "Chapter 13. A Fistful
     of Monads"). He also walked one step at a time, and each of his steps could result
     in failure, because a bunch of birds could land on one side of his balancing pole
     and make him fall.
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 但是现在，它们不再返回 `Zipper a`，而是返回 `Maybe (Zipper a)`，并且这样链接函数是不行的。我们在处理第 13 章 [第 13
+    章](ch13.html "第 13 章。一袋模态") 中的走钢丝者时也遇到了类似的问题。他也是一步一步地走，每一步都可能失败，因为一大群鸟可能会落在他的平衡杆的一侧，使他跌倒。
 - en: 'Now the joke is on us, because we’re the ones doing the walking, and we’re
     traversing a labyrinth of our own devising. Luckily, we can learn from the tightrope
     walker and just do what he did: replace normal function application with `>>=`.
@@ -823,11 +1205,17 @@
     sure that the context is handled. So just like our tightrope walker, we’re going
     to trade in all our `-:` operators for `>>=` operators. Then we will be able to
     chain our functions again! Watch how it works:'
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在轮到我们成为笑话的主角了，因为我们成了行走的人，而且我们在自己设计的迷宫中穿梭。幸运的是，我们可以从走钢丝的人那里学到东西，就像他做的那样：用 `>>=`
+    替换正常的函数应用。这需要一个带有上下文（在我们的情况下，是 `Maybe (Zipper a)`，它有一个可能失败上下文）的值，并将其输入到一个函数中，同时确保上下文得到处理。所以就像我们的走钢丝者一样，我们将用所有的
+    `-:` 操作符来交换 `>>=` 操作符。然后我们就能再次链接我们的函数了！看看它是如何工作的：
 - en: '[PRE49]'
+  id: totrans-181
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE49]'
 - en: We used `return` to put a zipper in a `Just`, and then used `>>=` to feed that
     to our `goRight` function. First, we made a tree that has on its left an empty
     subtree and on its right a node that has two empty subtrees. When we try to go
@@ -835,33 +1223,48 @@
     right twice is okay, too. We end up with the focus on an empty subtree. But going
     right three times doesn’t make sense—we can’t go to the right of an empty subtree.
     This is why the result is a `Nothing`.
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们使用 `return` 将 zippers 放入 `Just` 中，然后使用 `>>=` 将其输入到我们的 `goRight` 函数中。首先，我们创建了一个在其左侧有一个空子树，在其右侧有一个有两个空子树的节点的树。当我们向右走一次时，结果是成功的，因为操作是有意义的。向右走两次也是可以的。我们最终会在一个空子树上聚焦。但是向右走三次是没有意义的——我们无法走到空子树的右边。这就是为什么结果是
+    `Nothing` 的原因。
 - en: Now we’ve equipped our trees with a safety net that will catch us should we
     fall off. (Wow, I nailed that metaphor.)
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经给我们的树配备了安全网，以防我们跌落。 （哇，我完美地使用了这个隐喻。）
 - en: Note
+  id: totrans-184
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Our filesystem also has a lot of cases where an operation could fail, such as
     trying to focus on a file or folder that doesn’t exist. As an exercise, you can
     equip our filesystem with functions that fail gracefully by using the `Maybe`
     monad.
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们的文件系统也有许多操作可能失败的情况，例如尝试聚焦到一个不存在文件或文件夹。作为一个练习，你可以通过使用 `Maybe` 模态来为我们的文件系统添加优雅失败的功能。
 - en: Thanks for Reading!
+  id: totrans-186
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 感谢阅读！
 - en: Or just flipping to the last page! I hope you found this book useful and fun.
     I have strived to give you good insight into the Haskell language and its idioms.
     While there’s always something new to learn in Haskell, you should now be able
     to code cool stuff, as well as read and understand other people’s code. So hurry
     up and get coding! See you on the other side!
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: 或者直接翻到最后一页！希望你觉得这本书有用且有趣。我努力为你提供了对 Haskell 语言及其惯用法的良好洞察。虽然 Haskell 总是有新的东西可以学习，但现在你应该能够编写酷炫的代码，以及阅读和理解他人的代码。所以赶快开始编码吧！在另一边见！
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages802742.png.jpg)'
+  id: totrans-188
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802742.png.jpg)'

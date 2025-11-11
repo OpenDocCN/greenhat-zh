@@ -1,0 +1,3229 @@
+- en: Chapter 14. For a Few Monads More
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第14章. 更多单子
+- en: You’ve seen how monads can be used to take values with contexts and apply them
+    to functions, and how using `>>=` or `do` notation allows you to focus on the
+    values themselves, while Haskell handles the context for you.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您已经看到单子可以用来取具有上下文的值并将它们应用于函数，以及使用`>>=`或`do`记法如何让您专注于值本身，而Haskell为您处理上下文。
+- en: You’ve met the `Maybe` monad and seen how it adds a context of possible failure
+    to values. You’ve learned about the list monad and seen how it lets us easily
+    introduce nondeterminism into our programs. You’ve also learned how to work in
+    the `IO` monad, even before you knew what a monad was!
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您已经遇到了`Maybe`单子，并看到了它是如何为值添加可能的失败上下文的。您已经了解了列表单子，并看到了它是如何让我们轻松地将非确定性引入我们的程序的。您还学习了如何在`IO`单子中工作，即使您在知道什么是单子之前就已经这样做了！
+- en: In this chapter, we’ll cover a few other monads. You’ll see how they can make
+    your programs clearer by letting you treat all sorts of values as monadic ones.
+    Further exploration of monads will also solidify your intuition for recognizing
+    and working with monads.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将介绍几个其他单子。您将看到它们如何通过让您将各种值视为单子值来使您的程序更清晰。对单子的进一步探索也将巩固您识别和操作单子的直觉。
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802698.png.jpg)'
+  id: totrans-4
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802698.png.jpg)'
+- en: The monads that we’ll be exploring are all part of the `mtl` package.(A Haskell
+    *package* is a collection of modules.) The `mtl` package comes with the Haskell
+    Platform, so you probably already have it. To check if you do, type **`ghc-pkg
+    list`** from the command line. This will show which Haskell packages you have
+    installed, and one of them should be `mtl`, followed by a version number.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将要探索的单子都是`mtl`包的一部分。（Haskell的*包*是一组模块。）`mtl`包包含在Haskell平台中，所以您可能已经拥有了它。要检查您是否拥有它，请在命令行中输入**`ghc-pkg
+    list`**。这将显示您安装了哪些Haskell包，其中之一应该是`mtl`，后面跟着一个版本号。
+- en: Writer? I Hardly Knew Her!
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 写作者？我几乎不认识她！
+- en: We’ve loaded our gun with the `Maybe` monad, the list monad, and the `IO` monad.
+    Now let’s put the `Writer` monad in the chamber and see what happens when we fire
+    it!
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经用`Maybe`单子、列表单子和`IO`单子武装了我们的枪。现在让我们把`Writer`单子装进弹仓，看看我们开火时会发生什么！
+- en: Whereas the `Maybe` monad is for values with an added context of failure, and
+    the list monad is for nondeterministic values, the `Writer` monad is for values
+    that have another value attached that acts as a sort of log value. `Writer` allows
+    us to do computations while making sure that all the log values are combined into
+    one log value, which then is attached to the result.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 而`Maybe`单子是为具有附加失败上下文的值，列表单子是为非确定性值，`Writer`单子是为附加了另一个值（充当某种日志值）的值。`Writer`允许我们在确保所有日志值都组合成一个日志值的同时进行计算，然后这个日志值附加到结果上。
+- en: 'For instance, we might want to equip our values with strings that explain what’s
+    going on, probably for debugging purposes. Consider a function that takes a number
+    of bandits in a gang and tells us if that’s a big gang. It’s a very simple function:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，我们可能希望给我们的值添加一些解释当前情况的字符串，这可能是为了调试目的。考虑一个函数，它接受一伙强盗的数量，并告诉我们这是否是一个大团伙。这是一个非常简单的函数：
+- en: '[PRE0]'
+  id: totrans-10
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Now, what if instead of just giving us a `True` or `False` value, we want the
+    function to also return a log string that says what it did? Well, we just make
+    that string and return it alongside our `Bool`:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们想让函数不仅返回一个`True`或`False`值，还想返回一个日志字符串来说明它做了什么？嗯，我们只需创建那个字符串，并和我们的`Bool`一起返回：
+- en: '[PRE1]'
+  id: totrans-12
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'So now, instead of just returning a `Bool`, we return a tuple, where the first
+    component of the tuple is the actual value and the second component is the string
+    that accompanies that value. There’s some added context to our value now. Let’s
+    give this a go:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，现在，我们不再只是返回一个`Bool`，而是返回一个元组，其中元组的第一个组件是实际值，第二个组件是伴随该值的字符串。现在我们的值有了更多的上下文。让我们试试看：
+- en: '[PRE2]'
+  id: totrans-14
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'So far, so good. `isBigGang` takes a normal value and returns a value with
+    a context. As you’ve just seen, feeding it a normal value is not a problem. Now
+    what if we already have a value that has a log string attached to it, such as
+    `(3, "Smallish gang.")`, and we want to feed it to `isBigGang`? It seems like
+    once again, we’re faced with this question: If we have a function that takes a
+    normal value and returns a value with a context, how do we take a value with a
+    context and feed it to the function?'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，一切顺利。`isBigGang` 接受一个正常值并返回一个带有上下文的值。正如你刚才看到的，给它一个正常值并没有问题。现在假设我们已经有了一个附加了日志字符串的值，例如
+    `(3, "Smallish gang.")`，我们想要将其传递给 `isBigGang`？看起来我们又一次面临了这个问题：如果我们有一个接受正常值并返回带有上下文值的函数，我们如何将带有上下文的值传递给这个函数？
+- en: When we were exploring the `Maybe` monad in the previous chapter, we made a
+    function `applyMaybe`. This function takes a `Maybe a` value and a function of
+    type `a -> Maybe b`. We feed that `Maybe a` value into the function, even though
+    the function takes a normal `a` instead of a `Maybe a`. It does this by minding
+    the context that comes with `Maybe a` values, which is that they are values with
+    possible failure. But inside the `a -> Maybe b` function, we can treat that value
+    as just a normal value, because `applyMaybe` (which later becomes `>>=`) takes
+    care of checking if it is a `Nothing` or a `Just` value.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章探索 `Maybe` 单子时，我们创建了一个函数 `applyMaybe`。这个函数接受一个 `Maybe a` 值和一个类型为 `a -> Maybe
+    b` 的函数。我们将那个 `Maybe a` 值传递给函数，尽管该函数接受一个正常的 `a` 而不是 `Maybe a`。它是通过注意 `Maybe a`
+    值的上下文来做到这一点的，即它们是可能失败的值。但在 `a -> Maybe b` 函数内部，我们可以将那个值视为一个普通值，因为 `applyMaybe`（稍后变为
+    `>>=`）负责检查它是否是 `Nothing` 或 `Just` 值。
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802700.png.jpg)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802700.png.jpg)'
+- en: 'In the same vein, let’s make a function that takes a value with an attached
+    log—that is, an `(a, String)` value—and a function of type `a -> (b, String)`,
+    and feeds that value into the function. We’ll call it `applyLog`. But an `(a,
+    String)` value doesn’t carry with it a context of possible failure, but rather
+    a context of an additional log value. So, `applyLog` will make sure that the log
+    of the original value isn’t lost, but is joined together with the log of the value
+    that results from the function. Here’s the implementation of `applyLog`:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样地，让我们创建一个函数，它接受一个附加了日志的值——即一个 `(a, String)` 值——和一个类型为 `a -> (b, String)` 的函数，并将该值传递给该函数。我们将它称为
+    `applyLog`。但是 `(a, String)` 值并不携带可能的失败上下文，而是携带额外的日志值上下文。因此，`applyLog` 将确保原始值的日志不会丢失，而是与函数结果值的日志一起连接。下面是
+    `applyLog` 的实现：
+- en: '[PRE3]'
+  id: totrans-19
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: When we have a value with a context that we want to feed to a function, we usually
+    try to separate the actual value from the context, apply the function to the value,
+    and then see whether the context is handled. In the `Maybe` monad, we checked
+    if the value was a `Just x`, and if it was, we took that `x` and applied the function
+    to it. In this case, it’s very easy to find the actual value, because we’re dealing
+    with a pair where one component is the value and the other a log. So, first, we
+    just take the value, which is `x`, and we apply the function `f` to it. We get
+    a pair of `(y, newLog)`, where `y` is the new result and `newLog` is the new log.
+    But if we returned that as the result, the old log value wouldn’t be included
+    in the result, so we return a pair of `(y, log ++ newLog)`. We use `++` to append
+    the new log to the old one.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们有一个想要传递给函数的带有上下文的值时，我们通常会尝试将实际值与上下文分开，将函数应用于值，然后查看上下文是否得到处理。在 `Maybe` 单子中，我们检查值是否是
+    `Just x`，如果是，我们就取那个 `x` 并将其应用于函数。在这种情况下，找到实际值非常容易，因为我们处理的是一个包含一个值和一个日志的配对。所以，我们首先只取值，即
+    `x`，并将函数 `f` 应用于它。我们得到一个 `(y, newLog)` 的配对，其中 `y` 是新的结果，`newLog` 是新的日志。但如果我们以这种方式返回结果，旧的日志值就不会包含在结果中，所以我们返回一个
+    `(y, log ++ newLog)` 的配对。我们使用 `++` 将新的日志追加到旧的日志上。
+- en: 'Here’s `applyLog` in action:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是 `applyLog` 的实际应用：
+- en: '[PRE4]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The results are similar to before, except that now the number of people in the
+    gang has its accompanying log, which is included in the result log.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果与之前相似，但现在团伙的人数有了其伴随的日志，该日志包含在结果日志中。
+- en: 'Here are a few more examples of using `applyLog`:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是使用 `applyLog` 的几个更多示例：
+- en: '[PRE5]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: See how inside the lambda, `x` is just a normal string and not a tuple, and
+    how `applyLog` takes care of appending the logs?
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 看看在 lambda 表达式中，`x` 只是一个普通字符串而不是一个元组，以及 `applyLog` 如何处理日志的追加？
+- en: Monoids to the Rescue
+  id: totrans-27
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 单子拯救
+- en: 'Right now, `applyLog` takes values of type `(a, String)`, but is there a reason
+    that the log must be a `String`? It uses `++` to append the logs, so wouldn’t
+    this work on any kind of list, not just a list of characters? Sure, it would.
+    We can change its type to this:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前，`applyLog`接受类型为`(a, String)`的值，但日志必须是`String`类型有原因吗？它使用`++`来追加日志，所以这难道不能适用于任何类型的列表，而不仅仅是字符列表吗？当然可以。我们可以将其类型更改为以下形式：
+- en: '[PRE6]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Now the log is a list. The type of values contained in the list must be the
+    same for the original list as well as for the list that the function returns.
+    Otherwise, we wouldn’t be able to use `++` to stick them together.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在日志是一个列表。列表中包含的值的类型必须与原始列表以及函数返回的列表相同。否则，我们就无法使用`++`将它们粘合在一起。
+- en: 'Would this work for bytestrings? There’s no reason it shouldn’t. However, the
+    type we have now works only for lists. It seems as though we would need to make
+    a separate `applyLog` for bytestrings. But wait! Both lists and bytestrings are
+    monoids. As such, they are both instances of the `Monoid` type class, which means
+    that they implement the `mappend` function. And for both lists and bytestrings,
+    `mappend` is for appending. Watch it in action:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这对bytestrings也适用吗？没有理由不适用。然而，我们现在拥有的类型仅适用于列表。似乎我们需要为bytestrings创建一个单独的`applyLog`。但是等等！列表和bytestrings都是幺半群。因此，它们都是`Monoid`类型类的实例，这意味着它们实现了`mappend`函数。对于列表和bytestrings，`mappend`是用于连接的。看看它是如何工作的：
+- en: '[PRE7]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Cool! Now our `applyLog` can work for any monoid. We need to change the type
+    to reflect this, as well as the implementation, because we need to change `++`
+    to `mappend`:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 太棒了！现在我们的`applyLog`可以适用于任何幺半群。我们需要更改类型以及实现来反映这一点，因为我们需要将`++`更改为`mappend`：
+- en: '[PRE8]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Because the accompanying value can now be any monoid value, we no longer need
+    to think of the tuple as a value and a log; now we can think of it as a value
+    with an accompanying monoid value. For instance, we can have a tuple that has
+    an item name and an item price as the monoid value. We just use the `Sum newtype`
+    to make sure that the prices are added as we operate with the items. Here’s a
+    function that adds drink to some cowboy food order:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为伴随的值现在可以是任何幺半群值，我们不再需要将元组视为值和日志；现在我们可以将其视为带有伴随幺半群值的值。例如，我们可以有一个包含项目名称和项目价格的元组作为幺半群值。我们只需使用`Sum
+    newtype`来确保在操作项目时价格会被累加。这里有一个向一些牛仔食品订单添加饮料的函数：
+- en: '[PRE9]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We use strings to represent foods and an `Int` in a `Sum newtype` wrapper to
+    keep track of how many cents something costs. As a reminder, doing `mappend` with
+    `Sum` results in the wrapped values being added together:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们用字符串来表示食物，并用`Int`类型在`Sum newtype`包装器中跟踪某物的价格。作为提醒，使用`Sum`进行`mappend`操作会将包装的值相加：
+- en: '[PRE10]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'The `addDrink` function is pretty simple. If we’re eating beans, it returns
+    `"milk"` along with `Sum 25`, so 25 cents wrapped in `Sum`. If we’re eating jerky,
+    we drink whiskey. And if we’re eating anything else, we drink beer. Just normally
+    applying this function to a food wouldn’t be terribly interesting right now. But
+    using `applyLog` to feed a food that comes with a price itself into this function
+    is worth a look:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`addDrink`函数相当简单。如果我们吃豆子，它返回`"milk"`以及`Sum 25`，即25美分被包装在`Sum`中。如果我们吃肉干，我们喝威士忌。如果我们吃其他任何东西，我们喝啤酒。现在直接应用这个函数到一个食物上不会很有趣。但是，使用`applyLog`将带有自身价格的食品传递给这个函数是值得一看的：'
+- en: '[PRE11]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Milk costs 25 cents, but if we have it with beans that cost 25 cents, we’ll
+    end up paying 35 cents.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 牛奶的价格是25美分，但如果我们再买25美分的豆子，最终就要支付35美分。
+- en: Now it’s clear how the attached value doesn’t always need to be a log. It can
+    be any monoid value, and how two such values are combined depends on the monoid.
+    When we were doing logs, they were appended, but now, the numbers are being added
+    up.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在很清楚附加的值不总是日志。它可以是一个任何幺半群值，并且两个这样的值如何组合取决于幺半群。当我们处理日志时，它们被连接，但现在，数字正在相加。
+- en: 'Because the value that `addDrink` returns is a tuple of type `(Food, Price)`,
+    we can feed that result to `addDrink` again, so that it tells us what we should
+    drink along with our meal and how much that will cost us. Let’s give it a shot:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为`addDrink`返回的值是类型为`(Food, Price)`的元组，所以我们可以将这个结果再次传递给`addDrink`，这样它就会告诉我们应该和餐点一起喝什么，以及这会花费我们多少钱。让我们试一试：
+- en: '[PRE12]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Adding a drink to some dog meat results in a beer and an additional 30 cents,
+    so `("beer", Sum 35)`. And if we use `applyLog` to feed that to `addDrink`, we
+    get another beer, and the result is `("beer", Sum 65)`.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一些狗肉中加一杯饮料会导致啤酒和额外的30美分，所以结果是`("beer", Sum 35)`。如果我们使用`applyLog`将这个结果传递给`addDrink`，我们就会得到另一杯啤酒，结果是`("beer",
+    Sum 65)`。
+- en: The Writer Type
+  id: totrans-46
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Writer类型
+- en: Now that you’ve seen how a value with an attached monoid acts like a monadic
+    value, let’s examine the `Monad` instance for types of such values. The `Control.Monad.Writer`
+    module exports the `Writer w a` type along with its `Monad` instance and some
+    useful functions for dealing with values of this type.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经看到了一个附加了monoid的值如何像一个monadic值一样行动，让我们来检查这种值的`Monad`实例。`Control.Monad.Writer`模块导出了`Writer
+    w a`类型及其`Monad`实例以及一些处理此类值的有用函数。
+- en: 'To attach a monoid to a value, we just need to put them together in a tuple.
+    The `Writer w a` type is just a `newtype` wrapper for this. Its definition is
+    very simple:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将monoid附加到值上，我们只需要将它们组合成一个元组。`Writer w a`类型只是这个的`newtype`包装器。它的定义非常简单：
+- en: '[PRE13]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: It’s wrapped in a `newtype` so that it can be made an instance of `Monad` and
+    so that its type is separate from a normal tuple. The `a` type parameter represents
+    the type of the value, and the `w` type parameter represents the type of the attached
+    monoid value.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它被包裹在一个`newtype`中，这样它就可以成为一个`Monad`的实例，并且它的类型与普通元组分开。`a`类型参数表示值的类型，`w`类型参数表示附加的monoid值的类型。
+- en: The `Control.Monad.Writer` module reserves the right to change the way it internally
+    implements the `Writer w a` type, so it doesn’t export the `Writer` value constructor.
+    However, it does export the `writer` function, which does the same thing that
+    the `Writer` constructor would do. Use it when you want to take a tuple and make
+    a `Writer` value from it.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Control.Monad.Writer`模块保留更改其内部实现`Writer w a`类型的方式的权利，因此它没有导出`Writer`值构造函数。然而，它确实导出了`writer`函数，它执行与`Writer`构造函数相同的功能。当你想要从一个元组创建一个`Writer`值时使用它。'
+- en: Because the `Writer` value constructor is not exported, you also can’t pattern
+    match against it. Instead, you need to use the `runWriter` function, which takes
+    a tuple that’s wrapped in a `Writer newtype` and unwraps it, returning a simple
+    tuple.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为`Writer`值构造函数没有导出，所以你也不能对它进行模式匹配。相反，你需要使用`runWriter`函数，它接受一个被`Writer newtype`包裹的元组并将其解包，返回一个简单的元组。
+- en: 'Its `Monad` instance is defined like so:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它的`Monad`实例定义如下：
+- en: '[PRE14]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: First, let’s examine `>>=`. Its implementation is essentially the same as `applyLog`,
+    only now that our tuple is wrapped in the `Writer newtype`, we need to unwrap
+    it when pattern matching. We take the value `x` and apply the function `f` to
+    it. This gives us gives us a `Writer w a` value, and we use a `let` expression
+    to pattern match on it. We present `y` as the new result and use `mappend` to
+    combine the old monoid value with the new one. We pack that up with the result
+    value in a tuple and then wrap that with the `Writer` constructor so that our
+    result is a `Writer` value, instead of just an unwrapped tuple.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们来检查`>>=`。它的实现基本上与`applyLog`相同，只是现在我们的元组被包裹在`Writer newtype`中，我们需要在模式匹配时解包它。我们取值`x`并对其应用函数`f`。这给我们一个`Writer
+    w a`值，我们使用`let`表达式来对其模式匹配。我们将`y`作为新的结果呈现，并使用`mappend`将旧的monoid值与新的值组合起来。我们将结果值打包成一个元组，然后使用`Writer`构造函数将其包裹起来，这样我们的结果就是一个`Writer`值，而不是一个未解包的元组。
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802702.png.jpg)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题的图片](httpatomoreillycomsourcenostarchimages802702.png.jpg)'
+- en: So, what about `return`? It must take a value and put it in a default minimal
+    context that still presents that value as the result. What would such a context
+    be for `Writer` values? If we want the accompanying monoid value to affect other
+    monoid values as little as possible, it makes sense to use `mempty`.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么，关于`return`呢？它必须返回一个值，并将其放入一个默认的最小上下文中，仍然将这个值作为结果呈现。对于`Writer`值，这样的上下文会是什么样子呢？如果我们想让伴随的monoid值尽可能少地影响其他monoid值，使用`mempty`是有意义的。
+- en: '`mempty` is used to present identity monoid values, such as `""` and `Sum 0`
+    and empty bytestrings. Whenever we use `mappend` between `mempty` and some other
+    monoid value, the result is that other monoid value. So, if we use `return` to
+    make a `Writer` value and then use `>>=` to feed that value to a function, the
+    resulting monoid value will be only what the function returns.'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mempty`用于表示恒等monoid值，如`""`、`Sum 0`和空字节数组。每当我们在`mempty`和某个其他monoid值之间使用`mappend`时，结果就是那个其他monoid值。所以，如果我们使用`return`来创建一个`Writer`值，然后使用`>>=`将这个值传递给一个函数，那么结果monoid值就只有函数返回的内容。'
+- en: 'Let’s use `return` on the number `3` a bunch of times, pairing it with a different
+    monoid each time:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们多次使用`return`在数字`3`上，每次都与不同的monoid配对：
+- en: '[PRE15]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Because `Writer` doesn’t have a `Show` instance, we used `runWriter` to convert
+    our `Writer` values to normal tuples that can be shown. For `String`, the monoid
+    value is the empty string. With `Sum`, it’s `0`, because if we add 0 to something,
+    that something stays the same. For `Product`, the identity is `1`.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于 `Writer` 没有提供 `Show` 实例，我们使用了 `runWriter` 来将我们的 `Writer` 值转换为可以显示的正常元组。对于
+    `String`，单例值是空字符串。对于 `Sum`，它是 `0`，因为如果我们把 `0` 加到某个东西上，那个东西就会保持不变。对于 `Product`，恒等值是
+    `1`。
+- en: The `Writer` instance doesn’t feature an implementation for `fail`, so if a
+    pattern match fails in `do` notation, `error` is called.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Writer` 实例没有为 `fail` 提供实现，所以如果 `do` 语法中的模式匹配失败，会调用 `error`。'
+- en: Using do Notation with Writer
+  id: totrans-63
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 `Writer` 的 `do` 语法
+- en: Now that we have a `Monad` instance, we’re free to use `do` notation for `Writer`
+    values. It’s handy when we have several `Writer` values and want to do stuff with
+    them. As with other monads, we can treat them as normal values, and the context
+    gets taken care of for us. In this case, all the monoid values that come attached
+    are `mappend`ed, and so are reflected in the final result.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了 `Monad` 实例，我们可以自由地使用 `do` 语法来处理 `Writer` 值。当我们有多个 `Writer` 值并想对它们进行操作时，这很方便。与其他单调类似，我们可以将它们视为普通值，上下文会由我们处理。在这种情况下，所有附加的单例值都会通过
+    `mappend` 组合，并反映在最终结果中。
+- en: 'Here’s a simple example of using `do` notation with `Writer` to multiply two
+    numbers:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是使用 `Writer` 的 `do` 语法来乘以两个数字的简单示例：
+- en: '[PRE16]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '`logNumber` takes a number and makes a `Writer` value out of it. Notice how
+    we used the `writer` function to construct a `Writer` value, instead of directly
+    using the `Writer` value constructor. For the monoid, we use a list of strings,
+    and we equip the number with a singleton list that just says that we have that
+    number. `multWithLog` is a `Writer` value that multiplies `3` and `5` and makes
+    sure that their attached logs are included in the final log. We use `return` to
+    present `a*b` as the result. Because `return` just takes something and puts it
+    in a minimal context, we can be sure that it won’t add anything to the log.'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`logNumber` 接收一个数字并将其转换为一个 `Writer` 值。注意我们是如何使用 `writer` 函数来构建一个 `Writer` 值，而不是直接使用
+    `Writer` 构造函数。对于单例，我们使用一个字符串列表，并给数字配上一个单例列表，表示我们拥有那个数字。`multWithLog` 是一个 `Writer`
+    值，它将 `3` 和 `5` 相乘并确保它们附加的日志包含在最终的日志中。我们使用 `return` 来展示 `a*b` 作为结果。因为 `return`
+    只是将某物放入一个最小化的上下文中，我们可以确信它不会向日志中添加任何内容。'
+- en: 'Here’s what we see if we run this code:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们运行这段代码，我们会看到以下内容：
+- en: '[PRE17]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Sometimes, we just want some monoid value to be included at some particular
+    point. For this, the `tell` function is useful. It’s part of the `MonadWriter`
+    type class. In the case of `Writer`, it takes a monoid value, like `["This is
+    going on"]`, and creates a `Writer` value that presents the dummy value `()` as
+    its result, but has the desired monoid value attached. When we have a monadic
+    value that has `()` as its result, we don’t bind it to a variable.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候，我们只想在某个特定的点包含某个单例值。为此，`tell` 函数很有用。它是 `MonadWriter` 类型类的一部分。在 `Writer` 的情况下，它接收一个单例值，如
+    `["This is going on"]`，并创建一个 `Writer` 值，该值将虚拟值 `()` 作为其结果，但附加了所需的单例值。当我们有一个以 `()`
+    作为其结果的单调值时，我们不会将其绑定到变量上。
+- en: 'Here’s `multWithLog` with some extra reporting included:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是包含了一些额外报告的 `multWithLog`：
+- en: '[PRE18]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'It’s important that `return (a*b)` is the last line, because the result of
+    the last line in a `do` expression is the result of the whole `do` expression.
+    Had we put `tell` as the last line, the result of this `do` expression would be
+    `()`. We would lose the result of the multiplication. However, the log would be
+    the same. Here’s this in action:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要的是 `return (a*b)` 是最后一行，因为在 `do` 表达式的最后一行中的结果是整个 `do` 表达式的结果。如果我们把 `tell`
+    放在最后一行，这个 `do` 表达式的结果将是 `()`。我们会丢失乘法的结果。然而，日志会保持不变。以下是实际操作：
+- en: '[PRE19]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Adding Logging to Programs
+  id: totrans-75
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 将日志添加到程序中
+- en: 'Euclid’s algorithm takes two numbers and computes their greatest common divisor—that
+    is, the biggest number that still divides both of them. Haskell already features
+    the `gcd` function, which does exactly this, but let’s implement our own function
+    and then equip it with logging capabilities. Here’s the normal algorithm:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 欧几里得算法接收两个数字并计算它们的最大公约数——即仍然可以同时整除这两个数字的最大数。Haskell 已经有了一个 `gcd` 函数，它正是做这件事，但让我们实现我们自己的函数，并给它添加日志功能。以下是正常的算法：
+- en: '[PRE20]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: The algorithm is very simple. First, it checks if the second number is 0\. If
+    it is, then the result is the first number. If it isn’t, then the result is the
+    greatest common divisor of the second number and the remainder of dividing the
+    first number with the second one.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 算法非常简单。首先，它检查第二个数字是否为 0。如果是，那么结果是第一个数字。如果不是，那么结果是第二个数字和第一个数字除以第二个数字的余数的最大公约数。
+- en: 'For instance, if we want to know what the greatest common divisor of 8 and
+    3 is, we just follow this algorithm. Because 3 isn’t 0, we need to find the greatest
+    common divisor of 3 and 2 (if we divide 8 by 3, the remainder is 2). Next, we
+    find the greatest common divisor of 3 and 2\. 2 still isn’t 0, so now we have
+    have 2 and 1\. The second number isn’t 0, so we run the algorithm again for 1
+    and 0, as dividing 2 by 1 gives us a remainder of 0\. And finally, because the
+    second number is now 0, the final result is 1\. Let’s see if our code agrees:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，如果我们想知道 8 和 3 的最大公约数，我们只需遵循这个算法。因为 3 不为 0，我们需要找到 3 和 2 的最大公约数（如果我们用 3 除以
+    8，余数是 2）。接下来，我们找到 3 和 2 的最大公约数。2 仍然不为 0，所以我们现在有 2 和 1。第二个数字不为 0，所以我们再次为 1 和 0
+    运行算法，因为用 2 除以 1 的余数是 0。最后，因为第二个数字现在是 0，最终结果是 1。让我们看看我们的代码是否一致：
+- en: '[PRE21]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'It does. Very good! Now, we want to equip our result with a context, and the
+    context will be a monoid value that acts as a log. As before, we’ll use a list
+    of strings as our monoid. So, this should be the type of our new `gcd''` function:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它确实如此！非常好！现在，我们想要给我们的结果添加一个上下文，这个上下文将是一个作为日志的幺半群值。和之前一样，我们将使用字符串列表作为我们的幺半群。因此，这应该是我们新的
+    `gcd'` 函数的类型：
+- en: '[PRE22]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'All that’s left now is to equip our function with log values. Here is the code:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在剩下的只是给我们的函数添加日志值。以下是代码：
+- en: '[PRE23]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'This function takes two normal `Int` values and returns a `Writer [String]
+    Int`—that is, an `Int` that has a log context. In the case where `b` is `0`, instead
+    of just giving `a` as the result, we use a `do` expression to put together a `Writer`
+    value as a result. First, we use `tell` to report that we’re finished, and then
+    we use `return` to present `a` as the result of the `do` expression. Instead of
+    this `do` expression, we could have also written this:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个函数接受两个普通的 `Int` 值，并返回一个 `Writer [String] Int`——即一个具有日志上下文的 `Int`。在 `b` 为 `0`
+    的情况下，我们不是只给出 `a` 作为结果，而是使用 `do` 表达式来组合一个 `Writer` 值作为结果。首先，我们使用 `tell` 来报告我们已经完成，然后我们使用
+    `return` 来将 `a` 作为 `do` 表达式的结果呈现。我们也可以这样写：
+- en: '[PRE24]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: However, I think the `do` expression is easier to read.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，我认为 `do` 表达式更容易阅读。
+- en: Next, we have the case when `b` isn’t `0`. In this case, we log that we’re using
+    `mod` to figure out the remainder of dividing `a` and `b`. Then the second line
+    of the `do` expression just recursively calls `gcd'`. Remember that `gcd'` now
+    ultimately returns a `Writer` value, so it’s perfectly valid that ``gcd' b (a
+    `mod` b)`` is a line in a `do` expression.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们有 `b` 不为 `0` 的情况。在这种情况下，我们记录我们正在使用 `mod` 来找出 `a` 和 `b` 的余数。然后 `do` 表达式的第二行只是递归调用
+    `gcd'`。记住，`gcd'` 现在最终返回一个 `Writer` 值，所以 `gcd' b (a `mod` b)` 是 `do` 表达式中的一行是完全可以接受的。
+- en: 'Let’s try out our new `gcd''`. Its result is a `Writer [String] Int` value,
+    and if we unwrap that from its `newtype`, we get a tuple. The first part of the
+    tuple is the result. Let’s see if it’s okay:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们尝试我们的新 `gcd'`。它的结果是 `Writer [String] Int` 值，如果我们从它的 `newtype` 中解包，我们得到一个元组。元组的第一个部分是结果。让我们看看它是否正确：
+- en: '[PRE25]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Good! Now what about the log? Because the log is a list of strings, let’s use
+    `mapM_ putStrLn` to print those strings on the screen:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 好的！那么关于日志呢？因为日志是字符串列表，让我们使用 `mapM_ putStrLn` 来在屏幕上打印这些字符串：
+- en: '[PRE26]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: I think it’s awesome how we were able to change our ordinary algorithm to one
+    that reports what it does as it goes along. And we did this just by changing normal
+    values to monadic values. We let the implementation of `>>=` for `Writer` take
+    care of the logs for us.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我认为我们能够将我们的普通算法改变为一种在执行过程中报告其操作的算法，这真是太棒了。我们只是通过将普通值改为幺半群值就做到了这一点。我们让 `Writer`
+    的 `>>=` 实现来为我们处理日志。
+- en: You can add a logging mechanism to pretty much any function. You just replace
+    normal values with `Writer` values where you want and change normal function application
+    to `>>=` (or `do` expressions if it increases readability).
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你几乎可以给任何函数添加日志机制。你只需在需要的地方将普通值替换为 `Writer` 值，并将普通函数应用改为 `>>=`（或者如果它增加了可读性，可以使用
+    `do` 表达式）。
+- en: Inefficient List Construction
+  id: totrans-95
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 低效的列表构建
+- en: When using the `Writer` monad, you need to be careful which monoid to use, because
+    using lists can sometimes turn out to be very slow. Lists use `++` for `mappend`,
+    and using `++` to add something to the end of a list is slow if that list is really
+    long.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用 `Writer` 模态时，你需要小心选择哪个单例，因为使用列表有时可能会非常慢。列表使用 `++` 作为 `mappend`，如果列表很长，使用
+    `++` 将东西添加到列表的末尾会很慢。
+- en: 'In our `gcd''` function, the logging is fast because the list appending ends
+    up looking like this:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的 `gcd'` 函数中，日志记录很快，因为列表连接最终看起来像这样：
+- en: '[PRE27]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'A list is a data structure that’s constructed from left to right. This is efficient,
+    because we first fully construct the left part of a list and only then add a longer
+    list on the right. But if we’re not careful, using the `Writer` monad can produce
+    list appending that looks like this:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列表是一种从左到右构建的数据结构。这是高效的，因为我们首先完全构建列表的左半部分，然后才在右边添加一个更长的列表。但如果我们不小心，使用 `Writer`
+    模态可能会产生如下所示的列表连接：
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802704.png.jpg)'
+  id: totrans-100
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802704.png.jpg)'
+- en: '[PRE28]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: This associates to the left instead of to the right. It’s inefficient because
+    every time it wants to add the right part to the left part, it must construct
+    the left part all the way from the beginning!
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它与左关联而不是右关联。它效率低下，因为每次它想要将右侧部分添加到左侧部分时，都必须从头开始构建左侧部分！
+- en: The following function works like `gcd'`, but it logs stuff in reverse. First,
+    it produces the log for the rest of the procedure, and then it adds the current
+    step to the end of the log.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下函数类似于 `gcd'`，但它以相反的顺序记录信息。首先，它为剩余的步骤生成日志，然后它将当前步骤添加到日志的末尾。
+- en: '[PRE29]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'It does the recursion first and binds its resulting value to `result`. Then
+    it adds the current step to the log, but the current step goes at the end of the
+    log that was produced by the recursion. At the end, it presents the result of
+    the recursion as the final result. Here it is in action:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它首先进行递归，并将其结果值绑定到 `result`。然后它将当前步骤添加到日志中，但当前步骤位于递归生成的日志末尾。最后，它将递归的结果作为最终结果呈现。下面是它的实际操作：
+- en: '[PRE30]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: This function is inefficient because it ends up associating the use of `++`
+    to the left instead of to the right.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个函数效率低下，因为它最终将 `++` 的使用关联到左侧而不是右侧。
+- en: Because lists can sometimes be inefficient when repeatedly appended in this
+    manner, it’s best to use a data structure that always supports efficient appending.
+    One such data structure is the difference list.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于列表有时在重复以这种方式连接时可能效率低下，因此最好使用始终支持高效连接的数据结构。其中一种数据结构是差分列表。
+- en: Using Difference Lists
+  id: totrans-109
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用差分列表
+- en: While similar to a normal list, a *difference list* is actually a function that
+    takes a list and prepends another list to it. For example, the difference list
+    equivalent of a list like `[1,2,3]` is the function `\xs -> [1,2,3] ++ xs`. A
+    normal empty list is `[]`, whereas an empty difference list is the function `\xs
+    -> [] ++ xs`.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然与普通列表相似，但 *差分列表* 实际上是一个函数，它接受一个列表并将其另一个列表前置。例如，类似于 `[1,2,3]` 的差分列表等价函数是 `\xs
+    -> [1,2,3] ++ xs`。一个普通的空列表是 `[]`，而一个空的差分列表是函数 `\xs -> [] ++ xs`。
+- en: Difference lists support efficient appending. When we append two normal lists
+    with `++`, the code must walk all the way to the end of the list on the left of
+    `++`, and then stick the other one there. But what if we take the difference list
+    approach and represent our lists as functions?
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 差分列表支持高效连接。当我们使用 `++` 连接两个普通列表时，代码必须走到 `++` 左侧列表的末尾，然后将另一个列表粘贴在那里。但如果我们采用差分列表方法并将我们的列表表示为函数呢？
+- en: 'Appending two difference lists can be done like so:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以这样连接两个差分列表：
+- en: '[PRE31]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Remember that `f` and `g` are functions that take lists and prepend something
+    to them. For instance, if `f` is the function `("dog"++)` (just another way of
+    writing `\xs -> "dog" ++ xs`) and `g` is the function `("meat"++)`, then ``f `append`
+    g`` makes a new function that’s equivalent to the following:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住，`f` 和 `g` 是接受列表并将某些内容前置到列表中的函数。例如，如果 `f` 是函数 `("dog"++)`（这只是另一种写法 `\xs ->
+    "dog" ++ xs`），而 `g` 是函数 `("meat"++)`，那么 `f `append` g` 将创建一个新函数，它等价于以下内容：
+- en: '[PRE32]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: We’ve appended two difference lists just by making a new function that first
+    applies one difference list to some list and then to the other.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们只是通过创建一个新的函数来连接两个差分列表，该函数首先将一个差分列表应用于某个列表，然后应用于另一个列表。
+- en: 'Let’s make a `newtype` wrapper for difference lists so that we can easily give
+    them monoid instances:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们为差分列表创建一个 `newtype` 包装器，这样我们就可以轻松地给它们提供单例实例：
+- en: '[PRE33]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'The type that we wrap is `[a] -> [a]`, because a difference list is just a
+    function that takes a list and returns another list. Converting normal lists to
+    difference lists and vice versa is easy:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们包装的类型是 `[a] -> [a]`，因为差分列表只是一个接受列表并返回另一个列表的函数。将普通列表转换为差分列表以及相反操作都很简单：
+- en: '[PRE34]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: To make a normal list into a difference list, we just do what we did before
+    and make it a function that prepends it to another list. Because a difference
+    list is a function that prepends something to another list, if we just want that
+    something, we apply the function to an empty list!
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将普通列表转换为差分列表，我们只需做我们之前做过的事情，将其变成一个将某个东西添加到另一个列表的函数。因为差分列表是一个将某个东西添加到另一个列表的函数，如果我们只想得到那个东西，我们只需将函数应用于一个空列表！
+- en: 'Here’s the `Monoid` instance:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是 `Monoid` 实例：
+- en: '[PRE35]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'Notice how for lists, `mempty` is just the `id` function, and `mappend` is
+    actually just function composition. Let’s see if this works:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意对于列表，`mempty` 只是 `id` 函数，而 `mappend` 实际上只是函数组合。让我们看看这行不行：
+- en: '[PRE36]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Tip-top! Now we can increase the efficiency of our `gcdReverse` function by
+    making it use difference lists instead of normal lists:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 极佳！现在我们可以通过使其使用差分列表而不是普通列表来提高我们的 `gcdReverse` 函数的效率：
+- en: '[PRE37]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'We just needed to change the type of the monoid from `[String]` to `DiffList
+    String` and then when using `tell`, convert our normal lists into difference lists
+    with `toDiffList`. Let’s see if the log gets assembled properly:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们只需要将单例的类型从 `[String]` 更改为 `DiffList String`，然后在使用 `tell` 时，使用 `toDiffList`
+    将我们的普通列表转换为差分列表。让我们看看日志是否被正确组装：
+- en: '[PRE38]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: We do `gcdReverse 110 34`, then use `runWriter` to unwrap it from the `newtype`,
+    then apply `snd` to that to just get the log, then apply `fromDiffList` to convert
+    it to a normal list, and, finally, print its entries to the screen.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们执行 `gcdReverse 110 34`，然后使用 `runWriter` 从 `newtype` 中解包它，然后应用 `snd` 来获取日志，然后应用
+    `fromDiffList` 将其转换为普通列表，最后将其条目打印到屏幕上。
+- en: Comparing Performance
+  id: totrans-131
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 性能比较
+- en: To get a feel for just how much difference lists may improve your performance,
+    consider the following function. It just counts down from some number to zero
+    but produces its log in reverse, like `gcdReverse`, so that the numbers in the
+    log will actually be counted up.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了了解差分列表可能如何提高你的性能，考虑以下函数。它只是从某个数字倒数到零，但产生的日志是反向的，就像 `gcdReverse` 一样，因此日志中的数字实际上是被倒数的。
+- en: '[PRE39]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: If we give it `0`, it just logs that value. For any other number, it first counts
+    down its predecessor to `0`, and then appends that number to the log. So, if we
+    apply `finalCountDown` to `100`, the string `"100"` will come last in the log.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们给它 `0`，它就只是记录这个值。对于任何其他数字，它首先将其前一个数字减到 `0`，然后将该数字追加到日志中。所以，如果我们将 `finalCountDown`
+    应用到 `100`，字符串 `"100"` 将是日志中最后一个出现的数字。
+- en: 'If you load this function in GHCi and apply it to a big number, like `500000`,
+    you’ll see that it quickly starts counting from `0` onward:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你将这个函数加载到 GHCi 中并应用于一个大数字，比如 `500000`，你会发现它很快就开始从 `0` 开始计数：
+- en: '[PRE40]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'However, if you change it to use normal lists instead of difference lists,
+    like so:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如果你将其更改为使用普通列表而不是差分列表，就像这样：
+- en: '[PRE41]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'and then tell GHCi to start counting:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后告诉 GHCi 开始计数：
+- en: '[PRE42]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: you’ll see that the counting is really slow.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你会发现计数真的非常慢。
+- en: Of course, this is not the proper and scientific way to test the speed of your
+    programs. However, we were able to see that, in this case, using difference lists
+    starts producing results immediately, whereas normal lists take forever.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，这不是测试程序速度的正确和科学的方法。然而，我们能够看到，在这种情况下，使用差分列表可以立即开始产生结果，而普通列表则需要很长时间。
+- en: Oh, by the way, the song “Final Countdown” by Europe is now stuck in your head.
+    Enjoy!
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 哦，顺便说一下，欧洲乐队的歌曲“Final Countdown”现在在你的脑海中回荡。享受吧！
+- en: Reader? Ugh, Not This Joke Again
+  id: totrans-144
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 读者？哦，不是这个笑话又来了
+- en: 'In [Chapter 11](ch11.html "Chapter 11. Applicative Functors"), you saw that
+    the function type `(->) r` is an instance of `Functor`. Mapping a function `f`
+    over a function `g` will make a function that takes the same thing as `g`, applies
+    `g` to it, and then applies `f` to that result. So basically, we’re making a new
+    function that’s like `g`, but before returning its result, `f` is applied to that
+    result as well. Here’s an example:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [第 11 章](ch11.html "第 11 章。应用函子") 中，你看到函数类型 `(->) r` 是 `Functor` 的一个实例。将函数
+    `f` 映射到函数 `g` 将会创建一个函数，它接受与 `g` 相同的东西，将其应用于 `g`，然后将 `f` 应用于那个结果。所以基本上，我们创建了一个新的函数，它类似于
+    `g`，但在返回结果之前，`f` 也会应用于那个结果。以下是一个例子：
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802706.png.jpg)'
+  id: totrans-146
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802706.png.jpg)'
+- en: '[PRE43]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'You’ve also seen that functions are applicative functors. They allow us to
+    operate on the eventual results of functions as if we already had their results.
+    Here’s an example:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还看到函数是应用函子。它们允许我们像已经拥有函数的结果一样操作函数的最终结果。以下是一个例子：
+- en: '[PRE44]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: The expression `(+) <$> (*2) <*> (+10)` makes a function that takes a number,
+    gives that number to `(*2)` and `(+10)`, and then adds together the results. For
+    instance, if we apply this function to `3`, it applies both `(*2)` and `(+10)`
+    to `3`, giving `6` and `13`. Then it calls `(+)` with `6` and `13`, and the result
+    is `19`.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表达式 `(+) <$> (*2) <*> (+10)` 创建了一个函数，它接受一个数字，将该数字传递给 `(*2)` 和 `(+10)`，然后将结果相加。例如，如果我们将这个函数应用到
+    `3` 上，它将 `(*2)` 和 `(+10)` 都应用到 `3` 上，得到 `6` 和 `13`。然后它用 `6` 和 `13` 调用 `(+)`，结果是
+    `19`。
+- en: Functions As Monads
+  id: totrans-151
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 函数作为 Monad
+- en: Not only is the function type `(->) r` a functor and an applicative functor,
+    but it’s also a monad. Just like other monadic values that you’ve met so far,
+    a function can also be considered a value with a context. The context for functions
+    is that that value is not present yet and that we need to apply that function
+    to something in order to get its result.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不仅函数类型 `(->) r` 是一个函子和应用函子，它还是一个 Monad。就像您迄今为止遇到的其他 monadic 值一样，一个函数也可以被视为一个带有上下文的价值。函数的上下文是那个值尚未存在，我们需要将那个函数应用到某个东西上以获得其结果。
+- en: 'Because you’re already acquainted with how functions work as functors and applicative
+    functors, let’s dive right in and see what their `Monad` instance looks like.
+    It’s located in `Control.Monad.Instances`, and it goes a little something like
+    this:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为您已经熟悉了函数作为函子以及应用函子的运作方式，让我们直接深入探讨一下它们的 `Monad` 实例是什么样的。它位于 `Control.Monad.Instances`
+    中，大致如下：
+- en: '[PRE45]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: You’ve seen how `pure` is implemented for functions, and `return` is pretty
+    much the same thing as `pure`. It takes a value and puts it in a minimal context
+    that always has that value as its result. And the only way to make a function
+    that always has a certain value as its result is to make it completely ignore
+    its parameter.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您已经看到了函数的 `pure` 实现方式，`return` 几乎与 `pure` 相同。它接受一个值并将其放入一个最小上下文中，该上下文的结果总是那个值。要创建一个总是有特定值作为其结果的函数的唯一方法就是让它完全忽略其参数。
+- en: The implementation for `>>=` may seem a bit cryptic, but it’s really not all
+    that complicated. When we use `>>=` to feed a monadic value to a function, the
+    result is always a monadic value. So, in this case, when we feed a function to
+    another function, the result is a function as well. That’s why the result starts
+    off as a lambda.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`>>=` 的实现可能看起来有点晦涩，但实际上并不复杂。当我们使用 `>>=` 将 monadic 值传递给一个函数时，结果始终是一个 monadic
+    值。所以，在这种情况下，当我们将一个函数传递给另一个函数时，结果也是一个函数。这就是为什么结果从 lambda 表达式开始。'
+- en: All of the implementations of `>>=` so far somehow isolated the result from
+    the monadic value and then applied the function `f` to that result. The same thing
+    happens here. To get the result from a function, we need to apply it to something,
+    which is why we use `(h w)` here, and then we apply `f` to that. `f` returns a
+    monadic value, which is a function in our case, so we apply it to `w` as well.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，所有 `>>=` 的实现都某种程度地将结果与 monadic 值隔离开来，然后应用函数 `f` 到那个结果上。这里也是同样的情况。要从函数中获取结果，我们需要将其应用到某个东西上，这就是为什么我们在这里使用
+    `(h w)`，然后应用 `f` 到它。`f` 返回一个 monadic 值，在我们的例子中是一个函数，所以我们也将它应用到 `w` 上。
+- en: The Reader Monad
+  id: totrans-158
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 读取者（Reader）Monad
+- en: 'If you don’t get how `>>=` works at this point, don’t worry. After a few examples,
+    you’ll see that this is a really simple monad. Here’s a `do` expression that utilizes
+    it:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您现在还不明白 `>>=` 的工作原理，不要担心。在几个例子之后，您会发现这实际上是一个非常简单的 Monad。这里有一个利用它的 `do` 表达式：
+- en: '[PRE46]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'This is the same thing as the applicative expression that we wrote earlier,
+    but now it relies on functions being monads. A `do` expression always results
+    in a monadic value, and this one is no different. The result of this monadic value
+    is a function. It takes a number, then `(*2)` is applied to that number, and the
+    result becomes `a`. `(+10)` is applied to the same number that `(*2)` was applied
+    to, and the result becomes `b`. `return`, as in other monads, doesn’t have any
+    effect but to make a monadic value that presents some result. This presents `a+b`
+    as the result of this function. If we test it, we get the same result as before:'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这与我们在之前写的应用表达式是同一回事，但现在它依赖于函数是单子。`do`表达式总是产生一个单子值，而这个例子也不例外。这个单子值的输出是一个函数。它接受一个数字，然后对该数字应用`(*2)`，结果变为`a`。对`(*2)`应用到的相同数字应用`(+10)`，结果变为`b`。在其它单子中，`return`没有实际效果，只是创建一个表示某些结果的单子值。这表示`a+b`是这个函数的结果。如果我们测试它，我们会得到之前相同的结果：
+- en: '[PRE47]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'Both `(*2)` and `(+10)` are applied to the number `3` in this case. `return
+    (a+b)` does as well, but it ignores that value and always presents `a+b` as the
+    result. For this reason, the function monad is also called the *reader monad*.
+    All the functions read from a common source. To make this even clearer, we can
+    rewrite `addStuff` like so:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，`(*2)`和`(+10)`都应用于数字`3`。`return (a+b)`也是如此，但它忽略了那个值，总是将`a+b`作为结果呈现。因此，函数单子也被称为*读者单子*。所有函数都从同一个源读取。为了使这一点更加清晰，我们可以将`addStuff`重写如下：
+- en: '[PRE48]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: You see that the reader monad allows us to treat functions as values with a
+    context. We can act as if we already know what the functions will return. It does
+    this by gluing functions together into one function and then giving that function’s
+    parameter to all of the functions that compose it. So, if we have a lot of functions
+    that are all just missing one parameter, and they will eventually be applied to
+    the same thing, we can use the reader monad to sort of extract their future results,
+    and the `>>=` implementation will make sure that it all works out.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到，读者单子允许我们将函数作为具有上下文的价值来处理。我们可以假装我们已经知道函数将返回什么。它是通过将函数粘合成一个函数，并将该函数的参数传递给所有组成它的函数来做到这一点的。因此，如果我们有很多函数，它们都缺少一个参数，并且最终将应用于同一事物，我们可以使用读者单子来提取它们的未来结果，而`>>=`实现将确保一切顺利。
+- en: Tasteful Stateful Computations
+  id: totrans-166
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 精美的有状态计算
+- en: Haskell is a pure language, and because of that, our programs are made of functions
+    that can’t change any global state or variables; they can only do some computations
+    and return the results. This restriction actually makes it easier to think about
+    our programs, as it frees us from worrying what every variable’s value is at some
+    point in time.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Haskell是一种纯语言，正因为如此，我们的程序由不能改变任何全局状态或变量的函数组成；它们只能进行一些计算并返回结果。这种限制实际上使我们的程序更容易思考，因为它使我们免于担心某个时间点每个变量的值是什么。
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802708.png.jpg)'
+  id: totrans-168
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802708.png.jpg)'
+- en: However, some problems are inherently stateful, in that they rely on some state
+    that changes over time. While this isn’t a problem for Haskell, these computations
+    can be a bit tedious to model. That’s why Haskell features the `State` monad,
+    which makes dealing with stateful problems a breeze, while still keeping everything
+    nice and pure.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，一些问题本质上是状态化的，因为它们依赖于随时间变化的状态。虽然这对Haskell来说不是问题，但这些计算建模起来可能有点繁琐。这就是为什么Haskell有`State`单子，它使得处理状态化问题变得轻而易举，同时仍然保持一切都很纯净。
+- en: 'When we were looking at random numbers back in [Chapter 9](ch09.html "Chapter 9. More
+    Input and More Output"), we dealt with functions that took a random generator
+    as a parameter and returned a random number and a new random generator. If we
+    wanted to generate several random numbers, we always needed to use the random
+    generator that a previous function returned along with its result. For example,
+    to create a function that takes a `StdGen` and tosses a coin three times based
+    on that generator, we did this:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们在[第9章](ch09.html "第9章。更多输入和更多输出")中查看随机数时，我们处理了接受随机生成器作为参数并返回随机数和新随机生成器的函数。如果我们想生成多个随机数，我们总是需要使用前一个函数返回的随机生成器及其结果。例如，要创建一个接受`StdGen`并基于该生成器抛掷三次硬币的函数，我们这样做：
+- en: '[PRE49]'
+  id: totrans-171
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: This function takes a generator `gen`, and then `random gen` returns a `Bool`
+    value along with a new generator. To throw the second coin, we use the new generator,
+    and so on.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此函数接受一个生成器 `gen`，然后 `random gen` 返回一个 `Bool` 值以及一个新的生成器。为了抛出第二个硬币，我们使用新的生成器，依此类推。
+- en: In most other languages, we wouldn’t need to return a new generator along with
+    a random number. We could just modify the existing one! But since Haskell is pure,
+    we can’t do that, so we need to take some state, make a result from it and a new
+    state, and then use that new state to generate new results.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在大多数其他语言中，我们不需要返回一个与随机数一起的新生成器。我们只需修改现有的一个！但是，由于 Haskell 是纯的，我们无法这样做，因此我们需要获取一些状态，从中生成一个结果以及一个新的状态，然后使用那个新的状态来生成新的结果。
+- en: You would think that to avoid manually dealing with stateful computations in
+    this way, we would need to give up the purity of Haskell. Well, we don’t have
+    to, since there’s a special little monad called the `State` monad that handles
+    all this state business for us, without impacting any of the purity that makes
+    Haskell programming so cool.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会认为为了避免以这种方式手动处理有状态的计算，我们需要放弃 Haskell 的纯度。但是，我们不必这样做，因为有一个特殊的小 monad 叫做 `State`
+    monad，它可以为我们处理所有这些状态事务，而不会影响 Haskell 编程中使其如此酷的任何纯度。
+- en: Stateful Computations
+  id: totrans-175
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 有状态的计算
+- en: 'To help demonstrate stateful computations, let’s go ahead and give them a type.
+    We’ll say that a stateful computation is a function that takes some state and
+    returns a value along with some new state. That function has the following type:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了帮助演示有状态的计算，让我们先给它们一个类型。我们将说一个有状态的计算是一个函数，它接受一些状态并返回一个值以及一些新的状态。该函数具有以下类型：
+- en: '[PRE50]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: '`s` is the type of the state, and `a` is the result of the stateful computations.'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`s` 是状态类型，`a` 是有状态计算的结果。'
+- en: Note
+  id: totrans-179
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Assignment in most other languages could be thought of as a stateful computation.
+    For instance, when we do `x = 5` in an imperative language, it will usually assign
+    the value `5` to the variable `x`, and it will also have the value `5` as an expression.
+    If you look at that functionally, it’s like a function that takes a state (that
+    is, all the variables that have been assigned previously) and returns a result
+    (in this case, `5`) and a new state, which would be all the previous variable
+    mappings plus the newly assigned variable.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在大多数其他语言中，赋值可以被认为是有状态的计算。例如，当我们在一个命令式语言中执行 `x = 5` 时，它通常会将值 `5` 赋给变量 `x`，并且它也将
+    `5` 作为表达式具有该值。如果你从函数的角度来看，它就像一个函数，它接受一个状态（即之前已分配的所有变量）并返回一个结果（在这种情况下，`5`），以及一个新的状态，这将包括所有之前的变量映射以及新分配的变量。
+- en: This stateful computation—a function that takes a state and returns a result
+    and a new state—can be thought of as a value with a context as well. The actual
+    value is the result, whereas the context is that we must provide some initial
+    state to actually get that result, and that apart from getting a result, we also
+    get a new state.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个有状态的计算——一个接受状态并返回结果和新状态的函数——可以被认为是一个具有上下文的价值。实际的价值是结果，而上下文是我们必须提供一些初始状态才能实际得到那个结果，并且除了得到一个结果之外，我们还得到一个新的状态。
+- en: Stacks and Stones
+  id: totrans-182
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 栈和石子
+- en: 'Say we want to model a stack. A *stack* is a data structure that contains a
+    bunch of elements and supports exactly two operations:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们想要模拟一个栈。一个*栈*是一个包含一些元素的数据结构，并且支持恰好两个操作：
+- en: '*Pushing* an element to the stack, which adds an element onto the top of the
+    stack'
+  id: totrans-184
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*压入* 元素到栈中，这将在栈顶添加一个元素'
+- en: '*Popping* an element off the stack, which removes the topmost element from
+    the stack'
+  id: totrans-185
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*弹出* 栈中的元素，这将从栈中移除最顶部的元素'
+- en: 'We’ll use a list to represent our stack, with the head of the list acting as
+    the top of the stack. To help us with our task, we’ll make two functions:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用一个列表来表示我们的栈，列表的头部作为栈顶。为了帮助我们完成任务，我们将创建两个函数：
+- en: '`pop` will take a stack, pop one item, and return that item as the result.
+    It will also return a new stack, without the popped item.'
+  id: totrans-187
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`pop` 将接受一个栈，弹出其中一个项目，并将该项目作为结果返回。它还将返回一个新的栈，其中不包含被弹出的项目。'
+- en: '`push` will take an item and a stack and then push that item onto the stack.
+    It will return `()` as its result, along with a new stack.'
+  id: totrans-188
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`push` 将接受一个项目和栈，然后将该项目推入栈中。它将返回 `()` 作为其结果，以及一个新的栈。'
+- en: 'Here are the functions in use:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里是正在使用的函数：
+- en: '[PRE51]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: We used `()` as the result when pushing to the stack because pushing an item
+    onto the stack doesn’t have any important result value—its main job is to change
+    the stack. If we apply only the first parameter of `push`, we get a stateful computation.
+    `pop` is already a stateful computation because of its type.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在向栈中推入时使用 `()` 作为结果，因为向栈中推入一个项目没有重要的结果值——它的主要任务是改变栈。如果我们只应用 `push` 的第一个参数，我们得到一个有状态的计算。`pop`
+    已经是一个有状态的计算，因为其类型。
+- en: 'Let’s write a small piece of code to simulate a stack using these functions.
+    We’ll take a stack, push `3` to it, and then pop two items, just for kicks. Here
+    it is:'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们写一小段代码来模拟使用这些函数的栈。我们将取一个栈，向其中推入 `3`，然后弹出两个元素，仅此而已。如下所示：
+- en: '[PRE52]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'We take a `stack`, and then we do `push 1 stack`, which results in a tuple.
+    The first part of the tuple is a `()`, and the second is a new stack, which we
+    call `newStack1`. Then we pop a number from `newStack1`, which results in a number
+    `a` (which is the `3`) that we pushed and a new stack, which we call `newStack2`.
+    Then we pop a number off `newStack2`, and we get a number that’s `b` and a `newStack3`.
+    We return a tuple with that number and that stack. Let’s try it out:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们取一个 `stack`，然后执行 `push 1 stack`，这会产生一个元组。元组的第一个部分是 `()`，第二个部分是新的栈，我们称之为 `newStack1`。然后我们从
+    `newStack1` 中弹出一个数字，这会产生一个数字 `a`（即我们推入的 `3`）和一个新的栈，我们称之为 `newStack2`。然后我们从 `newStack2`
+    中弹出一个数字，我们得到一个数字 `b` 和一个 `newStack3`。我们返回一个包含那个数字和那个栈的元组。让我们试试看：
+- en: '[PRE53]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: The result is `5`, and the new stack is `[8,2,1]`. Notice how `stackManip` is
+    itself a stateful computation. We’ve taken a bunch of stateful computations and
+    sort of glued them together. Hmm, sounds familiar.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果是 `5`，新的栈是 `[8,2,1]`。注意 `stackManip` 本身就是一个有状态的计算。我们已经取了一堆有状态的计算并将它们某种程度地粘合在一起。嗯，听起来很熟悉。
+- en: The preceding code for `stackManip` is kind of tedious, since we’re manually
+    giving the state to every stateful computation and storing it and then giving
+    it to the next one. Wouldn’t it be cooler if, instead of giving the stack manually
+    to each function, we could write something like the following?
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之前 `stackManip` 的代码有点繁琐，因为我们手动将状态提供给每个有状态的计算，然后存储它，然后再将其提供给下一个。如果我们可以像下面这样，而不是手动将栈提供给每个函数，那岂不是更酷？
+- en: '[PRE54]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: Well, using the `State` monad will allow us to do exactly that. With it, we
+    will be able to take stateful computations like these and use them without needing
+    to manage the state manually.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 好吧，使用 `State` 算子将允许我们做到这一点。有了它，我们将能够使用这些有状态的计算，而无需手动管理状态。
+- en: The State Monad
+  id: totrans-200
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 状态算子
+- en: 'The `Control.Monad.State` module provides a `newtype` that wraps stateful computations.
+    Here’s its definition:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Control.Monad.State` 模块提供了一个封装有状态的计算的 `newtype`。以下是它的定义：'
+- en: '[PRE55]'
+  id: totrans-202
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: A `State s a` is a stateful computation that manipulates a state of type `s`
+    and has a result of type `a`.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`State s a` 是一个操作类型为 `s` 的状态的计算，并且具有类型为 `a` 的结果。'
+- en: Much like `Control.Monad.Writer`, `Control.Monad.State` doesn’t export its value
+    constructor. If you want to take a stateful computation and wrap it in the `State
+    newtype`, use the `state` function, which does the same thing that the `State`
+    constructor would do.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与 `Control.Monad.Writer` 类似，`Control.Monad.State` 也不导出其值构造函数。如果你想将一个有状态的计算封装在
+    `State newtype` 中，可以使用 `state` 函数，它执行与 `State` 构造函数相同的功能。
+- en: 'Now that you’ve seen what stateful computations are about and how they can
+    even be thought of as values with contexts, let’s check out their `Monad` instance:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经了解了有状态的计算是什么，以及它们甚至可以被视为具有上下文的价值，让我们来看看它们的 `Monad` 实例：
+- en: '[PRE56]'
+  id: totrans-206
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: Our aim with `return` is to take a value and make a stateful computation that
+    always has that value as its result. That’s why we just make a lambda `\s -> (x,
+    s)`. We always present `x` as the result of the stateful computation, and the
+    state is kept unchanged, because `return` must put a value in a minimal context.
+    So `return` will make a stateful computation that presents a certain value as
+    the result and keeps the state unchanged.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用 `return` 的目的是取一个值并创建一个有状态的计算，该计算始终将该值作为其结果。这就是为什么我们只创建一个 lambda `\s ->
+    (x, s)`。我们始终将 `x` 作为有状态的计算的结果呈现，状态保持不变，因为 `return` 必须将一个值放入最小上下文中。因此，`return`
+    将创建一个有状态的计算，该计算呈现某个值作为结果并保持状态不变。
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802710.png)'
+  id: totrans-208
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802710.png)'
+- en: 'What about `>>=`? Well, the result of feeding a stateful computation to a function
+    with `>>=` must be a stateful computation, right? So, we start of with the `State
+    newtype` wrapper, and then we type out a lambda. This lambda will be our new stateful
+    computation. But what goes on in it? Well, we need to somehow extract the result
+    value from the first stateful computation. Because we’re in a stateful computation
+    right now, we can give the stateful computation `h` our current state `s`, which
+    results in a pair of the result and a new state: `(a, newState)`.'
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么`>>=`呢？嗯，将状态计算馈送到带有`>>=`的函数的结果必须是一个状态计算，对吧？所以，我们首先从`State newtype`包装器开始，然后输入一个lambda。这个lambda将成为我们的新状态计算。但它在里面做什么呢？嗯，我们需要以某种方式从第一个状态计算中提取结果值。因为我们现在正处于状态计算中，我们可以将状态计算`h`的当前状态`s`提供给`h`，这将产生一个结果和新的状态的配对：`(a,
+    newState)`。
+- en: So far, every time we implemented `>>=`, once we had extracted just the result
+    from the monadic value, we applied the function `f` to it to get the new monadic
+    value. In `Writer`, after doing that and getting the new monadic value, we still
+    need to make sure that the context is taken care of by `mappend`ing the old monoid
+    value with the new one. Here, we do `f a`, and we get a new stateful computation
+    `g`. Now that we have a new stateful computation and a new state (which goes by
+    the name of `newState`), we just apply that stateful computation `g` to the `newState`.
+    The result is a tuple of the final result and final state!
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，每次我们实现`>>=`时，一旦我们从单子值中提取了结果，我们就将函数`f`应用到它上面以获得新的单子值。在`Writer`中，在这样做并得到新的单子值之后，我们仍然需要确保通过`mappend`将旧的单子值与新的单子值合并来处理上下文。这里我们执行`f
+    a`，我们得到一个新的状态计算`g`。现在我们有一个新的状态计算和一个新的状态（命名为`newState`），我们只需将这个状态计算`g`应用到`newState`上。结果是最终结果和最终状态的元组！
+- en: 'So, with `>>=`, we kind of glue two stateful computations together. The second
+    computation is hidden inside a function that takes the previous computation’s
+    result. Because `pop` and `push` are already stateful computations, it’s easy
+    to wrap them into a `State` wrapper:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，使用`>>=`，我们似乎将两个状态计算粘合在一起。第二个计算隐藏在一个函数内部，该函数接受前一个计算的结果。因为`pop`和`push`已经是状态计算，所以很容易将它们包装到`State`包装器中：
+- en: '[PRE57]'
+  id: totrans-212
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: Notice how we used the `state` function to wrap a function into the `State newtype`
+    instead of using the `State` value constructor directly.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意我们是如何使用`state`函数将一个函数包装到`State newtype`中，而不是直接使用`State`值构造函数。
+- en: '`pop` is already a stateful computation, and `push` takes an `Int` and returns
+    a stateful computation. Now we can rewrite our previous example of pushing `3`
+    onto the stack and then popping two numbers off, like this:'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`pop`已经是一个状态计算，而`push`接受一个`Int`并返回一个状态计算。现在我们可以重写我们之前将`3`推入栈中然后弹出两个数字的例子，如下所示：'
+- en: '[PRE58]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'See how we’ve glued a push and two pops into one stateful computation? When
+    we unwrap it from its `newtype` wrapper, we get a function to which we can provide
+    some initial state:'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 看看我们是如何将一个推送和两个弹出操作合并成一个状态计算的吗？当我们从它的`newtype`包装器中展开它时，我们得到一个函数，我们可以向它提供一个初始状态：
+- en: '[PRE59]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 'We didn’t need to bind the second `pop` to `a`, because we didn’t use that
+    `a` at all. So, we could have written it like this:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不需要将第二个`pop`绑定到`a`上，因为我们根本就没有使用那个`a`。所以，我们可以这样写：
+- en: '[PRE60]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: 'Pretty cool. But what if we want to do something a little more complicated?
+    Let’s say we want to pop one number off the stack, and if that number is `5`,
+    we’ll just push it back on the stack and stop. But if the number *isn’t* `5`,
+    we’ll push `3` and `8` back on instead. Here’s the code:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非常酷。但如果我们想做一些更复杂的事情怎么办？比如说，我们想从栈中弹出数字，如果这个数字是`5`，我们就将其推回栈中并停止。如果不是`5`，我们就推回`3`和`8`。以下是代码：
+- en: '[PRE61]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 'This is quite straightforward. Let’s run it with an initial stack:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这相当直接。让我们用一个初始栈来运行它：
+- en: '[PRE62]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: 'Remember that `do` expressions result in monadic values, and with the `State`
+    monad, a single `do` expression is also a stateful function. Because `stackManip`
+    and `stackStuff` are ordinary stateful computations, we can glue them together
+    to produce further stateful computations:'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住`do`表达式会产生单子值，并且使用`State`单子，单个`do`表达式也是一个状态函数。因为`stackManip`和`stackStuff`是普通的状态计算，我们可以将它们粘合在一起以产生进一步的状态计算：
+- en: '[PRE63]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: If the result of `stackManip` on the current stack is `100`, we run `stackStuff`;
+    otherwise, we do nothing. `return ()` just keeps the state as it is and does nothing.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`stackManip`在当前栈上的结果是`100`，我们运行`stackStuff`；否则，我们什么都不做。`return ()`只是保持状态不变并什么都不做。
+- en: Getting and Setting State
+  id: totrans-227
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 获取和设置状态
+- en: 'The `Control.Monad.State` module provides a type class called `MonadState`,
+    which features two pretty useful functions: `get` and `put`. For `State`, the
+    `get` function is implemented like this:'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Control.Monad.State`模块提供了一个名为`MonadState`的类型类，它有两个相当有用的函数：`get`和`put`。对于`State`，`get`函数的实现如下：'
+- en: '[PRE64]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: It just takes the current state and presents it as the result.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它只是将当前状态呈现为结果。
+- en: 'The `put` function takes some state and makes a stateful function that replaces
+    the current state with it:'
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`put`函数接受一些状态并创建一个带状态函数，用它来替换当前状态：'
+- en: '[PRE65]'
+  id: totrans-232
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: 'So, with these, we can see what the current stack is or we can replace it with
+    a whole other stack, like so:'
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，有了这些，我们可以看到当前的栈是什么，或者我们可以用整个其他栈来替换它，如下所示：
+- en: '[PRE66]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: 'We can also use `get` and `put` to implement `pop` and `push`. Here’s `pop`:'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们也可以使用`get`和`put`来实现`pop`和`push`。以下是`pop`的实现：
+- en: '[PRE67]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: We use `get` to get the whole stack, and then we use `put` to make everything
+    but the top element the new state. Then we use `return` to present `x` as the
+    result.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用`get`来获取整个栈，然后我们使用`put`来将除了顶部元素之外的所有内容设置为新的状态。然后我们使用`return`来呈现`x`作为结果。
+- en: 'Here’s `push` implemented with `get` and `put`:'
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是使用`get`和`put`实现的`push`：
+- en: '[PRE68]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: We just use `get` to get the current stack and use `put` to make the set the
+    new state as our stack, with the element `x` on top.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们只需使用`get`来获取当前栈，并使用`put`来设置新状态作为我们的栈，元素`x`在顶部。
+- en: 'It’s worth examining what the type of `>>=` would be if it worked only for
+    `State` values:'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值得检查如果`>>=`只对`State`值有效，它的类型会是什么：
+- en: '[PRE69]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'See how the type of the state `s` stays the same, but the type of the result
+    can change from `a` to `b`? This means that we can glue together several stateful
+    computations whose results are of different types, but the type of the state must
+    stay the same. Now why is that? Well, for instance, for `Maybe`, `>>=` has this
+    type:'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 看看状态`s`的类型保持不变，但结果类型可以从`a`变为`b`？这意味着我们可以将几个具有不同类型结果的带状态计算粘合在一起，但状态类型必须保持相同。那么这是为什么？例如，对于`Maybe`，`>>=`有如下类型：
+- en: '[PRE70]'
+  id: totrans-244
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: It makes sense that the monad itself, `Maybe`, doesn’t change. It wouldn’t make
+    sense to use `>>=` between two different monads. Well, for the `State` monad,
+    the monad is actually `State s`, so if that `s` were different, we would be using
+    `>>=` between two different monads.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 很显然，单体本身，`Maybe`，不会改变。在两个不同的单体之间使用`>>=`是没有意义的。嗯，对于`State`单体，单体实际上是`State s`，所以如果那个`s`不同，我们就会在两个不同的单体之间使用`>>=`。
+- en: Randomness and the State Monad
+  id: totrans-246
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 随机性和状态单体
+- en: At the beginning of this section, we talked about how generating random numbers
+    can sometimes be awkward. Every random function takes a generator and returns
+    a random number along with a new generator, which must then be used instead of
+    the old one if we want to generate another random number. The `State` monad makes
+    dealing with this a lot easier.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节的开始，我们讨论了生成随机数有时可能会很尴尬。每个随机函数都接受一个生成器并返回一个随机数以及一个新的生成器，如果我们想生成另一个随机数，我们必须使用新的生成器而不是旧的生成器。`State`单体使得处理这个问题变得容易多了。
+- en: 'The `random` function from `System.Random` has the following type:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`System.Random`中的`random`函数具有以下类型：'
+- en: '[PRE71]'
+  id: totrans-249
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 'This means it takes a random generator and produces a random number along with
+    a new generator. We can see that it’s a stateful computation, so we can wrap it
+    in the `State newtype` constructor by using the `state` function, and then use
+    it as a monadic value so that passing the state is handled for us:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着它接受一个随机生成器并生成一个随机数以及一个新的生成器。我们可以看到这是一个带状态的计算，因此我们可以通过使用`state`函数将其包裹在`State
+    newtype`构造函数中，然后将其用作单调值，这样状态传递就由我们处理了：
+- en: '[PRE72]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: 'So, now if we want to throw three coins (`True` is tails, and `False` is heads),
+    we just do the following:'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以，现在如果我们想抛掷三枚硬币（`True`是反面，`False`是正面），我们只需做以下操作：
+- en: '[PRE73]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: '`threeCoins` is now a stateful computation, and after taking an initial random
+    generator, it passes that generator to the first `randomSt`, which produces a
+    number and a new generator, which is passed to the next one, and so on. We use
+    `return (a, b, c)` to present `(a, b, c)` as the result without changing the most
+    recent generator. Let’s give this a go:'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`threeCoins`现在是一个带状态的计算，在获取初始随机生成器后，它将这个生成器传递给第一个`randomSt`，它产生一个数字和一个新的生成器，这个生成器被传递给下一个，依此类推。我们使用`return
+    (a, b, c)`来呈现`(a, b, c)`作为结果，而不改变最近的生成器。让我们试一试：'
+- en: '[PRE74]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: Now doing things that require some state to be saved in between steps just became
+    much less of a hassle!
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在执行需要保存一些状态在步骤之间的操作变得容易多了！
+- en: Error Error on the Wall
+  id: totrans-257
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 墙上的错误错误
+- en: You know by now that `Maybe` is used to add a context of possible failure to
+    values. A value can be a `Just something` or a `Nothing`. However useful it may
+    be, when we have a `Nothing`, all we know is that there was some sort of failure—there’s
+    no way to cram more information in there telling us what kind of failure it was.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到现在为止，你应该知道 `Maybe` 是用来给值添加可能失败的上下文的。一个值可以是 `Just something` 或 `Nothing`。尽管它可能很有用，但当我们遇到
+    `Nothing` 时，我们只知道发生了某种类型的失败——没有方法可以挤进更多信息来告诉我们是哪种失败。
+- en: 'The `Either e a` type also allows us to incorporate a context of possible failure
+    into our values. It also lets us attach values to the failure, so they can describe
+    what went wrong or provide other useful information regarding the failure. An
+    `Either e a` value can either be a `Right` value, signifying the right answer
+    and a success, or it can be a `Left` value, signifying failure. Here’s an example:'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Either e a` 类型还允许我们将可能失败上下文纳入我们的值中。它还允许我们将值附加到失败上，以便它们可以描述出错的原因或提供有关失败的其他有用信息。一个
+    `Either e a` 值可以是表示正确答案和成功的 `Right` 值，或者可以是一个表示失败的 `Left` 值。以下是一个示例：'
+- en: '[PRE75]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: This is pretty much just an enhanced `Maybe`, so it makes sense for it to be
+    a monad. It can also be viewed as a value with an added context of possible failure,
+    but now there’s a value attached when there’s an error as well.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这基本上就是一个增强版的 `Maybe`，所以它作为一个单子是有意义的。它也可以被视为一个添加了可能失败上下文的价值，但现在当出现错误时，也会附加一个值。
+- en: 'Its `Monad` instance is similar to that of `Maybe`, and it can be found in
+    `Control.Monad.Error`:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它的 `Monad` 实例与 `Maybe` 类似，可以在 `Control.Monad.Error` 中找到：
+- en: '[PRE76]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '`return`, as always, takes a value and puts it in a default minimal context.
+    It wraps our value in the `Right` constructor because we’re using `Right` to represent
+    a successful computation where a result is present. This is a lot like `return`
+    for `Maybe`.'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 和往常一样，`return` 接收一个值并将其放入默认的最小上下文中。它使用 `Right` 构造函数包装我们的值，因为我们使用 `Right` 来表示存在结果的计算成功。这与
+    `Maybe` 的 `return` 非常相似。
+- en: 'The `>>=` examines two possible cases: a `Left` and a `Right`. In the case
+    of a `Right`, the function `f` is applied to the value inside it, similar to the
+    case of a `Just` where the function is just applied to its contents. In the case
+    of an error, the `Left` value is kept, along with its contents, which describe
+    the failure.'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`>>=` 检查两种可能的情况：`Left` 和 `Right`。在 `Right` 的情况下，函数 `f` 被应用于其内部值，类似于 `Just`
+    的情况，其中函数只是应用于其内容。在错误的情况下，保留 `Left` 值及其内容，这些内容描述了失败。'
+- en: 'The `Monad` instance for `Either e` has an additional requirement. The type
+    of the value contained in a `Left`—the one that’s indexed by the `e` type parameter—must
+    be an instance of the `Error` type class. The `Error` type class is for types
+    whose values can act like error messages. It defines the `strMsg` function, which
+    takes an error in the form of a string and returns such a value. A good example
+    of an `Error` instance is the `String` type! In the case of `String`, the `strMsg`
+    function just returns the string that it got:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Either e` 的 `Monad` 实例有一个额外的要求。包含在 `Left` 中的值的类型——由 `e` 类型参数索引——必须是 `Error`
+    类型类的实例。`Error` 类型类是为可以像错误消息一样行动的类型设计的。它定义了 `strMsg` 函数，该函数接受字符串形式的错误并返回这样的值。`String`
+    类型是 `Error` 实例的一个很好的例子！在 `String` 的情况下，`strMsg` 函数只是返回它接收到的字符串：'
+- en: '[PRE77]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: But since we usually use `String` to describe the error when using `Either`,
+    we don’t need to worry about this too much. When a pattern match fails in `do`
+    notation, a `Left` value is used to signify this failure.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但由于我们通常使用 `String` 来描述 `Either` 中的错误，所以我们不必过于担心这一点。当 `do` 表达式中的模式匹配失败时，使用 `Left`
+    值来表示这种失败。
+- en: 'Here are a few examples of usage:'
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有一些使用示例：
+- en: '[PRE78]'
+  id: totrans-270
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: When we use `>>=` to feed a `Left` value to a function, the function is ignored
+    and an identical `Left` value is returned. When we feed a `Right` value to a function,
+    the function is applied to what’s on the inside, but in this case, that function
+    produced a `Left` value anyway!
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们使用 `>>=` 将 `Left` 值传递给一个函数时，该函数会被忽略，并返回一个相同的 `Left` 值。当我们向函数传递 `Right` 值时，该函数会被应用于其内部的内容，但在这个情况下，该函数仍然产生了
+    `Left` 值！
+- en: When we try to feed a `Right` value to a function that also succeeds, we’re
+    tripped up by a peculiar type error. Hmmm.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们尝试向一个也成功的函数传递 `Right` 值时，我们会遇到一个奇特的类型错误。嗯嗯。
+- en: '[PRE79]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'Haskell says that it doesn’t know which type to choose for the `e` part of
+    our `Either e a`-typed value, even though we’re just printing the `Right` part.
+    This is due to the `Error e` constraint on the `Monad` instance. So, if you get
+    type errors like this one when using `Either` as a monad, just add an explicit
+    type signature:'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Haskell 说它不知道为我们的 `Either e a` 类型值的 `e` 部分选择哪种类型，即使我们只是在打印 `Right` 部分。这是由于 `Monad`
+    实例上的 `Error e` 约束。所以，如果你在使用 `Either` 作为单子时遇到这种类型的类型错误，只需添加一个显式的类型签名：
+- en: '[PRE80]'
+  id: totrans-275
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: And now it works!
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在它工作了！
+- en: Other than this little hang-up, using the error monad is very similar to using
+    `Maybe` as a monad.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了这个小问题之外，使用错误单子与使用 `Maybe` 作为单子非常相似。
+- en: Note
+  id: totrans-278
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意
+- en: In the previous chapter, we used the monadic aspects of `Maybe` to simulate
+    birds landing on the balancing pole of a tightrope walker. As an exercise, you
+    can rewrite that with the error monad so that when the tightrope walker slips
+    and falls, you remember how many birds were on each side of the pole when he fell.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，我们使用了 `Maybe` 的单子特性来模拟走钢丝者落在平衡杆上。作为一个练习，你可以用错误单子重写它，这样当走钢丝者滑倒并跌落时，你可以记住他跌落时杆子两侧有多少只鸟。
+- en: Some Useful Monadic Functions
+  id: totrans-280
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 一些有用的单子函数
+- en: In this section, we’re going to explore a few functions that operate on monadic
+    values or return monadic values as their results (or both!). Such functions are
+    usually referred to as *monadic functions*. While some of them will be brand new,
+    others will be monadic counterparts of functions that you already know, like `filter`
+    and `foldl`. Here, we’ll look at `liftM`, `join`, `filterM`, and `foldM`.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将探讨一些操作于单子值或返回单子值作为其结果（或两者都是！）的函数。这类函数通常被称为*单子函数*。虽然其中一些将是全新的，但其他一些将是你已经知道的函数的单子对应物，如
+    `filter` 和 `foldl`。在这里，我们将查看 `liftM`、`join`、`filterM` 和 `foldM`。
+- en: liftM and Friends
+  id: totrans-282
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: liftM 和朋友们
+- en: When we started our journey to the top of Monad Mountain, we first looked at
+    *functors*, which are for things that can be mapped over. Then we covered improved
+    functors called *applicative functors*, which allow us to apply normal functions
+    between several applicative values as well as to take a normal value and put it
+    in some default context. Finally, we introduced *monads* as improved applicative
+    functors, which add the ability for these values with context to somehow be fed
+    into normal functions.
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们开始攀登 Monad 山之旅时，我们首先了解了*函子*，它们用于可以映射的事物。然后我们介绍了改进后的函子，称为*应用函子*，它允许我们在几个应用值之间应用正常函数，以及将一个正常值放入某个默认上下文中。最后，我们介绍了*单子*作为改进的应用函子，它增加了这些具有上下文值的值能够以某种方式被喂入正常函数的能力。
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802712.png.jpg)'
+  id: totrans-284
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802712.png.jpg)'
+- en: So, every monad is an applicative functor, and every applicative functor is
+    a functor. The `Applicative` type class has a class constraint such that our type
+    must be an instance of `Functor` before we can make it an instance of `Applicative`.
+    `Monad` should have the same constraint for `Applicative`, as every monad is an
+    applicative functor, but it doesn’t, because the `Monad` type class was introduced
+    to Haskell long before `Applicative`.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，每个单子都是一个应用函子，每个应用函子都是一个函子。`Applicative` 类型类有一个类约束，即我们的类型必须是一个 `Functor` 的实例，我们才能将其作为
+    `Applicative` 的实例。`Monad` 应该对 `Applicative` 有相同的约束，因为每个单子都是一个应用函子，但它没有，因为 `Monad`
+    类型类是在 `Applicative` 之前被引入到 Haskell 中的。
+- en: 'But even though every monad is a functor, we don’t need to rely on it having
+    a `Functor` instance because of the `liftM` function. `liftM` takes a function
+    and a monadic value and maps the function over the monadic value. So it’s pretty
+    much the same thing as `fmap`! This is `liftM`’s type:'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管每个单子都是一个函子，但我们不需要依赖于它有一个 `Functor` 实例，因为有了 `liftM` 函数。`liftM` 接收一个函数和一个单子值，并将该函数映射到单子值上。所以这基本上与
+    `fmap` 相同！这是 `liftM` 的类型：
+- en: '[PRE81]'
+  id: totrans-287
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: 'And this is the type of `fmap`:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是 `fmap` 的类型：
+- en: '[PRE82]'
+  id: totrans-289
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: 'If the `Functor` and `Monad` instances for a type obey the functor and monad
+    laws, these two amount to the same thing (and all the monads that we’ve met so
+    far obey both). This is kind of like `pure` and `return` do the same thing, but
+    one has an `Applicative` class constraint, whereas the other has a `Monad` constraint.
+    Let’s try out `liftM`:'
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个类型的 `Functor` 和 `Monad` 实例遵守函子和单子定律，这两者等同于同一件事（并且我们迄今为止遇到的所有的单子都遵守这两者）。这有点像
+    `pure` 和 `return` 做的是同一件事，但一个有 `Applicative` 类约束，而另一个有 `Monad` 约束。让我们尝试一下 `liftM`：
+- en: '[PRE83]'
+  id: totrans-291
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: You already know quite well how `fmap` works with `Maybe` values. And `liftM`
+    does the same thing. For `Writer` values, the function is mapped over the first
+    component of the tuple, which is the result. Running `fmap` or `liftM` over a
+    stateful computation results in another stateful computation, but its eventual
+    result is modified by the supplied function. Had we not mapped `(+100)` over `pop`
+    before running it, it would have returned `(1, [2,3,4])`.
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你已经非常熟悉 `fmap` 如何与 `Maybe` 值一起工作了。`liftM` 做的是同样的事情。对于 `Writer` 值，函数映射到元组的第一个组件，即结果。在运行
+    `fmap` 或 `liftM` 过一个有状态的计算后，会得到另一个有状态的计算，但其最终结果会被提供的函数修改。如果我们没有在运行 `pop` 之前映射
+    `(+100)` 到它，它将返回 `(1, [2,3,4])`。
+- en: 'This is how `liftM` is implemented:'
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是 `liftM` 的实现方式：
+- en: '[PRE84]'
+  id: totrans-294
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: 'Or with `do` notation:'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者使用 `do` 语法：
+- en: '[PRE85]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: We feed the monadic value `m` into the function, and then we apply the function
+    `f` to its result before putting it back into a default context. Because of the
+    monad laws, this is guaranteed not to change the context; it changes only the
+    result that the monadic value presents.
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将单子值 `m` 传入函数，然后在我们将其放回默认上下文之前，将函数 `f` 应用到其结果上。由于单子定律，这保证了上下文不会改变；它只改变单子值呈现的结果。
+- en: You see that `liftM` is implemented without referencing the `Functor` type class
+    at all. This means that we can implement `fmap` (or `liftM`—whatever you want
+    to call it) just by using the goodies that monads offer us. Because of this, we
+    can conclude that monads are at least as strong as functors.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到 `liftM` 是在不引用 `Functor` 类型类的情况下实现的。这意味着我们可以只通过使用单子为我们提供的便利来实现 `fmap`（或者
+    `liftM`——你想叫它什么都可以）。正因为如此，我们可以得出结论，单子至少和函子一样强大。
+- en: 'The `Applicative` type class allows us to apply functions between values with
+    contexts as if they were normal values, like this:'
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Applicative` 类型类允许我们像处理普通值一样，在具有上下文的环境中应用函数，如下所示：'
+- en: '[PRE86]'
+  id: totrans-300
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: 'Using this applicative style makes things pretty easy. `<$>` is just `fmap`,
+    and `<*>` is a function from the `Applicative` type class that has the following
+    type:'
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这种应用风格使事情变得相当简单。`<$>` 就是 `fmap`，而 `<*>` 是来自 `Applicative` 类型类的一个函数，其类型如下：
+- en: '[PRE87]'
+  id: totrans-302
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: So it’s kind of like `fmap`, but the function itself is in a context. We need
+    to somehow extract it from the context and map it over the `f a` value, and then
+    reassemble the context. Because all functions are curried in Haskell by default,
+    we can use the combination of `<$>` and `<*>` to apply functions that take several
+    parameters between applicative values.
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以它有点像 `fmap`，但函数本身处于一个上下文中。我们需要以某种方式从上下文中提取它，并将其映射到 `f a` 值上，然后重新组装上下文。因为 Haskell
+    中默认所有函数都是柯里化的，我们可以使用 `<$>` 和 `<*>` 的组合来在应用值之间应用需要多个参数的函数。
+- en: 'Anyway, it turns out that just like `fmap`, `<*>` can also be implemented by
+    using only what the `Monad` type class gives us. The `ap` function is basically
+    `<*>`, but with a `Monad` constraint instead of an `Applicative` one. Here’s its
+    definition:'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论如何，结果证明，就像 `fmap` 一样，`<*>` 也可以仅使用 `Monad` 类型类提供的内容来实现。`ap` 函数基本上是 `<*>`，但有一个
+    `Monad` 约束而不是 `Applicative` 约束。以下是它的定义：
+- en: '[PRE88]'
+  id: totrans-305
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: '`mf` is a monadic value whose result is a function. Because the function as
+    well as the value is in a context, we get the function from the context and call
+    it `f`, then get the value and call that `x`, and, finally, apply the function
+    to the value and present that as a result. Here’s a quick demonstration:'
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mf` 是一个结果为函数的单子值。因为函数以及值都在上下文中，我们从上下文中获取函数并调用它 `f`，然后获取值并调用它 `x`，最后将函数应用于值并呈现结果。以下是一个快速演示：'
+- en: '[PRE89]'
+  id: totrans-307
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: Now we can see that monads are at least as strong as applicatives as well, because
+    we can use the functions from `Monad` to implement the ones for `Applicative`.
+    In fact, many times, when a type is found to be a monad, people first write up
+    a `Monad` instance, and then make an `Applicative` instance by just saying that
+    `pure` is `return` and `<*>` is `ap`. Similarly, if you already have a `Monad`
+    instance for something, you can give it a `Functor` instance just by saying that
+    `fmap` is `liftM`.
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以看到，单子至少和应用值一样强大，因为我们可以使用 `Monad` 中的函数来实现 `Applicative` 中的函数。实际上，很多时候，当发现一个类型是单子时，人们首先编写一个
+    `Monad` 实例，然后通过只说 `pure` 是 `return` 和 `<*>` 是 `ap` 来创建一个 `Applicative` 实例。同样，如果你已经有了某个东西的
+    `Monad` 实例，你只需说 `fmap` 是 `liftM` 就可以给它一个 `Functor` 实例。
+- en: '`liftA2` is a convenience function for applying a function between two applicative
+    values. It’s defined like so:'
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`liftA2` 是一个用于在两个应用值之间应用函数的便利函数。它定义如下：'
+- en: '[PRE90]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: The `liftM2` function does the same thing, but with a `Monad` constraint. There
+    are also `liftM3`, `liftM4`, and `liftM5` functions.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`liftM2` 函数做的是同样的事情，但是有一个 `Monad` 约束。还有 `liftM3`、`liftM4` 和 `liftM5` 函数。'
+- en: You saw how monads are at least as strong as applicatives and functors and how
+    even though all monads are functors and applicative functors, they don’t necessarily
+    have `Functor` and `Applicative` instances. We examined the monadic equivalents
+    of the functions that functors and applicative functors use.
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你看到了 monads 至少和 applicatives 和 functors 一样强大，尽管所有 monads 都是 functors 和 applicative
+    functors，它们并不一定有 `Functor` 和 `Applicative` 实例。我们检查了 functors 和 applicative functors
+    所使用的函数的 monadic 等价物。
+- en: The join Function
+  id: totrans-313
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: '`join` 函数'
+- en: 'Here’s some food for thought: If the result of one monadic value is another
+    monadic value (one monadic value is nested inside the other), can you flatten
+    them to just a single, normal monadic value? For instance, if we have `Just (Just
+    9)`, can we make that into `Just 9`? It turns out that any nested monadic value
+    can be flattened and that this is actually a property unique to monads. For this,
+    we have the `join` function. Its type is this:'
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有一些值得思考的问题：如果一个 monadic 值的结果是另一个 monadic 值（一个 monadic 值嵌套在另一个中），你能将它们展平成一个单一的、正常的
+    monadic 值吗？例如，如果我们有 `Just (Just 9)`，我们能将其变成 `Just 9` 吗？实际上，任何嵌套的 monadic 值都可以被展平，而且这实际上是
+    monads 独有的一个属性。为此，我们有 `join` 函数。它的类型是这样的：
+- en: '[PRE91]'
+  id: totrans-315
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: 'So, `join` takes a monadic value within a monadic value and gives us just a
+    monadic value—it flattens it, in other words. Here it is with some `Maybe` values:'
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以，`join` 取一个 monadic 值中的 monadic 值，并给我们一个 monadic 值——换句话说，它展平了它。这里有一些 `Maybe`
+    值的例子：
+- en: '[PRE92]'
+  id: totrans-317
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: The first line has a successful computation as a result of a successful computation,
+    so they are both just joined into one big successful computation. The second line
+    features a `Nothing` as a result of a `Just` value. Whenever we were dealing with
+    `Maybe` values before and we wanted to combine several of them into one—be it
+    with `<*>` or `>>=`—they all needed to be `Just` values for the result to be a
+    `Just` value. If there was any failure along the way, the result was a failure,
+    and the same thing happens here. In the third line, we try to flatten what is
+    from the onset a failure, so the result is a failure as well.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一行有一个成功的计算作为成功计算的结果，所以它们都被合并成了一个大的成功计算。第二行有一个 `Nothing` 作为 `Just` 值的结果。在我们之前处理
+    `Maybe` 值时，无论我们想要将几个值组合成一个——无论是使用 `<*>` 还是 `>>=`——它们都必须是 `Just` 值，结果才是一个 `Just`
+    值。如果过程中有任何失败，结果就是失败，这里也是同样的情况。在第三行，我们尝试展平一开始就是失败的情况，所以结果也是失败。
+- en: 'Flattening lists is pretty intuitive:'
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 展平列表相当直观：
+- en: '[PRE93]'
+  id: totrans-320
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: 'As you can see, for lists, `join` is just `concat`. To flatten a `Writer` value
+    whose result is a `Writer` value itself, we need to `mappend` the monoid value:'
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，对于列表，`join` 就是 `concat`。为了展平一个结果本身也是 `Writer` 值的 `Writer` 值，我们需要 `mappend`
+    单例值：
+- en: '[PRE94]'
+  id: totrans-322
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: The outer monoid value `"bbb"` comes first, and then `"aaa"` is appended to
+    it. Intuitively speaking, when you want to examine the result of a `Writer` value,
+    you need to write its monoid value to the log first, and only then can you look
+    at what it has inside.
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 外部单例值 `"bbb"` 首先出现，然后 `"aaa"` 被附加到它上面。直观地说，当你想要检查 `Writer` 值的结果时，你需要先将它的单例值写入日志，然后才能查看它内部的内容。
+- en: 'Flattening `Either` values is very similar to flattening `Maybe` values:'
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 展平 `Either` 值与展平 `Maybe` 值非常相似：
+- en: '[PRE95]'
+  id: totrans-325
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: 'If we apply `join` to a stateful computation whose result is a stateful computation,
+    the result is a stateful computation that first runs the outer stateful computation
+    and then the resulting one. Watch it at work:'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们将 `join` 应用到一个结果也是状态计算的状态计算中，结果是先运行外部状态计算，然后是结果状态计算。看看它是如何工作的：
+- en: '[PRE96]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: The lambda here takes a state, puts `2` and `1` onto the stack, and presents
+    `push 10` as its result. So, when this whole thing is flattened with `join` and
+    then run, it first puts `2` and `1` onto the stack, and then `push 10` is carried
+    out, pushing a `10` onto the top.
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里的 lambda 函数接受一个状态，将 `2` 和 `1` 放到栈上，并以 `push 10` 作为其结果。所以，当整个结构通过 `join` 展平并运行时，它首先将
+    `2` 和 `1` 放到栈上，然后执行 `push 10`，将一个 `10` 推到栈顶。
+- en: 'The implementation for `join` is as follows:'
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`join` 的实现如下：'
+- en: '[PRE97]'
+  id: totrans-330
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: 'Because the result of `mm` is a monadic value, we get that result and then
+    just put it on a line of its own because it’s a monadic value. The trick here
+    is that when we call `m <- mm`, the context of the monad that we are in is taken
+    care of. That’s why, for instance, `Maybe` values result in `Just` values only
+    if the outer and inner values are both `Just` values. Here’s what this would look
+    like if the `mm` value were set in advance to `Just (Just 8)`:'
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为 `mm` 的结果是单调值，所以我们得到这个结果，然后单独放在一行上，因为它是一个单调值。这里的技巧在于，当我们调用 `m <- mm` 时，我们正在使用的单调语境得到了处理。这就是为什么，例如，`Maybe`
+    值只有在外部和内部值都是 `Just` 值时才会产生 `Just` 值。如果 `mm` 值预先设置为 `Just (Just 8)`，这将是这样的：
+- en: '[PRE98]'
+  id: totrans-332
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: Perhaps the most interesting thing about `join` is that for every monad, feeding
+    a monadic value to a function with `>>=` is the same thing as just mapping that
+    function over the value and then using `join` to flatten the resulting nested
+    monadic value! In other words, `m >>= f` is always the same thing as `join (fmap
+    f m)`. It makes sense when you think about it.
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于 `join` 最有趣的事情可能是，对于每个单调，使用 `>>=` 将单调值传递给一个函数与只是映射该函数到值上，然后使用 `join` 来展平产生的嵌套单调值是相同的！换句话说，`m
+    >>= f` 总是等于 `join (fmap f m)`。当你这么想的时候，这是有意义的。
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802714.png.jpg)'
+  id: totrans-334
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802714.png.jpg)'
+- en: With `>>=`, we’re always thinking about how to feed a monadic value to a function
+    that takes a normal value but returns a monadic value. If we just map that function
+    over the monadic value, we have a monadic value inside a monadic value. For instance,
+    say we have `Just 9` and the function `\x -> Just (x+1)`. If we map this function
+    over `Just 9`, we’re left with `Just (Just 10)`.
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `>>=`，我们总是在思考如何将一个单调值传递给一个接受普通值但返回单调值的函数。如果我们只是将这个函数映射到单调值上，我们就会得到一个单调值嵌套在另一个单调值中。例如，假设我们有
+    `Just 9` 和函数 `\x -> Just (x+1)`。如果我们将这个函数映射到 `Just 9` 上，我们最终得到的是 `Just (Just 10)`。
+- en: The fact that `m >>= f` always equals `join (fmap f m)` is very useful if we’re
+    making our own `Monad` instance for some type. This is because it’s often easier
+    to figure out how we would flatten a nested monadic value than to figure out how
+    to implement `>>=`.
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们为某些类型创建自己的 `Monad` 实例，`m >>= f` 总是等于 `join (fmap f m)` 非常有用。这是因为通常更容易弄清楚如何展平嵌套的单调值，而不是弄清楚如何实现
+    `>>=`。
+- en: Another interesting thing is that `join` cannot be implemented by just using
+    the functions that functors and applicatives provide. This leads us to conclude
+    that not only are monads as strong as functors and applicatives, but they are
+    in fact stronger, because we can do more stuff with them than we can with just
+    functors and applicatives.
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一件有趣的事情是，`join` 不能仅使用函子和应用提供的功能来实现。这让我们得出结论，不仅单调与函子和应用一样强大，而且实际上更强，因为我们可以用它们做更多的事情，比只用函子和应用更多。
+- en: filterM
+  id: totrans-338
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: filterM
+- en: 'The `filter` function is pretty much the bread of Haskell programming (`map`
+    being the butter). It takes a predicate and a list to filter and then returns
+    a new list where only the elements that satisfy the predicate are kept. Its type
+    is this:'
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`filter` 函数几乎是 Haskell 编程的面包（`map` 是黄油）。它接受一个谓词和一个要过滤的列表，然后返回一个新列表，其中只保留满足谓词的元素。它的类型如下：'
+- en: '[PRE99]'
+  id: totrans-340
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: The predicate takes an element of the list and returns a `Bool` value. Now,
+    what if the `Bool` value that it returned was actually a monadic value? What if
+    it came with a context? For instance, what if every `True` or `False` value that
+    the predicate produced also had an accompanying monoid value, like `["Accepted
+    the number 5"]` or `["3 is too small"]`? If that were the case, we would expect
+    the resulting list to also come with a log of all the log values that were produced
+    along the way. So, if the `Bool` that the predicate returned came with a context,
+    we would expect the final resulting list to have some context attached as well.
+    Otherwise, the context that each `Bool` came with would be lost.
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 谓词接受列表中的一个元素并返回一个 `Bool` 值。现在，如果它返回的 `Bool` 值实际上是一个单调值怎么办？如果它带有上下文怎么办？例如，如果谓词产生的每个
+    `True` 或 `False` 值都附带一个单调值，比如 `["Accepted the number 5"]` 或 `["3 is too small"]`，会怎样？如果是这样，我们预计结果列表也会附带所有产生的日志值。所以，如果谓词返回的
+    `Bool` 值带有上下文，我们预计最终结果列表也会附带一些上下文。否则，每个 `Bool` 带来的上下文就会丢失。
+- en: 'The `filterM` function from `Control.Monad` does just what we want! Its type
+    is this:'
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自 `Control.Monad` 的 `filterM` 函数正是我们想要的！它的类型如下：
+- en: '[PRE100]'
+  id: totrans-343
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: The predicate returns a monadic value whose result is a `Bool`, but because
+    it’s a monadic value, its context can be anything from a possible failure to nondeterminism
+    and more! To ensure that the context is reflected in the final result, the result
+    is also a monadic value.
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 谓词返回一个单调值，其结果是`Bool`，但由于它是一个单调值，其上下文可以是可能的失败、非确定性等等！为了确保上下文反映在最终结果中，结果也是一个单调值。
+- en: 'Let’s take a list and keep only those values that are smaller than 4\. To start,
+    we’ll just use the regular `filter` function:'
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们取一个列表，只保留小于4的值。首先，我们将使用常规的`filter`函数：
+- en: '[PRE101]'
+  id: totrans-346
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: 'That’s pretty easy. Now, let’s make a predicate that, aside from presenting
+    a `True` or `False` result, also provides a log of what it did. Of course, we’ll
+    be using the `Writer` monad for this:'
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这很简单。现在，让我们创建一个谓词，除了提供一个`True`或`False`的结果外，还提供它所做操作的日志。当然，我们将使用`Writer`单调子来做到这一点：
+- en: '[PRE102]'
+  id: totrans-348
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: Instead of just returning a `Bool`, this function returns a `Writer [String]
+    Bool`. It’s a monadic predicate. Sounds fancy, doesn’t it? If the number is smaller
+    than `4`, we report that we’re keeping it, and then `return True`.
+  id: totrans-349
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个函数不仅返回一个`Bool`，还返回一个`Writer [String] Bool`。它是一个单调谓词。听起来很复杂，不是吗？如果数字小于`4`，我们报告我们保留它，然后`return
+    True`。
+- en: Now, let’s give it to `filterM` along with a list. Because the predicate returns
+    a `Writer` value, the resulting list will also be a `Writer` value.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们将列表传递给`filterM`。因为谓词返回一个`Writer`值，所以结果列表也将是一个`Writer`值。
+- en: '[PRE103]'
+  id: totrans-351
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: 'Examining the result of the resulting `Writer` value, we see that everything
+    is in order. Now, let’s print the log and see what we have:'
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检查结果`Writer`值，我们看到一切正常。现在，让我们打印日志，看看我们有什么：
+- en: '[PRE104]'
+  id: totrans-353
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: So, just by providing a monadic predicate to `filterM`, we were able to filter
+    a list while taking advantage of the monadic context that we used.
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，仅仅通过向`filterM`提供一个单调谓词，我们就能在利用我们使用的单调上下文的同时过滤列表。
+- en: 'A very cool Haskell trick is using `filterM` to get the powerset of a list
+    (if we think of them as sets for now). The *powerset* of some set is a set of
+    all subsets of that set. So if we have a set like `[1,2,3]`, its powerset includes
+    the following sets:'
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个非常酷的Haskell技巧是使用`filterM`来获取列表的幂集（如果我们现在将它们视为集合的话）。某个集合的幂集是该集合所有子集的集合。所以如果我们有一个集合如`[1,2,3]`，它的幂集包括以下集合：
+- en: '[PRE105]'
+  id: totrans-356
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: In other words, getting a powerset is like getting all the combinations of keeping
+    and throwing out elements from a set. For example, `[2,3]` is the original set
+    with the number `1` excluded, `[1,2]` is the original set with `3` excluded, and
+    so on.
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，获取幂集就像获取从集合中保留和丢弃元素的所有组合。例如，`[2,3]`是排除了数字`1`的原始集合，`[1,2]`是排除了`3`的原始集合，以此类推。
+- en: 'To make a function that returns a powerset of some list, we’re going to rely
+    on nondeterminism. We take the list `[1,2,3]` and then look at the first element,
+    which is `1`, and we ask ourselves, “Should we keep it or drop it?” Well, we would
+    like to do both actually. So, we are going to filter a list, and we’ll use a predicate
+    that nondeterministically both keeps and drops every element from the list. Here’s
+    our `powerset` function:'
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建一个返回某些列表幂集的函数，我们将依赖于非确定性。我们取列表`[1,2,3]`，然后查看第一个元素，即`1`，然后问自己，“我们应该保留它还是丢弃它？”实际上，我们希望两者都做。所以，我们将过滤一个列表，我们将使用一个谓词，该谓词非确定性地将列表中的每个元素都保留和丢弃。这是我们的`powerset`函数：
+- en: '[PRE106]'
+  id: totrans-359
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: 'Wait, that’s it? Yup. We choose to drop and keep every element, regardless
+    of what that element is. We have a nondeterministic predicate, so the resulting
+    list will also be a nondeterministic value and will thus be a list of lists. Let’s
+    give this a go:'
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 等等，这就完了？是的。我们选择丢弃和保留每个元素，无论这个元素是什么。我们有一个非确定性谓词，所以结果列表也将是一个非确定性值，因此它将是一个列表的列表。让我们试一试：
+- en: '[PRE107]'
+  id: totrans-361
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: This takes a bit of thinking to wrap your head around. Just consider lists as
+    nondeterministic values that don’t know what to be, so they decide to be everything
+    at once, and the concept is a bit easier to grasp.
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这需要一点思考才能理解。只需考虑列表作为不知道自己要成为什么的非确定性值，所以它们决定一次性成为一切，这个概念就更容易理解。
+- en: foldM
+  id: totrans-363
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: foldM
+- en: 'The monadic counterpart to `foldl` is `foldM`. If you remember your folds from
+    [Chapter 5](ch05.html "Chapter 5. Higher-Order Functions"), you know that `foldl`
+    takes a binary function, a starting accumulator, and a list to fold up and then
+    folds it from the left into a single value by using the binary function. `foldM`
+    does the same thing, except it takes a binary function that produces a monadic
+    value and folds the list up with that. Unsurprisingly, the resulting value is
+    also monadic. The type of `foldl` is this:'
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`foldl` 的单子对应物是 `foldM`。如果你还记得第 5 章（ch05.html "第 5 章. 高阶函数”）中的折叠，你知道 `foldl`
+    接收一个二进制函数、一个起始累加器和要折叠的列表，然后使用二进制函数从左到右折叠成一个单一值。`foldM` 做的是同样的事情，但它接收一个产生单子值的二进制函数，并使用该函数折叠列表。不出所料，结果也是单子的。`foldl`
+    的类型如下：'
+- en: '[PRE108]'
+  id: totrans-365
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: 'Whereas `foldM` has the following type:'
+  id: totrans-366
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 而 `foldM` 有以下类型：
+- en: '[PRE109]'
+  id: totrans-367
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: 'The value that the binary function returns is monadic, so the result of the
+    whole fold is monadic as well. Let’s sum a list of numbers with a fold:'
+  id: totrans-368
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制函数返回的值是单子的，所以整个折叠的结果也是单子的。让我们用折叠来求一个数字列表的和：
+- en: '[PRE110]'
+  id: totrans-369
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: The starting accumulator is `0`, and then `2` is added to the accumulator, resulting
+    in a new accumulator that has a value of `2`. `8` is added to this accumulator,
+    resulting in an accumulator of `10`, and so on. When we reach the end, the final
+    accumulator is the result.
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 起始累加器是 `0`，然后 `2` 被添加到累加器中，得到一个新的累加器，其值为 `2`。将 `8` 添加到这个累加器中，得到累加器值为 `10`，依此类推。当我们到达末尾时，最终的累加器就是结果。
+- en: 'Now, what if we wanted to sum a list of numbers but with the added condition
+    that if any number in the list is greater than `9`, the whole thing fails? It
+    would make sense to use a binary function that checks if the current number is
+    greater than `9`. If it is, the function fails; if it isn’t, the function continues
+    on its merry way. Because of this added possibility of failure, let’s make our
+    binary function return a `Maybe` accumulator instead of a normal one. Here’s the
+    binary function:'
+  id: totrans-371
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们想对数字列表求和，但附加条件是如果列表中的任何数字大于 `9`，整个操作就会失败？使用一个检查当前数字是否大于 `9` 的二进制函数是有意义的。如果是，函数失败；如果不是，函数继续执行。由于这种额外的失败可能性，让我们让我们的二进制函数返回一个
+    `Maybe` 累加器而不是一个普通的累加器。下面是这个二进制函数：
+- en: '[PRE111]'
+  id: totrans-372
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: 'Because our binary function is now a monadic function, we can’t use it with
+    the normal `foldl`; we must use `foldM`. Here goes:'
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们的二进制函数现在是一个单子函数，我们无法使用正常的 `foldl`；我们必须使用 `foldM`。下面是操作：
+- en: '[PRE112]'
+  id: totrans-374
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: Excellent! Because one number in the list was greater than `9`, the whole thing
+    resulted in a `Nothing`. Folding with a binary function that returns a `Writer`
+    value is cool as well, because then you log whatever you want as your fold goes
+    along its way.
+  id: totrans-375
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 太棒了！因为列表中的一个数字大于 `9`，整个结果变成了 `Nothing`。使用返回 `Writer` 值的二进制函数进行折叠也很酷，因为这样你可以在折叠过程中记录你想要的任何内容。
+- en: Making a Safe RPN Calculator
+  id: totrans-376
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 制作一个安全的 RPN 计算器
+- en: When we were solving the problem of implementing an RPN calculator in [Chapter 10](ch10.html
+    "Chapter 10. Functionally Solving Problems"), we noted that it worked fine as
+    long as the input that it got made sense. But if something went wrong, it caused
+    our whole program to crash. Now that we know how to make already existing code
+    monadic, let’s take our RPN calculator and add error handling to it by taking
+    advantage of the `Maybe` monad.
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们在第 10 章（ch10.html "第 10 章. 函数式解决问题”）中解决实现逆波兰表达式（RPN）计算器的问题时，我们注意到只要输入有意义，它就能正常工作。但如果出了问题，它会导致我们的整个程序崩溃。现在我们知道了如何使现有的代码成为单子，让我们利用
+    `Maybe` 单子来给我们的 RPN 计算器添加错误处理功能。
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802716.png)'
+  id: totrans-378
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802716.png)'
+- en: We implemented our RPN calculator by taking a string like `"1 3 + 2 *"`, breaking
+    it up into words to get something like `["1","3","+","2","*"]`. Then we folded
+    over that list by starting out with an empty stack and using a binary folding
+    function that adds numbers to the stack or manipulates numbers on the top of the
+    stack to add them together and divide them and such.
+  id: totrans-379
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过将字符串 `"1 3 + 2 *"` 分解成单词，得到类似 `["1","3","+","2","*"]` 的内容来实现我们的 RPN 计算器。然后我们通过从空栈开始，使用一个二进制折叠函数将数字添加到栈中或操作栈顶的数字来求和和除法等操作来折叠这个列表。
+- en: 'This was the main body of our function:'
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是我们函数的主体：
+- en: '[PRE113]'
+  id: totrans-381
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: 'We made the expression into a list of strings, and folded over it with our
+    folding function. Then, when we were left with just one item in the stack, we
+    returned that item as the answer. This was the folding function:'
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将表达式转换成一个字符串列表，并使用我们的折叠函数进行折叠。然后，当我们只剩一个项目在栈中时，我们将该项目作为答案返回。这就是我们的折叠函数：
+- en: '[PRE114]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: The accumulator of the fold was a stack, which we represented with a list of
+    `Double` values. As the folding function went over the RPN expression, if the
+    current item was an operator, it took two items off the top of the stack, applied
+    the operator between them, and then put the result back on the stack. If the current
+    item was a string that represented a number, it converted that string into an
+    actual number and returned a new stack that was like the old one, except with
+    that number pushed to the top.
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 折叠的累加器是一个栈，我们用 `Double` 值的列表来表示。当折叠函数遍历 RPN 表达式时，如果当前项是一个操作符，它会从栈顶取出两个项目，在它们之间应用操作符，然后将结果放回栈上。如果当前项是一个表示数字的字符串，它会将该字符串转换成实际的数字，并返回一个新的栈，就像旧的栈一样，只是将那个数字推到顶部。
+- en: 'Let’s first make our folding function capable of graceful failure. Its type
+    is going to change from what it is now to this:'
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们首先使我们的折叠函数能够优雅地失败。它的类型将从现在改变为这个：
+- en: '[PRE115]'
+  id: totrans-386
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE115]'
+- en: So, it will either return `Just` a new stack or it will fail with `Nothing`.
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所以，它要么返回一个新的栈，要么以 `Nothing` 失败。
+- en: 'The `reads` function is like `read`, except that it returns a list with a single
+    element in case of a successful read. If it fails to read something, it returns
+    an empty list. Apart from returning the value that it read, it also returns the
+    part of the string that it didn’t consume. We’re going to say that it always must
+    consume the full input to work, and make it into a `readMaybe` function for convenience.
+    Here it is:'
+  id: totrans-388
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`reads` 函数类似于 `read`，但它在成功读取时返回一个包含单个元素的列表。如果读取失败，它将返回一个空列表。除了返回它读取的值之外，它还会返回它未消费的字符串部分。我们将说它必须始终消耗完整输入才能工作，并为了方便将其制作成
+    `readMaybe` 函数。下面是它：'
+- en: '[PRE116]'
+  id: totrans-389
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE116]'
+- en: 'Now let’s test it:'
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们测试它：
+- en: '[PRE117]'
+  id: totrans-391
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE117]'
+- en: 'Okay, it seems to work. So, let’s make our folding function into a monadic
+    function that can fail:'
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 好的，它似乎工作得很好。所以，让我们将我们的折叠函数变成一个可能失败的 monadic 函数：
+- en: '[PRE118]'
+  id: totrans-393
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE118]'
+- en: The first three cases are like the old ones, except the new stack is wrapped
+    in a `Just` (we used `return` here to do this, but we could just as well have
+    written `Just`). In the last case, we use `readMaybe numberString`, and then we
+    map `(:xs)` over it. So, if the stack `xs` is `[1.0,2.0]`, and `readMaybe numberString`
+    results in a `Just 3.0`, the result is `Just [3.0,1.0,2.0]`. If `readMaybe numberString`
+    results in a `Nothing`, the result is `Nothing`.
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前三个情况与旧版本类似，只是新的栈被包裹在一个 `Just` 中（我们在这里使用 `return` 来做这个，但我们可以同样写 `Just`）。在最后一个情况中，我们使用
+    `readMaybe numberString`，然后对它应用 `(:xs)` 映射。所以，如果栈 `xs` 是 `[1.0,2.0]`，并且 `readMaybe
+    numberString` 结果是 `Just 3.0`，结果是 `Just [3.0,1.0,2.0]`。如果 `readMaybe numberString`
+    结果是 `Nothing`，结果是 `Nothing`。
+- en: 'Let’s try out the folding function by itself:'
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们通过单独尝试折叠函数来测试它：
+- en: '[PRE119]'
+  id: totrans-396
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE119]'
+- en: It looks like it’s working! And now it’s time for the new and improved `solveRPN`.
+    Here it is ladies and gents!
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 看起来它正在工作！现在是我们改进后的 `solveRPN` 的时候了，女士们先生们！
+- en: '[PRE120]'
+  id: totrans-398
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE120]'
+- en: Just as in the previous version, we take the string and make it into a list
+    of words. Then we do a fold, starting with the empty stack, but instead of doing
+    a normal `foldl`, we do a `foldM`. The result of that `foldM` should be a `Maybe`
+    value that contains a list (that’s our final stack), and that list should have
+    only one value. We use a `do` expression to get that value, and we call it `result`.
+    In case the `foldM` returns a `Nothing`, the whole thing will be a `Nothing`,
+    because that’s how `Maybe` works. Also notice that we pattern match in the `do`
+    expression, so if the list has more than one value or none at all, the pattern
+    match fails, and a `Nothing` is produced. In the last line, we just call `return
+    result` to present the result of the RPN calculation as the result of the final
+    `Maybe` value.
+  id: totrans-399
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就像上一个版本一样，我们将字符串转换成一个单词列表。然后我们进行折叠，从空栈开始，但不是做正常的 `foldl`，而是做 `foldM`。那个 `foldM`
+    的结果应该是一个包含列表的 `Maybe` 值（这是我们最终的栈），而这个列表应该只有一个值。我们使用 `do` 表达式来获取那个值，并将其命名为 `result`。如果
+    `foldM` 返回 `Nothing`，整个操作将是一个 `Nothing`，因为这就是 `Maybe` 的工作方式。注意，我们在 `do` 表达式中进行模式匹配，所以如果列表有多个值或根本没有值，模式匹配将失败，并产生一个
+    `Nothing`。在最后一行，我们只是调用 `return result` 来将 RPN 计算的结果作为最终 `Maybe` 值的结果呈现。
+- en: 'Let’s give it a shot:'
+  id: totrans-400
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们试一试：
+- en: '[PRE121]'
+  id: totrans-401
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE121]'
+- en: The first failure happens because the final stack isn’t a list with one element
+    in it, so the pattern matching in the `do` expression fails. The second failure
+    happens because `readMaybe` returns a `Nothing`.
+  id: totrans-402
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一次失败是因为最终的栈不是一个只有一个元素的列表，所以在 `do` 表达式中的模式匹配失败了。第二次失败是因为 `readMaybe` 返回了一个 `Nothing`。
+- en: Composing Monadic Functions
+  id: totrans-403
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 组合单调函数
+- en: 'When we were talking about the monad laws in [Chapter 13](ch13.html "Chapter 13. A
+    Fistful of Monads"), you learned that the `<=<` function is just like composition,
+    but instead of working for normal functions like `a -> b`, it works for monadic
+    functions like `a -> m b`. Here is an example:'
+  id: totrans-404
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们讨论第 13 章（[第 13 章](ch13.html "第 13 章。一袋单调")) 中的单调法则时，你了解到 `<=<` 函数就像组合一样，但不是为像
+    `a -> b` 这样的普通函数工作，而是为像 `a -> m b` 这样的单调函数工作。以下是一个例子：
+- en: '[PRE122]'
+  id: totrans-405
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE122]'
+- en: In this example, we first composed two normal functions, applied the resulting
+    function to `4`, and then composed two monadic functions and fed `Just 4` to the
+    resulting function with `>>=`.
+  id: totrans-406
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，我们首先组合了两个普通函数，将结果函数应用于 `4`，然后组合了两个单调函数，并用 `>>=` 将 `Just 4` 传递给结果函数。
+- en: 'If you have a bunch of functions in a list, you can compose them all into one
+    big function just by using `id` as the starting accumulator and the `.` function
+    as the binary function. Here’s an example:'
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你有一系列函数在列表中，你可以通过使用 `id` 作为起始累加器和 `.` 函数作为二元函数，将它们全部组合成一个大的函数。以下是一个例子：
+- en: '[PRE123]'
+  id: totrans-408
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE123]'
+- en: The function `f` takes a number and then adds `1` to it, multiplies the result
+    by `100`, and then adds `1` to that.
+  id: totrans-409
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数 `f` 接受一个数字，然后将其加 `1`，将结果乘以 `100`，然后再次加 `1`。
+- en: We can compose monadic functions in the same way, but instead of normal composition,
+    we use `<=<`, and instead of `id`, we use `return`. We don’t need to use a `foldM`
+    over a `foldr` or anything like that, because the `<=<` function makes sure that
+    composition happens in a monadic fashion.
+  id: totrans-410
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以用相同的方式组合单调函数，但不是使用普通组合，而是使用 `<=<`，而不是 `id`，我们使用 `return`。我们不需要在 `foldM`
+    上使用 `foldr` 或类似的东西，因为 `<=<` 函数确保组合以单调方式发生。
+- en: 'When you were introduced to the list monad in [Chapter 13](ch13.html "Chapter 13. A
+    Fistful of Monads"), we used it to figure out if a knight can go from one position
+    on a chessboard to another in exactly three moves. We created a function called
+    `moveKnight`, which takes the knight’s position on the board and returns all the
+    possible moves that he can make next. Then, to generate all the possible positions
+    that he can have after taking three moves, we made the following function:'
+  id: totrans-411
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你在第 13 章（[第 13 章](ch13.html "第 13 章。一袋单调")) 中介绍列表单调时，我们用它来确定骑士是否能在棋盘上通过恰好三步从一个位置移动到另一个位置。我们创建了一个名为
+    `moveKnight` 的函数，它接受骑士在棋盘上的位置，并返回他可以做出的所有可能的下一步移动。然后，为了生成他经过三步后可能拥有的所有位置，我们创建了以下函数：
+- en: '[PRE124]'
+  id: totrans-412
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE124]'
+- en: 'And to check if he can go from `start` to `end` in three moves, we did the
+    following:'
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了检查他是否能在三步内从 `start` 移动到 `end`，我们做了以下操作：
+- en: '[PRE125]'
+  id: totrans-414
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE125]'
+- en: 'Using monadic function composition, we can make a function like `in3`, except
+    instead of generating all the positions that the knight can have after making
+    three moves, we can do it for an arbitrary number of moves. If you look at `in3`,
+    you’ll see that we used our `moveKnight` three times, and each time, we used `>>=`
+    to feed it all the possible previous positions. So now, let’s make it more general.
+    Here’s how:'
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用单调函数组合，我们可以创建一个像 `in3` 这样的函数，除了生成骑士在走三步后可以拥有的所有位置外，我们还可以为任意数量的步数做这件事。如果你看
+    `in3`，你会看到我们使用了我们的 `moveKnight` 三次，每次都使用 `>>=` 将所有可能的前一个位置传递给它。所以现在，让我们让它更通用。以下是方法：
+- en: '[PRE126]'
+  id: totrans-416
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE126]'
+- en: First, we use `replicate` to make a list that contains `x` copies of the function
+    `moveKnight`. Then we monadically compose all those functions into one, which
+    gives us a function that takes a starting position and nondeterministically moves
+    the knight `x` times. Then we just make the starting position into a singleton
+    list with `return` and feed it to the function.
+  id: totrans-417
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们使用 `replicate` 创建一个包含 `x` 个 `moveKnight` 函数副本的列表。然后我们将所有这些函数单调组合成一个，这给了我们一个接受起始位置并非确定性地移动骑士
+    `x` 次的函数。然后我们只需用 `return` 将起始位置变成一个单元素列表，并将其传递给该函数。
+- en: 'Now, we can change our `canReachIn3` function to be more general as well:'
+  id: totrans-418
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以将我们的 `canReachIn3` 函数变得更通用：
+- en: '[PRE127]'
+  id: totrans-419
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE127]'
+- en: Making Monads
+  id: totrans-420
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建单调
+- en: In this section, we’re going to look at an example of how a type gets made,
+    identified as a monad, and then given the appropriate `Monad` instance. We don’t
+    usually set out to make a monad with the sole purpose of making a monad. Rather,
+    we make a type whose purpose is to model an aspect of some problem, and then later
+    on, if we see that the type represents a value with a context and can act like
+    a monad, we give it a `Monad` instance.
+  id: totrans-421
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们将查看一个示例，说明如何创建一个类型，将其识别为单子（monad），然后赋予适当的`Monad`实例。我们通常不会仅仅为了创建一个单子而创建一个单子。相反，我们创建一个类型，其目的是模拟某个问题的某个方面，然后稍后，如果我们看到该类型代表一个具有上下文的价值并且可以像单子一样操作，我们就会给它一个`Monad`实例。
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802718.png.jpg)'
+  id: totrans-422
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802718.png.jpg)'
+- en: As you’ve seen, lists are used to represent nondeterministic values. A list
+    like `[3,5,9]` can be viewed as a single nondeterministic value that just can’t
+    decide what it’s going to be. When we feed a list into a function with `>>=`,
+    it just makes all the possible choices of taking an element from the list and
+    applying the function to it and then presents those results in a list as well.
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你所见，列表用于表示非确定性值。像`[3,5,9]`这样的列表可以被视为一个单一的、无法决定它将是什么的非确定性值。当我们用`>>=`将列表输入到一个函数中时，它只是对所有可能的选项进行选择，从列表中取一个元素并对其应用函数，然后将这些结果也以列表的形式呈现。
+- en: If we look at the list `[3,5,9]` as the numbers `3`, `5`, and `9` occurring
+    at once, we might notice that there’s no information regarding the probability
+    that each of those numbers occurs. What if we wanted to model a nondeterministic
+    value like `[3,5,9]`, but we wanted to express that `3` has a 50 percent chance
+    of happening and `5` and `9` both have a 25 percent chance of happening? Let’s
+    try to make this work!
+  id: totrans-424
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们将列表`[3,5,9]`视为`3`、`5`和`9`同时发生，我们可能会注意到没有关于这些数字中每个数字发生概率的信息。如果我们想模拟一个非确定性值如`[3,5,9]`，但想表达`3`有50%的概率发生，而`5`和`9`都有25%的概率发生，该怎么办？让我们尝试让它工作！
+- en: 'Let’s say that every item in the list comes with another value: a probability
+    of it happening. It might make sense to present that value like this:'
+  id: totrans-425
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设列表中的每一项都附带另一个值：它发生的概率。可能以这种方式呈现该值是有意义的：
+- en: '[PRE128]'
+  id: totrans-426
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE128]'
+- en: 'In mathemathics, probabilities aren’t usually expressed in percentages, but
+    rather in real numbers between a 0 and 1\. A 0 means that there’s no chance in
+    hell for something to happen, and a 1 means that it’s happening for sure. Floating-point
+    numbers can get messy fast because they tend to lose precision, but Haskell offers
+    a data type for rational numbers. It’s called `Rational`, and it lives in `Data.Ratio`.
+    To make a `Rational`, we write it as if it were a fraction. The numerator and
+    the denominator are separated by a `%`. Here are a few examples:'
+  id: totrans-427
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在数学中，概率通常不是用百分比来表示的，而是用介于0和1之间的实数来表示。0表示没有任何机会发生某事，而1表示它一定会发生。浮点数很快就会变得混乱，因为它们往往会丢失精度，但Haskell提供了一个有理数的类型。它被称为`Rational`，位于`Data.Ratio`中。要创建一个`Rational`，我们将其写成分数的形式。分子和分母由`%`分隔。以下是一些示例：
+- en: '[PRE129]'
+  id: totrans-428
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE129]'
+- en: 'The first line is just one-quarter. In the second line, we add two halves to
+    get a whole. In the third line, we add one-third with five-quarters and get nineteen-twelfths.
+    So, let’s throw out our floating points and use `Rational` for our probabilities:'
+  id: totrans-429
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一行只是四分之一。在第二行，我们添加两个二分之一以得到一个整体。在第三行，我们将三分之一与五分之四相加得到十二分之十九。因此，让我们放弃浮点数，并使用`Rational`来表示概率：
+- en: '[PRE130]'
+  id: totrans-430
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE130]'
+- en: Okay, so `3` has a one-out-of-two chance of happening, while `5` and `9` will
+    happen one time out of four. Pretty neat.
+  id: totrans-431
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 好吧，所以`3`有50%的概率发生，而`5`和`9`将每四次发生一次。相当不错。
+- en: We took lists and we added some extra context to them, so this represents values
+    with contexts as well. Before we go any further, let’s wrap this into a `newtype`,
+    because something tells me we’ll be making some instances.
+  id: totrans-432
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们对列表添加了一些额外的上下文，因此这也代表了具有上下文的价值。在我们继续之前，让我们将其包装成一个`newtype`，因为有些事情告诉我我们将要创建一些实例。
+- en: '[PRE131]'
+  id: totrans-433
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE131]'
+- en: 'Is this a functor? Well, the list is a functor, so this should probably be
+    a functor, too, because we just added some stuff to the list. When we map a function
+    over a list, we apply it to each element. Here, we’ll apply it to each element
+    as well, but we’ll leave the probabilities as they are. Let’s make an instance:'
+  id: totrans-434
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个函子（functor）吗？嗯，列表是一个函子，所以这应该也是一个函子，因为我们只是向列表中添加了一些东西。当我们对列表映射一个函数时，我们将其应用于每个元素。这里，我们也将它应用于每个元素，但我们将保留概率不变。让我们创建一个实例：
+- en: '[PRE132]'
+  id: totrans-435
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE132]'
+- en: 'We unwrap it from the `newtype` with pattern matching, apply the function `f`
+    to the values while keeping the probabilities as they are, and then wrap it back
+    up. Let’s see if it works:'
+  id: totrans-436
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用模式匹配从`newtype`中展开它，将函数`f`应用于值的同时保持概率不变，然后再将其包装回原样。让我们看看它是否有效：
+- en: '[PRE133]'
+  id: totrans-437
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE133]'
+- en: Note that the probabilities should always add up to `1`. If those are all the
+    things that can happen, it doesn’t make sense for the sum of their probabilities
+    to be anything other than `1`. A coin that lands tails 75 percent of the time
+    and heads 50 percent of the time seems like it could work only in some other strange
+    universe.
+  id: totrans-438
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，概率的总和应该总是等于`1`。如果这些都是可能发生的事情，那么它们的概率总和不应该是任何其他值。一个75%的概率落地尾巴，50%的概率落地头部的硬币似乎只能存在于某个奇怪的世界中。
+- en: 'Now the big question: Is this a monad? Given how the list is a monad, this
+    looks like it should be a monad as well. First, let’s think about `return`. How
+    does it work for lists? It takes a value and puts it in a singleton list. What
+    about here? Well, since it’s supposed to be a default minimal context, it should
+    also make a singleton list. What about the probability? Well, `return x` is supposed
+    to make a monadic value that always presents `x` as its result, so it doesn’t
+    make sense for the probability to be `0`. If it always must present this value
+    as its result, the probability should be `1`!'
+  id: totrans-439
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在是最大的问题：这是一个单子吗？鉴于列表是一个单子，这似乎也应该是一个单子。首先，让我们考虑`return`。对于列表，它是如何工作的？它接受一个值并将其放入单元素列表中。那么这里呢？嗯，因为它应该是一个默认的最小上下文，它也应该创建一个单元素列表。那么概率呢？嗯，`return
+    x`应该创建一个总是呈现`x`作为其结果的单子值，所以概率为`0`是没有意义的。如果它总是必须以这个值作为其结果呈现，那么概率应该是`1`！
+- en: 'What about `>>=`? Seems kind of tricky, so let’s make use of the fact that
+    `m >>= f` always equals `join (fmap f m)` for monads and think about how we would
+    flatten a probability list of probability lists. As an example, let’s consider
+    this list where there’s a 25 percent chance that exactly one of `''a''` or `''b''`
+    will happen. Both `''a''` and `''b''` are equally likely to occur. Also, there’s
+    a 75 percent chance that exactly one of `''c''` or `''d''` will happen. `''c''`
+    and `''d''` are also equally likely to happen. Here’s a picture of a probability
+    list that models this scenario:'
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么`>>=`呢？这似乎有点棘手，所以让我们利用`m >>= f`对于单子总是等于`join (fmap f m)`的事实，并思考我们如何平铺概率列表的列表。作为一个例子，让我们考虑这个列表，其中有一个25%的概率是`'a'`或`'b'`中的任何一个会发生。`'a'`和`'b'`发生的可能性是相等的。还有75%的概率是`'c'`或`'d'`中的任何一个会发生。`'c'`和`'d'`发生的可能性也是相等的。这是一个概率列表的图片，它模拟了这个场景：
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802720.png.jpg)'
+  id: totrans-441
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802720.png.jpg)'
+- en: What are the chances for each of these letters to occur? If we were to draw
+    this as just four boxes, each with a probability, what would those probabilites
+    be? To find out, all we need to do is multiply each probability with all of the
+    probabilities that it contains. `'a'` would occur one time out of eight, as would
+    `'b'`, because if we multiply one-half by one-quarter, we get one-eighth. `'c'`
+    would happen three times out of eight, because three-quarters multiplied by one-half
+    is three-eighths. `'d'` would also happen three times out of eight. If we sum
+    all the probabilities, they still add up to one.
+  id: totrans-442
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些字母发生的概率是多少？如果我们只画四个带有概率的盒子，这些概率会是什么？为了找出答案，我们只需要将每个概率乘以它包含的所有概率。`'a'`和`'b'`都会在八次中发生一次，因为如果我们把一半乘以四分之一，我们得到八分之一。`'c'`会在八次中发生三次，因为四分之三乘以一半是三又八分之一。`'d'`也会在八次中发生三次。如果我们把所有概率加起来，它们仍然等于一。
+- en: 'Here’s this situation expressed as a probability list:'
+  id: totrans-443
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是用概率列表表示的这种情况：
+- en: '[PRE134]'
+  id: totrans-444
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE134]'
+- en: 'Notice that its type is `Prob (Prob Char)`. So now that we’ve figured out how
+    to flatten a nested probability list, all we need to do is write the code for
+    this. Then we can write `>>=` simply as `join (fmap f m)`, and we have ourselves
+    a monad! So here’s `flatten`, which we’ll use because the name `join` is already
+    taken:'
+  id: totrans-445
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，它的类型是`Prob (Prob Char)`。所以现在我们已经弄清楚如何平铺嵌套的概率列表，我们只需要编写这个代码。然后我们可以简单地写成`>>=`作为`join
+    (fmap f m)`，我们就有了单子！所以这里是`flatten`，我们将使用它，因为`join`这个名字已经被占用了：
+- en: '[PRE135]'
+  id: totrans-446
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE135]'
+- en: The function `multAll` takes a tuple of probability list and a probability `p`
+    that comes with it and then multiplies every inner probability with `p`, returning
+    a list of pairs of items and probabilities. We map `multAll` over each pair in
+    our nested probability list, and then we just flatten the resulting nested list.
+  id: totrans-447
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数 `multAll` 接收一个概率列表元组和与之相关的概率 `p`，然后将每个内部概率与 `p` 相乘，返回一个包含项目和概率的列表对。我们将 `multAll`
+    映射到嵌套概率列表中的每个对上，然后我们只需展平生成的嵌套列表。
+- en: Now we have all that we need. We can write a `Monad` instance!
+  id: totrans-448
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经拥有了所有需要的东西。我们可以编写一个 `Monad` 实例了！
+- en: '[PRE136]'
+  id: totrans-449
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE136]'
+- en: Because we already did all the hard work, the instance is very simple. We also
+    defined the `fail` function, which is the same as it is for lists, so if there’s
+    a pattern-match failure in a `do` expression, a failure occurs within the context
+    of a probability list.
+  id: totrans-450
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为我们已经完成了所有艰苦的工作，所以实例非常简单。我们还定义了 `fail` 函数，它与列表中的 `fail` 函数相同，所以如果 `do` 表达式中有模式匹配失败，失败就会发生在概率列表的上下文中。
+- en: 'It’s also important to check if the monad laws hold for the monad that we just
+    made:'
+  id: totrans-451
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检查我们刚刚创建的 `Monad` 是否满足 `Monad` 法则也很重要：
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802722.png)'
+  id: totrans-452
+  prefs: []
+  type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages802722.png)'
+- en: The first law says that `return x >>= f` should be equal to `f x`. A rigorous
+    proof would be rather tedious, but we can see that if we put a value in a default
+    context with `return`, then `fmap` a function over that, and then flatten the
+    resulting probability list, every probability that results from the function would
+    be multiplied by the `1%1` probability that we made with `return`, so it wouldn’t
+    affect the context.
+  id: totrans-453
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第一法则指出 `return x >>= f` 应该等于 `f x`。一个严格的证明可能会相当繁琐，但我们可以看到，如果我们用 `return` 将一个值放入默认上下文中，然后在这个值上应用一个函数，然后展平生成的概率列表，那么从该函数产生的每个概率都会乘以
+    `return` 制造的 `1%1` 概率，所以它不会影响上下文。
+- en: The second law states that `m >>= return` is no different than `m`. For our
+    example, the reasoning for `m >>= return` being equal to just `m` is similar to
+    that for the first law.
+  id: totrans-454
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第二法则指出 `m >>= return` 与 `m` 没有区别。对于我们的例子，`m >>= return` 等于 `m` 的推理与第一法则类似。
+- en: The third law states that `f <=< (g <=< h)` should be the same as `(f <=< g)
+    <=< h`. This one is true as well, because it holds for the list monad that forms
+    the basis of the probability monad and because multiplication is associative.
+    `1%2 * (1%3 * 1%5)` is equal to `(1%2 * 1%3) * 1%5`.
+  id: totrans-455
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 第三定律指出 `f <=< (g <=< h)` 应该与 `(f <=< g) <=< h` 相同。这一点也是正确的，因为它适用于构成概率 `Monad`
+    基础的列表 `Monad`，并且因为乘法是结合的。`1%2 * (1%3 * 1%5)` 等于 `(1%2 * 1%3) * 1%5`。
+- en: Now that we have a monad, what can we do with it? Well, it can help us do calculations
+    with probabilities. We can treat probabilistic events as values with contexts,
+    and the probability monad will make sure that those probabilities are reflected
+    in the probabilities of the final result.
+  id: totrans-456
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了 `Monad`，我们可以用它做什么呢？嗯，它可以帮助我们进行概率计算。我们可以将概率事件视为具有上下文的价值，概率 `Monad` 将确保这些概率反映在最终结果的概率中。
+- en: 'Say we have two normal coins and one loaded coin that lands tails an astounding
+    nine times out of ten and heads only one time out of ten. If we throw all the
+    coins at once, what are the odds of all of them landing tails? First, let’s make
+    probability values for a normal coin flip and for a loaded one:'
+  id: totrans-457
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有两枚正常的硬币和一枚落地时九次出现反面，一次出现正面的“作弊”硬币。如果我们一次性抛掷所有硬币，所有硬币都落地反面的概率是多少？首先，让我们为正常硬币的抛掷和作弊硬币的抛掷设定概率值：
+- en: '[PRE137]'
+  id: totrans-458
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE137]'
+- en: 'And finally, the coin-throwing action:'
+  id: totrans-459
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，抛掷硬币的动作：
+- en: '[PRE138]'
+  id: totrans-460
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE138]'
+- en: 'Giving it a go, we see that the odds of all three landing tails are not that
+    good, despite cheating with our loaded coin:'
+  id: totrans-461
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尝试一下，我们发现尽管我们使用了作弊硬币，所有三枚硬币都落地反面的概率并不高：
+- en: '[PRE139]'
+  id: totrans-462
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE139]'
+- en: All three of them will land tails 9 times out of 40, which is less than 25 percent.
+    We see that our monad doesn’t know how to join all of the `False` outcomes where
+    all coins don’t land tails into one outcome. That’s not a big problem, since writing
+    a function to put all the same outcomes into one outcome is pretty easy (and left
+    as an exercise to you, the reader).
+  id: totrans-463
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它们三个中有三个会落地反面，占40次中的9次，不到25%。我们看到我们的 `Monad` 不懂得如何将所有硬币都不落地反面的 `False` 结果合并成一个结果。这不是一个大问题，因为编写一个将所有相同结果合并成一个结果的函数相当简单（并且留给读者作为练习）。
+- en: In this section, we went from having a question (what if lists also carried
+    information about probability?) to making a type, recognizing a monad, and finally
+    making an instance and doing something with it. I think that’s quite fetching!
+    By now, you should have a pretty good grasp of monads and what they’re about.
+  id: totrans-464
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们从有一个问题（列表是否也可以携带关于概率的信息？）开始，到创建一个类型，识别一个单子，最后创建一个实例并对其进行操作。我认为这相当吸引人！到目前为止，你应该已经对单子及其内容有了相当好的理解。
