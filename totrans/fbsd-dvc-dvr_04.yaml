@@ -1,34 +1,48 @@
 - en: Chapter 4. Thread Synchronization
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第四章。线程同步
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
 - en: This chapter deals with the problem of data and state corruption caused by concurrent
     threads. When multiple threads executing on different CPUs simultaneously modify
     the same data structure, that structure can be corrupted. Similarly, when a thread
     gets interrupted and another thread manipulates the data that the first thread
     was manipulating, that data can be corrupted (Baldwin, 2002).
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章讨论由并发线程引起的数据和状态损坏问题。当多个线程在不同的CPU上同时修改相同的数据结构时，该结构可能会被损坏。同样，当一个线程被中断而另一个线程操作第一个线程正在操作的数据时，这些数据可能会被损坏（Baldwin，2002）。
 - en: Fortunately, FreeBSD provides a set of synchronization primitives to deal with
     these issues. Before I describe what synchronization primitives do, you’ll need
     an in-depth understanding of the abovementioned concurrency issues, also known
     as synchronization problems. To that end, let’s analyze a few.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: '幸运的是，FreeBSD提供了一套同步原语来处理这些问题。在我描述同步原语做什么之前，您需要深入了解上述并发问题，也称为同步问题。为此，让我们分析几个。 '
 - en: A Simple Synchronization Problem
+  id: totrans-4
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 一个简单的同步问题
 - en: 'Consider the following scenario in which two threads increment the same global
     variable. On *i386*, this operation might utilize the following processor instructions:'
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 考虑以下场景，其中两个线程增加相同的全局变量。在*i386*上，此操作可能使用以下处理器指令：
 - en: '[PRE0]'
+  id: totrans-6
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: Imagine that `count` is currently `0` and that the first thread manages to load
     the current value of `count` into `%eax` (that is, it completes the first instruction)
     just before the second thread preempts it. As part of the thread switch, FreeBSD
@@ -42,32 +56,48 @@
     problem, we lost an update. This can also occur when the two threads are executing
     concurrently but just slightly out of step (that is, one thread begins executing
     the first instruction when the other thread begins executing the second instruction).
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 假设`count`当前为`0`，并且第一个线程在第二个线程抢占它之前成功地将`count`的当前值加载到`%eax`（即，它完成了第一条指令）。作为线程切换的一部分，FreeBSD将`%eax`的值（即`0`）保存到即将退出的线程的上下文中。现在，假设第二个线程成功完成所有三个指令，从而将`count`从`0`增加到`1`。如果第一个线程抢占第二个线程，FreeBSD将恢复其线程上下文，其中包括将`%eax`设置为`0`。第一个线程将在第二条指令处恢复执行，现在将向`%eax`添加`1`并将结果存储在`count`中。此时，`count`等于`1`，而它应该等于`2`。因此，由于同步问题，我们丢失了一个更新。当两个线程并发执行但略微不同步时（即，一个线程开始执行第一条指令时，另一个线程开始执行第二条指令），这也可能发生。
 - en: A More Complex Synchronization Problem
+  id: totrans-8
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 一个更复杂的同步问题
 - en: '[Example 4-1](ch04s02.html#race.c "Example 4-1. race.c") is a complete character
     driver that lets you manipulate a doubly linked list through its `d_ioctl` function.
     You can add or remove an item from the list, determine whether an item is on the
     list, or print every item on the list. [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")
     also contains some synchronization problems.'
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 4-1](ch04s02.html#race.c "Example 4-1. race.c") 是一个完整的字符驱动程序，允许您通过其 `d_ioctl`
+    函数操作双链表。您可以从列表中添加或删除项目，确定项目是否在列表中，或打印列表上的每个项目。[示例 4-1](ch04s02.html#race.c "Example 4-1. race.c")
+    也包含一些同步问题。'
 - en: Note
+  id: totrans-10
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Take a quick look at this code and try to identify the synchronization problems.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 快速查看以下代码，并尝试识别同步问题。
 - en: Example 4-1. race.c
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 4-1. race.c
 - en: '[PRE1]'
+  id: totrans-13
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Before I identify [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")’s
     synchronization problems, let’s walk through it. [Example 4-1](ch04s02.html#race.c
     "Example 4-1. race.c") begins by ![](httpatomoreillycomsourcenostarchimages1137503.png)
@@ -76,71 +106,90 @@
     structure contains a (unique) ![](httpatomoreillycomsourcenostarchimages1137501.png)
     unit number and a ![](httpatomoreillycomsourcenostarchimages1137499.png) structure
     that maintains a pointer to the previous and next `race_softc` structure in `race_list`.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
 - en: 'Next, [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")’s ![](httpatomoreillycomsourcenostarchimages1137507.png)
     character device switch table is defined. The constant ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `RACE_NAME` is defined in the `race_ioctl.h` header as follows:'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE2]'
+  id: totrans-16
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'Note how [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")’s character
     device switch table doesn’t define `d_open` and `d_close`. Recall, from [Chapter 1](ch01.html
     "Chapter 1. Building and Running Modules"), that if a `d_foo` function is undefined
     the corresponding operation is unsupported. However,`d_open` and `d_close` are
     unique; when they’re undefined the kernel will automatically define them as follows:'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE3]'
+  id: totrans-18
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: This ensures that every registered character device can be opened and closed.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-20
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: Drivers commonly forgo defining a `d_open` and `d_close` function when they
     don’t need to prepare their devices for I/O—like [Example 4-1](ch04s02.html#race.c
     "Example 4-1. race.c").
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
 - en: 'Next, [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")’s `d_ioctl`
     function, named ![](httpatomoreillycomsourcenostarchimages1137511.png) `race_ioctl`,
     is defined. This function is like the `main` function for [Example 4-1](ch04s02.html#race.c
     "Example 4-1. race.c"). It uses three helper functions to do its work:'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
 - en: '`race_new`'
+  id: totrans-23
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`race_find`'
+  id: totrans-24
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '`race_destroy`'
+  id: totrans-25
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Before I describe `race_ioctl`, I’ll describe these functions first.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
 - en: race_new Function
+  id: totrans-27
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'The `race_new` function creates a new `race_softc` structure, which is then
     inserted at the head of `race_list`. Here is the function definition for `race_new`
     (again):'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE4]'
+  id: totrans-29
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) iterates
     through `race_list` looking for the largest unit number, which it stores in ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `max.` Next, `unit` is set to ![](httpatomoreillycomsourcenostarchimages1137503.png)
@@ -149,195 +198,292 @@
     ![](httpatomoreillycomsourcenostarchimages1137507.png) `unit`, and ![](httpatomoreillycomsourcenostarchimages1137509.png)
     inserts it at the head of `race_list`. Lastly, `race_new` ![](httpatomoreillycomsourcenostarchimages1137511.png)
     returns a pointer to the new `race_softc` structure.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先遍历 `race_list`，寻找最大的单元号，并将其存储在 `max` 中。然后，将 `unit` 设置为 `max` 加一。然后，`race_new`
+    为新的 `race_softc` 结构分配内存，将其分配单元号 `unit`，并将其插入到 `race_list` 的头部。最后，`race_new` 返回新的
+    `race_softc` 结构的指针。
 - en: race_find Function
+  id: totrans-31
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: race_find 函数
 - en: The `race_find` function takes a unit number and finds the associated `race_softc`
     structure on `race_list`.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: '`race_find` 函数接收一个单元号，并在 `race_list` 上找到相关的 `race_softc` 结构。'
 - en: '[PRE5]'
+  id: totrans-33
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: If `race_find` is successful, a pointer to the `race_softc` structure is returned;
     otherwise, `NULL` is returned.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果 `race_find` 成功，则返回 `race_softc` 结构的指针；否则，返回 `NULL`。
 - en: race_destroy Function
+  id: totrans-35
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: race_destroy 函数
 - en: 'The `race_destroy` function destroys a `race_softc` structure on `race_list`.
     Here is its function definition (again):'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: '`race_destroy` 函数销毁 `race_list` 上的 `race_softc` 结构。以下是其函数定义（再次）：'
 - en: '[PRE6]'
+  id: totrans-37
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: This function takes a ![](httpatomoreillycomsourcenostarchimages1137499.png)
     pointer to a `race_softc` structure and ![](httpatomoreillycomsourcenostarchimages1137501.png)
     removes that structure from `race_list`. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png)
     frees the allocated memory for that structure.
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数接收一个指向 `race_softc` 结构的指针，并将其从 `race_list` 中移除。然后，它释放该结构的分配内存。
 - en: race_ioctl Function
+  id: totrans-39
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: race_ioctl 函数
 - en: Before I walk through `race_ioctl`, an explanation of its ioctl commands, which
     are defined in `race_ioctl.h`, is needed.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我介绍 `race_ioctl` 之前，需要解释其 ioctl 命令，这些命令在 `race_ioctl.h` 中定义。
 - en: '[PRE7]'
+  id: totrans-41
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: As you can see, three of `race_ioctl`’s ioctl commands transfer an integer value.
     As you’ll see, this integer value is a unit number.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，`race_ioctl` 的三个 ioctl 命令传输一个整数值。您将看到，这个整数值是一个单元号。
 - en: 'Here is the function definition for `race_ioctl` (again):'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是 `race_ioctl` 函数定义（再次）：
 - en: '[PRE8]'
+  id: totrans-44
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: This function can perform one of four ioctl-based operations. The first, ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `RACE_IOC_ATTACH`, ![](httpatomoreillycomsourcenostarchimages1137501.png) creates
     a new `race_softc` structure, which is then inserted at the head of `race_list`.
     Afterward, the unit number of the new `race_softc` structure is ![](httpatomoreillycomsourcenostarchimages1137503.png)
     returned.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数可以执行基于四个 ioctl 的操作之一。第一个操作，`RACE_IOC_ATTACH`，创建一个新的 `race_softc` 结构，并将其插入到
+    `race_list` 的头部。之后，返回新 `race_softc` 结构的单元号。
 - en: The second operation, ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `RACE_IOC_DETACH`, removes a user-specified `race_softc` structure from `race_list`.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二种操作，`RACE_IOC_DETACH`，从 `race_list` 中移除用户指定的 `race_softc` 结构。
 - en: The third operation, ![](httpatomoreillycomsourcenostarchimages1137507.png)
     `RACE_IOC_QUERY`, determines whether a user-specified `race_softc` structure is
     on `race_list`.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三种操作，`RACE_IOC_QUERY`，确定用户指定的 `race_softc` 结构是否在 `race_list` 上。
 - en: Lastly, the fourth operation, ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `RACE_IOC_LIST`, prints the unit number of every `race_softc` structure on `race_list`.
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，第四种操作，`RACE_IOC_LIST`，打印 `race_list` 上每个 `race_softc` 结构的单元号。
 - en: race_modevent Function
+  id: totrans-49
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: race_modevent 函数
 - en: 'The `race_modevent` function is the module event handler for [Example 4-1](ch04s02.html#race.c
     "Example 4-1. race.c"). Here is its function definition (again):'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: '`race_modevent` 函数是 [示例 4-1](ch04s02.html#race.c "示例 4-1. race.c") 的模块事件处理程序。以下是其函数定义（再次）：'
 - en: '[PRE9]'
+  id: totrans-51
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'As you can see, this function includes a new case: ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `MOD_QUIESCE`.'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，这个函数包括一个新的情况：![图片](httpatomoreillycomsourcenostarchimages1137499.png) `MOD_QUIESCE`。
 - en: Note
+  id: totrans-53
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Because `MOD_LOAD` and `MOD_UNLOAD` are extremely rudimentary and because you’ve
     seen similar code elsewhere, I’ll omit discussing them.
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于`MOD_LOAD`和`MOD_UNLOAD`非常基础，而且你已经在其他地方见过类似的代码，所以我会省略对它们的讨论。
 - en: When one issues the `kldunload(8)` command, `MOD_QUIESCE` is run before `MOD_UNLOAD`.
     If `MOD_QUIESCE` returns an error, `MOD_UNLOAD` does not get executed. In other
     words, `MOD_QUIESCE` verifies that it is safe to unload your module.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你发出`kldunload(8)`命令时，`MOD_QUIESCE`在`MOD_UNLOAD`之前运行。如果`MOD_QUIESCE`返回错误，则不会执行`MOD_UNLOAD`。换句话说，`MOD_QUIESCE`验证卸载你的模块是否安全。
 - en: Note
+  id: totrans-56
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The `kldunload -f` command ignores every error returned by `MOD_QUIESCE`. So
     you can always unload a module, but it may not be the best idea.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: '`kldunload -f`命令忽略了`MOD_QUIESCE`返回的每个错误。因此，你总是可以卸载一个模块，但这可能不是最好的主意。'
 - en: Here, `MOD_QUIESCE` ![](httpatomoreillycomsourcenostarchimages1137501.png) guarantees
     that `race_list` is empty (before [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")
     is unloaded). This is done to prevent memory leaks from any potentially unclaimed
     `race_softc` structures.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，`MOD_QUIESCE` ![图片](httpatomoreillycomsourcenostarchimages1137501.png) 确保在[示例4-1](ch04s02.html#race.c
+    "示例4-1. race.c")卸载之前`race_list`是空的。这样做是为了防止任何可能未被声明的`race_softc`结构造成内存泄漏。
 - en: The Root of the Problem
+  id: totrans-59
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 问题根源
 - en: Now that we’ve walked through [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c"),
     let’s run it and see if we can identify its synchronization problems.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经走过了[示例4-1](ch04s02.html#race.c "示例4-1. race.c")，让我们运行它并看看我们是否能识别其同步问题。
 - en: '[Example 4-2](ch04s02.html#race_underscore_config.c "Example 4-2. race_config.c")
     presents a command-line utility designed to invoke the `race_ioctl` function in
     [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c"):'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例4-2](ch04s02.html#race_underscore_config.c "示例4-2. race_config.c")展示了一个命令行工具，该工具用于调用[示例4-1](ch04s02.html#race.c
+    "示例4-1. race.c")中的`race_ioctl`函数。'
 - en: Example 4-2. race_config.c
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例4-2. race_config.c
 - en: '[PRE10]'
+  id: totrans-63
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: Note
+  id: totrans-64
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '[Example 4-2](ch04s02.html#race_underscore_config.c "Example 4-2. race_config.c")
     is a bog-standard command-line utility. As such, I won’t cover its program structure.'
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例4-2](ch04s02.html#race_underscore_config.c "示例4-2. race_config.c")是一个标准的命令行工具。因此，我不会介绍其程序结构。'
 - en: 'The following shows an example execution of [Example 4-2](ch04s02.html#race_underscore_config.c
     "Example 4-2. race_config.c"):'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下展示了[示例4-2](ch04s02.html#race_underscore_config.c "示例4-2. race_config.c")的示例执行：
 - en: '[PRE11]'
+  id: totrans-67
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: Above, two threads simultaneously add a `race_softc` structure to `race_list`,
     which results in two `race_softc` structures with the “unique” unit number `0`—this
     is a problem, yes?
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 在上面，两个线程同时将一个`race_softc`结构添加到`race_list`中，导致有两个具有“唯一”单元号`0`的`race_softc`结构——这是问题，对吗？
 - en: 'Here’s another example:'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里还有一个例子：
 - en: '[PRE12]'
+  id: totrans-70
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: Above, one thread adds a `race_softc` structure to `race_list` while another
     thread unloads *race.ko*, which causes a memory leak. Recall that `MOD_QUIESCE`
     is supposed to prevent this, but it didn’t. Why?
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 在上面，一个线程将一个`race_softc`结构添加到`race_list`中，而另一个线程卸载*race.ko*，这导致内存泄漏。回想一下，`MOD_QUIESCE`本应防止这种情况，但它没有。为什么？
 - en: The problem, in both examples, is a race condition. *Race conditions* are errors
     caused by a sequence of events. In the first example, both threads check `race_list`
     simultaneously, discover that it is empty, and assign `0` as the unit number.
     In the second example, `MOD_QUIESCE` returns error-free, a `race_softc` structure
     is then added to `race_list`, and finally `MOD_UNLOAD` completes.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这两个例子中，问题都是竞争条件。**竞争条件**是由一系列事件引起的错误。在第一个例子中，两个线程同时检查`race_list`，发现它是空的，并将`0`作为单元号分配。在第二个例子中，`MOD_QUIESCE`返回无错误，随后将一个`race_softc`结构添加到`race_list`中，最后`MOD_UNLOAD`完成。
 - en: Note
+  id: totrans-73
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: One characteristic of race conditions is that they’re hard to reproduce. Ergo,
     the results were doctored in the preceding examples. That is, I caused the threads
     to context switch at specific points to achieve the desired outcome. Under normal
     conditions, it would have taken literally millions of attempts before those race
     conditions would occur, and I didn’t want to spend that much time.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 竞争条件的一个特点是它们很难重现。因此，在先前的例子中，我修改了结果。也就是说，我在特定的点上使线程进行上下文切换以达到预期的结果。在正常情况下，要使这些竞争条件发生，实际上需要数百万次尝试，我不想花那么多时间。
 - en: Preventing Race Conditions
+  id: totrans-75
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 防止竞争条件
 - en: Race conditions are prevented using locks. *Locks*, also known as *synchronization
     primitives*, are used to serialize the execution of two or more threads. For example,
     the race conditions in [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c"),
@@ -348,36 +494,54 @@
     the current owner to relinquish `foo`. This protocol guarantees that at any moment
     in time only one thread can access `race_list`, which eliminates [Example 4-1](ch04s02.html#race.c
     "Example 4-1. race.c")’s race conditions.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用锁可以防止竞态条件。*锁*，也称为*同步原语*，用于序列化两个或多个线程的执行。例如，[示例4-1](ch04s02.html#race.c "示例4-1.
+    race.c")中的竞态条件，是由于对`race_list`的并发访问引起的，可以通过使用锁来序列化对`race_list`的访问来防止。在线程可以访问`race_list`之前，它必须首先获取foo锁。一次只能有一个线程持有foo。如果一个线程无法获取`foo`，它就不能访问`race_list`，必须等待当前所有者释放`foo`。此协议保证在任何时刻只有一个线程可以访问`race_list`，从而消除了[示例4-1](ch04s02.html#race.c
+    "示例4-1. race.c")的竞态条件。
 - en: There are several different types of locks in FreeBSD, each having its own characteristics
     (for example, some locks can be held by more than one thread). The remainder of
     this chapter describes the different types of locks available in FreeBSD and how
     to use them.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD中有几种不同的锁类型，每种锁都有其自身的特性（例如，一些锁可以被多个线程持有）。本章的剩余部分将描述FreeBSD中可用的不同类型的锁以及如何使用它们。
 - en: Mutexes
+  id: totrans-78
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 互斥锁
 - en: '*Mutex locks (mutexes)* ensure that at any moment in time, only one thread
     can access a shared object. Mutex is an amalgamation of mutual and exclusion.'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: '*互斥锁（mutexes）* 确保在任何时刻，只有一个线程可以访问共享对象。互斥锁是互斥和排他的结合。'
 - en: Note
+  id: totrans-80
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The `foo` lock described in the previous section was a mutex lock.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 上一个章节中描述的`foo`锁是一个互斥锁。
 - en: 'FreeBSD provides two types of mutex locks: spin mutexes and sleep mutexes.'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD提供了两种类型的互斥锁：自旋互斥锁和睡眠互斥锁。
 - en: Spin Mutexes
+  id: totrans-83
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 自旋互斥锁
 - en: '*Spin mutexes* are simple spin locks. If a thread attempts to acquire a spin
     lock that is being held by another thread, it will “spin” and wait for the lock
     to be released. *Spin*, in this case, means to loop infinitely on the CPU. This
@@ -385,201 +549,296 @@
     or if it context switches, and all subsequent threads attempt to acquire that
     lock. Consequently, while holding a spin mutex all interrupts are blocked on the
     local processor and a context switch cannot be performed.'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: '*自旋互斥锁* 是简单的自旋锁。如果一个线程尝试获取被另一个线程持有的自旋锁，它将“自旋”并等待锁被释放。在这里，“自旋”意味着在CPU上无限循环。这种自旋可能导致死锁，如果持有自旋锁的线程被中断或进行上下文切换，并且所有后续线程都尝试获取该锁。因此，在持有自旋互斥锁期间，所有中断都会在本地处理器上被阻塞，并且无法执行上下文切换。'
 - en: Spin mutexes should be held only for short periods of time and should be used
     only to protect objects related to nonpreemptive interrupts and low-level scheduling
     code (McKusick and Neville-Neil, 2005). Ordinarily, you’ll never use spin mutexes.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 自旋互斥锁应仅用于短时间持有，并且仅用于保护与不可抢占中断和低级调度代码相关的对象（McKusick和Neville-Neil，2005）。通常，你永远不会使用自旋互斥锁。
 - en: Sleep Mutexes
+  id: totrans-86
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 睡眠互斥锁
 - en: '*Sleep mutexes* are the most commonly used lock. If a thread attempts to acquire
     a sleep mutex that is being held by another thread, it will context switch (that
     is, sleep) and wait for the mutex to be released. Because of this behavior, sleep
     mutexes are not susceptible to the deadlock described above.'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: '*睡眠互斥锁* 是最常用的锁。如果一个线程尝试获取被另一个线程持有的睡眠互斥锁，它将进行上下文切换（即睡眠）并等待互斥锁被释放。由于这种行为，睡眠互斥锁不会受到上述死锁的影响。'
 - en: Sleep mutexes support priority propagation. When a thread sleeps on a sleep
     mutex and its priority is higher than the sleep mutex’s current owner, the current
     owner will inherit the priority of this thread (Baldwin, 2002). This characteristic
     prevents a lower priority thread from blocking a higher priority thread.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 睡眠互斥锁支持优先级传播。当一个线程在睡眠互斥锁上睡眠，并且其优先级高于睡眠互斥锁的当前所有者时，当前所有者将继承该线程的优先级（Baldwin，2002）。这种特性防止低优先级线程阻塞高优先级线程。
 - en: Note
+  id: totrans-89
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Sleeping (for example, calling a `*sleep` function, which is discussed in [Chapter 5](ch05.html
     "Chapter 5. Delaying Execution")) while holding a mutex is never safe and must
     be avoided; otherwise, there are numerous assertions that will fail and the kernel
     will panic (McKusick and Neville-Neil, 2005).
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 在持有互斥锁的情况下睡眠（例如，调用`*sleep`函数，该函数将在[第 5 章](ch05.html "第 5 章. 延迟执行")中讨论）从不安全，必须避免；否则，会有许多断言失败，内核会崩溃（McKusick
+    和 Neville-Neil，2005）。
 - en: Mutex Management Routines
+  id: totrans-91
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Mutex 管理例程
 - en: 'The FreeBSD kernel provides the following seven functions for working with
     mutexes:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD内核提供了以下七个函数用于处理互斥锁：
 - en: '[PRE13]'
+  id: totrans-93
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: The `mtx_init` function initializes the mutex ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `mutex`. The ![](httpatomoreillycomsourcenostarchimages1137501.png) `name` argument
     is used during debugging to identify `mutex`. The ![](httpatomoreillycomsourcenostarchimages1137503.png)
     `type` argument is used during lock-order verification by `witness(4)`. If `type`
     is `NULL`, `name` is used instead.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mtx_init`函数初始化mutex `mutex`。`name`参数在调试期间用于识别`mutex`。`type`参数在`witness(4)`进行锁顺序验证时使用。如果`type`是`NULL`，则使用`name`。'
 - en: Note
+  id: totrans-95
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: You’ll typically pass `NULL` as `type`.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常会将`NULL`作为`type`传递。
 - en: The ![](httpatomoreillycomsourcenostarchimages1137505.png) `opts` argument modifies
     `mtx_init`’s behavior. Valid values for `opts` are shown in [Table 4-1](ch04s05.html#mtx_underscore_init_symbolic_constants
     "Table 4-1. mtx_init Symbolic Constants").
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: '`opts`参数修改了`mtx_init`的行为。`opts`的有效值显示在[表 4-1](ch04s05.html#mtx_underscore_init_symbolic_constants
+    "表 4-1. `mtx_init` 符号常量")中。'
 - en: Table 4-1. mtx_init Symbolic Constants
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 4-1. `mtx_init` 符号常量
 - en: '| Constant | Description |'
+  id: totrans-99
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-100
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `MTX_DEF` | Initializes `mutex` as a sleep mutex; this bit or `MTX_SPIN`
     must be present |'
+  id: totrans-101
   prefs: []
   type: TYPE_TB
+  zh: '| `MTX_DEF` | 将`mutex`初始化为睡眠锁；此位或`MTX_SPIN`必须存在 |'
 - en: '| `MTX_SPIN` | Initializes `mutex` as a spin mutex; this bit or `MTX_DEF` must
     be present |'
+  id: totrans-102
   prefs: []
   type: TYPE_TB
+  zh: '| `MTX_SPIN` | 将`mutex`初始化为自旋锁；此位或`MTX_DEF`必须存在 |'
 - en: '| `MTX_RECURSE` | Specifies that `mutex` is a recursive lock; more on recursive
     locks later |'
+  id: totrans-103
   prefs: []
   type: TYPE_TB
+  zh: '| `MTX_RECURSE` | 指定`mutex`是一个递归锁；关于递归锁的更多内容将在后面介绍 |'
 - en: '| `MTX_QUIET` | Instructs the system to *not* log the operations done on this
     lock |'
+  id: totrans-104
   prefs: []
   type: TYPE_TB
+  zh: '| `MTX_QUIET` | 指示系统不要对此锁的操作进行日志记录 |'
 - en: '| `MTX_NOWITNESS` | Causes `witness(4)` to ignore this lock |'
+  id: totrans-105
   prefs: []
   type: TYPE_TB
+  zh: '| `MTX_NOWITNESS` | 导致`witness(4)`忽略此锁 |'
 - en: '| `MTX_DUPOK` | Causes `witness(4)` to ignore duplicates of this lock |'
+  id: totrans-106
   prefs: []
   type: TYPE_TB
+  zh: '| `MTX_DUPOK` | 导致`witness(4)`忽略此锁的重复项 |'
 - en: '| `MTX_NOPROFILE` | Instructs the system to *not* profile this lock |'
+  id: totrans-107
   prefs: []
   type: TYPE_TB
+  zh: '| `MTX_NOPROFILE` | 指示系统不要对此锁进行性能分析 |'
 - en: Threads acquire sleep mutexes by calling `mtx_lock`. If another thread is currently
     holding ![](httpatomoreillycomsourcenostarchimages1137507.png) `mutex`, the caller
     will sleep until `mutex` is available.
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用`mtx_lock`来获取睡眠锁。如果另一个线程当前持有`mutex`，调用者将休眠，直到`mutex`可用。
 - en: Threads acquire spin mutexes by calling `mtx_lock_spin`. If another thread is
     currently holding ![](httpatomoreillycomsourcenostarchimages1137509.png) `mutex`,
     the caller will spin until `mutex` is available. Note that all interrupts are
     blocked on the local processor during the spin, and they remain disabled following
     the acquisition of `mutex`.
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用`mtx_lock_spin`来获取自旋锁。如果另一个线程当前持有`mutex`，调用者将自旋，直到`mutex`可用。注意，在自旋期间，所有中断都被本地处理器阻塞，并且在获取`mutex`后保持禁用状态。
 - en: 'A thread can recursively acquire ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `mutex` (with no ill effects) if `MTX_RECURSE` was passed to ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `opts`. A recursive lock is useful if it’ll be acquired at two or more levels.
     For example:'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果在`opts`中传递了`MTX_RECURSE`，则线程可以递归地获取`mutex`（没有不良影响）。如果将在两个或更多级别获取，递归锁非常有用。例如：
 - en: '[PRE14]'
+  id: totrans-111
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: By using a recursive lock, lower levels don’t need to check if `mutex` has been
     acquired by a higher level. They can simply acquire and release mutex as needed
     (McKusick and Neville-Neil, 2005).
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过使用递归锁，低级别不需要检查是否由高级别获取了`mutex`。它们可以简单地根据需要获取和释放`mutex`（McKusick 和 Neville-Neil，2005）。
 - en: Note
+  id: totrans-113
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: I would avoid recursive mutexes. You’ll learn why in [Avoid Recursing on Exclusive
     Locks](ch04s14.html#avoid_recursing_on_exclusive_locks "Avoid Recursing on Exclusive
     Locks") in [Memory Management Routines](ch02.html#memory_management_routines "Memory
     Management Routines")
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 我会避免递归互斥锁。您将在[避免在独占锁上递归](ch04s14.html#avoid_recursing_on_exclusive_locks "避免在独占锁上递归")中了解到原因，在[内存管理例程](ch02.html#memory_management_routines
+    "内存管理例程")。
 - en: The `mtx_trylock` function is identical to `mtx_lock` except that if another
     thread is currently holding ![](httpatomoreillycomsourcenostarchimages1137511.png)
     `mutex`, it returns `0` (that is, the caller does not sleep).
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mtx_trylock`函数与`mtx_lock`相同，不同之处在于如果另一个线程当前持有![mutex](httpatomoreillycomsourcenostarchimages1137511.png)，则它返回`0`（即调用者不会睡眠）。'
 - en: Threads release sleep mutexes by calling `mtx_unlock`. Note that recursive locks
     “remember” the number of times they’ve been acquired. Consequently, each successful
     lock acquisition must have a corresponding lock release.
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用`mtx_unlock`来释放睡眠互斥锁。请注意，递归锁“记住”它们被获取的次数。因此，每次成功的锁获取都必须有一个相应的锁释放。
 - en: Threads release spin mutexes by calling `mtx_unlock_spin`. The `mtx_unlock_spin`
     function also restores the interrupt state to what it was before ![](httpatomoreillycomsourcenostarchimages1137513.png)
     `mutex` was acquired.
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用`mtx_unlock_spin`来释放自旋互斥锁。`mtx_unlock_spin`函数还将中断状态恢复到![获取](httpatomoreillycomsourcenostarchimages1137513.png)`mutex`之前的状态。
 - en: The `mtx_destroy` function destroys the mutex ![](httpatomoreillycomsourcenostarchimages1137515.png)
     `mutex`. Note that `mutex` can be held when it is destroyed. However, mutex cannot
     be held recursively orhave other threads waiting for it when it is destroyed or
     else the kernel will panic (McKusick and Neville-Neil, 2005).
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: '`mtx_destroy`函数销毁互斥锁 ![互斥锁](httpatomoreillycomsourcenostarchimages1137515.png)
+    `mutex`。请注意，在销毁时`mutex`可能被持有。然而，在销毁时，互斥锁不能被递归持有或让其他线程等待，否则内核会崩溃（McKusick和Neville-Neil，2005）。'
 - en: Implementing Mutexes
+  id: totrans-119
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 实现互斥锁
 - en: '[Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")
     is a revision of [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c") that
     uses a mutex to serialize access to `race_list`.'
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例4-3](ch04s06.html#race_underscore_mtx.c "示例4-3. race_mtx.c")是[示例4-1](ch04s02.html#race.c
+    "示例4-1. race.c")的修订版，它使用互斥锁来序列化对`race_list`的访问。'
 - en: Note
+  id: totrans-121
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: To save space, the functions `race_ioctl`, `race_new`, `race_find`, and `race_destroy`
     aren’t listed here, as they haven’t been changed.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了节省空间，函数`race_ioctl`、`race_new`、`race_find`和`race_destroy`在此处未列出，因为它们没有发生变化。
 - en: Example 4-3. race_mtx.c
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例4-3. race_mtx.c
 - en: '[PRE15]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: This driver ![](httpatomoreillycomsourcenostarchimages1137499.png) declares
     a mutex named `race_mtx`, which gets initialized as a ![](httpatomoreillycomsourcenostarchimages1137511.png)
     sleep mutex in the module event handler.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 此驱动程序 ![声明](httpatomoreillycomsourcenostarchimages1137499.png)了一个名为`race_mtx`的互斥锁，它在模块事件处理程序中被初始化为![睡眠互斥锁](httpatomoreillycomsourcenostarchimages1137511.png)。
 - en: Note
+  id: totrans-126
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: As you’ll see, a mutex is not the ideal solution for [Example 4-1](ch04s02.html#race.c
     "Example 4-1. race.c"). However, for now, I just want to cover how to use mutexes.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如您将看到的，互斥锁并不是[示例4-1](ch04s02.html#race.c "示例4-1. race.c")的理想解决方案。然而，目前我只想介绍如何使用互斥锁。
 - en: In [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c"), the main source
     of concurrent access to `race_list` is the `race_ioctl` function. This should
     be obvious, because `race_ioctl` manages `race_list`.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 在[示例4-1](ch04s02.html#race.c "示例4-1. race.c")中，对`race_list`并发访问的主要来源是`race_ioctl`函数。这一点应该是显而易见的，因为`race_ioctl`管理`race_list`。
 - en: '[Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")
     remedies the race conditions caused by `race_ioctl by` serializing its execution
     via the ![](httpatomoreillycomsourcenostarchimages1137503.png) `race_ioctl_mtx`
@@ -588,482 +847,749 @@
     acquiring `race_mtx`. Then ![](httpatomoreillycomsourcenostarchimages1137507.png)
     `race_ioctl` is called and subsequently `race_mtx` is ![](httpatomoreillycomsourcenostarchimages1137509.png)
     released.'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例4-3](ch04s06.html#race_underscore_mtx.c "示例4-3. race_mtx.c")通过通过`race_ioctl`函数的序列化执行来修复由`race_ioctl`引起的竞态条件。`race_ioctl_mtx`定义为![d_ioctl](httpatomoreillycomsourcenostarchimages1137501.png)函数。它首先![获取](httpatomoreillycomsourcenostarchimages1137505.png)`race_mtx`。然后调用`race_ioctl`，随后释放![race_mtx](httpatomoreillycomsourcenostarchimages1137507.png)。'
 - en: As you can see, it takes just three lines (or one mutex) to serialize the execution
     of `race_ioctl`.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，仅需要三行代码（或一个互斥锁）即可序列化`race_ioctl`的执行。
 - en: race_modevent Function
+  id: totrans-131
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`race_modevent` 函数'
 - en: 'The `race_modevent` function is the module event handler for [Example 4-3](ch04s06.html#race_underscore_mtx.c
     "Example 4-3. race_mtx.c"). Here is its function definition (again):'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: '`race_modevent` 函数是 [示例 4-3](ch04s06.html#race_underscore_mtx.c "示例 4-3. race_mtx.c")
+    的模块事件处理程序。以下是它的函数定义（再次）：'
 - en: '[PRE16]'
+  id: totrans-133
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'On module load, this function ![](httpatomoreillycomsourcenostarchimages1137499.png)
     initializes `race_mtx` as a ![](httpatomoreillycomsourcenostarchimages1137501.png)
     sleep mutex. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png) creates
     [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")’s
     device node: `race`.'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 在模块加载时，此函数 ![](httpatomoreillycomsourcenostarchimages1137499.png) 将 `race_mtx`
+    初始化为一个 ![](httpatomoreillycomsourcenostarchimages1137501.png) 睡眠互斥锁。然后它 ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    创建 [示例 4-3](ch04s06.html#race_underscore_mtx.c "示例 4-3. race_mtx.c") 的设备节点：`race`。
 - en: On `MOD_QUIESCE`, this function ![](httpatomoreillycomsourcenostarchimages1137513.png)
     acquires `race_mtx`, ![](httpatomoreillycomsourcenostarchimages1137515.png) confirms
     that `race_list` is empty, and then ![](httpatomoreillycomsourcenostarchimages1137517.png)
     releases `race_mtx`.
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 `MOD_QUIESCE` 时，此函数 ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    获取 `race_mtx`，![](httpatomoreillycomsourcenostarchimages1137515.png) 确认 `race_list`
+    为空，然后 ![](httpatomoreillycomsourcenostarchimages1137517.png) 释放 `race_mtx`。
 - en: On module unload, this function first calls ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `destroy_dev` to destroy the `race` device node.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 在模块卸载时，此函数首先调用 ![](httpatomoreillycomsourcenostarchimages1137505.png) `destroy_dev`
+    来销毁 `race` 设备节点。
 - en: Note
+  id: totrans-137
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The `destroy_dev` function does not return until every `d_foo` function currently
     executing completes. Consequently, one should not hold a lock while calling `destroy_dev`;
     otherwise, you could deadlock your driver or panic your system.
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: '`destroy_dev` 函数只有在当前正在执行的每个 `d_foo` 函数都完成后才返回。因此，在调用 `destroy_dev` 时不应持有锁；否则，您可能会使驱动程序死锁或使系统崩溃。'
 - en: Next, `race_modevent` ![](httpatomoreillycomsourcenostarchimages1137507.png)
     confirms that `race_list` is still empty. See, after the execution of `MOD_QUIESCE`,
     a `race_softc` structure could have been added to `race_list`. So, `race_list`
     is checked again and every `race_softc` structure found is ![](httpatomoreillycomsourcenostarchimages1137509.png)
     released. Once this is done, `race_mtx` is ![](httpatomoreillycomsourcenostarchimages1137511.png)
     destroyed.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，`race_modevent` ![](httpatomoreillycomsourcenostarchimages1137507.png) 确认
+    `race_list` 仍然为空。注意，在执行 `MOD_QUIESCE` 之后，一个 `race_softc` 结构可能已被添加到 `race_list`
+    中。因此，再次检查 `race_list`，并释放找到的每个 `race_softc` 结构。一旦完成这些操作，`race_mtx` 就会被 ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    销毁。
 - en: As you can see, every time `race_list` was accessed, `mtx_lock(&race_mtx)` was
     called first. This was necessary in order to serialize access to `race_list` throughout
     [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c").
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，每次访问 `race_list` 时，都会首先调用 `mtx_lock(&race_mtx)`。这在 [示例 4-3](ch04s06.html#race_underscore_mtx.c
+    "示例 4-3. race_mtx.c") 中对 `race_list` 的访问进行序列化时是必要的。
 - en: Don’t Panic
+  id: totrans-141
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 不要慌张
 - en: 'Now that we’ve examined [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c"),
     let’s give it a try:'
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经检查了 [示例 4-3](ch04s06.html#race_underscore_mtx.c "示例 4-3. race_mtx.c")，让我们试一试：
 - en: '[PRE17]'
+  id: totrans-143
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'Unsurprisingly, it works. Yet using a mutex has introduced a new problem. See,
     the function definition for `race_new` contains this line:'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 毫不意外，它确实有效。然而，使用互斥锁引入了新的问题。看，`race_new` 函数的定义中包含这一行：
 - en: '[PRE18]'
+  id: totrans-145
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `M_WAITOK` means
     that it’s okay to sleep. But it’s *never* okay to sleep while holding a mutex.
     Recall that sleeping while holding a mutex causes the kernel to panic.
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，![](httpatomoreillycomsourcenostarchimages1137499.png) `M_WAITOK` 表示可以睡眠。但是，在持有互斥锁时睡眠是绝对不允许的。回想一下，在持有互斥锁时睡眠会导致内核崩溃。
 - en: 'There are two solutions to this problem: First, change `M_WAITOK` to `M_NOWAIT`.
     Second, use a lock that can be held while sleeping. As the first solution changes
     the functionality of [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")
     (that is, currently, `race_new` never fails), let’s go with the second.'
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 解决这个问题的有两个方案：首先，将 `M_WAITOK` 改为 `M_NOWAIT`。其次，使用可以在睡眠时持有的锁。由于第一个方案会改变 [示例 4-1](ch04s02.html#race.c
+    "示例 4-1. race.c") 的功能（即，目前 `race_new` 从不失败），所以我们选择第二个方案。
 - en: Shared/Exclusive Locks
+  id: totrans-148
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 共享/独占锁
 - en: '*Shared/exclusive locks (sx locks)* are locks that threads can hold while asleep.
     As the name implies, multiple threads can have a *shared hold* on an sx lock,
     but only one thread can have an *exclusive hold* on an sx lock. When a thread
     has an exclusive hold on an sx lock, other threads cannot have a shared hold on
     that lock.'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: '*共享/独占锁（sx锁）* 是线程在睡眠时可以持有的锁。正如其名所示，多个线程可以共享持有 sx 锁，但只有一个线程可以独占持有 sx 锁。当一个线程独占持有
+    sx 锁时，其他线程不能共享持有该锁。'
 - en: sx locks do not support priority propagation and are inefficient compared to
     mutexes. The main reason for using sx locks is that threads can sleep while holding
     one.
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: sx 锁不支持优先级传播，与互斥锁相比效率较低。使用 sx 锁的主要原因是可以让线程在持有锁的同时睡眠。
 - en: Shared/Exclusive Lock Management Routines
+  id: totrans-151
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 共享/独占锁管理例程
 - en: 'The FreeBSD kernel provides the following 14 functions for working with sx
     locks:'
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD 内核提供了以下 14 个函数用于处理 sx 锁：
 - en: '[PRE19]'
+  id: totrans-153
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: The `sx_init` function initializes the sx lock ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `sx`. The ![](httpatomoreillycomsourcenostarchimages1137501.png) `description`
     argument is used during debugging to identify `sx`.
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sx_init` 函数初始化 sx 锁 ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `sx`。`![](httpatomoreillycomsourcenostarchimages1137501.png)` `description` 参数在调试期间用于识别
+    `sx`。'
 - en: The `sx_init_flags` function is an alternative to `sx_init`. The ![](httpatomoreillycomsourcenostarchimages1137503.png)
     opts argument modifies `sx_init_flags`’s behavior. Valid values for `opts` are
     shown in [Table 4-2](ch04s08.html#sx_underscore_init_underscore_flags_symb "Table 4-2. sx_init_flags
     Symbolic Constants").
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sx_init_flags` 函数是 `sx_init` 的替代方案。`![](httpatomoreillycomsourcenostarchimages1137503.png)`
+    选项参数修改了 `sx_init_flags` 的行为。`opts` 的有效值显示在 [表 4-2](ch04s08.html#sx_underscore_init_underscore_flags_symb
+    "表 4-2. sx_init_flags 符号常量") 中。'
 - en: Table 4-2. sx_init_flags Symbolic Constants
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 4-2. sx_init_flags 符号常量
 - en: '| Constant | Description |'
+  id: totrans-157
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-158
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `SX_NOADAPTIVE` | If this bit is passed and the kernel is compiled without
     options `NO_ADAPTIVE_SX`, then threads holding `sx` will spin instead of sleeping.
     |'
+  id: totrans-159
   prefs: []
   type: TYPE_TB
+  zh: '| `SX_NOADAPTIVE` | 如果传递了此位，并且内核未编译 `NO_ADAPTIVE_SX` 选项，则持有 `sx` 的线程将自旋而不是睡眠。
+    |'
 - en: '| `SX_RECURSE` | Specifies that `sx` is a recursive lock |'
+  id: totrans-160
   prefs: []
   type: TYPE_TB
+  zh: '| `SX_RECURSE` | 指定 `sx` 是递归锁 |'
 - en: '| `SX_QUIET` | Instructs the system to *not* log the operations done on this
     lock |'
+  id: totrans-161
   prefs: []
   type: TYPE_TB
+  zh: '| `SX_QUIET` | 指示系统不要对此锁的操作进行日志记录 |'
 - en: '| `SX_NOWITNESS` | Causes `witness(4)` to ignore this lock |'
+  id: totrans-162
   prefs: []
   type: TYPE_TB
+  zh: '| `SX_NOWITNESS` | 导致 `witness(4)` 忽略此锁 |'
 - en: '| `SX_DUPOK` | Causes `witness(4)` to ignore duplicates of this lock |'
+  id: totrans-163
   prefs: []
   type: TYPE_TB
+  zh: '| `SX_DUPOK` | 导致 `witness(4)` 忽略此锁的重复项 |'
 - en: '| `SX_NOPROFILE` | Instructs the system to *not* profile this lock |'
+  id: totrans-164
   prefs: []
   type: TYPE_TB
+  zh: '| `SX_NOPROFILE` | 指示系统不要对此锁进行性能分析 |'
 - en: Threads acquire a shared hold on `sx` by calling `sx_slock`. If another thread
     currently has an exclusive hold on `sx`, the caller will sleep until `sx` is available.
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用 `sx_slock` 获取对 `sx` 的共享持有。如果另一个线程当前持有 `sx` 的独占持有，调用者将睡眠直到 `sx` 可用。
 - en: Threads acquire an exclusive hold on `sx` by calling `sx_xlock`. If any threads
     currently have a shared or exclusive hold on `sx`, the caller will sleep until
     `sx` is available.
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用 `sx_xlock` 获取对 `sx` 的独占持有。如果有任何线程当前持有 `sx` 的共享或独占持有，调用者将睡眠直到 `sx` 可用。
 - en: The `sx_slock_sig` and `sx_xlock_sig` functions are identical to `sx_slock`
     and `sx_xlock` except that when the caller sleeps it can be woken up by signals.
     If this occurs, a nonzero value is returned.
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sx_slock_sig` 和 `sx_xlock_sig` 函数与 `sx_slock` 和 `sx_xlock` 相同，不同之处在于当调用者睡眠时，它可以被信号唤醒。如果发生这种情况，将返回非零值。'
 - en: Note
+  id: totrans-168
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Normally, threads sleeping on locks cannot be woken up early.
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，在锁上睡眠的线程不能被提前唤醒。
 - en: The `sx_try_slock` and `sx_try_xlock` functions are identical to `sx_slock`
     and `sx_xlock` except that if `sx` cannot be acquired, they return `0` (that is,
     the caller does not sleep).
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sx_try_slock` 和 `sx_try_xlock` 函数与 `sx_slock` 和 `sx_xlock` 相同，不同之处在于如果无法获取
+    `sx`，它们将返回 `0`（即调用者不会睡眠）。'
 - en: Threads release a shared hold on `sx` by calling `sx_sunlock`, and they release
     an exclusive hold by calling `sx_xunlock`.
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用 `sx_sunlock` 释放对 `sx` 的共享持有，通过调用 `sx_xunlock` 释放独占持有。
 - en: The `sx_unlock` function is a front end to `sx_sunlock` and `sx_xunlock`. This
     function is used when the hold state on `sx` is unknown.
+  id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sx_unlock` 函数是 `sx_sunlock` 和 `sx_xunlock` 的前端。当对 `sx` 的持有状态未知时，使用此函数。'
 - en: Threads can upgrade a shared hold to an exclusive hold by calling `sx_try_upgrade`.
     If the hold cannot be immediately upgraded, 0 is returned. Threads can downgrade
     an exclusive hold to a shared hold by calling `sx_downgrade`.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程可以通过调用 `sx_try_upgrade` 将共享持有升级为独占持有。如果持有不能立即升级，则返回 0。线程可以通过调用 `sx_downgrade`
+    将独占持有降级为共享持有。
 - en: The `sx_destroy` function destroys the sx lock ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `sx`. Note that `sx` cannot be held when it is destroyed.
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sx_destroy` 函数销毁 sx 锁 ![sx_lock](http://atomoreilly.com/source/nostarch/images/1137505.png)
+    `sx`。请注意，在销毁时不能持有 `sx`。'
 - en: Implementing Shared/Exclusive Locks
+  id: totrans-175
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 实现共享/独占锁
 - en: '[Example 4-4](ch04s09.html#race_underscore_sx.c "Example 4-4. race_sx.c") is
     a revision of [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")
     that uses an sx lock instead of a mutex.'
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 4-4](ch04s09.html#race_underscore_sx.c "示例 4-4. race_sx.c") 是 [示例 4-3](ch04s06.html#race_underscore_mtx.c
+    "示例 4-3. race_mtx.c") 的修订版，它使用 sx 锁而不是互斥锁。'
 - en: Note
+  id: totrans-177
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: To save space, the functions `race_ioctl`, `race_new`, `race_find`, and `race_destroy`
     aren’t listed here, as they haven’t been changed.
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了节省空间，`race_ioctl`、`race_new`、`race_find` 和 `race_destroy` 函数没有列出，因为它们没有改变。
 - en: Example 4-4. race_sx.c
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 4-4. race_sx.c
 - en: '[PRE20]'
+  id: totrans-180
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: '[Example 4-4](ch04s09.html#race_underscore_sx.c "Example 4-4. race_sx.c") is
     identical to [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")
     except that every mutex management function has been replaced by its sx lock equivalent.'
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 4-4](ch04s09.html#race_underscore_sx.c "示例 4-4. race_sx.c") 与 [示例 4-3](ch04s06.html#race_underscore_mtx.c
+    "示例 4-3. race_mtx.c") 相同，除了每个互斥管理函数都被其 sx 锁等价物替换。'
 - en: Note
+  id: totrans-182
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The numbered balls in [Example 4-4](ch04s09.html#race_underscore_sx.c "Example 4-4. race_sx.c")
     highlight the differences.
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 4-4](ch04s09.html#race_underscore_sx.c "示例 4-4. race_sx.c") 中的编号球突出了差异。'
 - en: 'Here are the results from interacting with [Example 4-4](ch04s09.html#race_underscore_sx.c
     "Example 4-4. race_sx.c"):'
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是与 [示例 4-4](ch04s09.html#race_underscore_sx.c "示例 4-4. race_sx.c") 交互的结果：
 - en: '[PRE21]'
+  id: totrans-185
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: Naturally, everything works, and no new problems were introduced.
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: 自然，一切正常，没有引入新的问题。
 - en: Reader/Writer Locks
+  id: totrans-187
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 读写锁
 - en: '*Reader/writer locks (rw locks)* are basically mutexes with sx lock semantics.
     Like sx locks, threads can hold rw locks as a *reader*, which is identical to
     a shared hold, or as a *writer*, which is identical to an exclusive hold. Like
     mutexes, rw locks support priority propagation and threads cannot hold them while
     sleeping (or the kernel will panic).'
+  id: totrans-188
   prefs: []
   type: TYPE_NORMAL
+  zh: '*读写锁（rw 锁）*基本上是具有 sx 锁语义的互斥锁。像 sx 锁一样，线程可以以 *读者* 的身份持有 rw 锁，这等同于共享持有，或者以 *写入者*
+    的身份持有，这等同于独占持有。像互斥锁一样，rw 锁支持优先级传播，并且线程在睡眠时不能持有它们（否则内核会崩溃）。'
 - en: rw locks are used when you need to protect an object that is mostly going to
     be read from instead of written to.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你需要保护一个主要将被读取而不是写入的对象时，使用 rw 锁。
 - en: Reader/Writer Lock Management Routines
+  id: totrans-190
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 读写锁管理例程
 - en: 'The FreeBSD kernel provides the following 11 functions for working with rw
     locks:'
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD 内核提供了以下 11 个函数用于处理 rw 锁：
 - en: '[PRE22]'
+  id: totrans-192
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: The `rw_init` function initializes the rw lock ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `rw`. The ![](httpatomoreillycomsourcenostarchimages1137501.png) `name` argument
     is used during debugging to identify `rw`.
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: '`rw_init` 函数初始化 rw 锁 ![rw_lock](http://atomoreilly.com/source/nostarch/images/1137499.png)
+    `rw`。在调试期间，`name` 参数用于识别 `rw`。'
 - en: The `rw_init_flags` function is an alternative to `rw_init`. The ![](httpatomoreillycomsourcenostarchimages1137503.png)
     `opts` argument modifies `rw_init_flags`’s behavior. Valid values for `opts` are
     shown in [Table 4-3](ch04s11.html#rw_underscore_init_underscore_flags_symb "Table 4-3. rw_init_flags
     Symbolic Constants").
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: '`rw_init_flags` 函数是 `rw_init` 的替代方案。![rw_init_flags](http://atomoreilly.com/source/nostarch/images/1137503.png)
+    `opts` 参数修改 `rw_init_flags` 的行为。`opts` 的有效值显示在 [表 4-3](ch04s11.html#rw_underscore_init_underscore_flags_symb
+    "表 4-3. rw_init_flags 符号常量") 中。'
 - en: Table 4-3. rw_init_flags Symbolic Constants
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 4-3. rw_init_flags 符号常量
 - en: '| Constant | Description |'
+  id: totrans-196
   prefs: []
   type: TYPE_TB
+  zh: '| 常量 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-197
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `RW_RECURSE` | Specifies that `rw` is a recursive lock |'
+  id: totrans-198
   prefs: []
   type: TYPE_TB
+  zh: '| `RW_RECURSE` | 指定 `rw` 是一个递归锁 |'
 - en: '| `RW_QUIET` | Instructs the system to *not* log the operations done on this
     lock |'
+  id: totrans-199
   prefs: []
   type: TYPE_TB
+  zh: '| `RW_QUIET` | 指示系统不要记录对这个锁的操作 |'
 - en: '| `RW_NOWITNESS` | Causes `witness(4)` to ignore this lock |'
+  id: totrans-200
   prefs: []
   type: TYPE_TB
+  zh: '| `RW_NOWITNESS` | 导致 `witness(4)` 忽略这个锁 |'
 - en: '| `RW_DUPOK` | Causes `witness(4)` to ignore duplicates of this lock |'
+  id: totrans-201
   prefs: []
   type: TYPE_TB
+  zh: '| `RW_DUPOK` | 导致 `witness(4)` 忽略这个锁的重复项 |'
 - en: '| `RW_NOPROFILE` | Instructs the system to *not* profile this lock |'
+  id: totrans-202
   prefs: []
   type: TYPE_TB
+  zh: '| `RW_NOPROFILE` | 指示系统不要对这个锁进行性能分析 |'
 - en: Threads acquire a shared hold on `rw` by calling `rw_rlock`. If another thread
     currently has an exclusive hold on `rw`, the caller will sleep until `rw` is available.
+  id: totrans-203
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用 `rw_rlock` 获取对 `rw` 的共享持有。如果另一个线程当前对 `rw` 持有独占持有，调用者将睡眠直到 `rw` 可用。
 - en: Threads acquire an exclusive hold on `rw` by calling `rw_wlock`. If any threads
     currently have a shared or exclusive hold on `rw`, the caller will sleep until
     `rw` is available.
+  id: totrans-204
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用 `rw_wlock` 获取对 `rw` 的独占持有。如果有任何线程当前对 `rw` 持有共享或独占持有，调用者将睡眠直到 `rw` 可用。
 - en: The `rw_try_rlock` and `rw_try_wlock` functions are identical to `rw_rlock`
     and `rw_wlock` except that if `rw` cannot be acquired, they return `0` (that is,
     the caller does not sleep).
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
+  zh: '`rw_try_rlock` 和 `rw_try_wlock` 函数与 `rw_rlock` 和 `rw_wlock` 相同，不同之处在于如果无法获取
+    `rw`，它们将返回 `0`（即调用者不会睡眠）。'
 - en: Threads release a shared hold on `rw` by calling `rw_runlock`, and they release
     an exclusive hold by calling `rw_wunlock`.
+  id: totrans-206
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用 `rw_runlock` 释放对 `rw` 的共享持有，并通过调用 `rw_wunlock` 释放独占持有。
 - en: Threads can upgrade a shared hold to an exclusive hold by calling `rw_try_upgrade`.
     If the hold cannot be immediately upgraded, `0` is returned. Threads can downgrade
     an exclusive hold to a shared hold by calling `rw_downgrade`.
+  id: totrans-207
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程可以通过调用 `rw_try_upgrade` 将共享持有升级为独占持有。如果无法立即升级，则返回 `0`。线程可以通过调用 `rw_downgrade`
+    将独占持有降级为共享持有。
 - en: The `rw_destroy` function destroys the `rw` lock ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `rw`. Note that `rw` cannot be held when it is destroyed.
+  id: totrans-208
   prefs: []
   type: TYPE_NORMAL
+  zh: '`rw_destroy` 函数销毁 `rw` 锁 ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `rw`。请注意，在销毁时不能持有 `rw`。'
 - en: At this point, you should be comfortable with locks—there’s really nothing to
     them. So, I’m going to omit discussing an example that uses rw locks.
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，你应该对锁感到舒适——它们实际上没有什么。因此，我将省略使用 rw 锁的示例。
 - en: Condition Variables
+  id: totrans-210
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 条件变量
 - en: '*Condition variables* synchronize the execution of two or more threads based
     upon the value of an object. In contrast, locks synchronize threads by controlling
     their access to objects.'
+  id: totrans-211
   prefs: []
   type: TYPE_NORMAL
+  zh: '*条件变量* 根据对象值同步两个或更多线程的执行。相比之下，锁通过控制对对象的访问来同步线程。'
 - en: 'Condition variables are used in conjunction with locks to “block” threads until
     a condition is true. It works like this: A thread first acquires the `foo` lock.
     Then it examines the condition. If the condition is false, it sleeps on the `bar`
     condition variable. While asleep on `bar`, threads relinquish `foo`. A thread
     that causes the condition to be true wakes up the threads sleeping on bar. Threads
     woken up in this manner reacquire `foo` before proceeding.'
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: 条件变量与锁结合使用以“阻塞”线程，直到条件为真。其工作方式如下：一个线程首先获取 `foo` 锁。然后检查条件。如果条件为假，它将在 `bar` 条件变量上睡眠。在
+    `bar` 上睡眠时，线程会放弃 `foo`。使条件为真的线程会唤醒在 `bar` 上睡眠的线程。以这种方式唤醒的线程在继续之前会重新获取 `foo`。
 - en: Condition Variable Management Routines
+  id: totrans-213
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 条件变量管理例程
 - en: 'The FreeBSD kernel provides the following 11 functions for working with condition
     variables:'
+  id: totrans-214
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD 内核提供了以下 11 个函数用于处理条件变量：
 - en: '[PRE23]'
+  id: totrans-215
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: The `cv_init` function initializes the condition variable ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `cvp`. The ![](httpatomoreillycomsourcenostarchimages1137501.png) `d` argument
     describes `cvp`.
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cv_init` 函数初始化条件变量 ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `cvp`。![](httpatomoreillycomsourcenostarchimages1137501.png) `d` 参数描述 `cvp`。'
 - en: The `cv_wmesg` function gets the ![](httpatomoreillycomsourcenostarchimages1137501.png)
     description of ![](httpatomoreillycomsourcenostarchimages1137503.png) `cvp`. This
     function is primarily used in error reporting.
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cv_wmesg` 函数获取 ![](httpatomoreillycomsourcenostarchimages1137501.png) `cvp`
+    的 ![](httpatomoreillycomsourcenostarchimages1137503.png) 描述。此函数主要用于错误报告。'
 - en: Threads sleep on ![](httpatomoreillycomsourcenostarchimages1137513.png) `cvp`
     by calling `cv_wait`. The ![](httpatomoreillycomsourcenostarchimages1137507.png)
     `lock` argument demands a sleep mutex, sx `lock`, or `rw` lock. Threads must hold
     lock before calling `cv_wait`. Threads must not sleep on `cvp` with `lock` held
     recursively.
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用 `cv_wait` 在 ![](httpatomoreillycomsourcenostarchimages1137513.png) `cvp`
+    上睡眠。![](httpatomoreillycomsourcenostarchimages1137507.png) `lock` 参数要求一个睡眠互斥锁，sx
+    `lock` 或 `rw` 锁。线程在调用 `cv_wait` 之前必须持有锁。线程不得在持有 `lock` 的情况下递归地睡眠在 `cvp` 上。
 - en: The `cv_wait_unlock` function is a variant of `cv_wait`. When threads wake up
     from sleeping on ![](httpatomoreillycomsourcenostarchimages1137509.png) `cvp`,
     they forgo reacquiring ![](httpatomoreillycomsourcenostarchimages1137511.png)
     `lock`.
+  id: totrans-219
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cv_wait_unlock` 函数是 `cv_wait` 的一个变体。当线程从在 ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `cvp` 上睡眠中唤醒时，它们会放弃重新获取 ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `lock`。'
 - en: The `cv_wait_sig` function is identical to `cv_wait` except that when the caller
     is asleep it can be woken up by signals. If this occurs, the error code `EINTR`
     or `ERESTART` is returned.
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cv_wait_sig` 函数与 `cv_wait` 函数相同，除了当调用者处于睡眠状态时，它可以被信号唤醒。如果发生这种情况，则返回错误代码 `EINTR`
+    或 `ERESTART`。'
 - en: Note
+  id: totrans-221
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Normally, threads sleeping on condition variables cannot be woken up early.
+  id: totrans-222
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，在条件变量上睡眠的线程不能被提前唤醒。
 - en: The `cv_timedwait` function is identical to `cv_wait` except that the caller
     sleeps at most ![](httpatomoreillycomsourcenostarchimages1137513.png) `timo` /
     `hz` seconds. If the sleep times out, the error code `EWOULDBLOCK` is returned.
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cv_timedwait` 函数与 `cv_wait` 函数相同，除了调用者最多睡眠 `timo` / `hz` 秒。如果睡眠超时，则返回错误代码
+    `EWOULDBLOCK`。'
 - en: The `cv_timedwait_sig` function is like `cv_wait_sig` and `cv_timedwait`. The
     caller can be woken up by signals and sleeps at most `timo` / `hz` seconds.
+  id: totrans-224
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cv_timedwait_sig` 函数类似于 `cv_wait_sig` 和 `cv_timedwait`。调用者可以通过信号唤醒，并最多睡眠 `timo`
+    / `hz` 秒。'
 - en: Threads wake up one thread sleeping on `cvp` by calling `cv_signal`, and they
     wake up every thread sleeping on `cvp` by calling `cv_broadcast`.
+  id: totrans-225
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用 `cv_signal` 唤醒在 `cvp` 上睡眠的一个线程，并通过调用 `cv_broadcast` 唤醒在 `cvp` 上睡眠的所有线程。
 - en: The `cv_broadcastpri` function is identical to `cv_broadcast` except that all
     threads woken up have their priority raised to ![](httpatomoreillycomsourcenostarchimages1137515.png)
     `pri`. Threads with a priority higher than `pri` do not have their priority lowered.
+  id: totrans-226
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cv_broadcastpri` 函数与 `cv_broadcast` 函数相同，除了唤醒的所有线程的优先级都提升到 `pri`。优先级高于 `pri`
+    的线程的优先级不会降低。'
 - en: The `cv_destroy` function destroys the condition variable ![](httpatomoreillycomsourcenostarchimages1137517.png)
     `cvp`.
+  id: totrans-227
   prefs: []
   type: TYPE_NORMAL
+  zh: '`cv_destroy` 函数销毁条件变量 `cvp`。'
 - en: Note
+  id: totrans-228
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: We’ll walk through an example that uses condition variables in [Chapter 5](ch05.html
     "Chapter 5. Delaying Execution").
+  id: totrans-229
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将在 [第 5 章](ch05.html "第 5 章。延迟执行") 中通过一个使用条件变量的示例进行说明。
 - en: General Guidelines
+  id: totrans-230
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 通用指南
 - en: Here are some general guidelines for lock usage. Note that these aren’t hard-and-fast
     rules, just things to keep in mind.
+  id: totrans-231
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是一些关于锁使用的通用指南。请注意，这些并不是铁的规则，只是需要记住的事情。
 - en: Avoid Recursing on Exclusive Locks
+  id: totrans-232
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 避免在独占锁上递归
 - en: When an exclusive hold or lock is acquired, the holder usually assumes that
     it has exclusive access to the objects the lock protects. Unfortunately, recursive
     locks can break this assumption in some cases. As an example, suppose function
     `F1` uses a recursive lock `L` to protect object O. If function `F2` acquires
     `L`, modifies `O`, leaving it in an inconsistent state, and then calls `F1`, `F1`
     will recursively acquire `L` and falsely assume that `O` is in a consistent state.^([[7](#ftn.CHP-4-FN-1)])
+  id: totrans-233
   prefs: []
   type: TYPE_NORMAL
+  zh: 当获取独占持有或锁时，持有者通常假设它对锁保护的对象具有独占访问权。不幸的是，递归锁在某些情况下可能会破坏这个假设。例如，假设函数 `F1` 使用递归锁
+    `L` 来保护对象 O。如果函数 `F2` 获取 `L`，修改 `O`，使其处于不一致的状态，然后调用 `F1`，`F1` 将递归获取 `L` 并错误地假设
+    `O` 处于一致状态.^([[7](#ftn.CHP-4-FN-1)])
 - en: One solution to this problem is to use a nonrecursive lock and to rewrite `F1`
     so that it does not acquire `L`. Instead, `L` must be acquired before calling
     `F1`.
+  id: totrans-234
   prefs: []
   type: TYPE_NORMAL
+  zh: 解决这个问题的方法之一是使用非递归锁，并重写 `F1` 以确保它不会获取 `L`。相反，必须在调用 `F1` 之前获取 `L`。
 - en: Avoid Holding Exclusive Locks for Long Periods of Time
+  id: totrans-235
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 避免长时间持有独占锁
 - en: Exclusive locks reduce concurrency and should be released as soon as possible.
     Note that it is better to hold a lock for a short period of time when it is not
     needed than to release the lock only to reacquire it (Baldwin, 2002). This is
     because the operations to acquire and release a lock are relatively expensive.
+  id: totrans-236
   prefs: []
   type: TYPE_NORMAL
+  zh: 独占锁减少了并发性，应尽快释放。请注意，当不需要锁时，持有锁的时间越短越好，而不是仅仅释放它然后再重新获取（Baldwin，2002）。这是因为获取和释放锁的操作相对昂贵。
 - en: '* * *'
+  id: totrans-237
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[7](#CHP-4-FN-1)]) This paragraph is adapted from `Locking in the Multithreaded
     FreeBSD Kernel by John H`. Baldwin (2002)
+  id: totrans-238
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[7](#CHP-4-FN-1)]) 这段内容改编自 John H. Baldwin 的《Multithreaded FreeBSD Kernel
+    中的锁定》（2002年）
 - en: Conclusion
+  id: totrans-239
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: This chapter dealt with the problem of data and state corruption caused by concurrent
     threads. In short, whenever an object is accessible by multiple threads, its access
     must be managed.
+  id: totrans-240
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章讨论了由并发线程引起的数据和状态损坏问题。简而言之，每当一个对象可以被多个线程访问时，其访问必须得到管理。

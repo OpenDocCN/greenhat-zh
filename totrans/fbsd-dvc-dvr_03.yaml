@@ -3,10 +3,12 @@
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第3章 设备通信与控制
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
   id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
 - en: In [Chapter 1](ch01.html "Chapter 1. Building and Running Modules") we constructed
     a driver that could read from and write to a device. In addition to reading and
     writing, most drivers need to perform other I/O operations, such as reporting
@@ -15,6 +17,8 @@
   id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 [第1章](ch01.html "第1章. 构建和运行模块") 中，我们构建了一个可以读取和写入设备的驱动程序。除了读取和写入之外，大多数驱动程序还需要执行其他
+    I/O 操作，例如报告错误信息、弹出可移动媒体或激活自毁序列。本章详细介绍了如何使驱动程序执行这些操作。
 - en: We’ll start by describing the *ioctl interface*, also known as the *input/output
     control interface*. This interface is commonly used for device communication and
     control. Then we’ll describe the *sysctl interface*, also known as the *system
@@ -23,11 +27,14 @@
   id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将从描述 *ioctl 接口* 开始，也称为 *输入/输出控制接口*。该接口通常用于设备通信和控制。然后我们将描述 *sysctl 接口*，也称为
+    *系统控制接口*。该接口用于动态更改或检查内核的参数，包括设备驱动程序。
 - en: ioctl
   id: totrans-4
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: ioctl
 - en: The ioctl interface is the catchall of I/O operations (Stevens, 1992). Any operation
     that cannot be expressed using `d_read` or `d_write` (that is, any operation that’s
     *not* a data transfer) is supported by `d_ioctl`.^([[3](#ftn.CHP-3-FN-1)]) For
@@ -37,11 +44,15 @@
   id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: ioctl 接口是 I/O 操作的万能工具（Stevens，1992）。任何不能用 `d_read` 或 `d_write` 表达的操作（即任何不是数据传输的操作）都由
+    `d_ioctl` 支持。^([[3](#ftn.CHP-3-FN-1)]) 例如，CD-ROM 驱动程序的 `d_ioctl` 函数执行了 29 个不同的操作，例如弹出
+    CD、开始音频播放、停止音频播放、静音音频等。
 - en: 'The function prototype for `d_ioctl` is defined in the `<sys/conf.h>` header
     as follows:'
   id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d_ioctl` 函数的原型定义在 `<sys/conf.h>` 头文件中，如下所示：'
 - en: '[PRE0]'
   id: totrans-7
   prefs: []
@@ -56,19 +67,26 @@
   id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，！[](httpatomoreillycomsourcenostarchimages1137499.png)`cmd` 是从用户空间传递的 ioctl
+    命令。*ioctl 命令* 是由驱动程序定义的数字常量，用于标识 `d_ioctl` 函数可以执行的不同 I/O 操作。通常，您会在 `switch` 语句中使用
+    `cmd` 参数来为每个 I/O 操作设置代码块。任何需要的 I/O 操作的参数都通过！[](httpatomoreillycomsourcenostarchimages1137501.png)`data`
+    传递。
 - en: 'Here is an example `d_ioctl` function:'
   id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是一个 `d_ioctl` 函数的示例：
 - en: Note
   id: totrans-10
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Just concentrate on the structure of this code and ignore what it does.
   id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 只关注这段代码的结构，忽略它的功能。
 - en: '[PRE1]'
   id: totrans-12
   prefs: []
@@ -84,6 +102,10 @@
   id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意！[](httpatomoreillycomsourcenostarchimages1137499.png)`cmd` 参数是！[](httpatomoreillycomsourcenostarchimages1137503.png)`switch`
+    语句的表达式。常量！[](httpatomoreillycomsourcenostarchimages1137505.png)`ECHO_CLEAR_BUFFER`
+    和！[](httpatomoreillycomsourcenostarchimages1137507.png)`ECHO_SET_BUFFER_SIZE`
+    显然是 ioctl 命令。所有 ioctl 命令都是使用四种宏定义的。我将在下一节讨论这些宏。
 - en: Additionally, notice how the ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `data` argument is ![](httpatomoreillycomsourcenostarchimages1137509.png) cast—as
     an integer pointer—before it is dereferenced. This is because `data` is fundamentally
@@ -91,16 +113,20 @@
   id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，请注意！[](httpatomoreillycomsourcenostarchimages1137501.png)`data` 参数在解引用之前是如何被！[](httpatomoreillycomsourcenostarchimages1137509.png)强制转换为整数指针的。这是因为
+    `data` 本质上是一个“指向 `void` 的指针”。
 - en: Note
   id: totrans-15
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Pointers to `void` can hold any pointer type, so they must be cast before they’re
     dereferenced. In fact, you can’t directly dereference a pointer to `void`.
   id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: '`void` 指针可以持有任何指针类型，因此在解引用之前必须进行转换。实际上，您不能直接解引用 `void` 指针。'
 - en: Finally, according to the POSIX standard, when an inappropriate ioctl command
     is received, the error code `ENOTTY` should be returned (Corbet et al., 2005).
     Hence, the ![](httpatomoreillycomsourcenostarchimages1137511.png) `default` block
@@ -108,82 +134,102 @@
   id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，根据 POSIX 标准，当收到不适当的 ioctl 命令时，应该返回错误代码 `ENOTTY`（Corbet 等人，2005）。因此，`default`
+    块将 `error` 设置为 `ENOTTY`。
 - en: Note
   id: totrans-18
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: 'At one point in time, only TTY drivers had an ioctl function, which is why
     `ENOTTY` means “error: inappropriate ioctl for device” (Corbet et al., 2005).'
   id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 在某个时间点，只有 TTY 驱动程序有 ioctl 函数，这就是为什么 `ENOTTY` 表示“错误：不适当的 ioctl 设备”（Corbet 等人，2005）。
 - en: Now that you’ve examined the structure of a `d_ioctl` function, I’ll explain
     how to define an ioctl command.
   id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，你已经检查了 `d_ioctl` 函数的结构，我将解释如何定义 ioctl 命令。
 - en: '* * *'
   id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[3](#CHP-3-FN-1)]) The `d_ioctl` function was first introduced in [d_foo
     Functions](ch01s05.html#d_underscore_foo_functions "d_foo Functions") in [Character
     Drivers](ch01s05.html "Character Drivers").
   id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[3](#CHP-3-FN-1)]) `d_ioctl` 函数首次在[字符设备](ch01s05.html "字符设备")中的[d_foo 函数](ch01s05.html#d_underscore_foo_functions
+    "d_foo 函数")中引入。
 - en: Defining ioctl Commands
   id: totrans-23
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 定义 ioctl 命令
 - en: 'To define an ioctl command, you’d call one of the following macros: `_IO`,
     `_IOR`, `_IOW`, or `_IOWR`. An explanation of each macro is provided in [Table 3-1](ch03s02.html#ioctl_command_macros
     "Table 3-1. ioctl Command Macros").'
   id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 要定义一个 ioctl 命令，你可以调用以下宏之一：`_IO`、`_IOR`、`_IOW` 或 `_IOWR`。每个宏的解释在[表 3-1](ch03s02.html#ioctl_command_macros
+    "表 3-1. ioctl 命令宏")中提供。
 - en: Table 3-1. ioctl Command Macros
   id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 3-1. ioctl 命令宏
 - en: '| Macro | Description |'
   id: totrans-26
   prefs: []
   type: TYPE_TB
+  zh: '| 宏 | 描述 |'
 - en: '| --- | --- |'
   id: totrans-27
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `_IO` | Creates an ioctl command for an I/O operation that transfers no data—in
     other words, the `data` argument in `d_ioctl` will be unused—for example, ejecting
     removable media |'
   id: totrans-28
   prefs: []
   type: TYPE_TB
+  zh: '| `_IO` | 创建一个不传输数据的 ioctl 命令——换句话说，`d_ioctl` 中的 `data` 参数将被弃用——例如，弹出可移动媒体
+    |'
 - en: '| `_IOR` | Creates an ioctl command for a read operation; *read operations*
     transfer data from the device to user space; for example, retrieving error information
     |'
   id: totrans-29
   prefs: []
   type: TYPE_TB
+  zh: '| `_IOR` | 创建一个用于读取操作的 ioctl 命令；*读取操作*将数据从设备传输到用户空间；例如，检索错误信息 |'
 - en: '| `_IOW` | Creates an ioctl command for a write operation; *write operations*
     transfer data to the device from user space; for example, setting a device parameter
     |'
   id: totrans-30
   prefs: []
   type: TYPE_TB
+  zh: '| `_IOW` | 创建一个用于写入操作的 ioctl 命令；*写入操作*将数据从用户空间传输到设备；例如，设置设备参数 |'
 - en: '| `_IOWR` | Creates an ioctl command for an I/O operation with bidirectional
     data transfers |'
   id: totrans-31
   prefs: []
   type: TYPE_TB
+  zh: '| `_IOWR` | 创建一个用于双向数据传输的 I/O 操作的 ioctl 命令 |'
 - en: '`_IO`, `_IOR`, `_IOW`, and `_IOWR` are defined in the `<sys/ioccom.h>` header
     as follows:'
   id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: '`_IO`、`_IOR`、`_IOW` 和 `_IOWR` 在 `<sys/ioccom.h>` 头文件中定义如下：'
 - en: '[PRE2]'
   id: totrans-33
   prefs: []
@@ -194,21 +240,25 @@
   id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: '`g` 参数，代表 *group*，期望一个 8 位魔法数字。你可以选择任何数字——只需在你的驱动程序中一直使用它。'
 - en: The `n` argument is the ordinal number. This number is used to differentiate
     your driver’s ioctl commands from one another.
   id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: '`n` 参数是序号。这个数字用于区分你的驱动程序的 ioctl 命令。'
 - en: Finally, the `t` argument is the type of data transferred during the I/O operation.
     Obviously, the `_IO` macro does not have a `t` argument, because no data transfer
     occurs.
   id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，`t` 参数是在 I/O 操作期间传输的数据类型。显然，`_IO` 宏没有 `t` 参数，因为没有数据传输发生。
 - en: 'Generally, ioctl command definitions look like this:'
   id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，ioctl 命令的定义如下：
 - en: '[PRE3]'
   id: totrans-38
   prefs: []
@@ -219,22 +269,26 @@
   id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，`'F'` 是这些 ioctl 命令的魔法数字。通常，选择你的驱动程序名称的第一个字母的大写作为魔法数字。
 - en: Naturally, all of the ordinal numbers are unique. But they don’t have to be
     consecutive. You can leave gaps.
   id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 自然，所有的序号都是唯一的。但它们不必连续。你可以留下空隙。
 - en: Lastly, note that you can pass ![](httpatomoreillycomsourcenostarchimages1137499.png)
     structures as the `t` argument. Using a structure is how you’ll pass multiple
     arguments to an ioctl-based operation.
   id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，请注意，你可以将结构体作为 `t` 参数传递。使用结构体是向基于 ioctl 的操作传递多个参数的方式。
 - en: Implementing ioctl
   id: totrans-42
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 实现 ioctl
 - en: '[Example 3-1](ch03s03.html#echo-3.0.c "Example 3-1. echo-3.0.c") is a revision
     of [Example 2-1](ch02s03.html#echo-2.0.c "Example 2-1. echo-2.0.c") that adds
     in a `d_ioctl` function. As you’ll see, this `d_ioctl` function handles two ioctl
@@ -242,20 +296,26 @@
   id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 3-1](ch03s03.html#echo-3.0.c "示例 3-1. echo-3.0.c") 是 [示例 2-1](ch02s03.html#echo-2.0.c
+    "示例 2-1. echo-2.0.c") 的修订版，增加了 `d_ioctl` 函数。正如您将看到的，这个 `d_ioctl` 函数处理两个 ioctl
+    命令。'
 - en: Note
   id: totrans-44
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Take a quick look at this code and try to discern some of its structure. If
     you don’t understand all of it, don’t worry; an explanation follows.
   id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 快速查看这段代码，并尝试了解其结构。如果您不理解所有内容，请不要担心；解释将随后提供。
 - en: Example 3-1. echo-3.0.c
   id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 3-1. echo-3.0.c
 - en: '[PRE4]'
   id: totrans-47
   prefs: []
@@ -268,16 +328,19 @@
   id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个驱动程序首先定义了两个 ioctl 命令：![图片](httpatomoreillycomsourcenostarchimages1137499.png)`ECHO_CLEAR_BUFFER`（用于清除内存缓冲区）和![图片](httpatomoreillycomsourcenostarchimages1137501.png)`ECHO_SET_BUFFER_SIZE`（接受一个![图片](httpatomoreillycomsourcenostarchimages1137503.png)整数以调整内存缓冲区大小）。
 - en: Note
   id: totrans-49
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Usually, ioctl commands are defined in a header file—they were defined in [Example 3-1](ch03s03.html#echo-3.0.c
     "Example 3-1. echo-3.0.c") solely to simplify this discussion.
   id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，ioctl 命令定义在头文件中——它们在[示例 3-1](ch03s03.html#echo-3.0.c "示例 3-1. echo-3.0.c")中仅被定义，目的是为了简化讨论。
 - en: Obviously, to accommodate adding in a `d_ioctl` function, the character device
     switch table was ![](httpatomoreillycomsourcenostarchimages1137505.png) adapted.
     Moreover, `struct echo` was adjusted to include a variable (![](httpatomoreillycomsourcenostarchimages1137507.png)
@@ -288,33 +351,42 @@
   id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 显然，为了适应添加 `d_ioctl` 函数，字符设备切换表被![图片](httpatomoreillycomsourcenostarchimages1137505.png)修改。此外，`struct
+    echo` 被调整以包含一个变量![图片](httpatomoreillycomsourcenostarchimages1137507.png) `buffer_size`，以保持缓冲区大小（因为现在它可以被改变）。自然地，[示例
+    3-1](ch03s03.html#echo-3.0.c "示例 3-1. echo-3.0.c")也被![图片](httpatomoreillycomsourcenostarchimages1137509.png)![图片](httpatomoreillycomsourcenostarchimages1137511.png)修改，以使用这个新变量。
 - en: Note
   id: totrans-52
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Interestingly, only `echo_write` had to be altered. The `echo_open`, `echo_close`,
     and `echo_read` functions remain the same.
   id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 有趣的是，只有 `echo_write` 需要修改。`echo_open`、`echo_close` 和 `echo_read` 函数保持不变。
 - en: The `echo_write`, `echo_set_buffer_size`, `echo_ioctl`, and `echo_modevent`
     functions call for a more in-depth explanation and are therefore described in
     their own sections.
   id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: '`echo_write`、`echo_set_buffer_size`、`echo_ioctl` 和 `echo_modevent` 函数需要更深入的说明，因此它们将在各自的章节中描述。'
 - en: echo_write Function
   id: totrans-55
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: echo_write 函数
 - en: 'As mentioned above, the `echo_write` function was altered from its [Example 2-1](ch02s03.html#echo-2.0.c
     "Example 2-1. echo-2.0.c") (and [Example 1-2](ch01s06.html#echo.c "Example 1-2. echo.c"))
     form. Here is its function definition (again):'
   id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 如上所述，`echo_write` 函数已被从其 [示例 2-1](ch02s03.html#echo-2.0.c "示例 2-1. echo-2.0.c")（和
+    [示例 1-2](ch01s06.html#echo.c "示例 1-2. echo.c")）形式修改。以下是它的函数定义（再次）：
 - en: '[PRE5]'
   id: totrans-57
   prefs: []
@@ -328,17 +400,22 @@
   id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个版本的 `echo_write` 使用![图片](httpatomoreillycomsourcenostarchimages1137505.png)`uiomove`（如[第
+    1 章](ch01.html "第 1 章. 构建和运行模块")所述）而不是 `copyin`。请注意，`uiomove` 对每个复制的字节减少 `uio->uio_resid`（一个单位）并增加
+    `uio->uio_offset`（一个单位）。这使得多次调用 `uiomove` 可以轻松地复制数据块。
 - en: Note
   id: totrans-59
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: You’ll recall that `uio->uio_resid` and `uio->uio_offset` denote the number
     of bytes remaining to be transferred and an offset into the data (that is, the
     character string), respectively.
   id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 您会记得，`uio->uio_resid` 和 `uio->uio_offset` 分别表示剩余要传输的字节数和数据的偏移量（即字符字符串）。
 - en: This function starts by ![](httpatomoreillycomsourcenostarchimages1137499.png)
     determining the number of bytes to copy—either the ![](httpatomoreillycomsourcenostarchimages1137501.png)
     amount the user sent or ![](httpatomoreillycomsourcenostarchimages1137503.png)
@@ -349,21 +426,25 @@
   id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个函数首先![图片](httpatomoreillycomsourcenostarchimages1137499.png)确定要复制的字节数——要么是用户发送的数量，要么是![图片](httpatomoreillycomsourcenostarchimages1137501.png)缓冲区可以容纳的任何数量。然后它![图片](httpatomoreillycomsourcenostarchimages1137505.png)将相应数量的数据从![图片](httpatomoreillycomsourcenostarchimages1137511.png)用户空间传输到![图片](httpatomoreillycomsourcenostarchimages1137507.png)内核空间。
 - en: The remainder of this function should be self-explanatory.
   id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个函数的其余部分应该很容易理解。
 - en: echo_set_buffer_size Function
   id: totrans-63
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: echo_set_buffer_size 函数
 - en: 'As its name implies, the `echo_set_buffer_size` function takes an integer to
     resize the memory buffer `echo_message->buffer`. Here is its function definition
     (again):'
   id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 如其名称所示，`echo_set_buffer_size`函数接受一个整数来调整内存缓冲区`echo_message->buffer`的大小。以下是它的函数定义（再次）：
 - en: '[PRE6]'
   id: totrans-65
   prefs: []
@@ -377,6 +458,9 @@
   id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个函数可以被分为三个部分。第一部分确认了当前和提议的缓冲区大小是不同的（否则不需要发生任何操作）![图片](httpatomoreillycomsourcenostarchimages1137499.png)
+    ![图片](httpatomoreillycomsourcenostarchimages1137501.png) ![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    ![图片](httpatomoreillycomsourcenostarchimages1137505.png)。
 - en: The second part ![](httpatomoreillycomsourcenostarchimages1137507.png) changes
     the size of the memory buffer. Then it ![](httpatomoreillycomsourcenostarchimages1137509.png)
     records the new buffer size. Note that if the data stored in the buffer is longer
@@ -385,6 +469,7 @@
   id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二部分![图片](httpatomoreillycomsourcenostarchimages1137507.png)更改内存缓冲区的大小。然后它![图片](httpatomoreillycomsourcenostarchimages1137509.png)记录新的缓冲区大小。请注意，如果缓冲区中存储的数据比提议的缓冲区大小长，则调整大小操作（即`realloc`）将截断该数据。
 - en: The third part comes about only ![](httpatomoreillycomsourcenostarchimages1137511.png)
     if the data stored in the buffer was truncated. It begins by ![](httpatomoreillycomsourcenostarchimages1137513.png)
     correcting the stored data’s length. Then it ![](httpatomoreillycomsourcenostarchimages1137515.png)
@@ -392,16 +477,19 @@
   id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三部分只有在缓冲区中存储的数据被截断的情况下才会发生。它首先![图片](httpatomoreillycomsourcenostarchimages1137511.png)纠正存储数据的长度。然后它![图片](httpatomoreillycomsourcenostarchimages1137513.png)将数据以空字符终止。
 - en: echo_ioctl Function
   id: totrans-69
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: echo_ioctl 函数
 - en: 'The `echo_ioctl` function is the `d_ioctl` function for [Example 3-1](ch03s03.html#echo-3.0.c
     "Example 3-1. echo-3.0.c"). Here is its function definition (again):'
   id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: '`echo_ioctl`函数是`d_ioctl`函数，对应于[示例3-1](ch03s03.html#echo-3.0.c "示例3-1. echo-3.0.c")。以下是它的函数定义（再次）：'
 - en: '[PRE7]'
   id: totrans-71
   prefs: []
@@ -414,6 +502,7 @@
   id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个函数可以执行两种基于ioctl的操作之一。第一种![图片](httpatomoreillycomsourcenostarchimages1137501.png)清除内存缓冲区。它首先![图片](httpatomoreillycomsourcenostarchimages1137503.png)将缓冲区清零。然后它![图片](httpatomoreillycomsourcenostarchimages1137505.png)将数据长度设置为`0`。
 - en: 'The second ![](httpatomoreillycomsourcenostarchimages1137507.png) resizes the
     memory buffer by calling ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `echo_set_buffer_size`. Note that this operation requires an ![](httpatomoreillycomsourcenostarchimages1137511.png)
@@ -422,26 +511,32 @@
   id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二种![图片](httpatomoreillycomsourcenostarchimages1137507.png)通过调用`echo_set_buffer_size`来调整内存缓冲区的大小。请注意，这个操作需要一个![图片](httpatomoreillycomsourcenostarchimages1137511.png)参数：提议的缓冲区大小。这个参数通过![图片](httpatomoreillycomsourcenostarchimages1137499.png)
+    `data`从用户空间获取。
 - en: Note
   id: totrans-74
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Remember that you must cast `data` before it can be dereferenced.
   id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 记住，在可以解引用之前，你必须对`data`进行类型转换。
 - en: echo_modevent Function
   id: totrans-76
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: echo_modevent 函数
 - en: 'As you know, the `echo_modevent` function is the module event handler. Like
     `echo_write`, this function had to be altered to accommodate adding in `echo_ioctl`.
     Here is its function definition (again):'
   id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所知，`echo_modevent` 函数是模块事件处理器。像 `echo_write` 一样，这个函数必须修改以适应添加 `echo_ioctl`。以下是它的函数定义（再次）：
 - en: '[PRE8]'
   id: totrans-78
   prefs: []
@@ -454,16 +549,19 @@
   id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个版本的 `echo_modevent` 分别为 `echo` 结构和内存缓冲区分配内存（这就是唯一的变化）。之前，内存缓冲区不能调整大小。因此，单独的内存分配是不必要的。
 - en: Don’t Panic
   id: totrans-80
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 不要慌张
 - en: 'Now that we’ve walked through [Example 3-1](ch03s03.html#echo-3.0.c "Example 3-1. echo-3.0.c"),
     let’s give it a try:'
   id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们已经走过了 [示例 3-1](ch03s03.html#echo-3.0.c "示例 3-1. echo-3.0.c")，让我们试一试：
 - en: '[PRE9]'
   id: totrans-82
   prefs: []
@@ -473,15 +571,18 @@
   id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 显然它有效。但我们如何调用 `echo_ioctl`？
 - en: Invoking ioctl
   id: totrans-84
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 调用 ioctl
 - en: To invoke a `d_ioctl` function, you’d use the `ioctl(2)` system call.
   id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 要调用 `d_ioctl` 函数，你会使用 `ioctl(2)` 系统调用。
 - en: '[PRE10]'
   id: totrans-86
   prefs: []
@@ -494,16 +595,21 @@
   id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: '`d` 参数，代表 *描述符*，期望一个设备节点的文件描述符。`request` 参数是要发出的 ioctl 命令（例如，`ECHO_CLEAR_BUFFER`）。剩余的参数（`...`）是指向要传递给
+    `d_ioctl` 函数的数据的指针。'
 - en: '[Example 3-2](ch03s04.html#echo_underscore_config.c "Example 3-2. echo_config.c")
     presents a command-line utility designed to invoke the `echo_ioctl` function in
     [Example 3-1](ch03s03.html#echo-3.0.c "Example 3-1. echo-3.0.c"):'
   id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 3-2](ch03s04.html#echo_underscore_config.c "示例 3-2. echo_config.c") 展示了一个命令行工具，用于调用
+    [示例 3-1](ch03s03.html#echo-3.0.c "示例 3-1. echo-3.0.c") 中的 `echo_ioctl` 函数：'
 - en: Example 3-2. echo_config.c
   id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 3-2. echo_config.c
 - en: '[PRE11]'
   id: totrans-90
   prefs: []
@@ -514,12 +620,15 @@
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '[Example 3-2](ch03s04.html#echo_underscore_config.c "Example 3-2. echo_config.c")
     is a fairly standard command-line utility. As such, I won’t cover its program
     structure. Instead, I’ll concentrate on how it invokes `echo_ioctl`.'
   id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 3-2](ch03s04.html#echo_underscore_config.c "示例 3-2. echo_config.c") 是一个相当标准的命令行工具。因此，我不会介绍其程序结构。相反，我会集中讨论它是如何调用
+    `echo_ioctl` 的。'
 - en: This program begins by redefining ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `ECHO_CLEAR_BUFFER` and ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `ECHO_SET_BUFFER_SIZE`.^([[4](#ftn.CHP-3-FN-2)]) To issue an ioctl command, [Example 3-2](ch03s04.html#echo_underscore_config.c
@@ -530,16 +639,22 @@
   id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个程序首先重新定义了 `ECHO_CLEAR_BUFFER` 和 `ECHO_SET_BUFFER_SIZE`。^([[4](#ftn.CHP-3-FN-2)])
+    要发出 ioctl 命令，[示例 3-2](ch03s04.html#echo_underscore_config.c "示例 3-2. echo_config.c")
+    首先打开 `/dev/echo`。然后它使用适当的参数调用 `ioctl(2)`。
 - en: Note that since `ECHO_CLEAR_BUFFER` doesn’t transmit any data, ![](httpatomoreillycomsourcenostarchimages1137507.png)
     `NULL` is passed as the third argument to `ioctl(2)`.
   id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，由于 `ECHO_CLEAR_BUFFER` 不传输任何数据，`NULL` 被传递为 `ioctl(2)` 的第三个参数。
 - en: 'The following shows the results from executing [Example 3-2](ch03s04.html#echo_underscore_config.c
     "Example 3-2. echo_config.c") to clear the memory buffer:'
   id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下展示了执行 [示例 3-2](ch03s04.html#echo_underscore_config.c "示例 3-2. echo_config.c")
+    清除内存缓冲区的结果：
 - en: '[PRE12]'
   id: totrans-96
   prefs: []
@@ -550,6 +665,8 @@
   id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下展示了执行 [示例 3-2](ch03s04.html#echo_underscore_config.c "示例 3-2. echo_config.c")
+    调整内存缓冲区大小的结果：
 - en: '[PRE13]'
   id: totrans-98
   prefs: []
@@ -559,52 +676,64 @@
   id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[4](#CHP-3-FN-2)]) This step could have been avoided by defining those `ioctl`
     commands in a header file.
   id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[4](#CHP-3-FN-2)]) 通过在头文件中定义那些 `ioctl` 命令，可以避免这一步骤。
 - en: sysctl
   id: totrans-101
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: sysctl
 - en: As mentioned earlier, the sysctl interface is used to dynamically change or
     examine the kernel’s parameters, which includes device drivers. For example, some
     drivers let you enable (or disable) debug options using sysctls.
   id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，sysctl 接口用于动态更改或检查内核参数，这包括设备驱动程序。例如，一些驱动程序允许您使用 sysctl 启用（或禁用）调试选项。
 - en: Note
   id: totrans-103
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: This book was written under the assumption that you know how to work with sysctls;
     if you don’t, see the `sysctl(8)` manual page.
   id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 本书假设您知道如何使用 sysctl；如果您不知道，请参阅 `sysctl(8)` 手册页。
 - en: Unlike with previous topics, I’m going to take a holistic approach to explain
     sysctl. That is, I’m going to show an example first, and then I’ll describe the
     sysctl functions. I found this to be the easiest way to grok implementing sysctls.
   id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 与前一个主题不同，我将采取整体的方法来解释 sysctl。也就是说，我将首先展示一个示例，然后描述 sysctl 函数。我发现这是理解实现 sysctl
+    的最简单方法。
 - en: Implementing sysctls, Part 1
   id: totrans-106
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 实现sysctl，第1部分
 - en: '[Example 3-3](ch03s06.html#pointless.c "Example 3-3. pointless.c") is a complete
     KLD (based on code written by Andrzej Bialecki) that creates multiple sysctls.'
   id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 3-3](ch03s06.html#pointless.c "Example 3-3. pointless.c") 是一个完整的 KLD（基于安德烈·比亚莱茨基编写的代码）创建多个
+    sysctl。'
 - en: Example 3-3. pointless.c
   id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 3-3. pointless.c
 - en: '[PRE14]'
   id: totrans-109
   prefs: []
@@ -618,6 +747,9 @@
   id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 在模块加载时，[示例 3-3](ch03s06.html#pointless.c "Example 3-3. pointless.c") 首先通过 ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    初始化一个名为 `clist` 的 sysctl 上下文。一般来说，*sysctl 上下文* 负责跟踪动态创建的 sysctl——这就是为什么 `clist`
+    被传递给每个 `SYSCTL_ADD_*` 调用的原因。
 - en: 'The first ![](httpatomoreillycomsourcenostarchimages1137503.png) `SYSCTL_ADD_NODE`
     call creates a new top-level category named `example`. The ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `SYSCTL_ADD_LONG` call creates a new sysctl named `long` that handles a long variable.
@@ -627,6 +759,11 @@
   id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 第一次调用 ![](httpatomoreillycomsourcenostarchimages1137503.png) `SYSCTL_ADD_NODE`
+    创建了一个名为 `example` 的新顶级类别。![](httpatomoreillycomsourcenostarchimages1137505.png)
+    的 `SYSCTL_ADD_LONG` 调用创建了一个名为 `long` 的新 sysctl，它处理一个长变量。请注意，`SYSCTL_ADD_LONG`
+    的第二个参数是 `SYSCTL_CHILDREN(poid)`^([[5](#ftn.CHP-3-FN-3)])，而 `poid` 包含 `SYSCTL_ADD_NODE`
+    的返回值。因此，`long` 被放置在 `example` 下，如下所示：
 - en: '[PRE15]'
   id: totrans-112
   prefs: []
@@ -638,6 +775,8 @@
   id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: '![](httpatomoreillycomsourcenostarchimages1137507.png) 的 `SYSCTL_ADD_INT` 调用创建了一个名为
+    `int` 的新 sysctl，它处理一个整数变量。由于与 `SYSCTL_ADD_LONG` 的原因相同，`int` 被放置在 `example` 下：'
 - en: '[PRE16]'
   id: totrans-114
   prefs: []
@@ -649,6 +788,7 @@
   id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二次调用 `SYSCTL_ADD_NODE` 创建了一个名为 `node` 的新子类别，它被放置在 `example` 下，如下所示：
 - en: '[PRE17]'
   id: totrans-116
   prefs: []
@@ -663,6 +803,10 @@
   id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: '![](httpatomoreillycomsourcenostarchimages1137511.png) 的 `SYSCTL_ADD_PROC`
+    调用创建了一个名为 `proc` 的新 sysctl，它使用一个 ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    函数来处理其读写请求；在这种情况下，该函数只是打印一些文本。您会注意到 `SYSCTL_ADD_PROC` 的第二个参数也是 `SYSCTL_CHILDREN(poid)`。但
+    `poid` 现在包含第二次 `SYSCTL_ADD_NODE` 调用的返回值。因此，`proc` 被放置在 `node` 下：'
 - en: '[PRE18]'
   id: totrans-118
   prefs: []
@@ -675,6 +819,9 @@
   id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三次调用 ![](httpatomoreillycomsourcenostarchimages1137513.png) `SYSCTL_ADD_NODE`
+    创建了一个名为 `example` 的新子类别。如您所见，其第二个参数是 `SYSCTL_STATIC_CHILDREN(_debug)`，^([[6](#ftn.CHP-3-FN-4)])
+    这将 `example` 放在 `debug`（这是一个静态顶级类别）下。
 - en: '[PRE19]'
   id: totrans-120
   prefs: []
@@ -686,6 +833,8 @@
   id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: '`![](httpatomoreillycomsourcenostarchimages1137515.png)` `SYSCTL_ADD_STRING`
+    调用创建了一个名为 `string` 的新 sysctl，用于处理字符串。由于显而易见的原因，`string` 被放置在 `debug.example` 下：'
 - en: '[PRE20]'
   id: totrans-122
   prefs: []
@@ -697,11 +846,15 @@
   id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 在模块卸载时，[示例 3-3](ch03s06.html#pointless.c "示例 3-3. pointless.c") 简单地将 `clist`
+    传递给 `![](httpatomoreillycomsourcenostarchimages1137517.png)` `sysctl_ctx_free`
+    以销毁在模块加载期间创建的每个 sysctl。
 - en: 'The following shows the results from loading [Example 3-3](ch03s06.html#pointless.c
     "Example 3-3. pointless.c"):'
   id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下展示了加载 [示例 3-3](ch03s06.html#pointless.c "示例 3-3. pointless.c") 的结果：
 - en: '[PRE21]'
   id: totrans-125
   prefs: []
@@ -712,32 +865,40 @@
   id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们详细讨论 [示例 3-3](ch03s06.html#pointless.c "示例 3-3. pointless.c") 中使用的不同函数和宏。
 - en: '* * *'
   id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[5](#CHP-3-FN-3)]) The `SYSCTL_CHILDREN` macro is described in [SYSCTL_STATIC_CHILDREN
     Macro](ch03s08.html#sysctl_underscore_static_underscore_chil "SYSCTL_STATIC_CHILDREN
     Macro").
   id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[5](#CHP-3-FN-3)]) `SYSCTL_CHILDREN` 宏在 [SYSCTL_STATIC_CHILDREN 宏](ch03s08.html#sysctl_underscore_static_underscore_chil
+    "SYSCTL_STATIC_CHILDREN 宏") 中描述。
 - en: ^([[6](#CHP-3-FN-4)]) The `SYSCTL_STATIC_CHILDREN` macro is described in [SYSCTL_STATIC_CHILDREN
     Macro](ch03s08.html#sysctl_underscore_static_underscore_chil "SYSCTL_STATIC_CHILDREN
     Macro").
   id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[6](#CHP-3-FN-4)]) `SYSCTL_STATIC_CHILDREN` 宏在 [SYSCTL_STATIC_CHILDREN 宏](ch03s08.html#sysctl_underscore_static_underscore_chil
+    "SYSCTL_STATIC_CHILDREN 宏") 中描述。
 - en: sysctl Context Management Routines
   id: totrans-130
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: sysctl 上下文管理例程
 - en: As mentioned previously, sysctl contexts manage dynamically created sysctls.
     A sysctl context is initialized via the `sysctl_ctx_init` function.
   id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，sysctl 上下文管理动态创建的 sysctl。sysctl 上下文通过 `sysctl_ctx_init` 函数初始化。
 - en: '[PRE22]'
   id: totrans-132
   prefs: []
@@ -749,11 +910,13 @@
   id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: sysctl 上下文初始化后，它可以传递给各种 `SYSCTL_ADD_*` 宏。这些宏将使用指向新创建的 sysctl 的指针更新 sysctl 上下文。
 - en: Conversely, the `sysctl_ctx_free` function takes a sysctl context and destroys
     every sysctl that it has a pointer to.
   id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 相反，`sysctl_ctx_free` 函数接受一个 sysctl 上下文并销毁它所指向的每个 sysctl。
 - en: '[PRE23]'
   id: totrans-135
   prefs: []
@@ -764,16 +927,19 @@
   id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果无法销毁 sysctl，则重新启用与 sysctl 上下文关联的所有 sysctl。
 - en: Creating Dynamic sysctls
   id: totrans-137
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 创建动态 sysctl
 - en: 'The FreeBSD kernel provides the following 10 macros for creating sysctls during
     runtime:'
   id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD 内核提供了以下 10 个宏，用于在运行时创建 sysctl：
 - en: '[PRE24]'
   id: totrans-139
   prefs: []
@@ -784,127 +950,158 @@
   id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: '`SYSCTL_ADD_OID` 宏创建一个新的 sysctl，它可以处理任何数据类型。如果成功，则返回指向 sysctl 的指针；否则，返回 `NULL`。'
 - en: The other `SYSCTL_ADD_*` macros are alternatives to `SYSCTL_ADD_OID` that create
     a sysctl that can handle a specific data type. These macros are explained in [Table 3-2](ch03s08.html#sysctl_underscore_add_underscore_asteris
     "Table 3-2. SYSCTL_ADD_* Macros").
   id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 其他 `SYSCTL_ADD_*` 宏是 `SYSCTL_ADD_OID` 的替代方案，可以创建一个可以处理特定数据类型的 sysctl。这些宏在 [表
+    3-2](ch03s08.html#sysctl_underscore_add_underscore_asteris "表 3-2. SYSCTL_ADD_*
+    宏") 中解释。
 - en: Table 3-2. SYSCTL_ADD_* Macros
   id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 3-2. SYSCTL_ADD_* 宏
 - en: '| Macro | Description |'
   id: totrans-143
   prefs: []
   type: TYPE_TB
+  zh: '| 宏 | 描述 |'
 - en: '| --- | --- |'
   id: totrans-144
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `SYSCTL_ADD_NODE` | Creates a new node (or category) to which child nodes
     may be added |'
   id: totrans-145
   prefs: []
   type: TYPE_TB
+  zh: '| `SYSCTL_ADD_NODE` | 创建一个新的节点（或类别），可以添加子节点 |'
 - en: '| `SYSCTL_ADD_STRING` | Creates a new sysctl that handles a null-terminated
     character string |'
   id: totrans-146
   prefs: []
   type: TYPE_TB
+  zh: '| `SYSCTL_ADD_STRING` | 创建一个新的 sysctl，用于处理以空字符终止的字符串 |'
 - en: '| `SYSCTL_ADD_INT` | Creates a new sysctl that handles an integer variable
     |'
   id: totrans-147
   prefs: []
   type: TYPE_TB
+  zh: '| `SYSCTL_ADD_INT` | 创建一个新的 sysctl，用于处理整数变量 |'
 - en: '| `SYSCTL_ADD_UINT` | Creates a new sysctl that handles an unsigned integer
     variable |'
   id: totrans-148
   prefs: []
   type: TYPE_TB
+  zh: '| `SYSCTL_ADD_UINT` | 创建一个新的 sysctl，用于处理无符号整数变量 |'
 - en: '| `SYSCTL_ADD_LONG` | Creates a new sysctl that handles a long variable |'
   id: totrans-149
   prefs: []
   type: TYPE_TB
+  zh: '| `SYSCTL_ADD_LONG` | 创建一个新的 sysctl，用于处理长变量 |'
 - en: '| `SYSCTL_ADD_ULONG` | Creates a new sysctl that handles an unsigned long variable
     |'
   id: totrans-150
   prefs: []
   type: TYPE_TB
+  zh: '| `SYSCTL_ADD_ULONG` | 创建一个新的 sysctl，用于处理无符号长变量 |'
 - en: '| `SYSCTL_ADD_OPAQUE` | Creates a new sysctl that handles a chunk of opaque
     data; the size of this data is specified by the `len` argument |'
   id: totrans-151
   prefs: []
   type: TYPE_TB
+  zh: '| `SYSCTL_ADD_OPAQUE` | 创建一个新的 sysctl，用于处理一块不透明数据；这块数据的大小由 `len` 参数指定 |'
 - en: '| `SYSCTL_ADD_STRUCT` | Creates a new sysctl that handles a structure |'
   id: totrans-152
   prefs: []
   type: TYPE_TB
+  zh: '| `SYSCTL_ADD_STRUCT` | 创建一个新的 sysctl，用于处理结构体 |'
 - en: '| `SYSCTL_ADD_PROC` | Creates a new sysctl that uses a function to handle its
     read and write requests; this “handler function” is normally used to process the
     data before importing or exporting it |'
   id: totrans-153
   prefs: []
   type: TYPE_TB
+  zh: '| `SYSCTL_ADD_PROC` | 创建一个新的 sysctl，它使用一个函数来处理其读写请求；这个“处理函数”通常用于在导入或导出之前处理数据
+    |'
 - en: In most cases, you should use a `SYSCTL_ADD_*` macro instead of the generic
     `SYSCTL_ADD_OID` macro.
   id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 在大多数情况下，你应该使用 `SYSCTL_ADD_*` 宏而不是通用的 `SYSCTL_ADD_OID` 宏。
 - en: The arguments for the `SYSCTL_ADD_*` macros are described in [Table 3-3](ch03s08.html#sysctl_underscore_add_underscore_ast
     "Table 3-3. SYSCTL_ADD_* Arguments").
   id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: '`SYSCTL_ADD_*` 宏的参数在 [表 3-3](ch03s08.html#sysctl_underscore_add_underscore_ast
+    "表 3-3. SYSCTL_ADD_* 参数") 中描述。'
 - en: Table 3-3. SYSCTL_ADD_* Arguments
   id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 3-3. SYSCTL_ADD_* 参数
 - en: '| Argument | Description |'
   id: totrans-157
   prefs: []
   type: TYPE_TB
+  zh: '| 参数 | 描述 |'
 - en: '| --- | --- |'
   id: totrans-158
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `ctx` | Expects a pointer to a sysctl context |'
   id: totrans-159
   prefs: []
   type: TYPE_TB
+  zh: '| `ctx` | 期望一个指向 sysctl 上下文的指针 |'
 - en: '| `parent` | Expects a pointer to the parent sysctl’s list of children; more
     on this later |'
   id: totrans-160
   prefs: []
   type: TYPE_TB
+  zh: '| `parent` | 期望一个指向父 sysctl 的子节点列表的指针；关于这一点稍后会有更多说明 |'
 - en: '| `number` | Expects the sysctl’s number; this should always be set to `OID_AUTO`
     |'
   id: totrans-161
   prefs: []
   type: TYPE_TB
+  zh: '| `number` | 期望 sysctl 的编号；这应该始终设置为 `OID_AUTO` |'
 - en: '| `name` | Expects the sysctl’s name |'
   id: totrans-162
   prefs: []
   type: TYPE_TB
+  zh: '| `name` | 期望 sysctl 的名称 |'
 - en: '| `access` | Expects an access flag; *access flags* specify whether the sysctl
     is read-only (`CTLFLAG_RD`) or read-write (`CTLFLAG_RW`) |'
   id: totrans-163
   prefs: []
   type: TYPE_TB
+  zh: '| `access` | 期望一个访问标志；*访问标志* 指定 sysctl 是只读（`CTLFLAG_RD`）还是读写（`CTLFLAG_RW`）|'
 - en: '| `arg` | Expects a pointer to the data that the sysctl will manage (or `NULL`)
     |'
   id: totrans-164
   prefs: []
   type: TYPE_TB
+  zh: '| `arg` | 期望一个指向 sysctl 将管理的数据的指针（或 `NULL`）|'
 - en: '| `len` | Set this to `0` unless you’re calling `SYSCTL_ADD_OPAQUE` |'
   id: totrans-165
   prefs: []
   type: TYPE_TB
+  zh: '| `len` | 如果不是调用 `SYSCTL_ADD_OPAQUE`，则将其设置为 `0` |'
 - en: '| `handler` | Expects a pointer to the function that will handle the sysctl’s
     read and write requests (or `0`) |'
   id: totrans-166
   prefs: []
   type: TYPE_TB
+  zh: '| `handler` | 期望一个指向将处理 sysctl 的读写请求的函数的指针（或 `0`）|'
 - en: '| `format` | Expects a format name; *format names* identify the type of data
     that the sysctl will manage; the complete list of format names is: `"N"` for node,
     `"A"` for `char *`, `"I"` for `int`, `"IU"` for `unsigned int`, `"L"` for `long`,
@@ -912,27 +1109,35 @@
   id: totrans-167
   prefs: []
   type: TYPE_TB
+  zh: '| `format` | 期望一个格式名称；*格式名称* 识别 sysctl 将管理的类型数据；格式名称的完整列表是：`"N"` 表示节点，`"A"`
+    表示 `char *`，`"I"` 表示 `int`，`"IU"` 表示 `unsigned int`，`"L"` 表示 `long`，`"LU"` 表示
+    `unsigned long`，以及 `"S,foo"` 表示 `struct foo` |'
 - en: '| `descr` | Expects a textual description of the sysctl; this description is
     printed by `sysctl -d` |'
   id: totrans-168
   prefs: []
   type: TYPE_TB
+  zh: '| `descr` | 期望 sysctl 的文本描述；此描述由 `sysctl -d` 打印 |'
 - en: A sysctl created by a `SYSCTL_ADD_*` macro must be connected to a parent sysctl.
     This is done by passing `SYSCTL_STATIC_CHILDREN` or `SYSCTL_CHILDREN` as the `parent`
     argument.
   id: totrans-169
   prefs: []
   type: TYPE_NORMAL
+  zh: 由 `SYSCTL_ADD_*` 宏创建的 sysctl 必须连接到父 sysctl。这是通过将 `SYSCTL_STATIC_CHILDREN` 或
+    `SYSCTL_CHILDREN` 作为 `parent` 参数传递来完成的。
 - en: SYSCTL_STATIC_CHILDREN Macro
   id: totrans-170
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: SYSCTL_STATIC_CHILDREN 宏
 - en: The `SYSCTL_STATIC_CHILDREN` macro is passed as `parent` when connecting to
     a static node. A *static node* is part of the base system.
   id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: '`SYSCTL_STATIC_CHILDREN` 宏在连接到静态节点时作为 `parent` 传递。一个 *静态节点* 是基本系统的一部分。'
 - en: '[PRE25]'
   id: totrans-172
   prefs: []
@@ -944,21 +1149,25 @@
   id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个宏接受一个以下划线开头的父 sysctl 名称。并且所有点都必须替换为下划线。因此，要连接到 `hw.usb`，你会使用 `_hw_usb`。
 - en: If `SYSCTL_STATIC_CHILDREN(/* no argument */)` is passed as `parent` to `SYSCTL_ADD_NODE`,
     a new top-level category will be created.
   id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果将 `SYSCTL_STATIC_CHILDREN(/* 无参数 */)` 作为 `parent` 传递给 `SYSCTL_ADD_NODE`，将创建一个新的顶级类别。
 - en: SYSCTL_CHILDREN Macro
   id: totrans-175
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: SYSCTL_CHILDREN 宏
 - en: The `SYSCTL_CHILDREN` macro is passed as `parent` when connecting to a dynamic
     node. A *dynamic node* is created by a `SYSCTL_ADD_NODE` call.
   id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: '`SYSCTL_CHILDREN` 宏在连接到动态节点时作为 `parent` 传递。一个 *动态节点* 是由 `SYSCTL_ADD_NODE` 调用创建的。'
 - en: '[PRE26]'
   id: totrans-177
   prefs: []
@@ -969,36 +1178,44 @@
   id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个宏将其唯一的参数作为 `SYSCTL_ADD_NODE` 调用返回的指针。
 - en: Implementing sysctls, Part 2
   id: totrans-179
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 实现sysctl，第2部分
 - en: Now that you know how to create sysctls during runtime, let’s do some actual
     device control (as opposed to quoting Monty Python).
   id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你已经知道了如何在运行时创建 sysctl，让我们做一些实际的设备控制（而不是引用蒙提·派森）。
 - en: '[Example 3-4](ch03s09.html#echo-4.0.c "Example 3-4. echo-4.0.c") is a revision
     of [Example 3-1](ch03s03.html#echo-3.0.c "Example 3-1. echo-3.0.c") that employs
     a sysctl to resize the memory buffer.'
   id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 3-4](ch03s09.html#echo-4.0.c "示例 3-4. echo-4.0.c") 是 [示例 3-1](ch03s03.html#echo-3.0.c
+    "示例 3-1. echo-3.0.c") 的修订版，它使用 sysctl 来调整内存缓冲区的大小。'
 - en: Note
   id: totrans-182
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: To save space, the functions `echo_open`, `echo_close`, `echo_write`, and `echo_read`
     aren’t listed here, as they haven’t been changed.
   id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了节省空间，函数 `echo_open`、`echo_close`、`echo_write` 和 `echo_read` 没有在此列出，因为它们没有发生变化。
 - en: Example 3-4. echo-4.0.c
   id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 3-4. echo-4.0.c
 - en: '[PRE27]'
   id: totrans-185
   prefs: []
@@ -1011,16 +1228,21 @@
   id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: 在模块加载时，[示例 3-4](ch03s09.html#echo-4.0.c "示例 3-4. echo-4.0.c") 创建了一个名为 `echo.buffer_size`
+    的 sysctl，该 sysctl 管理内存缓冲区的大小。此外，这个 sysctl 使用一个名为 `sysctl_set_buffer_size` 的 ![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    处理函数来调整内存缓冲区的大小。
 - en: sysctl_set_buffer_size Function
   id: totrans-187
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: sysctl_set_buffer_size 函数
 - en: As stated above, the `sysctl_set_buffer_size` function resizes the memory buffer.
     Before I describe this function, let’s identify its arguments.
   id: totrans-188
   prefs: []
   type: TYPE_NORMAL
+  zh: 如上所述，`sysctl_set_buffer_size` 函数调整内存缓冲区的大小。在描述这个函数之前，让我们确定它的参数。
 - en: '[PRE28]'
   id: totrans-189
   prefs: []
@@ -1031,6 +1253,8 @@
   id: totrans-190
   prefs: []
   type: TYPE_NORMAL
+  zh: 常量 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) `SYSCTL_HANDLER_ARGS`
+    在 `<sys/sysctl.h>` 中定义如下：
 - en: '[PRE29]'
   id: totrans-191
   prefs: []
@@ -1044,10 +1268,15 @@
   id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，![图片](httpatomoreillycomsourcenostarchimages1137499.png) `oidp` 指向 sysctl，![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    `arg1` 指向 sysctl 管理的数据，![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    `arg2` 是数据的长度，![图片](httpatomoreillycomsourcenostarchimages1137505.png) `req` 描述了
+    sysctl 请求。
 - en: Now, keeping these arguments in mind, let’s examine the function `sysctl_set_buffer_size`.
   id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，牢记这些论点，让我们来检查函数 `sysctl_set_buffer_size`。
 - en: '[PRE30]'
   id: totrans-194
   prefs: []
@@ -1060,12 +1289,17 @@
   id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个函数首先将 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) `size` 设置为当前缓冲区大小。之后，调用
+    ![图片](httpatomoreillycomsourcenostarchimages1137501.png) `sysctl_handle_int` 从用户空间获取新的
+    sysctl 值（即建议的缓冲区大小）。
 - en: Note that the ![](httpatomoreillycomsourcenostarchimages1137503.png) second
     argument to `sysctl_handle_int` is `&size`. See, this function takes a pointer
     to the original sysctl value and overwrites it with the new sysctl value.
   id: totrans-196
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，`sysctl_handle_int` 的 ![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    第二个参数是 `&size`。看，这个函数接受原始 sysctl 值的指针，并用新的 sysctl 值覆盖它。
 - en: This ![](httpatomoreillycomsourcenostarchimages1137505.png) `if` statement ensures
     that the new sysctl value was obtained successfully. It works by verifying that
     `sysctl_handle_int` returned ![](httpatomoreillycomsourcenostarchimages1137507.png)
@@ -1074,22 +1308,29 @@
   id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个 ![图片](httpatomoreillycomsourcenostarchimages1137505.png) `if` 语句确保新 sysctl
+    值获取成功。它通过验证 `sysctl_handle_int` 没有错误返回，并且 ![图片](httpatomoreillycomsourcenostarchimages1137507.png)
+    `req->newptr` 是有效的。
 - en: The remainder of `sysctl_set_buffer_size` is identical to `echo_set_buffer_size`,
     which was described in [echo_set_buffer_size Function](ch03s03.html#echo_underscore_set_underscore_buffer_un
     "echo_set_buffer_size Function").
   id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sysctl_set_buffer_size` 的其余部分与在 [echo_set_buffer_size 函数](ch03s03.html#echo_underscore_set_underscore_buffer_un
+    "echo_set_buffer_size 函数") 中描述的 `echo_set_buffer_size` 相同。'
 - en: Don’t Panic
   id: totrans-199
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 不要慌张
 - en: 'Now, let’s give [Example 3-4](ch03s09.html#echo-4.0.c "Example 3-4. echo-4.0.c")
     a try:'
   id: totrans-200
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们尝试 [示例 3-4](ch03s09.html#echo-4.0.c "示例 3-4. echo-4.0.c")：
 - en: '[PRE31]'
   id: totrans-201
   prefs: []
@@ -1099,11 +1340,13 @@
   id: totrans-202
   prefs: []
   type: TYPE_NORMAL
+  zh: 成功！
 - en: Conclusion
   id: totrans-203
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: 'This chapter has described the traditional methods for device communication
     and control: sysctl and ioctl. Generally, sysctls are employed to adjust parameters,
     and ioctls are used for everything else—that’s why ioctls are the catchall of
@@ -1112,6 +1355,8 @@
   id: totrans-204
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章介绍了设备通信和控制的传统方法：sysctl 和 ioctl。通常，sysctls 用于调整参数，而 ioctls 用于其他所有操作——这就是为什么
+    ioctls 是 I/O 操作的万能工具。注意，如果你发现自己只是为了 ioctl 请求创建设备节点，你可能应该使用 sysctls。
 - en: Incidentally, be aware that it’s fairly trivial to write user-mode programs
     that interact with drivers. Thus, your drivers—*not* your user-mode programs (for
     example, [Example 3-2](ch03s04.html#echo_underscore_config.c "Example 3-2. echo_config.c"))—should
