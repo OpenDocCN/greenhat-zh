@@ -1,0 +1,470 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;8.&#xA0;Interrupt Handling"><div class="titlepage"><div><div><h1 class="title"><a id="interrupt_handling"/>Chapter 8. Interrupt Handling</h1></div></div></div><div class="informalfigure"><a id="image_no_caption-id8"/><div class="mediaobject"><a id="I_mediaobject8_d1e15043"/><img alt="image with no caption" src="httpatomoreillycomsourcenostarchimages1137497.png.jpg"/></div></div><p>Hardware devices often have to perform (or deal with) external events, such as spinning disk platters, winding tapes, waiting for I/O, and so on. Most of these external events occur in a timeframe that is much slower than the processor’s—that is, if the processor were to wait for the completion (or arrival) of these events, it would be idle for some time. To avoid wasting the processor’s valuable time, interrupts are employed. An <span class="emphasis"><em>interrupt</em></span> is simply a signal that a hardware device can send when it wants the processor’s attention (Corbet et al., 2005). For the most part, a driver only needs to register a handler function to service its device’s interrupts.<a class="indexterm" id="IDX-CHP-8-0001"/><a class="indexterm" id="IDX-CHP-8-0002"/><a class="indexterm" id="IDX-CHP-8-0003"/><a class="indexterm" id="IDX-CHP-8-0004"/></p><div class="sect1" title="Registering an Interrupt Handler"><div class="titlepage"><div><div><h1 class="title"><a id="registering_an_interrupt_handler"/>Registering an Interrupt Handler</h1></div></div></div><p>The following functions, declared in <code class="literal">&lt;sys/bus.h&gt;</code>, register or tear down an interrupt handler:</p><a id="I_programlisting8_d1e15077"/><pre class="programlisting">#include &lt;sys/param.h&gt;
+#include &lt;sys/bus.h&gt;
+
+int
+bus_setup_intr(device_t dev, struct resource *r, int flags,
+    driver_filter_t filter, driver_intr_t ithread, void *arg,
+    void **cookiep);
+
+int
+bus_teardown_intr(device_t dev, struct resource *r, void *cookiep);</pre><p>The <code class="literal">bus_setup_intr</code> function registers an interrupt handler with an IRQ. This IRQ must be allocated beforehand with <code class="literal">bus_alloc_resource</code>, as described in <a class="xref" href="ch07s03.html" title="Hardware Resource Management">Hardware Resource Management</a> in <a class="xref" href="ch07s02.html#donat_panic-id6" title="Don’t Panic">Don’t Panic</a>.<a class="indexterm" id="IDX-CHP-8-0005"/><a class="indexterm" id="IDX-CHP-8-0006"/><a class="indexterm" id="IDX-CHP-8-0007"/><a class="indexterm" id="IDX-CHP-8-0008"/><a class="indexterm" id="IDX-CHP-8-0009"/><a class="indexterm" id="IDX-CHP-8-0010"/><a class="indexterm" id="IDX-CHP-8-0011"/><a class="indexterm" id="IDX-CHP-8-0012"/><a class="indexterm" id="IDX-CHP-8-0013"/><a class="indexterm" id="IDX-CHP-8-0014"/><a class="indexterm" id="IDX-CHP-8-0015"/></p><p>The <code class="literal">bus_setup_intr</code> function is normally called during <code class="literal">device_attach</code>. The arguments for this function are described in the next few paragraphs.</p><p>The <code class="literal">dev</code> argument is the device whose interrupts are to be handled. This device must have an IRQ.</p><p>The <code class="literal">r</code> argument demands the return value from the successful <code class="literal">bus_alloc_resource</code> call that assigned an IRQ for <code class="literal">dev</code>.</p><p>The <code class="literal">flags</code> argument classifies the interrupt handler and/or the interrupt. Valid values for this argument are defined in the <code class="literal">intr_type</code> enumeration, found in <code class="literal">&lt;sys/bus.h&gt;</code>. <a class="xref" href="ch08.html#bus_underscore_setup_underscore_intr_sym" title="Table 8-1. bus_setup_intr Symbolic Constants">Table 8-1</a> describes the more commonly used values.</p><div class="table"><a id="bus_underscore_setup_underscore_intr_sym"/><p class="title">Table 8-1. bus_setup_intr Symbolic Constants</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="bus_setup_intr Symbolic Constants"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Constant</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">INTR_MPSAFE</code></p></td><td style="text-align: left" valign="top"><p>Indicates that the interrupt handler is multiprocessor safe and does not need to be protected by <code class="literal">Giant</code>—that is, any race conditions are to be handled by the interrupt handler itself; contemporary code should always pass this flag</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">INTR_ENTROPY</code></p></td><td style="text-align: left" valign="top"><p>Indicates that the interrupt is a good source of entropy and may be employed by the entropy device <code class="literal">/dev/random</code></p></td></tr></tbody></table></div></div><p>The <code class="literal">filter</code> and <code class="literal">ithread</code> arguments specify the filter and ithread routines for the interrupt handler. For now, don’t worry about these arguments; I’ll discuss them in the following section.</p><p>The <code class="literal">arg</code> argument is the sole argument that gets passed to the interrupt handler. Generally, you’ll always set <code class="literal">arg</code> to <code class="literal">dev</code>’s software context.</p><p>The <code class="literal">cookiep</code> argument expects a pointer to void *. If <code class="literal">bus_setup_intr</code> is successful, a cookie is returned in <code class="literal">cookiep</code>; this cookie is needed to destroy the interrupt handler.</p><p>As you would expect, the <code class="literal">bus_teardown_intr</code> function tears down an interrupt handler.</p></div></div>
+<div class="sect1" title="Interrupt Handlers in FreeBSD"><div class="titlepage"><div><div><h1 class="title"><a id="interrupt_handlers_in_freebsd"/>Interrupt Handlers in FreeBSD</h1></div></div></div><p>Now that you know how to register an interrupt handler, let’s discuss how interrupt handlers are implemented.</p><p>In FreeBSD, interrupt handlers are composed of a filter routine, an ithread routine, or both. A <span class="emphasis"><em>filter routine</em></span> executes in primary interrupt context (that is, it does not have its own context). Thus, it cannot block or context switch, and it can use only spin mutexes for synchronization. Due to these constraints, filter routines are typically used only with devices that require a nonpreemptive interrupt handler.<a class="indexterm" id="IDX-CHP-8-0016"/><a class="indexterm" id="IDX-CHP-8-0017"/><a class="indexterm" id="IDX-CHP-8-0018"/></p><p>A filter routine may either completely handle an interrupt or defer the computationally expensive work to its associated ithread routine, assuming it has one. <a class="xref" href="ch08s02.html#filter_routine_return_values" title="Table 8-2. Filter Routine Return Values">Table 8-2</a> details the values that a filter routine can return.<a class="indexterm" id="IDX-CHP-8-0019"/></p><div class="table"><a id="filter_routine_return_values"/><p class="title">Table 8-2. Filter Routine Return Values</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="Filter Routine Return Values"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Constant</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">FILTER_STRAY</code></p></td><td style="text-align: left" valign="top"><p>Indicates that the filter routine can’t handle this interrupt; this value is equivalent to an error code.</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">FILTER_HANDLED</code></p></td><td style="text-align: left" valign="top"><p>Indicates that the interrupt has been completely handled; this value is equivalent to a success code.</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">FILTER_SCHEDULE_THREAD</code></p></td><td style="text-align: left" valign="top"><p>Schedules the ithread routine to execute; this value can be returned if and only if the filter routine has an associated ithread routine.</p></td></tr></tbody></table></div></div><p>An <span class="emphasis"><em>ithread routine</em></span>, unlike a filter routine, executes in its own thread context. You can do whatever you want in an ithread routine, except voluntarily context switch (that is, sleep) or wait on a condition variable. Because filter routines are nonpreemptive, most interrupt handlers in FreeBSD are just ithread routines.</p></div>
+<div class="sect1" title="Implementing an Interrupt Handler"><div class="titlepage"><div><div><h1 class="title"><a id="implementing_an_interrupt_handler"/>Implementing an Interrupt Handler</h1></div></div></div><p><a class="xref" href="ch08s03.html#pint.c" title="Example 8-1. pint.c">Example 8-1</a> is a contrived Newbus driver designed to demonstrate interrupt handlers. <a class="xref" href="ch08s03.html#pint.c" title="Example 8-1. pint.c">Example 8-1</a> sets up an interrupt handler on the parallel port; on read, it sleeps until it receives an interrupt.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Take a quick look at this code and try to discern some of its structure. If you don’t understand all of it, don’t worry; an explanation follows.</p></div><div class="example"><a id="pint.c"/><p class="title">Example 8-1. pint.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/param.h&gt;
+#include &lt;sys/module.h&gt;
+#include &lt;sys/kernel.h&gt;
+#include &lt;sys/systm.h&gt;
+
+#include &lt;sys/conf.h&gt;
+#include &lt;sys/uio.h&gt;
+#include &lt;sys/bus.h&gt;
+#include &lt;sys/malloc.h&gt;
+
+#include &lt;machine/bus.h&gt;
+#include &lt;sys/rman.h&gt;
+#include &lt;machine/resource.h&gt;
+
+#include &lt;dev/ppbus/ppbconf.h&gt;
+#include "ppbus_if.h"
+#include &lt;dev/ppbus/ppbio.h&gt;
+
+#define PINT_NAME               "pint"
+#define BUFFER_SIZE             256
+
+struct pint_data {
+        int                     sc_irq_rid;
+        struct resource        *sc_irq_resource;
+        void                   *sc_irq_cookie;
+        device_t                sc_device;
+        struct cdev            *sc_cdev;
+        short                   sc_state;
+#define PINT_OPEN               0x01
+        char                   *sc_buffer;
+        int                     sc_length;
+};
+
+static d_open_t                 pint_open;
+static d_close_t                pint_close;
+static d_read_t                 pint_read;
+static d_write_t                pint_write;
+
+static struct cdevsw pint_cdevsw = {
+        .d_version =            D_VERSION,
+        .d_open =               pint_open,
+        .d_close =              pint_close,
+        .d_read =               pint_read,
+        .d_write =              pint_write,
+        .d_name =               PINT_NAME
+};
+
+static devclass_t pint_devclass;
+
+static int
+pint_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
+{
+        struct pint_data *sc = dev-&gt;si_drv1;
+        device_t pint_device = sc-&gt;sc_device;
+        device_t ppbus = device_get_parent(pint_device);
+        int error;
+
+        ppb_lock(ppbus);
+
+        if (sc-&gt;sc_state) {
+                ppb_unlock(ppbus);
+                return (EBUSY);
+        } else
+                sc-&gt;sc_state |= PINT_OPEN;
+
+        error = ppb_request_bus(ppbus, pint_device, PPB_WAIT | PPB_INTR);
+        if (error) {
+                sc-&gt;sc_state = 0;
+                ppb_unlock(ppbus);
+                return (error);
+        }
+
+        ppb_wctr(ppbus, 0);
+        ppb_wctr(ppbus, IRQENABLE);
+
+        ppb_unlock(ppbus);
+        return (0);
+}
+
+static int
+pint_close(struct cdev *dev, int fflag, int devtype, struct thread *td)
+{
+        struct pint_data *sc = dev-&gt;si_drv1;
+        device_t pint_device = sc-&gt;sc_device;
+        device_t ppbus = device_get_parent(pint_device);
+
+        ppb_lock(ppbus);
+
+        ppb_wctr(ppbus, 0);
+        ppb_release_bus(ppbus, pint_device);
+        sc-&gt;sc_state = 0;
+
+        ppb_unlock(ppbus);
+        return (0);
+}
+
+static int
+pint_write(struct cdev *dev, struct uio *uio, int ioflag)
+{
+        struct pint_data *sc = dev-&gt;si_drv1;
+        device_t pint_device = sc-&gt;sc_device;
+        int amount, error = 0;
+
+        amount = MIN(uio-&gt;uio_resid,
+            (BUFFER_SIZE - 1 - uio-&gt;uio_offset &gt; 0) ?
+             BUFFER_SIZE - 1 - uio-&gt;uio_offset : 0);
+        if (amount == 0)
+                return (error);
+
+        error = uiomove(sc-&gt;sc_buffer, amount, uio);
+        if (error) {
+                device_printf(pint_device, "write failed\n");
+                return (error);
+        }
+
+        sc-&gt;sc_buffer[amount] = '\0';
+        sc-&gt;sc_length = amount;
+
+        return (error);
+}
+
+static int
+pint_read(struct cdev *dev, struct uio *uio, int ioflag)
+{
+        struct pint_data *sc = dev-&gt;si_drv1;
+        device_t pint_device = sc-&gt;sc_device;
+        device_t ppbus = device_get_parent(pint_device);
+        int amount, error = 0;
+
+        ppb_lock(ppbus);
+        error = ppb_sleep(ppbus, pint_device, PPBPRI | PCATCH, PINT_NAME, 0);
+        ppb_unlock(ppbus);
+        if (error)
+                return (error);
+
+        amount = MIN(uio-&gt;uio_resid,
+            (sc-&gt;sc_length - uio-&gt;uio_offset &gt; 0) ?
+             sc-&gt;sc_length - uio-&gt;uio_offset : 0);
+
+        error = uiomove(sc-&gt;sc_buffer + uio-&gt;uio_offset, amount, uio);
+        if (error)
+                device_printf(pint_device, "read failed\n");
+
+        return (error);
+}
+
+static void
+pint_intr(void *arg)
+{
+        struct pint_data *sc = arg;
+        device_t pint_device = sc-&gt;sc_device;
+
+#ifdef INVARIANTS
+        device_t ppbus = device_get_parent(pint_device);
+        ppb_assert_locked(ppbus);
+#endif
+
+        wakeup(pint_device);
+}
+
+static void
+pint_identify(driver_t *driver, device_t parent)
+{
+        device_t dev;
+
+        dev = device_find_child(parent, PINT_NAME, −1);
+        if (!dev)
+                BUS_ADD_CHILD(parent, 0, PINT_NAME, −1);
+}
+
+static int
+pint_probe(device_t dev)
+{
+        /* probe() is always OK. */
+        device_set_desc(dev, "Interrupt Handler Example");
+
+        return (BUS_PROBE_SPECIFIC);
+}
+
+static int
+pint_attach(device_t dev)
+{
+        struct pint_data *sc = device_get_softc(dev);
+        int error, unit = device_get_unit(dev);
+
+        /* Declare our interrupt handler. */
+        sc-&gt;sc_irq_rid = 0;
+        sc-&gt;sc_irq_resource = bus_alloc_resource_any(dev, SYS_RES_IRQ,
+            &amp;sc-&gt;sc_irq_rid, RF_ACTIVE | RF_SHAREABLE);
+
+        /* Interrupts are mandatory. */
+        if (!sc-&gt;sc_irq_resource) {
+                device_printf(dev,
+                    "unable to allocate interrupt resource\n");
+                return (ENXIO);
+        }
+
+        /* Register our interrupt handler. */
+        error = bus_setup_intr(dev, sc-&gt;sc_irq_resource,
+            INTR_TYPE_TTY | INTR_MPSAFE, NULL, pint_intr,
+            sc, &amp;sc-&gt;sc_irq_cookie);
+        if (error) {
+                bus_release_resource(dev, SYS_RES_IRQ, sc-&gt;sc_irq_rid,
+                    sc-&gt;sc_irq_resource);
+                device_printf(dev, "unable to register interrupt handler\n");
+                return (error);
+        }
+
+        sc-&gt;sc_buffer = malloc(BUFFER_SIZE, M_DEVBUF, M_WAITOK);
+
+        sc-&gt;sc_device = dev;
+        sc-&gt;sc_cdev = make_dev(&amp;pint_cdevsw, unit, UID_ROOT, GID_WHEEL, 0600,
+            PINT_NAME "%d", unit);
+        sc-&gt;sc_cdev-&gt;si_drv1 = sc;
+
+        return (0);
+}
+
+static int
+pint_detach(device_t dev)
+{
+        struct pint_data *sc = device_get_softc(dev);
+
+        destroy_dev(sc-&gt;sc_cdev);
+
+        bus_teardown_intr(dev, sc-&gt;sc_irq_resource, sc-&gt;sc_irq_cookie);
+        bus_release_resource(dev, SYS_RES_IRQ, sc-&gt;sc_irq_rid,
+            sc-&gt;sc_irq_resource);
+
+        free(sc-&gt;sc_buffer, M_DEVBUF);
+
+        return (0);
+}
+
+static device_method_t pint_methods[] = {
+        /* Device interface. */
+        DEVMETHOD(device_identify,      pint_identify),
+        DEVMETHOD(device_probe,         pint_probe),
+        DEVMETHOD(device_attach,        pint_attach),
+        DEVMETHOD(device_detach,        pint_detach),
+        { 0, 0 }
+};
+
+static driver_t pint_driver = {
+        PINT_NAME,
+        pint_methods,
+        sizeof(struct pint_data)
+};
+
+DRIVER_MODULE(pint, ppbus, pint_driver, pint_devclass, 0, 0);
+MODULE_DEPEND(pint, ppbus, 1, 1, 1);</pre></div></div><p>To make things easier to understand, I’ll describe the functions in <a class="xref" href="ch08s03.html#pint.c" title="Example 8-1. pint.c">Example 8-1</a> in the order they were written, instead of in the order they appear. To that end, I’ll begin with the <code class="literal">pint_identify</code> function.<a class="indexterm" id="IDX-CHP-8-0020"/><a class="indexterm" id="IDX-CHP-8-0021"/><a class="indexterm" id="IDX-CHP-8-0022"/><a class="indexterm" id="IDX-CHP-8-0023"/></p><div class="sect2" title="pint_identify Function"><div class="titlepage"><div><div><h2 class="title"><a id="pint_underscore_identify_function"/>pint_identify Function</h2></div></div></div><p>The <code class="literal">pint_identify</code> function is the <code class="literal">device_identify</code> implementation for this driver. Logically, this function is required because the parallel port cannot identify its children unaided.</p><p>Here is the function definition for <code class="literal">pint_identify</code> (again):</p><a id="I_programlisting8_d1e15365"/><pre class="programlisting">static void
+pint_identify(driver_t *driver, device_t parent)
+{
+        device_t dev;
+
+        dev = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>device_find_child(parent, <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>PINT_NAME, −1);
+        if (!dev)
+                <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>BUS_ADD_CHILD(parent, 0, PINT_NAME, −1);
+}</pre><p>This function first <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15387"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> determines whether the parallel port has (ever) identified a child device named <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15393"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">PINT_NAME</code>. If it has not, then <code class="literal">pint_identify</code> <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15405"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> adds <code class="literal">PINT_NAME</code> to the parallel port’s list of identified children.</p></div><div class="sect2" title="pint_probe Function"><div class="titlepage"><div><div><h2 class="title"><a id="pint_underscore_probe_function"/>pint_probe Function</h2></div></div></div><p>The <code class="literal">pint_probe</code> function is the <code class="literal">device_probe</code> implementation for this driver. Here is its function definition (again):</p><a id="I_programlisting8_d1e15426"/><pre class="programlisting">static int
+pint_probe(device_t dev)
+{
+        /* probe() is always OK. */
+        device_set_desc(dev, "Interrupt Handler Example");
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>return (BUS_PROBE_SPECIFIC);
+}</pre><p>As you can see, this function always <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15436"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> returns the success code <code class="literal">BUS_PROBE_SPECIFIC</code>, so <a class="xref" href="ch08s03.html#pint.c" title="Example 8-1. pint.c">Example 8-1</a> attaches to every device it probes. This may seem erroneous, but it is the correct behavior, as devices identified by a <code class="literal">device_identify</code> routine, using <code class="literal">BUS_ADD_CHILD</code>, are probed only by drivers with the same name. In this case, the identified device and driver name is <code class="literal">PINT_NAME</code>.<a class="indexterm" id="IDX-CHP-8-0024"/><a class="indexterm" id="IDX-CHP-8-0025"/><a class="indexterm" id="IDX-CHP-8-0026"/><a class="indexterm" id="IDX-CHP-8-0027"/><a class="indexterm" id="IDX-CHP-8-0028"/></p></div><div class="sect2" title="pint_attach Function"><div class="titlepage"><div><div><h2 class="title"><a id="pint_underscore_attach_function"/>pint_attach Function</h2></div></div></div><p>The <code class="literal">pint_attach</code> function is the <code class="literal">device_attach</code> implementation for this driver. Here is its function definition (again):</p><a id="I_programlisting8_d1e15489"/><pre class="programlisting">static int
+pint_attach(device_t dev)
+{
+        struct pint_data *sc = device_get_softc(dev);
+        int error, unit = device_get_unit(dev);
+
+        /* Declare our interrupt handler. */
+        sc-&gt;sc_irq_rid = 0;
+        sc-&gt;sc_irq_resource = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>bus_alloc_resource_any(dev, SYS_RES_IRQ,
+            &amp;sc-&gt;sc_irq_rid, RF_ACTIVE | RF_SHAREABLE);
+
+        /* Interrupts are mandatory. */
+        if (!sc-&gt;sc_irq_resource) {
+                device_printf(dev,
+                    "unable to allocate interrupt resource\n");
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>return (ENXIO);
+        }
+
+        /* Register our interrupt handler. */
+        error = <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>bus_setup_intr(dev, sc-&gt;sc_irq_resource,
+            INTR_TYPE_TTY | INTR_MPSAFE, NULL, <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>pint_intr,
+            sc, &amp;sc-&gt;sc_irq_cookie);
+        if (error) {
+                bus_release_resource(dev, SYS_RES_IRQ, sc-&gt;sc_irq_rid,
+                    sc-&gt;sc_irq_resource);
+                device_printf(dev, "unable to register interrupt handler\n");
+                return (error);
+        }
+
+        sc-&gt;sc_buffer = <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>malloc(BUFFER_SIZE, M_DEVBUF, M_WAITOK);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>sc-&gt;sc_device = dev;
+        sc-&gt;sc_cdev = <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>make_dev(&amp;pint_cdevsw, unit, UID_ROOT, GID_WHEEL,
+            0600, PINT_NAME "%d", unit);
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>sc-&gt;sc_cdev-&gt;si_drv1 = sc;
+
+        return (0);
+}</pre><p>This function first <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15542"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> allocates an IRQ. If unsuccessful, the error code <code class="literal">ENXIO</code> (which stands for <span class="emphasis"><em>error: device not configured</em></span>) is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15554"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> returned. Next, the <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15560"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">pint_intr</code> function is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15570"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> set up as the interrupt handler for <code class="literal">dev</code> (in this case, the interrupt handler is just an ithread routine). Afterward, a buffer of <code class="literal">BUFFER_SIZE</code> bytes is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15582"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> allocated. Then <code class="literal">sc-&gt;sc_device</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15592"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> set to <code class="literal">dev</code>, <a class="xref" href="ch08s03.html#pint.c" title="Example 8-1. pint.c">Example 8-1</a>’s character device node is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15603"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> created, and a pointer to the software context (<code class="literal">sc</code>) is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15612"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> saved in <code class="literal">sc-&gt;sc_cdev-&gt;si_drv1</code>.<a class="indexterm" id="IDX-CHP-8-0029"/><a class="indexterm" id="IDX-CHP-8-0030"/><a class="indexterm" id="IDX-CHP-8-0031"/><a class="indexterm" id="IDX-CHP-8-0032"/><a class="indexterm" id="IDX-CHP-8-0033"/></p></div><div class="sect2" title="pint_detach Function"><div class="titlepage"><div><div><h2 class="title"><a id="pint_underscore_detach_function"/>pint_detach Function</h2></div></div></div><p>The <code class="literal">pint_detach</code> function is the <code class="literal">device_detach</code> implementation for this driver. Here is its function definition (again):</p><a id="I_programlisting8_d1e15656"/><pre class="programlisting">static int
+pint_detach(device_t dev)
+{
+        struct pint_data *sc = device_get_softc(dev);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>destroy_dev(sc-&gt;sc_cdev);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>bus_teardown_intr(dev, sc-&gt;sc_irq_resource, sc-&gt;sc_irq_cookie);
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>bus_release_resource(dev, SYS_RES_IRQ, sc-&gt;sc_irq_rid,
+            sc-&gt;sc_irq_resource);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>free(sc-&gt;sc_buffer, M_DEVBUF);
+
+        return (0);
+}</pre><p>This function starts by <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15684"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> destroying <a class="xref" href="ch08s03.html#pint.c" title="Example 8-1. pint.c">Example 8-1</a>’s device node. Once this is done, it <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15692"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> tears down <code class="literal">dev</code>’s interrupt handler, <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15701"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> releases <code class="literal">dev</code>’s IRQ, and <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15711"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> frees the allocated memory.</p></div><div class="sect2" title="pint_open Function"><div class="titlepage"><div><div><h2 class="title"><a id="pint_underscore_open_function"/>pint_open Function</h2></div></div></div><p>The <code class="literal">pint_open</code> function is defined in <code class="literal">pint_cdevsw</code> (that is, <a class="xref" href="ch08s03.html#pint.c" title="Example 8-1. pint.c">Example 8-1</a>’s character device switch table) as the <code class="literal">d_open</code> operation. Recall that <code class="literal">d_open</code> operations prepare the device for I/O.</p><p>Here is the function definition for <code class="literal">pint_open</code> (again):</p><a id="I_programlisting8_d1e15741"/><pre class="programlisting">static int
+pint_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
+{
+        struct pint_data *sc = dev-&gt;si_drv1;
+        device_t pint_device = sc-&gt;sc_device;
+        device_t ppbus = device_get_parent(pint_device);
+        int error;
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>ppb_lock(ppbus);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>if (sc-&gt;sc_state) {
+                ppb_unlock(ppbus);
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>return (EBUSY);
+        } else
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>sc-&gt;sc_state |= PINT_OPEN;
+
+        error = <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>ppb_request_bus(ppbus, pint_device, PPB_WAIT | PPB_INTR);
+        if (error) {
+                sc-&gt;sc_state = 0;
+                ppb_unlock(ppbus);
+                return (error);
+        }
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>ppb_wctr(ppbus, 0);
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>ppb_wctr(ppbus, IRQENABLE);
+
+        ppb_unlock(ppbus);
+        return (0);
+}</pre><p>This function first <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15788"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> acquires the parallel port mutex. Then the value of <code class="literal">sc-&gt;sc_state</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15797"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> examined. If it does not equal 0, which indicates that another process has opened the device, the error code <code class="literal">EBUSY</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15806"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> returned; otherwise, <code class="literal">pint_open</code> <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15816"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> “opens” the device. Opening the device, in this case, means setting <code class="literal">sc-&gt;sc_state</code> to <code class="literal">PINT_OPEN</code>. Afterward, the <code class="literal">ppb_request_bus</code> function is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15831"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> called to mark <code class="literal">pint_device</code> as the owner of the parallel port. Naturally, <code class="literal">pint_device</code> is our device (that is, it points to dev from <code class="literal">pint_attach</code>).<a class="indexterm" id="IDX-CHP-8-0034"/><a class="indexterm" id="IDX-CHP-8-0035"/><a class="indexterm" id="IDX-CHP-8-0036"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>Owning the parallel port lets a device transfer data to and from it.</p></div><p>Finally, before <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15865"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> enabling interrupts, <code class="literal">pint_open</code> <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15874"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> clears the parallel port’s control register.</p></div><div class="sect2" title="pint_close Function"><div class="titlepage"><div><div><h2 class="title"><a id="pint_underscore_close_function"/>pint_close Function</h2></div></div></div><p>The <code class="literal">pint_close</code> function is defined in <code class="literal">pint_cdevsw</code> as the <code class="literal">d_close</code> operation. Here is its function definition (again):</p><a id="I_programlisting8_d1e15894"/><pre class="programlisting">static int
+pint_close(struct cdev *dev, int fflag, int devtype, struct thread *td)
+{
+        struct pint_data *sc = dev-&gt;si_drv1;
+        device_t pint_device = sc-&gt;sc_device;
+        device_t ppbus = device_get_parent(pint_device);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>ppb_lock(ppbus);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>ppb_wctr(ppbus, 0);
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>ppb_release_bus(ppbus, pint_device);
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>sc-&gt;sc_state = 0;
+
+        ppb_unlock(ppbus);
+        return (0);
+}</pre><p>This function first <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15922"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> acquires the parallel port mutex. Then interrupts on the parallel port are <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15928"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> disabled (for all intents and purposes, clearing the control register, which is what the above code does, disables interrupts). Next, the <code class="literal">ppb_release_bus</code> function is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15937"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> called to relinquish ownership of the parallel port. Finally, <code class="literal">sc-&gt;sc_state</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e15947"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> zeroed, so that another process can open this device.<a class="indexterm" id="IDX-CHP-8-0037"/><a class="indexterm" id="IDX-CHP-8-0038"/><a class="indexterm" id="IDX-CHP-8-0039"/><a class="indexterm" id="IDX-CHP-8-0040"/><a class="indexterm" id="IDX-CHP-8-0041"/></p></div><div class="sect2" title="pint_write Function"><div class="titlepage"><div><div><h2 class="title"><a id="pint_underscore_write_function"/>pint_write Function</h2></div></div></div><p>The <code class="literal">pint_write</code> function is defined in <code class="literal">pint_cdevsw</code> as the <code class="literal">d_write</code> operation. This function acquires a character string from user space and stores it.</p><p>Here is the function definition for <code class="literal">pint_write</code> (again):</p><a id="I_programlisting8_d1e15996"/><pre class="programlisting">static int
+pint_write(struct cdev *dev, struct uio *uio, int ioflag)
+{
+        struct pint_data *sc = dev-&gt;si_drv1;
+        device_t pint_device = sc-&gt;sc_device;
+        int amount, error = 0;
+
+        amount = MIN(uio-&gt;uio_resid,
+            (BUFFER_SIZE - 1 - uio-&gt;uio_offset &gt; 0) ?
+             BUFFER_SIZE - 1 - uio-&gt;uio_offset : 0);
+        if (amount == 0)
+                return (error);
+
+        error = uiomove(sc-&gt;sc_buffer, amount, uio);
+        if (error) {
+                device_printf(pint_device, "write failed\n");
+                return (error);
+        }
+
+        sc-&gt;sc_buffer[amount] = '\0';
+        sc-&gt;sc_length = amount;
+
+        return (error);
+}</pre><p>This function is fundamentally identical to the <code class="literal">echo_write</code> function described in <a class="xref" href="ch03s03.html#echo_underscore_write_function-id1" title="echo_write Function">echo_write Function</a>. Consequently, I won’t walk through it again here.</p></div><div class="sect2" title="pint_read Function"><div class="titlepage"><div><div><h2 class="title"><a id="pint_underscore_read_function"/>pint_read Function</h2></div></div></div><p>The <code class="literal">pint_read</code> function is defined in <code class="literal">pint_cdevsw</code> as the <code class="literal">d_read</code> operation. This function sleeps on entry. It also returns the stored character string to user space.</p><p>Here is the function definition for <code class="literal">pint_read</code> (again):</p><a id="I_programlisting8_d1e16024"/><pre class="programlisting">static int
+pint_read(struct cdev *dev, struct uio *uio, int ioflag)
+{
+        struct pint_data *sc = dev-&gt;si_drv1;
+        device_t pint_device = sc-&gt;sc_device;
+        device_t ppbus = device_get_parent(pint_device);
+        int amount, error = 0;
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>ppb_lock(ppbus);
+        error = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>ppb_sleep(ppbus, <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>pint_device, PPBPRI | PCATCH,
+            PINT_NAME, 0);
+        ppb_unlock(ppbus);
+        if (error)
+                return (error);
+
+        amount = MIN(uio-&gt;uio_resid,
+            (sc-&gt;sc_length - uio-&gt;uio_offset &gt; 0) ?
+             sc-&gt;sc_length - uio-&gt;uio_offset : 0);
+
+        error = uiomove(sc-&gt;sc_buffer + uio-&gt;uio_offset, amount, uio);
+        if (error)
+                device_printf(pint_device, "read failed\n");
+
+        return (error);
+}</pre><p>This function begins by <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e16046"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> acquiring the parallel port mutex. Then it <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e16052"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> sleeps on the channel <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e16058"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">pint_device</code>.<a class="indexterm" id="IDX-CHP-8-0042"/><a class="indexterm" id="IDX-CHP-8-0043"/><a class="indexterm" id="IDX-CHP-8-0044"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>The <code class="literal">ppb_sleep</code> function releases the parallel port mutex before sleeping. Of course, it also reacquires the parallel port mutex before returning to its caller.</p></div><p>The remnants of this function are basically identical to the <code class="literal">echo_read</code> function described in <a class="xref" href="ch01s06.html#echo_underscore_read_function" title="echo_read Function">echo_read Function</a>, so we won’t discuss them again here.</p></div><div class="sect2" title="pint_intr Function"><div class="titlepage"><div><div><h2 class="title"><a id="pint_underscore_intr_function"/>pint_intr Function</h2></div></div></div><p>The <code class="literal">pint_intr</code> function is the interrupt handler for <a class="xref" href="ch08s03.html#pint.c" title="Example 8-1. pint.c">Example 8-1</a>. Here is its function definition (again):</p><a id="I_programlisting8_d1e16104"/><pre class="programlisting">static void
+pint_intr(void *arg)
+{
+        struct pint_data *sc = arg;
+        device_t pint_device = sc-&gt;sc_device;
+
+#ifdef INVARIANTS
+        device_t ppbus = device_get_parent(pint_device);
+        ppb_assert_locked(ppbus);
+#endif
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>wakeup(pint_device);
+}</pre><p>As you can see, this function simply <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e16114"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> wakes up every thread sleeping on <code class="literal">pint_device</code>.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Parallel port interrupt handlers are unique, because they get invoked with the parallel port mutex already held. Conversely, normal interrupt handlers need to explicitly acquire their own locks.<a class="indexterm" id="IDX-CHP-8-0045"/><a class="indexterm" id="IDX-CHP-8-0046"/><a class="indexterm" id="IDX-CHP-8-0047"/></p></div></div><div class="sect2" title="Don’t Panic"><div class="titlepage"><div><div><h2 class="title"><a id="donat_panic-id7"/>Don’t Panic</h2></div></div></div><p>Now that we’ve walked through <a class="xref" href="ch08s03.html#pint.c" title="Example 8-1. pint.c">Example 8-1</a>, let’s give it a try:</p><a id="I_programlisting8_d1e16146"/><pre class="programlisting">$ <strong class="userinput"><code>sudo kldload ./pint.ko</code></strong>
+$ <strong class="userinput"><code>su</code></strong>
+Password:
+# <strong class="userinput"><code>echo "DON'T PANIC" &gt; /dev/pint0</code></strong>
+# <strong class="userinput"><code>cat /dev/pint0 &amp;</code></strong>
+[1] 954
+# <strong class="userinput"><code>ps | head -n 1 &amp;&amp; ps | grep "cat"</code></strong>
+  PID  TT  STAT      TIME COMMAND
+  954  v1  I      0:00.03 cat /dev/pint0</pre><p>Apparently it works. But how do we generate an interrupt to test our interrupt handler?</p></div></div>
+<div class="sect1" title="Generating Interrupts on the Parallel Port"><div class="titlepage"><div><div><h1 class="title"><a id="generating_interrupts_on_the_parallel_po"/>Generating Interrupts on the Parallel Port</h1></div></div></div><p>Once interrupts are enabled, the parallel port generates an interrupt whenever the electrical signal at pin 10, dubbed the <span class="emphasis"><em>ACK bit</em></span>, changes from low to high (Corbet et al., 2005).</p><p>To toggle the electrical signal at pin 10, I connected pin 10 to pin 9 (using a resistor) and then I executed the program shown in <a class="xref" href="ch08s04.html#tint.c" title="Example 8-2. tint.c">Example 8-2</a>.</p><div class="example"><a id="tint.c"/><p class="title">Example 8-2. tint.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/types.h&gt;
+  #include &lt;machine/cpufunc.h&gt;
+
+  #include &lt;err.h&gt;
+  #include &lt;fcntl.h&gt;
+  #include &lt;stdio.h&gt;
+  #include &lt;stdlib.h&gt;
+  #include &lt;unistd.h&gt;
+
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/> #define BASE_ADDRESS    0x378
+
+  int
+  main(int argc, char *argv[])
+  {
+          int fd;
+
+          fd = open("/dev/io", O_RDWR);
+          if (fd &lt; 0)
+                  err(1, "open(/dev/io)");
+
+          outb(BASE_ADDRESS, <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>0x00);
+          outb(BASE_ADDRESS, <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>0xff);
+          outb(BASE_ADDRESS, 0x00);
+
+          close(fd);
+          return (0);
+  }</pre></div></div><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e16202"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">BASE_ADDRESS</code> denotes the base address of the parallel port. On most contemporary PCs, <code class="literal">0x378</code> is the base address of the parallel port. However, you can check your machine’s BIOS to be sure.</p><p>This program changes the electrical signal at pin 9 of the parallel port from <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e16216"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> low to <span class="inlinemediaobject"><a id="I_inlinemediaobject8_d1e16222"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> high.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>If you’re curious, pin 9 is the most significant bit of the parallel data byte (Corbet et al., 2005).</p></div><p>Here are the results from executing <a class="xref" href="ch08s04.html#tint.c" title="Example 8-2. tint.c">Example 8-2</a>:</p><a id="I_programlisting8_d1e16235"/><pre class="programlisting"># <strong class="userinput"><code>echo "DON'T PANIC" &gt; /dev/pint0</code></strong>
+# <strong class="userinput"><code>cat /dev/pint0 &amp;</code></strong>
+[1] 1056
+# <strong class="userinput"><code>./tint</code></strong>
+DON'T PANIC</pre></div>
+<div class="sect1" title="Conclusion"><div class="titlepage"><div><div><h1 class="title"><a id="conclusion-id7"/>Conclusion</h1></div></div></div><p>This chapter focused primarily on implementing an interrupt handler. In <a class="xref" href="ch09.html" title="Chapter 9. Case Study: Parallel Port Printer Driver">Chapter 9</a>, we’ll build upon the concepts and code described here to write a nontrivial, interrupt-driven driver.</p></div></body></html>

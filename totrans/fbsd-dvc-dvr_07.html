@@ -1,0 +1,239 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;7.&#xA0;Newbus and Resource Allocation"><div class="titlepage"><div><div><h1 class="title"><a id="newbus_and_resource_allocation"/>Chapter 7. Newbus and Resource Allocation</h1></div></div></div><div class="informalfigure"><a id="image_no_caption-id7"/><div class="mediaobject"><a id="I_mediaobject7_d1e13537"/><img alt="image with no caption" src="httpatomoreillycomsourcenostarchimages1137497.png.jpg"/></div></div><p>Until now, we’ve examined only pseudo-devices, which provide a superb introduction to driver writing. However, most drivers need to interact with real hardware. This chapter shows you how to write drivers that do just that.<a class="indexterm" id="IDX-CHP-7-0001"/></p><p>I’ll start by introducing <span class="emphasis"><em>Newbus</em></span>, which is the infrastructure used in FreeBSD to manage the hardware devices on the system (McKusick and Neville-Neil, 2005). I’ll then describe the basics of a Newbus driver, and I’ll conclude this chapter by talking about hardware resource allocation.</p><div class="sect1" title="Autoconfiguration and Newbus Drivers"><div class="titlepage"><div><div><h1 class="title"><a id="autoconfiguration_and_newbus_drivers"/>Autoconfiguration and Newbus Drivers</h1></div></div></div><p><span class="emphasis"><em>Autoconfiguration</em></span> is the procedure carried out by FreeBSD to enable the hardware devices on a machine (McKusick and Neville-Neil, 2005). It works by systematically probing a machine’s I/O buses in order to identify their child devices. For each identified device, an appropriate Newbus driver is assigned to configure and initialize it. Note that it’s possible for a device to be unidentifiable or unsupported. As a result, no Newbus driver will be assigned.<a class="indexterm" id="IDX-CHP-7-0002"/><a class="indexterm" id="IDX-CHP-7-0003"/><a class="indexterm" id="IDX-CHP-7-0004"/><a class="indexterm" id="IDX-CHP-7-0005"/><a class="indexterm" id="IDX-CHP-7-0006"/><a class="indexterm" id="IDX-CHP-7-0007"/><a class="indexterm" id="IDX-CHP-7-0008"/><a class="indexterm" id="IDX-CHP-7-0009"/><a class="indexterm" id="IDX-CHP-7-0010"/></p><p>A <span class="emphasis"><em>Newbus driver</em></span> is any driver in FreeBSD that controls a device that is bound to an I/O bus (that is, roughly every driver that is not a pseudo-device driver).</p><p>In general, three components are common to all Newbus drivers:<a class="indexterm" id="IDX-CHP-7-0011"/></p><div class="itemizedlist"><ul class="itemizedlist"><li class="listitem"><p>The <code class="literal">device_foo</code> functions</p></li><li class="listitem"><p>A device method table</p></li><li class="listitem"><p>A <code class="literal">DRIVER_MODULE</code> macro call</p></li></ul></div><div class="sect2" title="device_foo Functions"><div class="titlepage"><div><div><h2 class="title"><a id="device_underscore_foo_functions"/>device_foo Functions</h2></div></div></div><p>The <code class="literal">device_foo</code> functions are, more or less, the operations executed by a Newbus driver during autoconfiguration. <a class="xref" href="ch07.html#device_underscore_foo_functions-id1" title="Table 7-1. device_foo Functions">Table 7-1</a> briefly introduces each <code class="literal">device_foo</code> function.</p><div class="table"><a id="device_underscore_foo_functions-id1"/><p class="title">Table 7-1. device_foo Functions</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="device_foo Functions"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Function</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">device_identify</code></p></td><td style="text-align: left" valign="top"><p>Add new device to I/O bus</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">device_probe</code></p></td><td style="text-align: left" valign="top"><p>Probe for specific device(s)</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">device_attach</code></p></td><td style="text-align: left" valign="top"><p>Attach to device</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">device_detach</code></p></td><td style="text-align: left" valign="top"><p>Detach from device</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">device_shutdown</code></p></td><td style="text-align: left" valign="top"><p>Shut down device</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">device_suspend</code></p></td><td style="text-align: left" valign="top"><p>Device suspend requested</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">device_resume</code></p></td><td style="text-align: left" valign="top"><p>Resume has occurred</p></td></tr></tbody></table></div></div><p>The <code class="literal">device_identify</code> function adds a new device (instance) to an I/O bus. This function is used only by buses that cannot directly identify their children. Recall that autoconfiguration begins by identifying the child devices on each I/O bus. Modern buses can directly identify the devices that are connected to them. Older buses, such as ISA, have to use the <code class="literal">device_identify</code> routine provided by their associated drivers to identify their child devices (McKusick and Neville-Neil, 2005). You’ll learn how to associate a driver with an I/O bus shortly.</p><p>All identified child devices are passed to every Newbus driver’s <code class="literal">device_probe</code> function. A <code class="literal">device_probe</code> function tells the kernel whether its driver can handle the identified device.</p><p>Note that there may be more than one driver that can handle an identified child device. Thus, <code class="literal">device_probe</code>’s return value is used to specify how well its driver matches the identified device. The <code class="literal">device_probe</code> function that returns the highest value denotes the best Newbus driver for the identified device. The following excerpt from <code class="literal">&lt;sys/bus.h&gt;</code> shows the constants used to indicate success (that is, a match):<a class="indexterm" id="IDX-CHP-7-0012"/></p><a id="I_programlisting7_d1e13730"/><pre class="programlisting">#define BUS_PROBE_SPECIFIC      0       /* Only I can use this device. */
+#define BUS_PROBE_VENDOR        (-10)   /* Vendor-supplied driver. */
+#define BUS_PROBE_DEFAULT       (-20)   /* Base OS default driver. */
+#define BUS_PROBE_LOW_PRIORITY  (-40)   /* Older, less desirable driver. */
+#define BUS_PROBE_GENERIC       (-100)  /* Generic driver for device. */
+#define BUS_PROBE_HOOVER        (-500)  /* Driver for all devices on bus. */
+#define BUS_PROBE_NOWILDCARD    (-2000000000) /* No wildcard matches. */</pre><p>As you can see, success codes are values less than or equal to zero. The standard UNIX error codes (that is, positive values) are used as failure codes.</p><p>Once the best driver has been found to handle a device, its <code class="literal">device_attach</code> function is called. A <code class="literal">device_attach</code> function initializes a device and any essential software (for example, device nodes).</p><p>The <code class="literal">device_detach</code> function disconnects a driver from a device. This function should set the device to a sane state and release any resources that were allocated during <code class="literal">device_attach</code>.</p><p>A Newbus driver’s <code class="literal">device_shutdown</code>, <code class="literal">device_suspend</code>, and <code class="literal">device_resume</code> functions are called when the system is shut down, when its device is suspended, or when its device returns from suspension, respectively. These functions let a driver manage its device as these events occur.</p></div><div class="sect2" title="Device Method Table"><div class="titlepage"><div><div><h2 class="title"><a id="device_method_table"/>Device Method Table</h2></div></div></div><p>A device method table, <code class="literal">device_method_t</code>, specifies which <code class="literal">device_foo</code> functions a Newbus driver implements. It is defined in the <code class="literal">&lt;sys/bus.h&gt;</code> header.<a class="indexterm" id="IDX-CHP-7-0013"/><a class="indexterm" id="IDX-CHP-7-0014"/></p><p>Here is an example device method table for a fictitious PCI device:</p><a id="I_programlisting7_d1e13785"/><pre class="programlisting">static device_method_t foo_pci_methods[] = {
+        /* Device interface. */
+        DEVMETHOD(device_probe,         foo_pci_probe),
+        DEVMETHOD(device_attach,        foo_pci_attach),
+        DEVMETHOD(device_detach,        foo_pci_detach),
+        { 0, 0 }
+};</pre><p>As you can see, not every <code class="literal">device_foo</code> function has to be defined. If a <code class="literal">device_foo</code> function is undefined, the corresponding operation is unsupported.</p><p>Unsurprisingly, the <code class="literal">device_probe</code> and <code class="literal">device_attach</code> functions must be defined for every Newbus driver. For drivers on older buses, the <code class="literal">device_identify</code> function must also be defined.</p></div><div class="sect2" title="DRIVER_MODULE Macro"><div class="titlepage"><div><div><h2 class="title"><a id="driver_underscore_module_macro"/>DRIVER_MODULE Macro</h2></div></div></div><p>The <code class="literal">DRIVER_MODULE</code> macro registers a Newbus driver with the system. This macro is defined in the <code class="literal">&lt;sys/bus.h&gt;</code> header. Here is its function prototype:<a class="indexterm" id="IDX-CHP-7-0015"/><a class="indexterm" id="IDX-CHP-7-0016"/><a class="indexterm" id="IDX-CHP-7-0017"/><a class="indexterm" id="IDX-CHP-7-0018"/><a class="indexterm" id="IDX-CHP-7-0019"/><a class="indexterm" id="IDX-CHP-7-0020"/><a class="indexterm" id="IDX-CHP-7-0021"/><a class="indexterm" id="IDX-CHP-7-0022"/><a class="indexterm" id="IDX-CHP-7-0023"/><a class="indexterm" id="IDX-CHP-7-0024"/><a class="indexterm" id="IDX-CHP-7-0025"/><a class="indexterm" id="IDX-CHP-7-0026"/><a class="indexterm" id="IDX-CHP-7-0027"/><a class="indexterm" id="IDX-CHP-7-0028"/><a class="indexterm" id="IDX-CHP-7-0029"/><a class="indexterm" id="IDX-CHP-7-0030"/><a class="indexterm" id="IDX-CHP-7-0031"/><a class="indexterm" id="IDX-CHP-7-0032"/><a class="indexterm" id="IDX-CHP-7-0033"/><a class="indexterm" id="IDX-CHP-7-0034"/></p><a id="I_programlisting7_d1e13919"/><pre class="programlisting">#include &lt;sys/param.h&gt;
+#include &lt;sys/kernel.h&gt;
+#include &lt;sys/bus.h&gt;
+#include &lt;sys/module.h&gt;
+
+DRIVER_MODULE(name, busname, driver_t driver, devclass_t devclass,
+    modeventhand_t evh, void *arg);</pre><p>The arguments expected by this macro are as follows.</p><div class="sect3" title="name"><div class="titlepage"><div><div><h3 class="title"><a id="name-id1"/>name</h3></div></div></div><p>The <code class="literal">name</code> argument is used to identify the driver.</p></div><div class="sect3" title="busname"><div class="titlepage"><div><div><h3 class="title"><a id="busname"/>busname</h3></div></div></div><p>The <code class="literal">busname</code> argument specifies the driver’s I/O bus (for example, <code class="literal">isa</code>, <code class="literal">pci</code>, <code class="literal">usb</code>, and so on).</p></div><div class="sect3" title="driver"><div class="titlepage"><div><div><h3 class="title"><a id="driver"/>driver</h3></div></div></div><p>The <code class="literal">driver</code> argument expects a filled-out <code class="literal">driver_t</code> structure. This argument is best understood with an example:</p><a id="I_programlisting7_d1e13959"/><pre class="programlisting">static driver_t foo_pci_driver = {
+        <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>"foo_pci",
+        <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>foo_pci_methods,
+        <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>sizeof(struct foo_pci_softc)
+};</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e13981"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">"foo_pci"</code> is this example driver’s official name, <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e13990"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">foo_pci_methods</code> is its device method table, and <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e13999"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">sizeof(struct foo_pci_softc)</code> is the size of its software context.</p></div><div class="sect3" title="devclass"><div class="titlepage"><div><div><h3 class="title"><a id="devclass"/>devclass</h3></div></div></div><p>The <code class="literal">devclass</code> argument expects an uninitialized <code class="literal">devclass_t</code> variable, which will be used by the kernel for internal bookkeeping.</p></div><div class="sect3" title="evh"><div class="titlepage"><div><div><h3 class="title"><a id="evh"/>evh</h3></div></div></div><p>The <code class="literal">evh</code> argument denotes an optional module event handler. Generally, we’ll always set <code class="literal">evh</code> to <code class="literal">0</code>, because <code class="literal">DRIVER_MODULE</code> supplies its own module event handler.</p></div><div class="sect3" title="arg"><div class="titlepage"><div><div><h3 class="title"><a id="arg"/>arg</h3></div></div></div><p>The <code class="literal">arg</code> argument is the <code class="literal">void *</code> argument for the module event handler specified by <code class="literal">evh</code>. If <code class="literal">evh</code> is set to <code class="literal">0</code>, <code class="literal">arg</code> must be too.</p></div></div></div></div>
+<div class="sect1" title="Tying Everything Together"><div class="titlepage"><div><div><h1 class="title"><a id="tying_everything_together-id1"/>Tying Everything Together</h1></div></div></div><p>You now know enough to write your first Newbus driver. <a class="xref" href="ch07s02.html#foo_underscore_pci.c" title="Example 7-1. foo_pci.c">Example 7-1</a> is a simple Newbus driver (based on code written by Murray Stokely) for a fictitious PCI device.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Take a quick look at this code and try to discern some of its structure. If you don’t understand all of it, don’t worry; an explanation follows.</p></div><div class="example"><a id="foo_underscore_pci.c"/><p class="title">Example 7-1. foo_pci.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/param.h&gt;
+  #include &lt;sys/module.h&gt;
+  #include &lt;sys/kernel.h&gt;
+  #include &lt;sys/systm.h&gt;
+
+  #include &lt;sys/conf.h&gt;
+  #include &lt;sys/uio.h&gt;
+  #include &lt;sys/bus.h&gt;
+
+  #include &lt;dev/pci/pcireg.h&gt;
+  #include &lt;dev/pci/pcivar.h&gt;
+
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/> struct foo_pci_softc {
+         <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>device_t        device;
+         <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>struct cdev     *cdev;
+  };
+
+  static d_open_t         foo_pci_open;
+  static d_close_t        foo_pci_close;
+  static d_read_t         foo_pci_read;
+  static d_write_t        foo_pci_write;
+
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/> static struct cdevsw foo_pci_cdevsw = {
+          .d_version =    D_VERSION,
+          .d_open =       foo_pci_open,
+          .d_close =      foo_pci_close,
+          .d_read =       foo_pci_read,
+          .d_write =      foo_pci_write,
+          .d_name =       "foo_pci"
+  };
+
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/> static devclass_t foo_pci_devclass;
+
+  static int
+  foo_pci_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
+  {
+          struct foo_pci_softc *sc;
+
+          sc = dev-&gt;si_drv1;
+          device_printf(sc-&gt;device, "opened successfully\n");
+          return (0);
+  }
+
+  static int
+  foo_pci_close(struct cdev *dev, int fflag, int devtype, struct thread *td)
+  {
+          struct foo_pci_softc *sc;
+
+          sc = dev-&gt;si_drv1;
+          device_printf(sc-&gt;device, "closed\n");
+          return (0);
+  }
+
+  static int
+  foo_pci_read(struct cdev *dev, struct uio *uio, int ioflag)
+  {
+          struct foo_pci_softc *sc;
+
+          sc = dev-&gt;si_drv1;
+          device_printf(sc-&gt;device, "read request = %dB\n", uio-&gt;uio_resid);
+          return (0);
+  }
+
+  static int
+  foo_pci_write(struct cdev *dev, struct uio *uio, int ioflag)
+  {
+          struct foo_pci_softc *sc;
+
+          sc = dev-&gt;si_drv1;
+          device_printf(sc-&gt;device, "write request = %dB\n", uio-&gt;uio_resid);
+          return (0);
+  }
+
+  static struct _pcsid {
+          uint32_t        type;
+          const char      *desc;
+  } pci_ids[] = {
+          { 0x1234abcd, "RED PCI Widget" },
+          { 0x4321fedc, "BLU PCI Widget" },
+          { 0x00000000, NULL }
+  };
+
+  static int
+  foo_pci_probe(device_t dev)
+  {
+          uint32_t type = pci_get_devid(dev);
+          struct _pcsid *ep = pci_ids;
+
+          while (ep-&gt;type &amp;&amp; ep-&gt;type != type)
+                  ep++;
+          if (ep-&gt;desc) {
+                  device_set_desc(dev, ep-&gt;desc);
+                  return (BUS_PROBE_DEFAULT);
+          }
+
+          return (ENXIO);
+  }
+
+  static int
+  foo_pci_attach(device_t dev)
+  {
+          struct foo_pci_softc *sc = device_get_softc(dev);
+          int unit = device_get_unit(dev);
+
+          sc-&gt;device = dev;
+          sc-&gt;cdev = <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>make_dev(&amp;foo_pci_cdevsw, unit, UID_ROOT, GID_WHEEL,
+              0600, "foo_pci%d", unit);
+          sc-&gt;cdev-&gt;si_drv1 = sc;
+
+          return (0);
+  }
+
+  static int
+  foo_pci_detach(device_t dev)
+  {
+          struct foo_pci_softc *sc = device_get_softc(dev);
+
+          destroy_dev(sc-&gt;cdev);
+          return (0);
+  }
+
+  static device_method_t foo_pci_methods[] = {
+          /* Device interface. */
+          DEVMETHOD(device_probe,         foo_pci_probe),
+          DEVMETHOD(device_attach,        foo_pci_attach),
+          DEVMETHOD(device_detach,        foo_pci_detach),
+          { 0, 0 }
+  };
+
+  static driver_t foo_pci_driver = {
+          "foo_pci",
+          foo_pci_methods,
+          sizeof(struct foo_pci_softc)
+  };
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/> DRIVER_MODULE(foo_pci, pci, foo_pci_driver, <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>foo_pci_devclass, 0, 0);</pre></div></div><p>This driver begins by defining its <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14127"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> software context, which will maintain a <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14133"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> pointer to its device and the <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14139"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">cdev</code> returned by the <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14148"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <code class="literal">make_dev</code> call.</p><p>Next, its <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14160"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> character device switch table is defined. This table contains four <code class="literal">d_foo</code> functions named <code class="literal">foo_pci_open</code>, <code class="literal">foo_pci_close</code>, <code class="literal">foo_pci_read</code>, and <code class="literal">foo_pci_write</code>. I’ll describe these functions in <a class="xref" href="ch01s05.html#d_underscore_foo_functions" title="d_foo Functions">d_foo Functions</a> in <a class="xref" href="ch07s02.html#d_underscore_foo_functions-id2" title="d_foo Functions">d_foo Functions</a>.</p><p>Then a <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14188"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <code class="literal">devclass_t</code> variable is declared. This variable is passed to the <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14197"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> <code class="literal">DRIVER_MODULE</code> macro as its <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14206"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> <code class="literal">devclass</code> argument.</p><p>Finally, the <code class="literal">d_foo</code> and <code class="literal">device_foo</code> functions are defined. These functions are described in the order they would execute.</p><div class="sect2" title="foo_pci_probe Function"><div class="titlepage"><div><div><h2 class="title"><a id="foo_underscore_pci_underscore_probe_func"/>foo_pci_probe Function</h2></div></div></div><p>The <code class="literal">foo_pci_probe</code> function is the <code class="literal">device_probe</code> implementation for this driver. Before I walk through this function, a description of the <code class="literal">pci_ids</code> array (found around the middle of <a class="xref" href="ch07s02.html#foo_underscore_pci.c" title="Example 7-1. foo_pci.c">Example 7-1</a>) is needed.<a class="indexterm" id="IDX-CHP-7-0035"/><a class="indexterm" id="IDX-CHP-7-0036"/><a class="indexterm" id="IDX-CHP-7-0037"/><a class="indexterm" id="IDX-CHP-7-0038"/><a class="indexterm" id="IDX-CHP-7-0039"/></p><a id="I_programlisting7_d1e14264"/><pre class="programlisting">static struct _pcsid {
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>uint32_t        type;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>const char      *desc;
+} pci_ids[] = {
+        { 0x1234abcd, "RED PCI Widget" },
+        { 0x4321fedc, "BLU PCI Widget" },
+        { 0x00000000, NULL }
+};</pre><p>This array is composed of three <code class="literal">_pcsid</code> structures. Each <code class="literal">_pcsid</code> structure contains a <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14286"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> PCI ID and a <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14292"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> description of the PCI device. As you might have guessed, <code class="literal">pci_ids</code> lists the devices that <a class="xref" href="ch07s02.html#foo_underscore_pci.c" title="Example 7-1. foo_pci.c">Example 7-1</a> supports.</p><p>Now that I’ve described <code class="literal">pci_ids</code>, let’s walk through <code class="literal">foo_pci_probe</code>.</p><a id="I_programlisting7_d1e14312"/><pre class="programlisting">static int
+foo_pci_probe(device_t <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>dev)
+{
+        uint32_t type = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>pci_get_devid(dev);
+        struct _pcsid *ep = <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>pci_ids;
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>while (ep-&gt;type &amp;&amp; ep-&gt;type != type)
+                ep++;
+        if (ep-&gt;desc) {
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>device_set_desc(dev, ep-&gt;desc);
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>return (BUS_PROBE_DEFAULT);
+        }
+
+        return (ENXIO);
+}</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14353"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">dev</code> describes an identified device found on the PCI bus. So this function begins by <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14362"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> obtaining the PCI ID of <code class="literal">dev</code>. Then it <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14371"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> determines if <code class="literal">dev</code>’s PCI ID is listed in <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14381"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">pci_ids</code>. If it is, <code class="literal">dev</code>’s verbose description is <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14393"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> set and the success code <code class="literal">BUS_PROBE_DEFAULT</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14403"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> returned.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>The verbose description is printed to the system console when <code class="literal">foo_pci_attach</code> executes.</p></div></div><div class="sect2" title="foo_pci_attach Function"><div class="titlepage"><div><div><h2 class="title"><a id="foo_underscore_pci_underscore_attach_fun"/>foo_pci_attach Function</h2></div></div></div><p>The <code class="literal">foo_pci_attach</code> function is the <code class="literal">device_attach</code> implementation for this driver. Here is its function definition (again):</p><a id="I_programlisting7_d1e14426"/><pre class="programlisting">static int
+foo_pci_attach(device_t <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>dev)
+{
+        struct foo_pci_softc *sc = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>device_get_softc(dev);
+        int unit = <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>device_get_unit(dev);
+
+        sc-&gt;device = <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>dev;
+        sc-&gt;cdev = <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>make_dev(&amp;foo_pci_cdevsw, unit, UID_ROOT, GID_WHEEL,
+            0600, "foo_pci%d", unit);
+        sc-&gt;cdev-&gt;si_drv1 = <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>sc;
+
+        return (0);
+}</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14467"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">dev</code> describes a device under this driver’s control. Thus, this function starts by getting <code class="literal">dev</code>’s <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14479"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> software context and <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14485"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> unit number. Then a character device node is <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14492"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> created and the variables <code class="literal">sc-&gt;device</code> and <code class="literal">sc-&gt;cdev-&gt;si_drv1</code> are set to <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14504"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">dev</code> and <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14513"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <code class="literal">sc</code>, respectively.<a class="indexterm" id="IDX-CHP-7-0040"/><a class="indexterm" id="IDX-CHP-7-0041"/><a class="indexterm" id="IDX-CHP-7-0042"/><a class="indexterm" id="IDX-CHP-7-0043"/><a class="indexterm" id="IDX-CHP-7-0044"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>The <code class="literal">d_foo</code> functions (described next) use <code class="literal">sc-&gt;device</code> and <code class="literal">cdev-&gt;si_drv1</code> to gain access to <code class="literal">dev</code> and <code class="literal">sc</code>.</p></div></div><div class="sect2" title="d_foo Functions"><div class="titlepage"><div><div><h2 class="title"><a id="d_underscore_foo_functions-id2"/>d_foo Functions</h2></div></div></div><p>Because every <code class="literal">d_foo</code> function in <a class="xref" href="ch07s02.html#foo_underscore_pci.c" title="Example 7-1. foo_pci.c">Example 7-1</a> just prints a debug message (that is to say, they’re all basically the same), I’m only going to walk through one of them: <code class="literal">foo_pci_open</code>.</p><a id="I_programlisting7_d1e14579"/><pre class="programlisting">static int
+foo_pci_open(struct cdev <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>*dev, int oflags, int devtype, struct thread *td)
+{
+        struct foo_pci_softc *sc;
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>sc = dev-&gt;si_drv1;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>device_printf(sc-&gt;device, "opened successfully\n");
+        return (0);
+}</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14601"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">dev</code> is the <code class="literal">cdev</code> returned by the <code class="literal">make_dev</code> call in <code class="literal">foo_pci_attach</code>. So, this function first <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14620"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> obtains its software context. Then it <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14626"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> prints a debug message.</p></div><div class="sect2" title="foo_pci_detach Function"><div class="titlepage"><div><div><h2 class="title"><a id="foo_underscore_pci_underscore_detach_fun"/>foo_pci_detach Function</h2></div></div></div><p>The <code class="literal">foo_pci_detach</code> function is the <code class="literal">device_detach</code> implementation for this driver. Here is its function definition (again):</p><a id="I_programlisting7_d1e14644"/><pre class="programlisting">static int
+foo_pci_detach(device_t <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>dev)
+{
+        struct foo_pci_softc *sc = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>device_get_softc(dev);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>destroy_dev(sc-&gt;cdev);
+        return (0);
+}</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14666"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">dev</code> describes a device under this driver’s control. Thus, this function simply obtains <code class="literal">dev</code>’s <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14678"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> software context to <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14684"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> destroy its device node.<a class="indexterm" id="IDX-CHP-7-0045"/><a class="indexterm" id="IDX-CHP-7-0046"/><a class="indexterm" id="IDX-CHP-7-0047"/><a class="indexterm" id="IDX-CHP-7-0048"/></p></div><div class="sect2" title="Don’t Panic"><div class="titlepage"><div><div><h2 class="title"><a id="donat_panic-id6"/>Don’t Panic</h2></div></div></div><p>Now that we’ve discussed <a class="xref" href="ch07s02.html#foo_underscore_pci.c" title="Example 7-1. foo_pci.c">Example 7-1</a>, let’s give it a try:</p><a id="I_programlisting7_d1e14716"/><pre class="programlisting">$ <strong class="userinput"><code>sudo kldload ./foo_pci.ko</code></strong>
+$ <strong class="userinput"><code>kldstat</code></strong>
+Id Refs Address    Size     Name
+ 1    3 0xc0400000 c9f490   kernel
+ 2    1 0xc3af0000 2000     foo_pci.ko
+$ <strong class="userinput"><code>ls -l /dev/foo*</code></strong>
+ls: /dev/foo*: <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>No such file or directory</pre><p>Of course, it <span class="inlinemediaobject"><a id="I_inlinemediaobject7_d1e14735"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> fails miserably, because <code class="literal">foo_pci_probe</code> is probing for fictitious PCI devices. Before concluding this chapter, one additional topic bears mentioning.</p></div></div>
+<div class="sect1" title="Hardware Resource Management"><div class="titlepage"><div><div><h1 class="title"><a id="hardware_resource_management"/>Hardware Resource Management</h1></div></div></div><p>As part of configuring and operating devices, a driver might need to manage hardware resources, such as interrupt-request lines (IRQs), I/O ports, or I/O memory (McKusick and Neville-Neil, 2005). Naturally, Newbus includes several functions for doing just that.<a class="indexterm" id="IDX-CHP-7-0049"/></p><a id="I_programlisting7_d1e14752"/><pre class="programlisting">#include &lt;sys/param.h&gt;
+#include &lt;sys/bus.h&gt;
+
+#include &lt;machine/bus.h&gt;
+#include &lt;sys/rman.h&gt;
+#include &lt;machine/resource.h&gt;
+
+struct resource *
+bus_alloc_resource(device_t dev, int type, int *rid, u_long start,
+    u_long end, u_long count, u_int flags);
+
+struct resource *
+bus_alloc_resource_any(device_t dev, int type, int *rid,
+    u_int flags);
+
+int
+bus_activate_resource(device_t dev, int type, int rid,
+    struct resource *r);
+
+int
+bus_deactivate_resource(device_t dev, int type, int rid,
+    struct resource *r);
+
+int
+bus_release_resource(device_t dev, int type, int rid,
+    struct resource *r);</pre><p>The <code class="literal">bus_alloc_resource</code> function allocates hardware resources for a specific device to use. If successful, a <code class="literal">struct resource</code> pointer is returned; otherwise, <code class="literal">NULL</code> is returned. This function is normally called during <code class="literal">device_attach</code>. If it is called during <code class="literal">device_probe</code>, all allocated resources must be released (via <code class="literal">bus_release_resource</code>) before returning. Most of the arguments for <code class="literal">bus_alloc_resource</code> are common to the other hardware resource management functions. These arguments are described in the next few paragraphs.<a class="indexterm" id="IDX-CHP-7-0050"/><a class="indexterm" id="IDX-CHP-7-0051"/><a class="indexterm" id="IDX-CHP-7-0052"/><a class="indexterm" id="IDX-CHP-7-0053"/><a class="indexterm" id="IDX-CHP-7-0054"/><a class="indexterm" id="IDX-CHP-7-0055"/><a class="indexterm" id="IDX-CHP-7-0056"/><a class="indexterm" id="IDX-CHP-7-0057"/><a class="indexterm" id="IDX-CHP-7-0058"/><a class="indexterm" id="IDX-CHP-7-0059"/><a class="indexterm" id="IDX-CHP-7-0060"/><a class="indexterm" id="IDX-CHP-7-0061"/></p><p>The <code class="literal">dev</code> argument is the device that requires ownership of the hardware resource(s). Before allocation, resources are owned by the parent bus.</p><p>The <code class="literal">type</code> argument represents the type of resource <code class="literal">dev</code> wants allocated. Valid values for this argument are listed in <a class="xref" href="ch07s03.html#symbolic_constants_for_hardware_resource" title="Table 7-2. Symbolic Constants for Hardware Resources">Table 7-2</a>.</p><div class="table"><a id="symbolic_constants_for_hardware_resource"/><p class="title">Table 7-2. Symbolic Constants for Hardware Resources</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="Symbolic Constants for Hardware Resources"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Constant</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">SYS_RES_IRQ</code></p></td><td style="text-align: left" valign="top"><p>Interrupt-request line</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYS_RES_IOPORT</code></p></td><td style="text-align: left" valign="top"><p>I/O port</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYS_RES_MEMORY</code></p></td><td style="text-align: left" valign="top"><p>I/O memory</p></td></tr></tbody></table></div></div><p>The <code class="literal">rid</code> argument expects a resource ID (RID). If <code class="literal">bus_alloc_resource</code> is successful, a RID is returned in <code class="literal">rid</code> that may differ from what you passed. You’ll learn more about RIDs later.</p><p>The <code class="literal">start</code> and <code class="literal">end</code> arguments are the start and end addresses of the hardware resource(s). To employ the default bus values, simply pass <code class="literal">0ul</code> as <code class="literal">start</code> and <code class="literal">˜0ul</code> as <code class="literal">end</code>.</p><p>The <code class="literal">count</code> argument denotes the size of the hardware resource(s). If you used the default bus values for <code class="literal">start</code> and <code class="literal">end</code>, <code class="literal">count</code> is used only if it is larger than the default bus value.</p><p>The <code class="literal">flags</code> argument details the characteristics of the hardware resource. Valid values for this argument are listed in <a class="xref" href="ch07s03.html#bus_underscore_alloc_underscore_resource" title="Table 7-3. bus_alloc_resource Symbolic Constants">Table 7-3</a>.</p><div class="table"><a id="bus_underscore_alloc_underscore_resource"/><p class="title">Table 7-3. bus_alloc_resource Symbolic Constants</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="bus_alloc_resource Symbolic Constants"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Constant</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">RF_ALLOCATED</code></p></td><td style="text-align: left" valign="top"><p>Allocate hardware resource, but don’t activate it</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">RF_ACTIVE</code></p></td><td style="text-align: left" valign="top"><p>Allocate hardware resource and activate resource automatically</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">RF_SHAREABLE</code></p></td><td style="text-align: left" valign="top"><p>Hardware resource permits contemporaneous sharing; you should always set this flag, unless the resource cannot be shared</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">RF_TIMESHARE</code></p></td><td style="text-align: left" valign="top"><p>Hardware resource permits time-division sharing</p></td></tr></tbody></table></div></div><p>The <code class="literal">bus_alloc_resource_any</code> function is a convenience wrapper for <code class="literal">bus_alloc_resource</code> that sets <code class="literal">start</code>, <code class="literal">end</code>, and <code class="literal">count</code> to their default bus values.</p><p>The <code class="literal">bus_activate_resource</code> function activates a previously allocated hardware resource. Naturally, resources must be activated before they can be used. Most drivers simply pass <code class="literal">RF_ACTIVE</code> to <code class="literal">bus_alloc_resource</code> or <code class="literal">bus_alloc_resource_any</code> to avoid calling <code class="literal">bus_activate_resource</code>.</p><p>The <code class="literal">bus_deactivate_resource</code> function deactivates a hardware resource. This function is primarily used in bus drivers (so we’ll never call it).</p><p>The <code class="literal">bus_release_resource</code> function releases a previously allocated hardware resource. Of course, the resource cannot be in use on release. If successful, <code class="literal">0</code> is returned; otherwise, the kernel panics.<a class="indexterm" id="IDX-CHP-7-0062"/><a class="indexterm" id="IDX-CHP-7-0063"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>We’ll cover an example that employs IRQs in <a class="xref" href="ch08.html" title="Chapter 8. Interrupt Handling">Chapter 8</a> and <a class="xref" href="ch09.html" title="Chapter 9. Case Study: Parallel Port Printer Driver">Chapter 9</a>, and I’ll go over an example that requires I/O ports and I/O memory in <a class="xref" href="ch10.html" title="Chapter 10. Managing and Using Resources">Chapter 10</a> and <a class="xref" href="ch11.html" title="Chapter 11. Case Study: Intelligent Platform Management Interface Driver">Chapter 11</a>.</p></div></div>
+<div class="sect1" title="Conclusion"><div class="titlepage"><div><div><h1 class="title"><a id="conclusion-id6"/>Conclusion</h1></div></div></div><p>This chapter introduced you to the basics of Newbus driver development— working with real hardware. The remainder of this book builds upon the concepts described here to complete your understanding of Newbus.</p></div></body></html>

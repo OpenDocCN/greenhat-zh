@@ -1,0 +1,305 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;17.&#xA0;Network Drivers, Part 2: Packet Reception and Transmission"><div class="titlepage"><div><div><h1 class="title"><a id="network_drivers_comma_part_2_colon_packe"/>Chapter 17. Network Drivers, Part 2: Packet Reception and Transmission</h1></div></div></div><div class="informalfigure"><a id="image_no_caption-id17"/><div class="mediaobject"><a id="I_mediaobject17_d1e31165"/><img alt="image with no caption" src="httpatomoreillycomsourcenostarchimages1137497.png.jpg"/></div></div><p>This chapter examines the packet reception and transmission components of <code class="literal">em(4)</code>. Predictably, <code class="literal">em(4)</code> uses both mbufs and MSI for packet reception and transmission.<a class="indexterm" id="IDX-CHP-17-0001"/><a class="indexterm" id="IDX-CHP-17-0002"/><a class="indexterm" id="IDX-CHP-17-0003"/></p><div class="sect1" title="Packet Reception"><div class="titlepage"><div><div><h1 class="title"><a id="packet_reception"/>Packet Reception</h1></div></div></div><p>When an interface receives a packet, it sends an interrupt. Naturally, this causes its interrupt handler to execute. For example, here is what executes in <code class="literal">em(4)</code>:</p><a id="I_programlisting17_d1e31201"/><pre class="programlisting">static void
+em_msix_rx(void <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>*arg)
+{
+        struct rx_ring *rxr = arg;
+        struct adapter *adapter = rxr-&gt;adapter;
+        bool more;
+
+        ++rxr-&gt;rx_irq;
+
+        more = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>em_rxeof(rxr, <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>adapter-&gt;rx_process_limit, NULL);
+        if (more)
+                <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>taskqueue_enqueue(rxr-&gt;tq, &amp;rxr-&gt;rx_task);
+        else
+                <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>E1000_WRITE_REG(&amp;adapter-&gt;hw, E1000_IMS, rxr-&gt;ims);
+}</pre><p>This function takes a <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31235"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> pointer to a ring buffer that contains one or more received packets, and calls <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31241"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">em_rxeof</code> to process those packets. If there are more than <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31250"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">rx_process_limit</code> packets, a <code class="literal">task</code> structure is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31263"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> queued; otherwise, this interrupt is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31269"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> reenabled. I’ll discuss the <code class="literal">task</code> structure and its associated function in <a class="xref" href="ch17.html#em_underscore_handle_underscore_rx_funct" title="em_handle_rx Function">em_handle_rx Function</a> in <a class="xref" href="ch17.html#em_underscore_handle_underscore_rx_funct" title="em_handle_rx Function">em_handle_rx Function</a>.<a class="indexterm" id="IDX-CHP-17-0004"/><a class="indexterm" id="IDX-CHP-17-0005"/><a class="indexterm" id="IDX-CHP-17-0006"/></p><div class="sect2" title="em_rxeof Function"><div class="titlepage"><div><div><h2 class="title"><a id="em_underscore_rxeof_function"/>em_rxeof Function</h2></div></div></div><p>As mentioned previously, <code class="literal">em_rxeof</code> processes received packets. Its function definition is listed below, but because this function is fairly long and involved, I’ll introduce it in parts. Here is the first part:</p><a id="I_programlisting17_d1e31306"/><pre class="programlisting">static bool
+em_rxeof(struct rx_ring *rxr, int count, int *done)
+{
+        struct adapter *adapter = rxr-&gt;adapter;
+        struct ifnet *ifp = adapter-&gt;ifp;
+        struct e1000_rx_desc *cur;
+        struct mbuf *mp, *sendmp;
+        u8 status = 0;
+        u16 len;
+        int i, processed, rxdone = 0;
+        bool eop;
+
+        EM_RX_LOCK(rxr);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>for (i = rxr-&gt;next_to_check, processed = 0; count != 0; ) {
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>if ((ifp-&gt;if_drv_flags &amp; <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>IFF_DRV_RUNNING) == 0)
+                        break;
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>bus_dmamap_sync(rxr-&gt;rxdma.dma_tag, <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>rxr-&gt;rxdma.dma_map,
+                    BUS_DMASYNC_POSTREAD);
+
+                mp = sendmp = NULL;
+                cur = <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>&amp;rxr-&gt;rx_base[i];
+                status = cur-&gt;status;
+                if ((status &amp; <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>E1000_RXD_STAT_DD) == 0)
+                        break;
+                len = le16toh(cur-&gt;length);
+                eop = (status &amp; <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>E1000_RXD_STAT_EOP) != 0;
+
+                if ((cur-&gt;errors &amp; <img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/>E1000_RXD_ERR_FRAME_ERR_MASK) ||
+                    (rxr-&gt;discard == TRUE)) {
+                        ++ifp-&gt;if_ierrors;
+                        ++rxr-&gt;rx_discarded;
+                        if (!eop)
+                                rxr-&gt;discard = TRUE;
+                        else
+                                rxr-&gt;discard = FALSE;
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137517.png"/>em_rx_discard(rxr, i);
+                        goto next_desc;
+                }
+...</pre><p>This function’s execution is contained primarily within a <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31371"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">for</code> loop. This loop begins by <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31380"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> verifying that the <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31386"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> interface is up and running. Then it <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31392"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> synchronizes the DMA buffer currently loaded in <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31399"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <code class="literal">rxr-&gt;rxdma.dma_map</code>, which is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31408"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <code class="literal">rxr-&gt;rx_base</code>.<a class="indexterm" id="IDX-CHP-17-0007"/><a class="indexterm" id="IDX-CHP-17-0008"/></p><p>The buffer <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31425"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <code class="literal">rxr-&gt;rx_base[i]</code> contains a descriptor that describes a received packet. When a packet spans multiple mbufs, <code class="literal">rxr-&gt;rx_base[i]</code> describes one mbuf in the chain.</p><p>If <code class="literal">rxr-&gt;rx_base[i]</code> lacks the <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31442"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> <code class="literal">E1000_RXD_STAT_DD</code> flag, the <code class="literal">for</code> loop exits. (The <code class="literal">E1000_RXD_STAT_DD</code> flag stands for <span class="emphasis"><em>receive descriptor status: descriptor done</em></span>. We’ll see its effects shortly.)</p><p>If <code class="literal">rxr-&gt;rx_base[i]</code> describes the <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31466"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> last mbuf in the chain, the Boolean variable <code class="literal">eop</code>, which stands for <span class="emphasis"><em>end of packet</em></span>, is set to <code class="literal">TRUE</code>. (Needless to say, when a packet requires only one mbuf, that mbuf is still the last mbuf in the chain.)</p><p>If the packet described by <code class="literal">rxr-&gt;rx_base[i]</code> contains any <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31486"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/></span> errors, it is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31492"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137517.png"/></span> discarded. Note that I use the word <span class="emphasis"><em>packet</em></span>, not <span class="emphasis"><em>mbuf</em></span>, here, because every mbuf in the packet is discarded.</p><p>Now let’s look at the next part of <code class="literal">em_rxeof</code>:</p><a id="I_programlisting17_d1e31509"/><pre class="programlisting">...
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>mp = rxr-&gt;rx_buffers[i].m_head;
+                mp-&gt;m_len = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>len;
+                rxr-&gt;rx_buffers[i].m_head = NULL;
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>if (rxr-&gt;fmp == NULL) {
+                        mp-&gt;m_pkthdr.len = len;
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>rxr-&gt;fmp = <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>rxr-&gt;lmp = mp;
+                } else {
+                        mp-&gt;m_flags &amp;= ˜M_PKTHDR;
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>rxr-&gt;lmp-&gt;m_next = mp;
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>rxr-&gt;lmp = mp;
+                        rxr-&gt;fmp-&gt;m_pkthdr.len += len;
+                }
+...</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31556"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">rxr-&gt;fmp</code> and <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31565"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <code class="literal">rxr-&gt;lmp</code> point to the first and last mbuf in the chain, <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31574"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">mp</code> is the mbuf described by <code class="literal">rxr-&gt;rx_base[i]</code>, and <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31587"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">len</code> is <code class="literal">mp</code>’s length.</p><p>So, this part simply <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31602"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> identifies whether <code class="literal">mp</code> is the first mbuf in the chain. If it is not, then <code class="literal">mp</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31614"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31620"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> linked into the chain.</p><p>Here is the next part of <code class="literal">em_rxeof</code>:</p><a id="I_programlisting17_d1e31631"/><pre class="programlisting">...
+                 <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>if (eop) {
+                          --count;
+                        <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>sendmp = <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>rxr-&gt;fmp;
+                            sendmp-&gt;m_pkthdr.rcvif = ifp;
+                          ++ifp-&gt;if_ipackets;
+                        <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>em_receive_checksum(cur, sendmp);
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/> #ifndef __NO_STRICT_ALIGNMENT
+                        <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>if (adapter-&gt;max_frame_size &gt;
+                              (MCLBYTES - ETHER_ALIGN) &amp;&amp;
+                            <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>em_fixup_rx(rxr) != 0)
+                                  goto skip;
+  #endif
+                          if (status &amp; E1000_RXD_STAT_VP) {
+                                  sendmp-&gt;m_pkthdr.ether_vtag =
+                                      le16toh(cur-&gt;special) &amp;
+                                      E1000_RXD_SPC_VLAN_MASK;
+                                  sendmp-&gt;m_flags |= M_VLANTAG;
+                          }
+  #ifndef __NO_STRICT_ALIGNMENT
+  skip:
+  #endif
+                        <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>rxr-&gt;fmp = <img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/>rxr-&gt;lmp = <img alt="" src="httpatomoreillycomsourcenostarchimages1137517.png"/>NULL;
+                  }
+  ...</pre><p>If <code class="literal">mp</code> is the <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31699"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> last mbuf in the chain, <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31705"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">sendmp</code> is set to the <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31714"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> first mbuf in the chain, and the header checksum is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31721"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> verified.</p><p>If our architecture requires <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31729"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> strict alignment and <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31735"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> jumbo frames are enabled, <code class="literal">em_rxeof</code> <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31744"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> aligns the mbuf chain. (Jumbo frames are Ethernet packets with more than 1500 bytes of data.)</p><p>This part concludes by setting <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31752"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> <code class="literal">rxr-&gt;fmp</code> and <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31761"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/></span> <code class="literal">rxr-&gt;lmp</code> to <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31770"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137517.png"/></span> <code class="literal">NULL</code>. Here is the next part of <code class="literal">em_rxeof</code>:</p><a id="I_programlisting17_d1e31783"/><pre class="programlisting">...
+next_desc:
+                cur-&gt;status = 0;
+                ++rxdone;
+                ++processed;
+
+                if (<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>++i == adapter-&gt;num_rx_desc)
+                        i = 0;
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>if (sendmp != NULL) {
+                        rxr-&gt;next_to_check = i;
+                        EM_RX_UNLOCK(rxr);
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>(*ifp-&gt;if_input)(ifp, <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>sendmp);
+                        EM_RX_LOCK(rxr);
+                        i = rxr-&gt;next_to_check;
+                }
+
+                if (processed == 8) {
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>em_refresh_mbufs(rxr, i);
+                        processed = 0;
+                }
+        }                                      /* The end of the for loop. */
+...</pre><p>Here, <code class="literal">i</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31820"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> incremented so that <code class="literal">em_rxeof</code> can get to the next mbuf in the ring. Then, <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31829"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> if <code class="literal">sendmp</code> points to an mbuf chain, <code class="literal">em(4)</code>’s input routine is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31842"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> executed to send that <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31848"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> chain to the upper layers. Afterward, new mbufs are <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31854"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> allocated for <code class="literal">em(4)</code>.<a class="indexterm" id="IDX-CHP-17-0009"/><a class="indexterm" id="IDX-CHP-17-0010"/><a class="indexterm" id="IDX-CHP-17-0011"/><a class="indexterm" id="IDX-CHP-17-0012"/><a class="indexterm" id="IDX-CHP-17-0013"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>When an mbuf chain is sent to the upper layers, drivers must not access those mbufs anymore. For all intents and purposes, those mbufs have been freed.</p></div><p>To sum up, this <code class="literal">for</code> loop simply links together every mbuf in a received packet and then sends that to the upper layers. This continues until every packet in the ring has been processed or <code class="literal">rx_process_limit</code> is hit (<code class="literal">rx_process_limit</code> was described in <a class="xref" href="ch17.html#packet_reception" title="Packet Reception">Packet Reception</a> in <a class="xref" href="ch17.html#packet_reception" title="Packet Reception">Packet Reception</a>).</p><p>Here is the final part of <code class="literal">em_rxeof</code>:</p><a id="I_programlisting17_d1e31911"/><pre class="programlisting">...
+        if (e1000_rx_unrefreshed(rxr))
+                em_refresh_mbufs(rxr, i);
+
+        rxr-&gt;next_to_check = i;
+        if (done != NULL)
+                *done = rxdone;
+        EM_RX_UNLOCK(rxr);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>return ((status &amp; E1000_RXD_STAT_DD) ? TRUE : FALSE);
+}</pre><p>If there are more packets to process, <code class="literal">em_rxeof</code> <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31924"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> returns <code class="literal">TRUE</code>.</p></div><div class="sect2" title="em_handle_rx Function"><div class="titlepage"><div><div><h2 class="title"><a id="em_underscore_handle_underscore_rx_funct"/>em_handle_rx Function</h2></div></div></div><p>Recall that when <code class="literal">em_rxeof</code> returns TRUE, <code class="literal">em_msix_rx</code> queues a task structure (<code class="literal">em_msix_rx</code> was discussed in <a class="xref" href="ch17.html#packet_reception" title="Packet Reception">Packet Reception</a> in <a class="xref" href="ch17.html#packet_reception" title="Packet Reception">Packet Reception</a>).</p><p>Here is that <code class="literal">task</code> structure’s function:</p><a id="I_programlisting17_d1e31956"/><pre class="programlisting">static void
+em_handle_rx(void *context, int pending)
+{
+        struct rx_ring *rxr = context;
+        struct adapter *adapter = rxr-&gt;adapter;
+        bool more;
+
+        more = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>em_rxeof(rxr, adapter-&gt;rx_process_limit, NULL);
+        if (more)
+                taskqueue_enqueue(rxr-&gt;tq, &amp;rxr-&gt;rx_task);
+        else
+                E1000_WRITE_REG(&amp;adapter-&gt;hw, E1000_IMS, rxr-&gt;ims);
+}</pre><p>This function is nearly identical to <code class="literal">em_msix_rx</code>. When there are more packets to process, <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e31969"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">em_rxeof</code> just gets called again.</p></div></div></div>
+<div class="sect1" title="Packet Transmission"><div class="titlepage"><div><div><h1 class="title"><a id="packet_transmission"/>Packet Transmission</h1></div></div></div><p>To transmit a packet, the network stack calls a driver’s output routine. All output routines end by calling their interface’s transmit or start routine. Here is <code class="literal">em(4)</code>’s start routine:<a class="indexterm" id="IDX-CHP-17-0014"/><a class="indexterm" id="IDX-CHP-17-0015"/><a class="indexterm" id="IDX-CHP-17-0016"/><a class="indexterm" id="IDX-CHP-17-0017"/><a class="indexterm" id="IDX-CHP-17-0018"/><a class="indexterm" id="IDX-CHP-17-0019"/></p><a id="I_programlisting17_d1e32016"/><pre class="programlisting">static void
+em_start(struct ifnet *ifp)
+{
+        struct adapter *adapter = ifp-&gt;if_softc;
+        struct tx_ring *txr = adapter-&gt;tx_rings;
+
+        if (ifp-&gt;if_drv_flags &amp; IFF_DRV_RUNNING) {
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>EM_TX_LOCK(txr);
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>em_start_locked(ifp, txr);
+                EM_TX_UNLOCK(txr);
+        }
+}</pre><p>This start routine <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32032"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> acquires a lock and then calls <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32038"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">em_start_locked</code>.</p><div class="sect2" title="em_start_locked Function"><div class="titlepage"><div><div><h2 class="title"><a id="em_underscore_start_underscore_locked_fu"/>em_start_locked Function</h2></div></div></div><p>The <code class="literal">em_start_locked</code> function is defined as follows:</p><a id="I_programlisting17_d1e32055"/><pre class="programlisting">static void
+em_start_locked(struct ifnet *ifp, struct tx_ring *txr)
+{
+        struct adapter *adapter = ifp-&gt;if_softc;
+        struct mbuf *m_head;
+
+        EM_TX_LOCK_ASSERT(txr);
+
+        if ((ifp-&gt;if_drv_flags &amp; (IFF_DRV_RUNNING | IFF_DRV_OACTIVE)) !=
+            IFF_DRV_RUNNING)
+                return;
+
+        if (!adapter-&gt;link_active)
+                return;
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>while (!IFQ_DRV_IS_EMPTY(&amp;ifp-&gt;if_snd)) {
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>if (txr-&gt;tx_avail &lt;= EM_TX_CLEANUP_THRESHOLD)
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>em_txeof(txr);
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>if (txr-&gt;tx_avail &lt; EM_MAX_SCATTER) {
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>ifp-&gt;if_drv_flags |= IFF_DRV_OACTIVE;
+                        break;
+                }
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>IFQ_DRV_DEQUEUE(<img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>&amp;ifp-&gt;if_snd, <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>m_head);
+                if (m_head == NULL)
+                        break;
+
+                if (<img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/>em_xmit(txr, &amp;m_head)) {
+                        if (m_head == NULL)
+                                break;
+                        ifp-&gt;if_drv_flags |= IFF_DRV_OACTIVE;
+                        IFQ_DRV_PREPEND(&amp;ifp-&gt;if_snd, m_head);
+                        break;
+                }
+
+                ETHER_BPF_MTAP(ifp, m_head);
+
+                txr-&gt;watchdog_time = ticks;
+                txr-&gt;queue_status = EM_QUEUE_WORKING;
+        }
+}</pre><p>This function <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32114"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> removes one <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32120"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> mbuf from <code class="literal">em(4)</code>’s <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32129"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> send queue and <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32135"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/></span> transmits it to the interface. This repeats until the send queue is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32142"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> empty. (Send queues, as mentioned in <a class="xref" href="ch16.html" title="Chapter 16. Network Drivers, Part 1: Data Structures">Chapter 16</a>, are populated by output routines.)<a class="indexterm" id="IDX-CHP-17-0020"/><a class="indexterm" id="IDX-CHP-17-0021"/><a class="indexterm" id="IDX-CHP-17-0022"/><a class="indexterm" id="IDX-CHP-17-0023"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>The <code class="literal">em_xmit</code> function, which actually transmits the mbufs to the interface, is not detailed in this book, because of its length. It is fairly straightforward, though, so you shouldn’t have any trouble with it.</p></div><p>If the number of available transmit descriptors is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32176"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> less than or equal to <code class="literal">EM_TX_CLEANUP_THRESHOLD</code>, <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32185"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">em_txeof</code> is called to reclaim the used descriptors. (A transmit descriptor describes an outgoing packet. If a packet spans multiple mbufs, a transmit descriptor describes one mbuf in the chain.)</p><p>If the number of available transmit descriptors is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32196"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> less than <code class="literal">EM_MAX_SCATTER</code>, transfers are <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32205"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> stopped.</p></div><div class="sect2" title="em_txeof Function"><div class="titlepage"><div><div><h2 class="title"><a id="em_underscore_txeof_function"/>em_txeof Function</h2></div></div></div><p>The <code class="literal">em_txeof</code> function goes through the transmit descriptors and frees the mbufs for packets that have been transmitted. Its function definition is listed below, but because this function is fairly long and involved, I’ll introduce it in parts. Here is the first part:</p><a id="I_programlisting17_d1e32219"/><pre class="programlisting">static bool
+em_txeof(struct tx_ring *txr)
+{
+        struct adapter *adapter = txr-&gt;adapter;
+        struct ifnet *ifp = adapter-&gt;ifp;
+        struct e1000_tx_desc *tx_desc, *eop_desc;
+        struct em_buffer *tx_buffer;
+        int processed, first, last, done;
+
+        EM_TX_LOCK_ASSERT(txr);
+
+        if (txr-&gt;tx_avail == adapter-&gt;num_tx_desc) {
+                txr-&gt;queue_status = EM_QUEUE_IDLE;
+                return (FALSE);
+        }
+
+        processed = 0;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>first = txr-&gt;next_to_clean;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>tx_desc = &amp;txr-&gt;tx_base[first];
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>tx_buffer = &amp;txr-&gt;tx_buffers[first];
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>last = tx_buffer-&gt;next_eop;
+        eop_desc = &amp;txr-&gt;tx_base[last];
+
+        if (++last == adapter-&gt;num_tx_desc)
+                last = 0;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>done = last;
+...</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32253"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">first</code> is the first mbuf in a chain that housed an outgoing packet, <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32262"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">last</code> is the last mbuf in that chain, and <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32271"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <code class="literal">done</code> is the mbuf after <code class="literal">last</code>.<a class="indexterm" id="IDX-CHP-17-0024"/><a class="indexterm" id="IDX-CHP-17-0025"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>Recall that transmit descriptors, and subsequently mbufs, are held in a ring buffer.</p></div><p>The variables <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32295"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">tx_desc</code> and <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32304"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">tx_buffer</code> are temporary variables for a transmit descriptor and its associated mbuf.</p><p>Now let’s look at the next part of <code class="literal">em_txeof</code>:</p><a id="I_programlisting17_d1e32318"/><pre class="programlisting">...
+        bus_dmamap_sync(txr-&gt;txdma.dma_tag, txr-&gt;txdma.dma_map,
+            BUS_DMASYNC_POSTREAD);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>while (eop_desc-&gt;upper.fields.status &amp; E1000_TXD_STAT_DD) {
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>while (first != done) {
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>tx_desc-&gt;upper.data = 0;
+                        tx_desc-&gt;lower.data = 0;
+                        tx_desc-&gt;buffer_addr = 0;
+                        ++txr-&gt;tx_avail;
+                        ++processed;
+
+                        if (tx_buffer-&gt;m_head) {
+                                bus_dmamap_unload(txr-&gt;txtag,
+                                    tx_buffer-&gt;map);
+                              <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>m_freem(tx_buffer-&gt;m_head);
+                                tx_buffer-&gt;m_head = NULL;
+                        }
+
+                        tx_buffer-&gt;next_eop = −1;
+                        txr-&gt;watchdog_time = ticks;
+
+                        if (++first == adapter-&gt;num_tx_desc)
+                                first = 0;
+                        tx_buffer = &amp;txr-&gt;tx_buffers[first];
+                        tx_desc = &amp;txr-&gt;tx_base[first];
+                }
+
+                ++ifp-&gt;if_opackets;
+
+                last = tx_buffer-&gt;next_eop;
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>if (last != −1) {
+                        eop_desc = &amp;txr-&gt;tx_base[last];
+                        if (++last == adapter-&gt;num_tx_desc)
+                                last = 0;
+                        done = last;
+                } else
+                        break;
+        }
+
+        bus_dmamap_sync(txr-&gt;txdma.dma_tag, txr-&gt;txdma.dma_map,
+            BUS_DMASYNC_PREWRITE);
+...</pre><p>This <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32352"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">while</code> loop iterates through <code class="literal">first</code> to <code class="literal">last</code>, <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32367"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> freeing their mbufs and <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32374"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> zeroing their transmit descriptors. (<code class="literal">em(4)</code> has a finite number of transmit descriptors. Zeroing a descriptor makes it available again.)<a class="indexterm" id="IDX-CHP-17-0026"/><a class="indexterm" id="IDX-CHP-17-0027"/><a class="indexterm" id="IDX-CHP-17-0028"/><a class="indexterm" id="IDX-CHP-17-0029"/><a class="indexterm" id="IDX-CHP-17-0030"/></p><p>This <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32410"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">while</code> loop <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32419"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> determines whether another mbuf chain can be freed by this <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32425"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">while</code> loop.</p><p>Here is the final part of <code class="literal">em_txeof</code>:</p><a id="I_programlisting17_d1e32440"/><pre class="programlisting">...
+        txr-&gt;next_to_clean = first;
+
+        if (!processed &amp;&amp; ((ticks - txr-&gt;watchdog_time) &gt; EM_WATCHDOG))
+                txr-&gt;queue_status = EM_QUEUE_HUNG;
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>if (txr-&gt;tx_avail &gt; EM_MAX_SCATTER)
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>ifp-&gt;if_drv_flags &amp;= ˜IFF_DRV_OACTIVE;
+
+        if (txr-&gt;tx_avail == adapter-&gt;num_tx_desc) {
+                txr-&gt;queue_status = EM_QUEUE_IDLE;
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>return (FALSE);
+        }
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>return (TRUE);
+}</pre><p>If there are more transmit descriptors to reclaim, <code class="literal">em_txeof</code> returns <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32471"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">TRUE</code>; otherwise, it returns <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32480"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">FALSE</code>.</p><p>If the number of available transmit descriptors is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32491"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> greater than <code class="literal">EM_MAX_SCATTER</code>, packets <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32500"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> can be transmitted.</p></div></div>
+<div class="sect1" title="Post Packet Transmission"><div class="titlepage"><div><div><h1 class="title"><a id="post_packet_transmission"/>Post Packet Transmission</h1></div></div></div><p>Whenever an interface transmits a packet, it sends an interrupt. Naturally, this causes its interrupt handler to execute. Here is what executes in <code class="literal">em(4)</code>:</p><a id="I_programlisting17_d1e32514"/><pre class="programlisting">static void
+em_msix_tx(void *arg)
+{
+        struct tx_ring *txr = arg;
+        struct adapter *adapter = txr-&gt;adapter;
+        bool more;
+
+        ++txr-&gt;tx_irq;
+
+        EM_TX_LOCK(txr);
+        more = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>em_txeof(txr);
+        EM_TX_UNLOCK(txr);
+        if (more)
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>taskqueue_enqueue(txr-&gt;tq, &amp;txr-&gt;tx_task);
+        else
+                E1000_WRITE_REG(&amp;adapter-&gt;hw, E1000_IMS, txr-&gt;ims);
+}</pre><div class="note" title="Note"><h3 class="title">Note</h3><p>Because of MSI, <code class="literal">em(4)</code> can use a different interrupt handler for post packet transmission and packet reception.</p></div><p>This function simply <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32536"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> reclaims the used transmit descriptors. If there are more descriptors to reclaim, a <code class="literal">task</code> structure is <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32545"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> queued. Here is that <code class="literal">task</code> structure’s function:</p><a id="I_programlisting17_d1e32554"/><pre class="programlisting">static void
+em_handle_tx(void *context, int pending)
+{
+        struct tx_ring *txr = context;
+        struct adapter *adapter = txr-&gt;adapter;
+        struct ifnet *ifp = adapter-&gt;ifp;
+
+        EM_TX_LOCK(txr);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>em_txeof(txr);
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>em_start_locked(ifp, txr);
+        E1000_WRITE_REG(&amp;adapter-&gt;hw, E1000_IMS, txr-&gt;ims);
+
+        EM_TX_UNLOCK(txr);
+}</pre><p>This function first <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32570"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> reclaims any used transmit descriptors, after which any packets that may have been halted due to a lack of descriptors are <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e32576"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> transmitted.</p></div>
+<div class="sect1" title="Conclusion"><div class="titlepage"><div><div><h1 class="title"><a id="conclusion-id16"/>Conclusion</h1></div></div></div><p>This chapter and <a class="xref" href="ch16.html" title="Chapter 16. Network Drivers, Part 1: Data Structures">Chapter 16</a> gave a primer on network devices and drivers. If you’re serious about writing network drivers, you should review <code class="literal">em(4)</code> in its entirety. I recommend beginning with its <code class="literal">device_attach</code> implementation: <code class="literal">em_attach</code>.</p></div></body></html>

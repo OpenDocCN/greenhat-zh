@@ -1,0 +1,1149 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;14.&#xA0;Common Access Method"><div class="titlepage"><div><div><h1 class="title"><a id="common_access_method"/>Chapter 14. Common Access Method</h1></div></div></div><div class="informalfigure"><a id="image_no_caption-id14"/><div class="mediaobject"><a id="I_mediaobject14_d1e24234"/><img alt="image with no caption" src="httpatomoreillycomsourcenostarchimages1137497.png.jpg"/></div></div><p><span class="emphasis"><em>Common Access Method (CAM)</em></span> is an ANSI standard. Although primarily used for SCSI, CAM is a method for separating host bus adapter (HBA) drivers from storage drivers. HBAs are devices (that is, a card or integrated circuit) that connect the host to other devices. For example, USB HBAs allow the host to communicate with USB devices.<a class="indexterm" id="IDX-CHP-14-0001"/><a class="indexterm" id="IDX-CHP-14-0002"/></p><p>By separating HBA drivers from storage drivers, CAM reduces the complexity of individual drivers. Furthermore, this separation enables storage drivers (such as CD-ROM and tape drivers) to control their devices on anyI/O bus (such as IDE, SCSI, and so on) as long as an appropriate HBA driver is available. In other words, CAM modularizes HBA and storage drivers.</p><p>In CAM vernacular, HBA drivers are known as software interface modules (SIMs), and storage drivers are known as peripheral modules. Incidentally, the storage drivers discussed in <a class="xref" href="ch13.html" title="Chapter 13. Storage Drivers">Chapter 13</a> are not under CAM. To avoid confusion, I’ll refer to storage drivers under CAM as peripheral modules from now on.<a class="indexterm" id="IDX-CHP-14-0003"/></p><p>The FreeBSD CAM implementation contains SIMs for SCSI Parallel Interface (SPI), Fibre Channel (FC), USB Mass Storage (UMASS), FireWire (IEEE 1394), and Advanced Technology Attachment Packet Interface (ATAPI). It has peripheral modules for disks (<code class="literal">da</code>), CD-ROMs (<code class="literal">cd</code>), tapes (<code class="literal">sa</code>), tape changers (<code class="literal">ch</code>), processor type devices (<code class="literal">pt</code>), and enclosure services (<code class="literal">ses</code>). Also, it provides a “pass-through” interface that allows user applications to send I/O requests directly to any CAM-controlled device (McKusick and Neville-Neil, 2005). This interface is, fundamentally, a SIM (as you’ll soon see).<a class="indexterm" id="IDX-CHP-14-0004"/><a class="indexterm" id="IDX-CHP-14-0005"/><a class="indexterm" id="IDX-CHP-14-0006"/><a class="indexterm" id="IDX-CHP-14-0007"/><a class="indexterm" id="IDX-CHP-14-0008"/><a class="indexterm" id="IDX-CHP-14-0009"/><a class="indexterm" id="IDX-CHP-14-0010"/><a class="indexterm" id="IDX-CHP-14-0011"/><a class="indexterm" id="IDX-CHP-14-0012"/><a class="indexterm" id="IDX-CHP-14-0013"/><a class="indexterm" id="IDX-CHP-14-0014"/><a class="indexterm" id="IDX-CHP-14-0015"/></p><p>In this chapter you’ll learn how to manage HBAs using CAM. Of course, before you can do that, you’ll need to know how CAM interfaces peripheral modules with SIMs. Because peripheral modules are just storage drivers with some CAM-related code, they’re only briefly discussed in this chapter.</p><div class="sect1" title="How CAM Works"><div class="titlepage"><div><div><h1 class="title"><a id="how_cam_works"/>How CAM Works</h1></div></div></div><p>CAM is most easily understood by tracing an I/O request through it.</p><p>In <a class="xref" href="ch14.html#the_path_of_an_i_solidus_o_request_throu" title="Figure 14-1. The path of an I/O request through the CAM subsystem">Figure 14-1</a>,<sup>[<a class="footnote" href="#ftn.CHP-14-FN-1" id="CHP-14-FN-1">9</a>]</sup> the kernel passes a block-centric I/O request to the <code class="literal">da(4)</code> peripheral module. As you would expect, this causes <code class="literal">da(4)</code>’s strategy routine (<code class="literal">dastrategy</code>) to execute.</p><div class="figure"><a id="the_path_of_an_i_solidus_o_request_throu"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject14_d1e24349"/><img alt="The path of an I/O request through the CAM subsystem" src="httpatomoreillycomsourcenostarchimages1137519.png"/></div></div><p class="title">Figure 14-1. The path of an I/O request through the CAM subsystem</p></div><p>The <code class="literal">dastrategy</code> function gets the block-centric I/O request and inserts it on the appropriate block I/O queue via <code class="literal">bioq_disksort</code>. It concludes by calling the <code class="literal">xpt_schedule</code> function. (The <code class="literal">da(4)</code> peripheral module supports every SCSI disk. Consequently, it manages multiple block I/O queues.)</p><p>The <code class="literal">xpt_schedule</code> function, by and large, schedules a peripheral module to receive a <span class="emphasis"><em>CAM Control Block (CCB)</em></span>. A CCB describes the location (or path) to the target device (that is, the intended recipient of the I/O request). The <code class="literal">xpt_schedule</code> function concludes by calling the <code class="literal">xpt_run_dev_allocq</code> function. (Note that my definition of CCB isn’t complete. I’ll expand this definition throughout this chapter.)<a class="indexterm" id="IDX-CHP-14-0016"/><a class="indexterm" id="IDX-CHP-14-0017"/><a class="indexterm" id="IDX-CHP-14-0018"/><a class="indexterm" id="IDX-CHP-14-0019"/><a class="indexterm" id="IDX-CHP-14-0020"/><a class="indexterm" id="IDX-CHP-14-0021"/><a class="indexterm" id="IDX-CHP-14-0022"/><a class="indexterm" id="IDX-CHP-14-0023"/><a class="indexterm" id="IDX-CHP-14-0024"/><a class="indexterm" id="IDX-CHP-14-0025"/><a class="indexterm" id="IDX-CHP-14-0026"/></p><p>The <code class="literal">xpt_run_dev_allocq</code> function allocates and constructs a CCB. Afterward, it calls the peripheral module’s start routine (<code class="literal">dastart</code> in this example).</p><p>The <code class="literal">dastart</code> function takes the first block-centric I/O request off the appropriate block I/O queue and converts that into a SCSI command. This command is stored in the CCB constructed by <code class="literal">xpt_run_dev_allocq</code>. The <code class="literal">dastart</code> function ends by calling the <code class="literal">xpt_action</code> function.</p><p>The <code class="literal">xpt_action</code> function uses the path information stored in the CCB to determine the SIM to which the SCSI command should be sent. It then calls that SIM’s action routine (<code class="literal">ahc_action</code> in this case).</p><div class="note" title="Note"><h3 class="title">Note</h3><p>A SIM was pseudo-randomly chosen for this example, so the fact that it’s <code class="literal">ahc(4)</code> is irrelevant.</p></div><p>The <code class="literal">ahc_action</code> function gets the CCB and translates the SCSI command into a hardware-specific command. This hardware-specific command is then passed to the device to be executed. Afterward, <code class="literal">ahc_action</code> returns back to the caller of <code class="literal">dastrategy</code>.</p><p>As soon as the device completes the hardware-specific command (which may involve DMA), it sends an interrupt, which causes <code class="literal">ahc(4)</code>’s done routine (<code class="literal">ahc_done</code>) to execute.</p><p>The <code class="literal">ahc_done</code> function appends the completion status (that is, successful or unsuccessful) to the CCB related to the completed hardware-specific command. It then calls the <code class="literal">xpt_done</code> function.</p><p>The <code class="literal">xpt_done</code> function gets the completed CCB and sets it up for processing by <code class="literal">camisr</code>, the CAM interrupt service routine. It then schedules <code class="literal">camisr</code> to run.</p><p>Loosely speaking, the <code class="literal">camisr</code> function carries out some “housekeeping” on the CCB. It ends by calling the CCB’s specified completion function (<code class="literal">dadone</code> in this example).</p><p>The <code class="literal">dadone</code> function, more or less, tells the kernel that the block-centric I/O request has been serviced by calling <code class="literal">biodone</code>.</p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-14-FN-1" id="ftn.CHP-14-FN-1">9</a>] </sup><a class="xref" href="ch14.html#the_path_of_an_i_solidus_o_request_throu" title="Figure 14-1. The path of an I/O request through the CAM subsystem">Figure 14-1</a> is adapted from <span class="emphasis"><em>The Design and Implementation of the FreeBSD Operating System</em></span> by Marshall Kirk McKusick and George V. Neville-Neil (Addison-Wesley, 2005).</p></div></div></div>
+<div class="sect1" title="A (Somewhat) Simple Example"><div class="titlepage"><div><div><h1 class="title"><a id="a_open_parenthesis_somewhat_close_parent"/>A (Somewhat) Simple Example</h1></div></div></div><p>Now that you’re familiar with the CAM subsystem, let’s work through some code. After that, I’ll detail the different CAM-related functions.</p><p><a class="xref" href="ch14s02.html#mfi_underscore_cam.c" title="Example 14-1. mfi_cam.c">Example 14-1</a> is a SIM for a pseudo-HBA (taken from the <code class="literal">mfi(4)</code> code base).</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Take a quick look at this code and try to discern some of its structure. If you don’t understand all of it, don’t worry; an explanation follows.</p></div><div class="example"><a id="mfi_underscore_cam.c"/><p class="title">Example 14-1. mfi_cam.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/param.h&gt;
+  #include &lt;sys/module.h&gt;
+  #include &lt;sys/kernel.h&gt;
+  #include &lt;sys/systm.h&gt;
+
+  #include &lt;sys/selinfo.h&gt;
+  #include &lt;sys/bus.h&gt;
+  #include &lt;sys/conf.h&gt;
+  #include &lt;sys/bio.h&gt;
+  #include &lt;sys/malloc.h&gt;
+  #include &lt;sys/uio.h&gt;
+
+  #include &lt;cam/cam.h&gt;
+  #include &lt;cam/cam_ccb.h&gt;
+  #include &lt;cam/cam_debug.h&gt;
+  #include &lt;cam/cam_sim.h&gt;
+  #include &lt;cam/cam_xpt_sim.h&gt;
+  #include &lt;cam/scsi/scsi_all.h&gt;
+
+  #include &lt;machine/md_var.h&gt;
+  #include &lt;machine/bus.h&gt;
+  #include &lt;sys/rman.h&gt;
+
+  #include &lt;dev/mfi/mfireg.h&gt;
+  #include &lt;dev/mfi/mfi_ioctl.h&gt;
+  #include &lt;dev/mfi/mfivar.h&gt;
+
+  #define ccb_mfip_ptr            sim_priv.entries[0].ptr
+
+  struct mfip {
+          device_t                dev;
+          struct mfi_softc        *mfi;
+          struct cam_devq         *devq;
+          struct cam_sim          *sim;
+          struct cam_path         *path;
+  };
+
+  static devclass_t               mfip_devclass;
+
+  static void                     mfip_action(struct cam_sim *, union ccb *);
+  static void                     mfip_poll(struct cam_sim *);
+  static struct mfi_command *     mfip_start(void *);
+  static void                     mfip_done(struct mfi_command *);
+
+  static int
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/> mfip_probe(device_t dev)
+  {
+          device_set_desc(dev, "SCSI pass-through bus");
+          return (BUS_PROBE_SPECIFIC);
+  }
+
+  static int
+  mfip_attach(device_t dev)
+  {
+          struct mfip *sc;
+          struct mfi_softc *mfi;
+
+          sc = device_get_softc(dev);
+          if (sc == NULL)
+                  return (EINVAL);
+
+          mfi = device_get_softc(device_get_parent(dev));
+          sc-&gt;dev = dev;
+          sc-&gt;mfi = mfi;
+          mfi-&gt;mfi_cam_start = mfip_start;
+
+          if ((sc-&gt;devq = cam_simq_alloc(MFI_SCSI_MAX_CMDS)) == NULL)
+                  return (ENOMEM);
+
+          sc-&gt;sim = cam_sim_alloc(mfip_action, mfip_poll, "mfi", sc,
+              device_get_unit(dev), &amp;mfi-&gt;mfi_io_lock, 1, MFI_SCSI_MAX_CMDS,
+              sc-&gt;devq);
+          if (sc-&gt;sim == NULL) {
+                  cam_simq_free(sc-&gt;devq);
+                  device_printf(dev, "cannot allocate CAM SIM\n");
+                  return (EINVAL);
+          }
+
+          mtx_lock(&amp;mfi-&gt;mfi_io_lock);
+          if (xpt_bus_register(sc-&gt;sim, dev, 0) != 0) {
+                  device_printf(dev,
+                      "cannot register SCSI pass-through bus\n");
+                  cam_sim_free(sc-&gt;sim, FALSE);
+                  cam_simq_free(sc-&gt;devq);
+                  mtx_unlock(&amp;mfi-&gt;mfi_io_lock);
+                  return (EINVAL);
+          }
+          mtx_unlock(&amp;mfi-&gt;mfi_io_lock);
+
+          return (0);
+  }
+
+  static int
+  mfip_detach(device_t dev)
+  {
+          struct mfip *sc;
+
+          sc = device_get_softc(dev);
+          if (sc == NULL)
+                  return (EINVAL);
+
+          if (sc-&gt;sim != NULL) {
+                  mtx_lock(&amp;sc-&gt;mfi-&gt;mfi_io_lock);
+                  xpt_bus_deregister(cam_sim_path(sc-&gt;sim));
+                  cam_sim_free(sc-&gt;sim, FALSE);
+                  mtx_unlock(&amp;sc-&gt;mfi-&gt;mfi_io_lock);
+          }
+
+          if (sc-&gt;devq != NULL)
+                  cam_simq_free(sc-&gt;devq);
+
+          return (0);
+  }
+
+  static void
+  mfip_action(struct cam_sim *sim, union ccb *ccb)
+  {
+          struct mfip *sc;
+          struct mfi_softc *mfi;
+
+          sc = cam_sim_softc(sim);
+          mfi = sc-&gt;mfi;
+          mtx_assert(&amp;mfi-&gt;mfi_io_lock, MA_OWNED);
+
+          switch (ccb-&gt;ccb_h.func_code) {
+          case XPT_PATH_INQ:
+          {
+                  struct ccb_pathinq *cpi;
+
+                  cpi = &amp;ccb-&gt;cpi;
+                  cpi-&gt;version_num = 1;
+                  cpi-&gt;hba_inquiry = PI_SDTR_ABLE | PI_TAG_ABLE | PI_WIDE_16;
+                  cpi-&gt;target_sprt = 0;
+                  cpi-&gt;hba_misc = PIM_NOBUSRESET | PIM_SEQSCAN;
+                  cpi-&gt;hba_eng_cnt = 0;
+                  cpi-&gt;max_target = MFI_SCSI_MAX_TARGETS;
+                  cpi-&gt;max_lun = MFI_SCSI_MAX_LUNS;
+                  cpi-&gt;initiator_id = MFI_SCSI_INITIATOR_ID;
+                  strncpy(cpi-&gt;sim_vid, "FreeBSD", SIM_IDLEN);
+                  strncpy(cpi-&gt;hba_vid, "LSI", HBA_IDLEN);
+                  strncpy(cpi-&gt;dev_name, cam_sim_name(sim), DEV_IDLEN);
+                  cpi-&gt;unit_number = cam_sim_unit(sim);
+                  cpi-&gt;bus_id = cam_sim_bus(sim);
+                  cpi-&gt;base_transfer_speed = 150000;
+                  cpi-&gt;protocol = PROTO_SCSI;
+                  cpi-&gt;protocol_version = SCSI_REV_2;
+                  cpi-&gt;transport = XPORT_SAS;
+                  cpi-&gt;transport_version = 0;
+
+                  cpi-&gt;ccb_h.status = CAM_REQ_CMP;
+                  break;
+          }
+          case XPT_RESET_BUS:
+                  ccb-&gt;ccb_h.status = CAM_REQ_CMP;
+                  break;
+          case XPT_RESET_DEV:
+                  ccb-&gt;ccb_h.status = CAM_REQ_CMP;
+                  break;
+          case XPT_GET_TRAN_SETTINGS:
+          {
+                  struct ccb_trans_settings_sas *sas;
+
+                  ccb-&gt;cts.protocol = PROTO_SCSI;
+                  ccb-&gt;cts.protocol_version = SCSI_REV_2;
+                  ccb-&gt;cts.transport = XPORT_SAS;
+                  ccb-&gt;cts.transport_version = 0;
+                  sas = &amp;ccb-&gt;cts.xport_specific.sas;
+                  sas-&gt;valid &amp;= ˜CTS_SAS_VALID_SPEED;
+                  sas-&gt;bitrate = 150000;
+
+                  ccb-&gt;ccb_h.status = CAM_REQ_CMP;
+                  break;
+          }
+          case XPT_SET_TRAN_SETTINGS:
+                  ccb-&gt;ccb_h.status = CAM_FUNC_NOTAVAIL;
+                  break;
+          case XPT_SCSI_IO:
+          {
+                  struct ccb_hdr *ccb_h = &amp;ccb-&gt;ccb_h;
+                  struct ccb_scsiio *csio = &amp;ccb-&gt;csio;
+
+                  ccb_h-&gt;status = CAM_REQ_INPROG;
+                  if (csio-&gt;cdb_len &gt; MFI_SCSI_MAX_CDB_LEN) {
+                          ccb_h-&gt;status = CAM_REQ_INVALID;
+                          break;
+                  }
+                  if ((ccb_h-&gt;flags &amp; CAM_DIR_MASK) != CAM_DIR_NONE) {
+                          if (ccb_h-&gt;flags &amp; CAM_DATA_PHYS) {
+                                  ccb_h-&gt;status = CAM_REQ_INVALID;
+                                  break;
+                          }
+                          if (ccb_h-&gt;flags &amp; CAM_SCATTER_VALID) {
+                                  ccb_h-&gt;status = CAM_REQ_INVALID;
+                                  break;
+                          }
+                  }
+
+                  ccb_h-&gt;ccb_mfip_ptr = sc;
+                  TAILQ_INSERT_TAIL(&amp;mfi-&gt;mfi_cam_ccbq, ccb_h, sim_links.tqe);
+                  mfi_startio(mfi);
+
+                  return;
+          }
+          default:
+                  ccb-&gt;ccb_h.status = CAM_REQ_INVALID;
+                  break;
+          }
+
+          xpt_done(ccb);
+          return;
+  }
+
+  static void
+  mfip_poll(struct cam_sim *sim)
+  {
+          return;
+  }
+
+  static struct mfi_command *
+  mfip_start(void *data)
+  {
+          union ccb *ccb = data;
+          struct ccb_hdr *ccb_h = &amp;ccb-&gt;ccb_h;
+          struct ccb_scsiio *csio = &amp;ccb-&gt;csio;
+          struct mfip *sc;
+          struct mfi_command *cm;
+          struct mfi_pass_frame *pt;
+
+          sc = ccb_h-&gt;ccb_mfip_ptr;
+
+          if ((cm = mfi_dequeue_free(sc-&gt;mfi)) == NULL)
+                  return (NULL);
+
+          pt = &amp;cm-&gt;cm_frame-&gt;pass;
+          pt-&gt;header.cmd = MFI_CMD_PD_SCSI_IO;
+          pt-&gt;header.cmd_status = 0;
+          pt-&gt;header.scsi_status = 0;
+          pt-&gt;header.target_id = ccb_h-&gt;target_id;
+          pt-&gt;header.lun_id = ccb_h-&gt;target_lun;
+          pt-&gt;header.flags = 0;
+          pt-&gt;header.timeout = 0;
+          pt-&gt;header.data_len = csio-&gt;dxfer_len;
+          pt-&gt;header.sense_len = MFI_SENSE_LEN;
+          pt-&gt;header.cdb_len = csio-&gt;cdb_len;
+          pt-&gt;sense_addr_lo = cm-&gt;cm_sense_busaddr;
+          pt-&gt;sense_addr_hi = 0;
+          if (ccb_h-&gt;flags &amp; CAM_CDB_POINTER)
+                  bcopy(csio-&gt;cdb_io.cdb_ptr, &amp;pt-&gt;cdb[0], csio-&gt;cdb_len);
+          else
+                  bcopy(csio-&gt;cdb_io.cdb_bytes, &amp;pt-&gt;cdb[0], csio-&gt;cdb_len);
+
+          cm-&gt;cm_complete = mfip_done;
+          cm-&gt;cm_private = ccb;
+          cm-&gt;cm_sg = &amp;pt-&gt;sgl;
+          cm-&gt;cm_total_frame_size = MFI_PASS_FRAME_SIZE;
+          cm-&gt;cm_data = csio-&gt;data_ptr;
+          cm-&gt;cm_len = csio-&gt;dxfer_len;
+          switch (ccb_h-&gt;flags &amp; CAM_DIR_MASK) {
+          case CAM_DIR_IN:
+                  cm-&gt;cm_flags = MFI_CMD_DATAIN;
+                  break;
+          case CAM_DIR_OUT:
+                  cm-&gt;cm_flags = MFI_CMD_DATAOUT;
+                  break;
+          case CAM_DIR_NONE:
+          default:
+                  cm-&gt;cm_data = NULL;
+                  cm-&gt;cm_len = 0;
+                  cm-&gt;cm_flags = 0;
+                  break;
+          }
+
+          TAILQ_REMOVE(&amp;sc-&gt;mfi-&gt;mfi_cam_ccbq, ccb_h, sim_links.tqe);
+          return (cm);
+  }
+
+  static void
+  mfip_done(struct mfi_command *cm)
+  {
+          union ccb *ccb = cm-&gt;cm_private;
+          struct ccb_hdr *ccb_h = &amp;ccb-&gt;ccb_h;
+          struct ccb_scsiio *csio = &amp;ccb-&gt;csio;
+          struct mfip *sc;
+          struct mfi_pass_frame *pt;
+
+          sc = ccb_h-&gt;ccb_mfip_ptr;
+          pt = &amp;cm-&gt;cm_frame-&gt;pass;
+
+          switch (pt-&gt;header.cmd_status) {
+          case MFI_STAT_OK:
+          {
+                  uint8_t command, device;
+
+                  ccb_h-&gt;status = CAM_REQ_CMP;
+                  csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+
+                  if (ccb_h-&gt;flags &amp; CAM_CDB_POINTER)
+                          command = ccb-&gt;csio.cdb_io.cdb_ptr[0];
+                  else
+                          command = ccb-&gt;csio.cdb_io.cdb_bytes[0];
+
+                  if (command == INQUIRY) {
+                          device = ccb-&gt;csio.data_ptr[0] &amp; 0x1f;
+                          if ((device == T_DIRECT) || (device == T_PROCESSOR))
+                                  csio-&gt;data_ptr[0] =
+                                      (device &amp; 0xe0) | T_NODEVICE;
+                  }
+
+                  break;
+          }
+          case MFI_STAT_SCSI_DONE_WITH_ERROR:
+          {
+                  int sense_len;
+
+                  ccb_h-&gt;status = CAM_SCSI_STATUS_ERROR | CAM_AUTOSNS_VALID;
+                  csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+
+                  sense_len = min(pt-&gt;header.sense_len,
+                      sizeof(struct scsi_sense_data));
+                  bzero(&amp;csio-&gt;sense_data, sizeof(struct scsi_sense_data));
+                  bcopy(&amp;cm-&gt;cm_sense-&gt;data[0], &amp;csio-&gt;sense_data, sense_len);
+                  break;
+          }
+          case MFI_STAT_DEVICE_NOT_FOUND:
+                  ccb_h-&gt;status = CAM_SEL_TIMEOUT;
+                  break;
+          case MFI_STAT_SCSI_IO_FAILED:
+                  ccb_h-&gt;status = CAM_REQ_CMP_ERR;
+                  csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+                  break;
+          default:
+                  ccb_h-&gt;status = CAM_REQ_CMP_ERR;
+                  csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+                  break;
+          }
+
+          mfi_release_command(cm);
+          xpt_done(ccb);
+  }
+
+  static device_method_t mfip_methods[] = {
+          /* Device interface. */
+          DEVMETHOD(device_probe,         mfip_probe),
+          DEVMETHOD(device_attach,        mfip_attach),
+          DEVMETHOD(device_detach,        mfip_detach),
+          { 0, 0 }
+  };
+
+  static driver_t mfip_driver = {
+          "mfip",
+          mfip_methods,
+          sizeof(struct mfip)
+  };
+
+  DRIVER_MODULE(mfip, mfi, mfip_driver, mfip_devclass, 0, 0);
+  MODULE_DEPEND(mfip, cam, 1, 1, 1);
+  MODULE_DEPEND(mfip, mfi, 1, 1, 1);</pre></div></div><p>The following sections describe the functions defined in <a class="xref" href="ch14s02.html#mfi_underscore_cam.c" title="Example 14-1. mfi_cam.c">Example 14-1</a> roughly in the order they would execute.<a class="indexterm" id="IDX-CHP-14-0027"/><a class="indexterm" id="IDX-CHP-14-0028"/><a class="indexterm" id="IDX-CHP-14-0029"/></p><p>As an aside, because <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24553"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">mfip_probe</code> is extremely rudimentary and because we’ve examined similar code elsewhere, I’ll omit discussing it.</p><div class="sect2" title="mfip_attach Function"><div class="titlepage"><div><div><h2 class="title"><a id="mfip_underscore_attach_function"/>mfip_attach Function</h2></div></div></div><p>The <code class="literal">mfip_attach</code> function is the <code class="literal">device_attach</code> implementation for this driver. Here is its function definition (again):</p><a id="I_programlisting14_d1e24573"/><pre class="programlisting">static int
+mfip_attach(device_t dev)
+{
+        struct mfip *sc;
+        struct mfi_softc *mfi;
+
+        sc = device_get_softc(dev);
+        if (sc == NULL)
+                return (EINVAL);
+
+        mfi = device_get_softc(device_get_parent(dev));
+        sc-&gt;dev = dev;
+        sc-&gt;mfi = mfi;
+        mfi-&gt;mfi_cam_start = mfip_start;
+
+        if ((sc-&gt;devq = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>cam_simq_alloc(MFI_SCSI_MAX_CMDS)) == NULL)
+                return (ENOMEM);
+
+        sc-&gt;sim = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>cam_sim_alloc(mfip_action, mfip_poll, "mfi", sc,
+            device_get_unit(dev), &amp;mfi-&gt;mfi_io_lock, 1, MFI_SCSI_MAX_CMDS,
+            sc-&gt;devq);
+        if (sc-&gt;sim == NULL) {
+                cam_simq_free(sc-&gt;devq);
+                device_printf(dev, "cannot allocate CAM SIM\n");
+                return (EINVAL);
+        }
+
+        mtx_lock(&amp;mfi-&gt;mfi_io_lock);
+        if (<img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>xpt_bus_register(sc-&gt;sim, dev, 0) != 0) {
+                device_printf(dev,
+                    "cannot register SCSI pass-through bus\n");
+                cam_sim_free(sc-&gt;sim, FALSE);
+                cam_simq_free(sc-&gt;devq);
+                mtx_unlock(&amp;mfi-&gt;mfi_io_lock);
+                return (EINVAL);
+        }
+        mtx_unlock(&amp;mfi-&gt;mfi_io_lock);
+
+        return (0);
+}</pre><p>This function first calls <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24595"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">cam_simq_alloc</code> to allocate a SIM queue. Loosely speaking, <span class="emphasis"><em>SIM queues</em></span> ensure that HBAs cannot be swamped by I/O requests. See, I/O requests from peripheral modules are housed on SIM queues to await service. When a queue becomes full, any additional requests are rejected.<a class="indexterm" id="IDX-CHP-14-0030"/><a class="indexterm" id="IDX-CHP-14-0031"/><a class="indexterm" id="IDX-CHP-14-0032"/><a class="indexterm" id="IDX-CHP-14-0033"/><a class="indexterm" id="IDX-CHP-14-0034"/></p><p>Next, <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24631"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">cam_sim_alloc</code> is called to allocate a SIM (or bus) descriptor. Note that if an HBA implements multiple buses (or channels), each bus requires its own descriptor.</p><p>Finally, <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24642"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">xpt_bus_register</code> takes the descriptor returned by <code class="literal">cam_sim_alloc</code> and registers it with the CAM subsystem.</p></div><div class="sect2" title="mfip_detach Function"><div class="titlepage"><div><div><h2 class="title"><a id="mfip_underscore_detach_function"/>mfip_detach Function</h2></div></div></div><p>The <code class="literal">mfip_detach</code> function is the <code class="literal">device_detach</code> implementation for this driver. Here is its function definition (again):</p><a id="I_programlisting14_d1e24665"/><pre class="programlisting">static int
+mfip_detach(device_t dev)
+{
+        struct mfip *sc;
+
+        sc = device_get_softc(dev);
+        if (sc == NULL)
+                return (EINVAL);
+
+        if (sc-&gt;sim != NULL) {
+                mtx_lock(&amp;sc-&gt;mfi-&gt;mfi_io_lock);
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>xpt_bus_deregister(cam_sim_path(sc-&gt;sim));
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>cam_sim_free(sc-&gt;sim, FALSE);
+                mtx_unlock(&amp;sc-&gt;mfi-&gt;mfi_io_lock);
+        }
+
+        if (sc-&gt;devq != NULL)
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>cam_simq_free(sc-&gt;devq);
+
+        return (0);
+}</pre><p>This function starts by <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24687"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> deregistering and <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24693"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> freeing its SIM descriptor. Afterward, its SIM queue is <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24699"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> freed.<a class="indexterm" id="IDX-CHP-14-0035"/><a class="indexterm" id="IDX-CHP-14-0036"/><a class="indexterm" id="IDX-CHP-14-0037"/><a class="indexterm" id="IDX-CHP-14-0038"/><a class="indexterm" id="IDX-CHP-14-0039"/></p></div><div class="sect2" title="mfip_action Function"><div class="titlepage"><div><div><h2 class="title"><a id="mfip_underscore_action_function"/>mfip_action Function</h2></div></div></div><p>The <code class="literal">mfip_action</code> function is defined in <code class="literal">mfip_attach</code> as the action routine (for verification, see the first argument to <code class="literal">cam_sim_alloc</code>). <span class="emphasis"><em>Action routines</em></span> are executed every time a SIM receives a CCB.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Recall that a CCB houses an I/O request (or command) to perform along with the identity of the target device (that is, the intended recipient of the I/O request).</p></div><p>Fundamentally, <code class="literal">mfip_action</code> is akin to the <code class="literal">ahc_action</code> function shown in <a class="xref" href="ch14.html#the_path_of_an_i_solidus_o_request_throu" title="Figure 14-1. The path of an I/O request through the CAM subsystem">Figure 14-1</a>. Here is its function definition (again):</p><a id="I_programlisting14_d1e24759"/><pre class="programlisting">static void
+mfip_action(struct cam_sim *sim, <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>union ccb *ccb)
+{
+        struct mfip *sc;
+        struct mfi_softc *mfi;
+
+        sc = cam_sim_softc(sim);
+        mfi = sc-&gt;mfi;
+        mtx_assert(&amp;mfi-&gt;mfi_io_lock, MA_OWNED);
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>switch (ccb-&gt;ccb_h.func_code) {
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>case XPT_PATH_INQ:
+        {
+                struct ccb_pathinq *cpi;
+
+                cpi = &amp;ccb-&gt;cpi;
+                cpi-&gt;version_num = 1;
+                cpi-&gt;hba_inquiry = PI_SDTR_ABLE | PI_TAG_ABLE | PI_WIDE_16;
+                cpi-&gt;target_sprt = 0;
+                cpi-&gt;hba_misc = PIM_NOBUSRESET | PIM_SEQSCAN;
+                cpi-&gt;hba_eng_cnt = 0;
+                cpi-&gt;max_target = MFI_SCSI_MAX_TARGETS;
+                cpi-&gt;max_lun = MFI_SCSI_MAX_LUNS;
+                cpi-&gt;initiator_id = MFI_SCSI_INITIATOR_ID;
+                strncpy(cpi-&gt;sim_vid, "FreeBSD", SIM_IDLEN);
+                strncpy(cpi-&gt;hba_vid, "LSI", HBA_IDLEN);
+                strncpy(cpi-&gt;dev_name, cam_sim_name(sim), DEV_IDLEN);
+                cpi-&gt;unit_number = cam_sim_unit(sim);
+                cpi-&gt;bus_id = cam_sim_bus(sim);
+                cpi-&gt;base_transfer_speed = 150000;
+                cpi-&gt;protocol = PROTO_SCSI;
+                cpi-&gt;protocol_version = SCSI_REV_2;
+                cpi-&gt;transport = XPORT_SAS;
+                cpi-&gt;transport_version = 0;
+
+                cpi-&gt;ccb_h.status = CAM_REQ_CMP;
+                break;
+        }
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>case XPT_RESET_BUS:
+                ccb-&gt;ccb_h.status = CAM_REQ_CMP;
+                break;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>case XPT_RESET_DEV:
+                ccb-&gt;ccb_h.status = CAM_REQ_CMP;
+                break;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>case XPT_GET_TRAN_SETTINGS:
+        {
+                struct ccb_trans_settings_sas *sas;
+
+                ccb-&gt;cts.protocol = PROTO_SCSI;
+                ccb-&gt;cts.protocol_version = SCSI_REV_2;
+                ccb-&gt;cts.transport = XPORT_SAS;
+                ccb-&gt;cts.transport_version = 0;
+                sas = &amp;ccb-&gt;cts.xport_specific.sas;
+                sas-&gt;valid &amp;= ˜CTS_SAS_VALID_SPEED;
+                sas-&gt;bitrate = 150000;
+
+                ccb-&gt;ccb_h.status = CAM_REQ_CMP;
+                break;
+        }
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>case XPT_SET_TRAN_SETTINGS:
+                ccb-&gt;ccb_h.status = CAM_FUNC_NOTAVAIL;
+                break;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>case XPT_SCSI_IO:
+        {
+                struct ccb_hdr *ccb_h = &amp;ccb-&gt;ccb_h;
+                struct ccb_scsiio *csio = &amp;ccb-&gt;csio;
+
+                ccb_h-&gt;status = CAM_REQ_INPROG;
+                if (csio-&gt;cdb_len &gt; MFI_SCSI_MAX_CDB_LEN) {
+                        ccb_h-&gt;status = CAM_REQ_INVALID;
+                        break;
+                }
+                if ((ccb_h-&gt;flags &amp; CAM_DIR_MASK) != CAM_DIR_NONE) {
+                        if (ccb_h-&gt;flags &amp; CAM_DATA_PHYS) {
+                                ccb_h-&gt;status = CAM_REQ_INVALID;
+                                break;
+                        }
+                        if (ccb_h-&gt;flags &amp; CAM_SCATTER_VALID) {
+                                ccb_h-&gt;status = CAM_REQ_INVALID;
+                                break;
+                        }
+                }
+
+                ccb_h-&gt;ccb_mfip_ptr = sc;
+                TAILQ_INSERT_TAIL(&amp;mfi-&gt;mfi_cam_ccbq, ccb_h, sim_links.tqe);
+                mfi_startio(mfi);
+
+                return;
+        }
+        default:
+                ccb-&gt;ccb_h.status = CAM_REQ_INVALID;
+                break;
+        }
+
+        xpt_done(ccb);
+        return;
+}</pre><p>Most action routines simply take a <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24812"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> CCB and <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24818"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> branch according to the <code class="literal">ccb_h.func_code</code> variable, which denotes the I/O operation to perform.<a class="indexterm" id="IDX-CHP-14-0040"/><a class="indexterm" id="IDX-CHP-14-0041"/><a class="indexterm" id="IDX-CHP-14-0042"/><a class="indexterm" id="IDX-CHP-14-0043"/><a class="indexterm" id="IDX-CHP-14-0044"/><a class="indexterm" id="IDX-CHP-14-0045"/><a class="indexterm" id="IDX-CHP-14-0046"/></p><p>For now, I’m going to focus on the structure of <code class="literal">mfip_action</code> and avoid its specifics. An in-depth explanation of <code class="literal">mfip_action</code> appears in <a class="xref" href="ch14s04.html" title="Action Routines">Action Routines</a> in <a class="xref" href="ch14s03.html#xpt_underscore_bus_underscore_register" title="xpt_bus_register Function">xpt_bus_register Function</a>.</p><p>As you can see, this function can perform one of six I/O operations: it can <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24875"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> return the SIM and HBA properties, reset a <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24881"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> bus or <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24887"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> device, <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24893"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> get or <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24899"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> set the transfer settings, or <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24906"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> issue a SCSI command to a device.</p></div><div class="sect2" title="mfip_poll Function"><div class="titlepage"><div><div><h2 class="title"><a id="mfip_underscore_poll_function"/>mfip_poll Function</h2></div></div></div><p>The <code class="literal">mfip_poll</code> function is defined in <code class="literal">mfip_attach</code> as the poll routine (for verification, see the second argument to <code class="literal">cam_sim_alloc</code>). Customarily, <span class="emphasis"><em>poll routines</em></span> wrap a SIM’s interrupt handler. See, when interrupts are unavailable (for example, after a kernel panic) the CAM subsystem will use poll routines to run its interrupt handlers.<a class="indexterm" id="IDX-CHP-14-0047"/></p><p>The following is the function definition for <code class="literal">mfip_poll</code> (again):</p><a id="I_programlisting14_d1e24937"/><pre class="programlisting">static void
+mfip_poll(struct cam_sim *sim)
+{
+        <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>return;
+}</pre><p>Because this SIM does not implement an interrupt handler, <code class="literal">mfip_poll</code> just <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e24950"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> returns.</p></div><div class="sect2" title="mfip_start Function"><div class="titlepage"><div><div><h2 class="title"><a id="mfip_underscore_start_function"/>mfip_start Function</h2></div></div></div><p>The <code class="literal">mfip_start</code> function transforms a SCSI command into a hardware-specific command. This function is called exclusively by <code class="literal">mfi_startio</code>.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>The <code class="literal">mfi_startio</code> function is defined in <span class="emphasis"><em>mfi.c</em></span> (which is not described in this book). <code class="literal">mfi_startio</code> is called by <code class="literal">mfip_action</code> (described in <a class="xref" href="ch14s02.html#mfip_underscore_action_function" title="mfip_action Function">mfip_action Function</a> in <a class="xref" href="ch14s02.html#mfip_underscore_action_function" title="mfip_action Function">mfip_action Function</a>) to issue a SCSI command to a device.<a class="indexterm" id="IDX-CHP-14-0048"/></p></div><p>Here is the function definition for <code class="literal">mfip_start</code> (again):</p><a id="I_programlisting14_d1e24996"/><pre class="programlisting">static struct mfi_command *
+mfip_start(void *data)
+{
+        union ccb *ccb = data;
+        struct ccb_hdr *ccb_h = &amp;ccb-&gt;ccb_h;
+        struct ccb_scsiio *csio = &amp;ccb-&gt;csio;
+        struct mfip *sc;
+        struct mfi_command *cm;
+        struct mfi_pass_frame *pt;
+
+        sc = ccb_h-&gt;ccb_mfip_ptr;
+
+        if ((cm = mfi_dequeue_free(sc-&gt;mfi)) == NULL)
+                return (NULL);
+
+        pt = &amp;cm-&gt;cm_frame-&gt;pass;
+        pt-&gt;header.cmd = MFI_CMD_PD_SCSI_IO;
+        pt-&gt;header.cmd_status = 0;
+        pt-&gt;header.scsi_status = 0;
+        pt-&gt;header.target_id = ccb_h-&gt;target_id;
+        pt-&gt;header.lun_id = ccb_h-&gt;target_lun;
+        pt-&gt;header.flags = 0;
+        pt-&gt;header.timeout = 0;
+        pt-&gt;header.data_len = csio-&gt;dxfer_len;
+        pt-&gt;header.sense_len = MFI_SENSE_LEN;
+        pt-&gt;header.cdb_len = csio-&gt;cdb_len;
+        pt-&gt;sense_addr_lo = cm-&gt;cm_sense_busaddr;
+        pt-&gt;sense_addr_hi = 0;
+        if (ccb_h-&gt;flags &amp; CAM_CDB_POINTER)
+                bcopy(csio-&gt;cdb_io.cdb_ptr, &amp;pt-&gt;cdb[0], csio-&gt;cdb_len);
+        else
+                bcopy(csio-&gt;cdb_io.cdb_bytes, &amp;pt-&gt;cdb[0], csio-&gt;cdb_len);
+
+        cm-&gt;cm_complete = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>mfip_done;
+        cm-&gt;cm_private = ccb;
+        cm-&gt;cm_sg = &amp;pt-&gt;sgl;
+        cm-&gt;cm_total_frame_size = MFI_PASS_FRAME_SIZE;
+        cm-&gt;cm_data = csio-&gt;data_ptr;
+        cm-&gt;cm_len = csio-&gt;dxfer_len;
+        switch (ccb_h-&gt;flags &amp; CAM_DIR_MASK) {
+        case CAM_DIR_IN:
+                cm-&gt;cm_flags = MFI_CMD_DATAIN;
+                break;
+        case CAM_DIR_OUT:
+                cm-&gt;cm_flags = MFI_CMD_DATAOUT;
+                break;
+        case CAM_DIR_NONE:
+        default:
+                cm-&gt;cm_data = NULL;
+                cm-&gt;cm_len = 0;
+                cm-&gt;cm_flags = 0;
+                break;
+        }
+
+        TAILQ_REMOVE(&amp;sc-&gt;mfi-&gt;mfi_cam_ccbq, ccb_h, sim_links.tqe);
+        return (cm);
+}</pre><p>As you can see, this function is fairly straightforward—it’s just a bunch of assignments. Until we’ve examined <code class="literal">struct ccb_scsiio</code> and <code class="literal">struct ccb_hdr</code>, which occurs in <a class="xref" href="ch14s04.html#xpt_underscore_scsi_underscore_io" title="XPT_SCSI_IO">XPT_SCSI_IO</a> in <a class="xref" href="ch14s04.html#xpt_underscore_scsi_underscore_io" title="XPT_SCSI_IO">XPT_SCSI_IO</a>, I’m going to postpone walking through this function.<a class="indexterm" id="IDX-CHP-14-0049"/><a class="indexterm" id="IDX-CHP-14-0050"/><a class="indexterm" id="IDX-CHP-14-0051"/><a class="indexterm" id="IDX-CHP-14-0052"/><a class="indexterm" id="IDX-CHP-14-0053"/></p><p>Note that <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25040"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">mfip_done</code> is set as the done routine for the hardware-specific command.</p></div><div class="sect2" title="mfip_done Function"><div class="titlepage"><div><div><h2 class="title"><a id="mfip_underscore_done_function"/>mfip_done Function</h2></div></div></div><p>As implied previously, the <code class="literal">mfip_done</code> function is the done routine for this SIM. It is executed by <code class="literal">mfi_intr</code> immediately after a device completes a hardware-specific command.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>The <code class="literal">mfi_intr</code> function is <code class="literal">mfi(4)</code>’s interrupt handler. It is defined in <span class="emphasis"><em>mfi.c</em></span>.</p></div><p>Fundamentally, <code class="literal">mfip_done</code> is akin to the <code class="literal">ahc_done</code> function shown in <a class="xref" href="ch14.html#the_path_of_an_i_solidus_o_request_throu" title="Figure 14-1. The path of an I/O request through the CAM subsystem">Figure 14-1</a>. Here is its function definition (again):</p><a id="I_programlisting14_d1e25082"/><pre class="programlisting">static void
+mfip_done(<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>struct mfi_command *cm)
+{
+        union ccb *ccb = cm-&gt;cm_private;
+        struct ccb_hdr *ccb_h = &amp;ccb-&gt;ccb_h;
+        struct ccb_scsiio *csio = &amp;ccb-&gt;csio;
+        struct mfip *sc;
+        struct mfi_pass_frame *pt;
+
+        sc = ccb_h-&gt;ccb_mfip_ptr;
+        pt = &amp;cm-&gt;cm_frame-&gt;pass;
+
+        switch (pt-&gt;header.cmd_status) {
+        case MFI_STAT_OK:
+        {
+                uint8_t command, device;
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>ccb_h-&gt;status = CAM_REQ_CMP;
+                csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+
+                if (ccb_h-&gt;flags &amp; CAM_CDB_POINTER)
+                        command = ccb-&gt;csio.cdb_io.cdb_ptr[0];
+                else
+                        command = ccb-&gt;csio.cdb_io.cdb_bytes[0];
+
+                if (command == INQUIRY) {
+                        device = ccb-&gt;csio.data_ptr[0] &amp; 0x1f;
+                        if ((device == T_DIRECT) || (device == T_PROCESSOR))
+                                csio-&gt;data_ptr[0] =
+                                    (device &amp; 0xe0) | T_NODEVICE;
+                }
+
+                break;
+        }
+        case MFI_STAT_SCSI_DONE_WITH_ERROR:
+        {
+                int sense_len;
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>ccb_h-&gt;status = CAM_SCSI_STATUS_ERROR | CAM_AUTOSNS_VALID;
+                csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+
+                sense_len = min(pt-&gt;header.sense_len,
+                    sizeof(struct scsi_sense_data));
+                bzero(&amp;csio-&gt;sense_data, sizeof(struct scsi_sense_data));
+                bcopy(&amp;cm-&gt;cm_sense-&gt;data[0], &amp;csio-&gt;sense_data, sense_len);
+                break;
+        }
+        case MFI_STAT_DEVICE_NOT_FOUND:
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>ccb_h-&gt;status = CAM_SEL_TIMEOUT;
+                break;
+        case MFI_STAT_SCSI_IO_FAILED:
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>ccb_h-&gt;status = CAM_REQ_CMP_ERR;
+                csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+                break;
+        default:
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>ccb_h-&gt;status = CAM_REQ_CMP_ERR;
+                csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+                break;
+        }
+
+        mfi_release_command(cm);
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>xpt_done(ccb);
+}</pre><p>Commonly, done routines take a <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25129"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> hardware-specific command and append the completion status (that is, successful or unsuccessful) to its associated <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25135"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25141"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25147"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25153"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25160"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> CCB. Once this is done, <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25166"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> <code class="literal">xpt_done</code> is called to process the completed CCB.<a class="indexterm" id="IDX-CHP-14-0054"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>The <code class="literal">mfi(4)</code> code base uses DMA to acquire the completion status from a device.</p></div><p>Now that you’re familiar with <a class="xref" href="ch14s02.html#mfi_underscore_cam.c" title="Example 14-1. mfi_cam.c">Example 14-1</a>, I’ll expound on the different functions, structures, and constructs it employs.</p></div></div>
+<div class="sect1" title="SIM Registration Routines"><div class="titlepage"><div><div><h1 class="title"><a id="sim_registration_routines"/>SIM Registration Routines</h1></div></div></div><p>As alluded to previously, registering a SIM with the CAM subsystem involves three functions:<a class="indexterm" id="IDX-CHP-14-0055"/><a class="indexterm" id="IDX-CHP-14-0056"/><a class="indexterm" id="IDX-CHP-14-0057"/><a class="indexterm" id="IDX-CHP-14-0058"/><a class="indexterm" id="IDX-CHP-14-0059"/><a class="indexterm" id="IDX-CHP-14-0060"/><a class="indexterm" id="IDX-CHP-14-0061"/><a class="indexterm" id="IDX-CHP-14-0062"/><a class="indexterm" id="IDX-CHP-14-0063"/></p><div class="itemizedlist"><ul class="itemizedlist"><li class="listitem"><p><code class="literal">cam_simq_alloc</code></p></li><li class="listitem"><p><code class="literal">cam_sim_alloc</code></p></li><li class="listitem"><p><code class="literal">xpt_bus_register</code></p></li></ul></div><div class="sect2" title="cam_simq_alloc Function"><div class="titlepage"><div><div><h2 class="title"><a id="cam_underscore_simq_underscore_alloc_fun"/>cam_simq_alloc Function</h2></div></div></div><p>The <code class="literal">cam_simq_alloc</code> function allocates a SIM queue.</p><a id="I_programlisting14_d1e25255"/><pre class="programlisting">#include &lt;cam/cam_sim.h&gt;
+#include &lt;cam/cam_queue.h&gt;
+
+struct cam_devq *
+cam_simq_alloc(u_int32_t max_sim_transactions);</pre><p>Here, <code class="literal">max_sim_transactions</code> denotes the size of the SIM queue. Normally, it is calculated like so:</p><a id="I_programlisting14_d1e25262"/><pre class="programlisting">max_sim_transactions = number_of_supported_devices *
+    number_of_commands_that_can_be_concurrently_processed_per_device;</pre></div><div class="sect2" title="cam_sim_alloc Function"><div class="titlepage"><div><div><h2 class="title"><a id="cam_underscore_sim_underscore_alloc_func"/>cam_sim_alloc Function</h2></div></div></div><p>The <code class="literal">cam_sim_alloc</code> function allocates a SIM (or bus) descriptor.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>If an HBA implements multiple buses (or channels), each bus requires its own descriptor.</p></div><a id="I_programlisting14_d1e25275"/><pre class="programlisting">#include &lt;sys/param.h&gt;
+#include &lt;sys/lock.h&gt;
+#include &lt;sys/mutex.h&gt;
+
+#include &lt;cam/cam_sim.h&gt;
+#include &lt;cam/cam_queue.h&gt;
+
+struct cam_sim *
+cam_sim_alloc(sim_action_func sim_action, sim_poll_func sim_poll,
+    const char *sim_name, void *softc, u_int32_t unit, struct mtx *mtx,
+    int max_dev_transactions, int max_tagged_dev_transactions,
+    struct cam_devq *queue);</pre><p>Because the first six arguments to <code class="literal">cam_sim_alloc</code> are fairly obvious—they’re exactly what their name implies—I’ll omit discussing them.</p><p>The <code class="literal">max_dev_transactions</code> argument specifies the maximum number of concurrent transactions per device. This argument applies only to devices that do not support SCSI Tagged Command Queuing (SCSI TCQ). Generally, <code class="literal">max_dev_transactions</code> is always set to <code class="literal">1</code>.</p><p>The <code class="literal">max_tagged_dev_transactions</code> argument is identical to <code class="literal">max_dev_transactions</code>, but it applies only to devices that support SCSI TCQ.<a class="indexterm" id="IDX-CHP-14-0064"/><a class="indexterm" id="IDX-CHP-14-0065"/><a class="indexterm" id="IDX-CHP-14-0066"/><a class="indexterm" id="IDX-CHP-14-0067"/><a class="indexterm" id="IDX-CHP-14-0068"/><a class="indexterm" id="IDX-CHP-14-0069"/><a class="indexterm" id="IDX-CHP-14-0070"/><a class="indexterm" id="IDX-CHP-14-0071"/><a class="indexterm" id="IDX-CHP-14-0072"/></p><p>The <code class="literal">queue</code> argument expects a pointer to a SIM queue (that is, <code class="literal">cam_simq_alloc</code>’s return value).</p></div><div class="sect2" title="xpt_bus_register Function"><div class="titlepage"><div><div><h2 class="title"><a id="xpt_underscore_bus_underscore_register"/>xpt_bus_register Function</h2></div></div></div><p>The <code class="literal">xpt_bus_register</code> function registers a SIM with the CAM subsystem.</p><a id="I_programlisting14_d1e25357"/><pre class="programlisting">#include &lt;cam/cam_sim.h&gt;
+#include &lt;cam/cam_xpt_sim.h&gt;
+
+int32_t
+xpt_bus_register(struct cam_sim *sim, device_t parent, u_int32_t bus)</pre><p>Here, <code class="literal">sim</code> specifies the SIM to register (that is, <code class="literal">cam_sim_alloc</code>’s return value) and <code class="literal">bus</code> denotes its bus number. The <code class="literal">parent</code> argument is currently unused.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>If an HBA implements multiple buses (or channels), each bus needs its own unique bus number.</p></div></div></div>
+<div class="sect1" title="Action Routines"><div class="titlepage"><div><div><h1 class="title"><a id="action_routines"/>Action Routines</h1></div></div></div><p>As mentioned previously, action routines are executed every time a SIM receives a CCB. You can think of action routines like the “main function” for a SIM.</p><p>Here is the function prototype for an action routine (taken from the <code class="literal">&lt;cam/cam_sim.h&gt;</code> header):</p><a id="I_programlisting14_d1e25386"/><pre class="programlisting">typedef void (*sim_action_func)(struct cam_sim *sim, union ccb *ccb);</pre><p>Recall that action routines <code class="literal">switch</code> according to the <code class="literal">ccb-&gt;ccb_h.func_code</code> variable, which contains a constant that symbolizes the I/O operation to perform. For the rest of this chapter, I’ll detail the most common constants/operations.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>For the complete list of constants/operations, see the <code class="literal">xpt_opcode</code> enumeration defined in the <code class="literal">&lt;cam/cam_ccb.h&gt;</code> header.</p></div><div class="sect2" title="XPT_PATH_INQ"><div class="titlepage"><div><div><h2 class="title"><a id="xpt_underscore_path_underscore_inq"/>XPT_PATH_INQ</h2></div></div></div><p>The <code class="literal">XPT_PATH_INQ</code> constant specifies a path inquiry operation, which returns the SIM and HBA properties. Action routines that are passed <code class="literal">XPT_PATH_INQ</code> simply fill in a <code class="literal">ccb_pathinq</code> structure and then return.</p><p><code class="literal">struct ccb_pathinq</code> is defined in the <code class="literal">&lt;cam/cam_ccb.h&gt;</code> header as follows:</p><a id="I_programlisting14_d1e25426"/><pre class="programlisting">struct ccb_pathinq {
+        struct ccb_hdr ccb_h;           /* Header information fields.   */
+        u_int8_t    version_num;        /* Version number.              */
+        u_int8_t    hba_inquiry;        /* Imitate INQ byte 7.          */
+        u_int8_t    target_sprt;        /* Target mode support flags.   */
+        u_int8_t    hba_misc;           /* Miscellaneous HBA features.  */
+        u_int16_t   hba_eng_cnt;        /* HBA engine count.            */
+
+        u_int8_t vuhba_flags[VUHBALEN]; /* Vendor unique capabilities.  */
+        u_int32_t   max_target;         /* Maximum supported targets.   */
+        u_int32_t   max_lun;            /* Maximum supported LUN.       */
+        u_int32_t   async_flags;        /* Asynchronous handler flags.  */
+        path_id_t   hpath_id;      /* Highest path ID in the subsystem. */
+        target_id_t initiator_id;       /* HBA ID on the bus.           */
+
+        char sim_vid[SIM_IDLEN];        /* SIM vendor ID.               */
+        char hba_vid[HBA_IDLEN];        /* HBA vendor ID.               */
+        char dev_name[DEV_IDLEN];       /* SIM device name.             */
+
+        u_int32_t   unit_number;        /* SIM unit number.             */
+        u_int32_t   bus_id;             /* SIM bus ID.                  */
+        u_int32_t base_transfer_speed;  /* Base bus speed in KB/sec.    */
+
+        cam_proto   protocol;           /* CAM protocol.                */
+        u_int       protocol_version;   /* CAM protocol version.        */
+        cam_xport   transport;          /* Transport (e.g., FC, USB).   */
+        u_int       transport_version;  /* Transport version.           */
+        union {
+                struct ccb_pathinq_settings_spi spi;
+                struct ccb_pathinq_settings_fc fc;
+                struct ccb_pathinq_settings_sas sas;
+                char ccb_pathinq_settings_opaque[PATHINQ_SETTINGS_SIZE];
+        } xport_specific;
+
+        u_int maxio;    /* Maximum supported I/O size (in bytes).       */
+};</pre><p>Here is an example <code class="literal">XPT_PATH_INQ</code> operation (taken from <a class="xref" href="ch14s02.html#mfi_underscore_cam.c" title="Example 14-1. mfi_cam.c">Example 14-1</a>):<a class="indexterm" id="IDX-CHP-14-0073"/></p><a id="I_programlisting14_d1e25438"/><pre class="programlisting">static void
+mfip_action(struct cam_sim *sim, union ccb *ccb)
+{
+        struct mfip *sc;
+        struct mfi_softc *mfi;
+
+        sc = cam_sim_softc(sim);
+        mfi = sc-&gt;mfi;
+        mtx_assert(&amp;mfi-&gt;mfi_io_lock, MA_OWNED);
+
+        switch (ccb-&gt;ccb_h.func_code) {
+        case XPT_PATH_INQ:
+        {
+                struct ccb_pathinq *cpi;
+
+                cpi = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>&amp;ccb-&gt;cpi;
+                cpi-&gt;version_num = 1;
+                cpi-&gt;hba_inquiry = PI_SDTR_ABLE | PI_TAG_ABLE | PI_WIDE_16;
+                cpi-&gt;target_sprt = 0;
+                cpi-&gt;hba_misc = PIM_NOBUSRESET | PIM_SEQSCAN;
+                cpi-&gt;hba_eng_cnt = 0;
+                cpi-&gt;max_target = MFI_SCSI_MAX_TARGETS;
+                cpi-&gt;max_lun = MFI_SCSI_MAX_LUNS;
+                cpi-&gt;initiator_id = MFI_SCSI_INITIATOR_ID;
+                strncpy(cpi-&gt;sim_vid, "FreeBSD", SIM_IDLEN);
+                strncpy(cpi-&gt;hba_vid, "LSI", HBA_IDLEN);
+                strncpy(cpi-&gt;dev_name, cam_sim_name(sim), DEV_IDLEN);
+                cpi-&gt;unit_number = cam_sim_unit(sim);
+                cpi-&gt;bus_id = cam_sim_bus(sim);
+                cpi-&gt;base_transfer_speed = 150000;
+                cpi-&gt;protocol = PROTO_SCSI;
+                cpi-&gt;protocol_version = SCSI_REV_2;
+                cpi-&gt;transport = XPORT_SAS;
+                cpi-&gt;transport_version = 0;
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>cpi-&gt;ccb_h.status = <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>CAM_REQ_CMP;
+                break;
+        }
+...
+        default:
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>ccb-&gt;ccb_h.status = <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>CAM_REQ_INVALID;
+                break;
+        }
+
+        xpt_done(ccb);
+        return;
+}</pre><p>Notice that the <code class="literal">ccb_pathinq</code> structure is provided by the <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25475"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> CCB. Moreover, notice that the <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25481"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> success or <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25487"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> failure of any operation is returned in <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25493"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25500"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">ccb_h.status</code>.<a class="indexterm" id="IDX-CHP-14-0074"/><a class="indexterm" id="IDX-CHP-14-0075"/><a class="indexterm" id="IDX-CHP-14-0076"/><a class="indexterm" id="IDX-CHP-14-0077"/></p></div><div class="sect2" title="XPT_RESET_BUS"><div class="titlepage"><div><div><h2 class="title"><a id="xpt_underscore_reset_underscore_bus"/>XPT_RESET_BUS</h2></div></div></div><p>The <code class="literal">XPT_RESET_BUS</code> constant specifies a bus reset operation. As you’d expect, <code class="literal">XPT_RESET_BUS</code> is horrifically hardware specific. Here is a minimalist implementation (taken from <a class="xref" href="ch14s02.html#mfi_underscore_cam.c" title="Example 14-1. mfi_cam.c">Example 14-1</a>):</p><a id="I_programlisting14_d1e25540"/><pre class="programlisting">static void
+mfip_action(struct cam_sim <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>*sim, union ccb *ccb)
+{
+        struct mfip *sc;
+        struct mfi_softc *mfi;
+
+        sc = cam_sim_softc(sim);
+        mfi = sc-&gt;mfi;
+        mtx_assert(&amp;mfi-&gt;mfi_io_lock, MA_OWNED);
+
+        switch (ccb-&gt;ccb_h.func_code) {
+...
+        case XPT_RESET_BUS:
+                ccb-&gt;ccb_h.status = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>CAM_REQ_CMP;
+                break;
+...
+        default:
+                ccb-&gt;ccb_h.status = CAM_REQ_INVALID;
+                break;
+        }
+
+        xpt_done(ccb);
+        return;
+}</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25556"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">sim</code> is the bus to reset. Unsurprisingly, minimalist implementations forgo any “real” work and simply return <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25565"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> success.<a class="indexterm" id="IDX-CHP-14-0078"/><a class="indexterm" id="IDX-CHP-14-0079"/><a class="indexterm" id="IDX-CHP-14-0080"/><a class="indexterm" id="IDX-CHP-14-0081"/><a class="indexterm" id="IDX-CHP-14-0082"/></p><p>Many SIMs use a minimalist implementation. A “proper” implementation is out of the scope of this book.</p></div><div class="sect2" title="XPT_GET_TRAN_SETTINGS"><div class="titlepage"><div><div><h2 class="title"><a id="xpt_underscore_get_underscore_tran_under"/>XPT_GET_TRAN_SETTINGS</h2></div></div></div><p>The <code class="literal">XPT_GET_TRAN_SETTINGS</code> constant denotes an I/O operation that returns the current transfer settings or the user-defined upper limits. Action routines that are passed <code class="literal">XPT_GET_TRAN_SETTINGS</code> simply fill in a <code class="literal">ccb_trans_settings</code> structure and then return.<a class="indexterm" id="IDX-CHP-14-0083"/></p><p><code class="literal">struct ccb_trans_settings</code> is defined in <code class="literal">&lt;cam/cam_ccb.h&gt;</code> like so:</p><a id="I_programlisting14_d1e25621"/><pre class="programlisting">typedef enum {
+        CTS_TYPE_CURRENT_SETTINGS,      /* Current transfer settings.   */
+        CTS_TYPE_USER_SETTINGS          /* User-defined upper limits.   */
+} cts_type;
+
+struct ccb_trans_settings {
+        struct ccb_hdr ccb_h;           /* Header information fields.   */
+        cts_type  type;                 /* Current or user settings?    */
+        cam_proto protocol;             /* CAM protocol.                */
+        u_int     protocol_version;     /* CAM protocol version.        */
+        cam_xport transport;            /* Transport (e.g., FC, USB).   */
+        u_int     transport_version;    /* Transport version.           */
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>union {
+                u_int valid;            /* Which field(s) to honor.     */
+                struct ccb_trans_settings_scsi scsi;
+        } proto_specific;
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>union {
+                u_int valid;            /* Which field(s) to honor.     */
+                struct ccb_trans_settings_spi spi;
+                struct ccb_trans_settings_fc fc;
+                struct ccb_trans_settings_sas sas;
+                struct ccb_trans_settings_ata ata;
+                struct ccb_trans_settings_sata sata;
+        } xport_specific;
+};</pre><p>As you can see, <code class="literal">ccb_trans_settings</code> marshals a <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25640"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> protocol structure and five <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25646"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> transport-specific structures. These structures are defined in <code class="literal">&lt;cam/cam_ccb.h&gt;</code> like so:</p><a id="I_programlisting14_d1e25655"/><pre class="programlisting">struct ccb_trans_settings_scsi {
+        u_int           valid;          /* Which field(s) to honor.     */
+#define CTS_SCSI_VALID_TQ               0x01
+        u_int           flags;
+#define CTS_SCSI_FLAGS_TAG_ENB          0x01
+};
+
+struct ccb_trans_settings_spi {
+        u_int           valid;          /* Which field(s) to honor.     */
+#define CTS_SPI_VALID_SYNC_RATE         0x01
+#define CTS_SPI_VALID_SYNC_OFFSET       0x02
+#define CTS_SPI_VALID_BUS_WIDTH         0x04
+#define CTS_SPI_VALID_DISC              0x08
+#define CTS_SPI_VALID_PPR_OPTIONS       0x10
+        u_int           flags;
+#define CTS_SPI_FLAGS_DISC_ENB          0x01
+        u_int           sync_period;    /* Sync period.                 */
+        u_int           sync_offset;    /* Sync offset.                 */
+        u_int           bus_width;      /* Bus width.                   */
+        u_int           ppr_options;    /* Parallel protocol request.   */
+};
+
+struct ccb_trans_settings_fc {
+        u_int           valid;          /* Which field(s) to honor.     */
+#define CTS_FC_VALID_WWNN               0x8000
+#define CTS_FC_VALID_WWPN               0x4000
+#define CTS_FC_VALID_PORT               0x2000
+#define CTS_FC_VALID_SPEED              0x1000
+        u_int64_t       wwnn;           /* World wide node name.        */
+        u_int64_t       wwpn;           /* World wide port name.        */
+        u_int32_t       port;           /* 24-bit port ID (if known).   */
+        u_int32_t       bitrate;        /* Mbps.                        */
+};
+
+struct ccb_trans_settings_sas {
+        u_int           valid;          /* Which field(s) to honor.     */
+#define CTS_SAS_VALID_SPEED             0x1000
+        u_int32_t       bitrate;        /* Mbps.                        */
+};
+
+struct ccb_trans_settings_ata {
+        u_int           valid;          /* Which field(s) to honor.     */
+#define CTS_ATA_VALID_MODE              0x01
+#define CTS_ATA_VALID_BYTECOUNT         0x02
+#define CTS_ATA_VALID_ATAPI             0x20
+        int             mode;           /* Mode.                        */
+        u_int           bytecount;      /* PIO transaction length.      */
+        u_int           atapi;          /* ATAPI CDB length.            */
+};
+
+struct ccb_trans_settings_sata {
+        u_int           valid;          /* Which field(s) to honor.     */
+#define CTS_SATA_VALID_MODE             0x01
+#define CTS_SATA_VALID_BYTECOUNT        0x02
+#define CTS_SATA_VALID_REVISION         0x04
+#define CTS_SATA_VALID_PM               0x08
+#define CTS_SATA_VALID_TAGS             0x10
+#define CTS_SATA_VALID_ATAPI            0x20
+#define CTS_SATA_VALID_CAPS             0x40
+        int             mode;           /* Legacy PATA mode.            */
+        u_int           bytecount;      /* PIO transaction length.      */
+        int             revision;       /* SATA revision.               */
+        u_int           pm_present;     /* PM is present (XPT-&gt;SIM).    */
+        u_int           tags;           /* Number of allowed tags.      */
+        u_int           atapi;          /* ATAPI CDB length.            */
+        u_int           caps;           /* Host and device SATA caps.   */
+#define CTS_SATA_CAPS_H                 0x0000ffff
+#define CTS_SATA_CAPS_H_PMREQ           0x00000001
+#define CTS_SATA_CAPS_H_APST            0x00000002
+#define CTS_SATA_CAPS_H_DMAAA           0x00000010
+#define CTS_SATA_CAPS_D                 0xffff0000
+#define CTS_SATA_CAPS_D_PMREQ           0x00010000
+#define CTS_SATA_CAPS_D_APST            0x00020000
+};</pre><p>Here is an example <code class="literal">XPT_GET_TRAN_SETTINGS</code> operation (taken from <a class="xref" href="ch14s02.html#mfi_underscore_cam.c" title="Example 14-1. mfi_cam.c">Example 14-1</a>):<a class="indexterm" id="IDX-CHP-14-0084"/></p><a id="I_programlisting14_d1e25667"/><pre class="programlisting">static void
+mfip_action(struct cam_sim *sim, union ccb *ccb)
+{
+        struct mfip *sc;
+        struct mfi_softc *mfi;
+
+        sc = cam_sim_softc(sim);
+        mfi = sc-&gt;mfi;
+        mtx_assert(&amp;mfi-&gt;mfi_io_lock, MA_OWNED);
+
+        switch (ccb-&gt;ccb_h.func_code) {
+...
+        case XPT_GET_TRAN_SETTINGS:
+        {
+                struct ccb_trans_settings_sas *sas;
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>ccb-&gt;<img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>cts.protocol = PROTO_SCSI;
+                ccb-&gt;cts.protocol_version = SCSI_REV_2;
+                ccb-&gt;cts.transport = XPORT_SAS;
+                ccb-&gt;cts.transport_version = 0;
+                sas = &amp;ccb-&gt;cts.xport_specific.sas;
+                sas-&gt;valid &amp;= ˜CTS_SAS_VALID_SPEED;
+                sas-&gt;bitrate = 150000;
+
+                ccb-&gt;ccb_h.status = CAM_REQ_CMP;
+                break;
+        }
+...
+        default:
+                ccb-&gt;ccb_h.status = CAM_REQ_INVALID;
+                break;
+        }
+
+        xpt_done(ccb);
+        return;
+}</pre><p>Notice that the <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25683"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">ccb_trans_settings</code> structure is provided by the <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25692"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> CCB. Naturally, only the fields applicable to the HBA are filled in.<a class="indexterm" id="IDX-CHP-14-0085"/><a class="indexterm" id="IDX-CHP-14-0086"/><a class="indexterm" id="IDX-CHP-14-0087"/><a class="indexterm" id="IDX-CHP-14-0088"/></p></div><div class="sect2" title="XPT_SET_TRAN_SETTINGS"><div class="titlepage"><div><div><h2 class="title"><a id="xpt_underscore_set_underscore_tran_under"/>XPT_SET_TRAN_SETTINGS</h2></div></div></div><p>As you’d expect, <code class="literal">XPT_SET_TRAN_SETTINGS</code> is the opposite of <code class="literal">XPT_GET_TRAN_SETTINGS</code>. That is, <code class="literal">XPT_SET_TRAN_SETTINGS</code> changes the current transfer settings based on a <code class="literal">ccb_trans_settings</code> structure. Unsurprisingly, not all SIMs support this operation. For example:</p><a id="I_programlisting14_d1e25733"/><pre class="programlisting">static void
+mfip_action(struct cam_sim *sim, union ccb *ccb)
+{
+        struct mfip *sc;
+        struct mfi_softc *mfi;
+
+        sc = cam_sim_softc(sim);
+        mfi = sc-&gt;mfi;
+        mtx_assert(&amp;mfi-&gt;mfi_io_lock, MA_OWNED);
+
+        switch (ccb-&gt;ccb_h.func_code) {
+...
+        case XPT_SET_TRAN_SETTINGS:
+                ccb-&gt;ccb_h.status = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>CAM_FUNC_NOTAVAIL;
+                break;
+...
+        default:
+                ccb-&gt;ccb_h.status = CAM_REQ_INVALID;
+                break;
+        }
+
+        xpt_done(ccb);
+        return;
+}</pre><p>This function states that <code class="literal">XPT_SET_TRAN_SETTINGS</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25746"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> not available. Note that a “proper” implementation is hardware specific and not covered in this book.</p></div><div class="sect2" title="XPT_SCSI_IO"><div class="titlepage"><div><div><h2 class="title"><a id="xpt_underscore_scsi_underscore_io"/>XPT_SCSI_IO</h2></div></div></div><p>The <code class="literal">XPT_SCSI_IO</code> constant denotes an I/O operation that issues a SCSI command to a device. The particulars of this SCSI command are stored in two structures: <code class="literal">ccb_scsiio</code> and <code class="literal">ccb_hdr</code>.<a class="indexterm" id="IDX-CHP-14-0089"/><a class="indexterm" id="IDX-CHP-14-0090"/><a class="indexterm" id="IDX-CHP-14-0091"/></p><p><code class="literal">struct ccb_scsiio</code> is defined in <code class="literal">&lt;cam/cam_ccb.h&gt;</code> like so:</p><a id="I_programlisting14_d1e25788"/><pre class="programlisting">struct ccb_scsiio {
+        struct ccb_hdr ccb_h;           /* Header information fields.   */
+        union ccb *next_ccb;            /* Next CCB to process.         */
+        u_int8_t  *req_map;             /* Mapping information.         */
+        u_int8_t  *data_ptr;            /* Data buffer or S/G list.     */
+        u_int32_t  dxfer_len;           /* Length of data to transfer.  */
+
+        /* Sense information (used if the command returns an error).    */
+        struct scsi_sense_data sense_data;
+
+        u_int8_t   sense_len;           /* Sense information length.    */
+        u_int8_t   cdb_len;             /* SCSI command length.         */
+        u_int16_t  sglist_cnt;          /* Number of S/G segments.      */
+        u_int8_t   scsi_status; /* SCSI status (returned by device).    */
+        u_int8_t   sense_resid; /* Residual sense information length.   */
+        u_int32_t  resid;               /* Residual data length.        */
+        cdb_t      cdb_io;              /* SCSI command.                */
+        u_int8_t  *msg_ptr;             /* Message.                     */
+        u_int16_t  msg_len;             /* Message length.              */
+        u_int8_t   tag_action;          /* Tag action?                  */
+        /*
+         * tag_action should be the constant below to send a non-tagged
+         * transaction or one of the constants in scsi_message.h.
+         */
+#define CAM_TAG_ACTION_NONE             0x00
+        u_int      tag_id;              /* Tag ID (from initiator).     */
+        u_int      init_id;             /* Initiator ID.                */
+};</pre><p><code class="literal">struct ccb_hdr</code> is also defined in <code class="literal">&lt;cam/cam_ccb.h&gt;</code>, like so:</p><a id="I_programlisting14_d1e25797"/><pre class="programlisting">struct ccb_hdr {
+        cam_pinfo       pinfo;          /* Priority scheduling.         */
+        camq_entry      xpt_links;      /* Transport layer links.       */
+        camq_entry      sim_links;      /* SIM layer links.             */
+        camq_entry      periph_links;   /* Peripheral layer links.      */
+        u_int32_t       retry_count;    /* Retry count.                 */
+
+        /* Pointer to peripheral module done routine.                   */
+        void (*cbfcnp)(struct cam_periph *, union ccb *);
+
+        xpt_opcode      func_code;      /* I/O operation to perform.    */
+        u_int32_t     <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>status;         /* Completion status.           */
+        struct cam_path *path;          /* Path for this CCB.           */
+        path_id_t       path_id;        /* Path ID for the request.     */
+        target_id_t     target_id;      /* Target device ID.            */
+        lun_id_t        target_lun;     /* Target logical unit number.  */
+        u_int32_t       flags;          /* CCB flags.                   */
+        ccb_ppriv_area  periph_priv;    /* Private use by peripheral.   */
+        ccb_spriv_area  sim_priv;       /* Private use by SIM.          */
+        u_int32_t       timeout;        /* Timeout value.               */
+
+        /* Deprecated. Don't use!                                       */
+        struct callout_handle timeout_ch;
+};</pre><p><code class="literal">struct ccb_hdr</code> should seem familiar—it’s used to return the <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25809"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> completion status in every I/O operation.</p><p>The following is an example <code class="literal">XPT_SCSI_IO</code> operation (taken from <a class="xref" href="ch14s02.html#mfi_underscore_cam.c" title="Example 14-1. mfi_cam.c">Example 14-1</a>):</p><a id="I_programlisting14_d1e25822"/><pre class="programlisting">#define ccb_mfip_ptr            sim_priv.entries[0].ptr
+...
+static void
+mfip_action(struct cam_sim *sim, union ccb *ccb)
+{
+        struct mfip *sc;
+        struct mfi_softc *mfi;
+
+        sc = cam_sim_softc(sim);
+        mfi = sc-&gt;mfi;
+        mtx_assert(&amp;mfi-&gt;mfi_io_lock, MA_OWNED);
+
+        switch (ccb-&gt;ccb_h.func_code) {
+...
+        case XPT_SCSI_IO:
+        {
+                struct ccb_hdr *ccb_h = &amp;ccb-&gt;ccb_h;
+                struct ccb_scsiio *csio = &amp;ccb-&gt;csio;
+
+                ccb_h-&gt;status = CAM_REQ_INPROG;
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>if (csio-&gt;cdb_len &gt; MFI_SCSI_MAX_CDB_LEN) {
+                        ccb_h-&gt;status = CAM_REQ_INVALID;
+                        break;
+                }
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>if ((ccb_h-&gt;flags &amp; CAM_DIR_MASK) != CAM_DIR_NONE) {
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>if (ccb_h-&gt;flags &amp; CAM_DATA_PHYS) {
+                                ccb_h-&gt;status = CAM_REQ_INVALID;
+                              <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>break;
+                        }
+                      <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>if (ccb_h-&gt;flags &amp; CAM_SCATTER_VALID) {
+                                ccb_h-&gt;status = CAM_REQ_INVALID;
+                              <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>break;
+                        }
+                }
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>ccb_h-&gt;ccb_mfip_ptr = sc;
+                TAILQ_INSERT_TAIL(&amp;mfi-&gt;mfi_cam_ccbq, ccb_h, sim_links.tqe);
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>mfi_startio(mfi);
+
+                return;
+        }
+        default:
+                ccb-&gt;ccb_h.status = CAM_REQ_INVALID;
+                break;
+        }
+
+        xpt_done(ccb);
+        return;
+}</pre><p>This operation begins by <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25875"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> checking that the SCSI command length is acceptable. Then it determines whether the SCSI command uses <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25881"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> physical addresses or <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25887"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> scatter/gather segments to <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25893"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> transfer data. If either is used, this operation <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25899"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25906"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> exits (as it’s received invalid arguments). Then <code class="literal">ccb_h-&gt;ccb_mfip_ptr</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25915"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> set to the software context and <code class="literal">mfi_startio</code> is <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e25924"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> called.<a class="indexterm" id="IDX-CHP-14-0092"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>The <code class="literal">mfi_startio</code> function is what actually issues the SCSI command.</p></div><p>Recall from <a class="xref" href="ch14s02.html#mfip_underscore_start_function" title="mfip_start Function">mfip_start Function</a> in <a class="xref" href="ch14s02.html#mfip_underscore_poll_function" title="mfip_poll Function">mfip_poll Function</a> that <code class="literal">mfi_startio</code> calls <code class="literal">mfip_start</code> to transform the SCSI command into a hardware-specific command.</p><a id="I_programlisting14_d1e25952"/><pre class="programlisting">static struct mfi_command *
+mfip_start(void *data)
+{
+        union ccb *ccb = data;
+        struct ccb_hdr *ccb_h = &amp;ccb-&gt;ccb_h;
+        struct ccb_scsiio *csio = &amp;ccb-&gt;csio;
+        struct mfip *sc;
+        struct mfi_command *cm;
+        struct mfi_pass_frame *pt;
+
+        sc = ccb_h-&gt;ccb_mfip_ptr;
+
+        if ((cm = mfi_dequeue_free(sc-&gt;mfi)) == NULL)
+                return (NULL);
+
+        pt = &amp;cm-&gt;cm_frame-&gt;pass;
+        pt-&gt;header.cmd = MFI_CMD_PD_SCSI_IO;
+        pt-&gt;header.cmd_status = 0;
+        pt-&gt;header.scsi_status = 0;
+        pt-&gt;header.target_id = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>ccb_h-&gt;target_id;
+        pt-&gt;header.lun_id = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>ccb_h-&gt;target_lun;
+        pt-&gt;header.flags = 0;
+        pt-&gt;header.timeout = 0;
+        pt-&gt;header.data_len = csio-&gt;dxfer_len;
+        pt-&gt;header.sense_len = MFI_SENSE_LEN;
+        pt-&gt;header.cdb_len = csio-&gt;cdb_len;
+        pt-&gt;sense_addr_lo = cm-&gt;cm_sense_busaddr;
+        pt-&gt;sense_addr_hi = 0;
+        if (ccb_h-&gt;flags &amp; CAM_CDB_POINTER)
+                bcopy(<img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>csio-&gt;cdb_io.cdb_ptr, &amp;pt-&gt;cdb[0],
+ <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>csio-&gt;cdb_len);
+        else
+                bcopy(<img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>csio-&gt;cdb_io.cdb_bytes, &amp;pt-&gt;cdb[0], csio-&gt;cdb_len);
+
+        cm-&gt;cm_complete = mfip_done;
+        cm-&gt;cm_private = ccb;
+        cm-&gt;cm_sg = &amp;pt-&gt;sgl;
+        cm-&gt;cm_total_frame_size = MFI_PASS_FRAME_SIZE;
+        cm-&gt;cm_data = <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>csio-&gt;data_ptr;
+        cm-&gt;cm_len = <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>csio-&gt;dxfer_len;
+        switch (ccb_h-&gt;flags &amp; CAM_DIR_MASK) {
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>case CAM_DIR_IN:
+                cm-&gt;cm_flags = MFI_CMD_DATAIN;
+                break;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/>case CAM_DIR_OUT:
+                cm-&gt;cm_flags = MFI_CMD_DATAOUT;
+                break;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137517.png"/>case CAM_DIR_NONE:
+        default:
+                cm-&gt;cm_data = NULL;
+                cm-&gt;cm_len = 0;
+                cm-&gt;cm_flags = 0;
+                break;
+        }
+
+        TAILQ_REMOVE(&amp;sc-&gt;mfi-&gt;mfi_cam_ccbq, ccb_h, sim_links.tqe);
+        return (cm);
+}</pre><p>Notice that <code class="literal">struct ccb_hdr</code> lists the target’s <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26020"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> device ID and <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26026"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> logical unit number. It also lists whether the SCSI command transfers data <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26032"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> in, <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26038"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/></span> out, or <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26045"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137517.png"/></span> nothing. Note that <code class="literal">XPT_SCSI_IO</code> operations are seen from the SIM’s point of view. Therefore, “in” means from the device, and “out” means to the device.<a class="indexterm" id="IDX-CHP-14-0093"/></p><p>The <code class="literal">ccb_scsiio</code> structure maintains the <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26062"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> data to transfer and its <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26068"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> length. It also maintains the SCSI command (through a <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26074"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> pointer or a <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26080"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> buffer) and the command’s <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26087"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> length.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Once more, the hardware-specific command constructed above is issued to the target device via <code class="literal">mfi_startio</code>.</p></div><p>Recall that as soon as a device completes a hardware-specific command, it sends an interrupt, which causes the done routine (<code class="literal">mfip_done</code> in this case) to execute.</p><a id="I_programlisting14_d1e26104"/><pre class="programlisting">static void
+mfip_done(struct mfi_command *cm)
+{
+        union ccb *ccb = cm-&gt;cm_private;
+        struct ccb_hdr *ccb_h = &amp;ccb-&gt;ccb_h;
+        struct ccb_scsiio *csio = &amp;ccb-&gt;csio;
+        struct mfip *sc;
+        struct mfi_pass_frame *pt;
+
+        sc = ccb_h-&gt;ccb_mfip_ptr;
+        pt = &amp;cm-&gt;cm_frame-&gt;pass;
+
+        switch (pt-&gt;header.cmd_status) {
+        case MFI_STAT_OK:
+        {
+                uint8_t command, device;
+
+                ccb_h-&gt;status = CAM_REQ_CMP;
+                csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+
+                if (ccb_h-&gt;flags &amp; CAM_CDB_POINTER)
+                        command = ccb-&gt;csio.cdb_io.cdb_ptr[0];
+                else
+                        command = ccb-&gt;csio.cdb_io.cdb_bytes[0];
+
+                if (command == INQUIRY) {
+                        device = ccb-&gt;csio.data_ptr[0] &amp; 0x1f;
+                        if ((device == T_DIRECT) || (device == T_PROCESSOR))
+                                csio-&gt;data_ptr[0] =
+                                    (device &amp; 0xe0) | T_NODEVICE;
+                }
+
+                break;
+        }
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>case MFI_STAT_SCSI_DONE_WITH_ERROR:
+        {
+                int sense_len;
+
+                ccb_h-&gt;status = CAM_SCSI_STATUS_ERROR | CAM_AUTOSNS_VALID;
+                csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+
+                sense_len = min(pt-&gt;header.sense_len,
+                    sizeof(struct scsi_sense_data));
+                bzero(&amp;csio-&gt;sense_data, sizeof(struct scsi_sense_data));
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>bcopy(<img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>&amp;cm-&gt;cm_sense-&gt;data[0], <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>&amp;csio-&gt;sense_data,
+                    sense_len);
+                break;
+        }
+        case MFI_STAT_DEVICE_NOT_FOUND:
+                ccb_h-&gt;status = CAM_SEL_TIMEOUT;
+                break;
+        case MFI_STAT_SCSI_IO_FAILED:
+                ccb_h-&gt;status = CAM_REQ_CMP_ERR;
+                csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+                break;
+        default:
+                ccb_h-&gt;status = CAM_REQ_CMP_ERR;
+                csio-&gt;scsi_status = pt-&gt;header.scsi_status;
+                break;
+        }
+
+        mfi_release_command(cm);
+        xpt_done(ccb);
+}</pre><p>Notice that if the hardware-specific command <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26132"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> returns an error, the <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26138"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> error information (or sense data) is <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26144"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> copied to the <code class="literal">ccb_scsiio</code> structure’s <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26153"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">sense_data</code> field.<a class="indexterm" id="IDX-CHP-14-0094"/><a class="indexterm" id="IDX-CHP-14-0095"/><a class="indexterm" id="IDX-CHP-14-0096"/><a class="indexterm" id="IDX-CHP-14-0097"/></p><p>At this point in the game, the unexplained parts of this function should be obvious.</p></div><div class="sect2" title="XPT_RESET_DEV"><div class="titlepage"><div><div><h2 class="title"><a id="xpt_underscore_reset_underscore_dev"/>XPT_RESET_DEV</h2></div></div></div><p>The <code class="literal">XPT_RESET_DEV</code> constant specifies a device reset operation. Unsurprisingly, <code class="literal">XPT_RESET_DEV</code> is fairly hardware specific. Here is a simple <code class="literal">XPT_RESET_DEV</code> operation (taken from <span class="emphasis"><em>bt.c</em></span>):</p><div class="note" title="Note"><h3 class="title">Note</h3><p>The <span class="emphasis"><em>bt.c</em></span> source file is part of the <code class="literal">bt(4)</code> code base.</p></div><a id="I_programlisting14_d1e26210"/><pre class="programlisting">static void
+btaction(struct cam_sim *sim, union ccb *ccb)
+{
+        struct bt_softc *bt;
+
+        bt = (struct bt_softc *)cam_sim_softc(sim);
+
+        switch (ccb-&gt;ccb_h.func_code) {
+        case XPT_RESET_DEV:
+                <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>/* FALLTHROUGH */
+        case XPT_SCSI_IO:
+        {
+...</pre><p>Given that a hardware-specific command must be issued to reset this device, <code class="literal">XPT_RESET_DEV</code> simply <span class="inlinemediaobject"><a id="I_inlinemediaobject14_d1e26223"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> cascades into <code class="literal">XPT_SCSI_IO</code>.</p><p>While not shown here, it should be stressed that all operations conclude by appending their completion status to their CCB and then calling <code class="literal">xpt_done(ccb)</code>.</p></div></div>
+<div class="sect1" title="Conclusion"><div class="titlepage"><div><div><h1 class="title"><a id="conclusion-id13"/>Conclusion</h1></div></div></div><p>This chapter concentrated heavily on HBA drivers, or SIMs, because they’re the most commonly written CAM-related driver. Of course, there’s more to CAM than what’s been shown here. You could conceivably write an entire book on CAM!</p></div></body></html>

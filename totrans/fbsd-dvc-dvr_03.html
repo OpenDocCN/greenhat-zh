@@ -1,0 +1,788 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;3.&#xA0;Device Communication and Control"><div class="titlepage"><div><div><h1 class="title"><a id="device_communication_and_control"/>Chapter 3. Device Communication and Control</h1></div></div></div><div class="informalfigure"><a id="image_no_caption-id3"/><div class="mediaobject"><a id="I_mediaobject3_d1e3209"/><img alt="image with no caption" src="httpatomoreillycomsourcenostarchimages1137497.png.jpg"/></div></div><p>In <a class="xref" href="ch01.html" title="Chapter 1. Building and Running Modules">Chapter 1</a> we constructed a driver that could read from and write to a device. In addition to reading and writing, most drivers need to perform other I/O operations, such as reporting error information, ejecting removable media, or activating self-destruct sequences. This chapter details how to make drivers do those things.</p><p>We’ll start by describing the <span class="emphasis"><em>ioctl interface</em></span>, also known as the <span class="emphasis"><em>input/output control interface</em></span>. This interface is commonly used for device communication and control. Then we’ll describe the <span class="emphasis"><em>sysctl interface</em></span>, also known as the <span class="emphasis"><em>system control interface</em></span>. This interface is used to dynamically change or examine the kernel’s parameters, which includes device drivers.</p><div class="sect1" title="ioctl"><div class="titlepage"><div><div><h1 class="title"><a id="ioctl"/>ioctl</h1></div></div></div><p>The ioctl interface is the catchall of I/O operations (Stevens, 1992). Any operation that cannot be expressed using <code class="literal">d_read</code> or <code class="literal">d_write</code> (that is, any operation that’s <span class="emphasis"><em>not</em></span> a data transfer) is supported by <code class="literal">d_ioctl</code>.<sup>[<a class="footnote" href="#ftn.CHP-3-FN-1" id="CHP-3-FN-1">3</a>]</sup> For example, the CD-ROM driver’s <code class="literal">d_ioctl</code> function performs 29 distinct operations, such as ejecting the CD, starting audio playback, stopping audio playback, muting the audio, and so on.<a class="indexterm" id="IDX-CHP-3-0001"/></p><p>The function prototype for <code class="literal">d_ioctl</code> is defined in the <code class="literal">&lt;sys/conf.h&gt;</code> header as follows:</p><a id="I_programlisting3_d1e3275"/><pre class="programlisting">typedef int d_ioctl_t(struct cdev *dev, u_long <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>cmd, caddr_t <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>data,
+                      int fflag, struct thread *td);</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3291"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">cmd</code> is an ioctl command passed from user space. <span class="emphasis"><em>ioctl commands</em></span> are driver-defined numeric constants that identify the different I/O operations that a <code class="literal">d_ioctl</code> function can perform. Generally, you’d use the <code class="literal">cmd</code> argument in a <code class="literal">switch</code> statement to set up a code block for each I/O operation. Any arguments required for an I/O operation are passed through <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3313"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">data</code>.<a class="indexterm" id="IDX-CHP-3-0002"/></p><p>Here is an example <code class="literal">d_ioctl</code> function:</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Just concentrate on the structure of this code and ignore what it does.</p></div><a id="I_programlisting3_d1e3333"/><pre class="programlisting">static int
+echo_ioctl(struct cdev *dev, u_long <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>cmd, caddr_t <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>data, int fflag,
+    struct thread *td)
+{
+        int error = 0;
+
+        switch (<img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>cmd) {
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>case ECHO_CLEAR_BUFFER:
+                memset(echo_message-&gt;buffer, '\0',
+                    echo_message-&gt;buffer_size);
+                echo_message-&gt;length = 0;
+                uprintf("Buffer cleared.\n");
+                break;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>case ECHO_SET_BUFFER_SIZE:
+                error = echo_set_buffer_size(*<img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>(int *)data);
+                if (error == 0)
+                        uprintf("Buffer resized.\n");
+                break;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>default:
+                <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>error = ENOTTY;
+                break;
+        }
+
+        return (error);
+}</pre><p>Notice how the <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3386"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">cmd</code> argument is the <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3395"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> expression for the <code class="literal">switch</code> statement. The constants <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3404"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">ECHO_CLEAR_BUFFER</code> and <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3414"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <code class="literal">ECHO_SET_BUFFER_SIZE</code> are (obviously) the ioctl commands. All ioctl commands are defined using one of four macros. I’ll discuss these macros in the following section.<a class="indexterm" id="IDX-CHP-3-0003"/><a class="indexterm" id="IDX-CHP-3-0004"/><a class="indexterm" id="IDX-CHP-3-0005"/><a class="indexterm" id="IDX-CHP-3-0006"/><a class="indexterm" id="IDX-CHP-3-0007"/><a class="indexterm" id="IDX-CHP-3-0008"/><a class="indexterm" id="IDX-CHP-3-0009"/><a class="indexterm" id="IDX-CHP-3-0010"/><a class="indexterm" id="IDX-CHP-3-0011"/><a class="indexterm" id="IDX-CHP-3-0012"/><a class="indexterm" id="IDX-CHP-3-0013"/></p><p>Additionally, notice how the <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3467"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">data</code> argument is <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3476"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> cast—as an integer pointer—before it is dereferenced. This is because <code class="literal">data</code> is fundamentally a “pointer to <code class="literal">void</code>.”</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Pointers to <code class="literal">void</code> can hold any pointer type, so they must be cast before they’re dereferenced. In fact, you can’t directly dereference a pointer to <code class="literal">void</code>.</p></div><p>Finally, according to the POSIX standard, when an inappropriate ioctl command is received, the error code <code class="literal">ENOTTY</code> should be returned (Corbet et al., 2005). Hence, the <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3503"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> <code class="literal">default</code> block sets <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3512"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> <code class="literal">error</code> to <code class="literal">ENOTTY</code>.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>At one point in time, only TTY drivers had an ioctl function, which is why <code class="literal">ENOTTY</code> means “error: inappropriate ioctl for device” (Corbet et al., 2005).</p></div><p>Now that you’ve examined the structure of a <code class="literal">d_ioctl</code> function, I’ll explain how to define an ioctl command.</p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-3-FN-1" id="ftn.CHP-3-FN-1">3</a>] </sup>The <code class="literal">d_ioctl</code> function was first introduced in <a class="xref" href="ch01s05.html#d_underscore_foo_functions" title="d_foo Functions">d_foo Functions</a> in <a class="xref" href="ch01s05.html" title="Character Drivers">Character Drivers</a>.</p></div></div></div>
+<div class="sect1" title="Defining ioctl Commands"><div class="titlepage"><div><div><h1 class="title"><a id="defining_ioctl_commands"/>Defining ioctl Commands</h1></div></div></div><p>To define an ioctl command, you’d call one of the following macros: <code class="literal">_IO</code>, <code class="literal">_IOR</code>, <code class="literal">_IOW</code>, or <code class="literal">_IOWR</code>. An explanation of each macro is provided in <a class="xref" href="ch03s02.html#ioctl_command_macros" title="Table 3-1. ioctl Command Macros">Table 3-1</a>.</p><div class="table"><a id="ioctl_command_macros"/><p class="title">Table 3-1. ioctl Command Macros</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="ioctl Command Macros"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Macro</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">_IO</code></p></td><td style="text-align: left" valign="top"><p>Creates an ioctl command for an I/O operation that transfers no data—in other words, the <code class="literal">data</code> argument in <code class="literal">d_ioctl</code> will be unused—for example, ejecting removable media</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">_IOR</code></p></td><td style="text-align: left" valign="top"><p>Creates an ioctl command for a read operation; <span class="emphasis"><em>read operations</em></span> transfer data from the device to user space; for example, retrieving error information<a class="indexterm" id="IDX-CHP-3-0014"/></p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">_IOW</code></p></td><td style="text-align: left" valign="top"><p>Creates an ioctl command for a write operation; <span class="emphasis"><em>write operations</em></span> transfer data to the device from user space; for example, setting a device parameter<a class="indexterm" id="IDX-CHP-3-0015"/></p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">_IOWR</code></p></td><td style="text-align: left" valign="top"><p>Creates an ioctl command for an I/O operation with bidirectional data transfers</p></td></tr></tbody></table></div></div><p><code class="literal">_IO</code>, <code class="literal">_IOR</code>, <code class="literal">_IOW</code>, and <code class="literal">_IOWR</code> are defined in the <code class="literal">&lt;sys/ioccom.h&gt;</code> header as follows:</p><a id="I_programlisting3_d1e3636"/><pre class="programlisting">#define _IO(g,n)        _IOC(IOC_VOID,  (g), (n), 0)
+#define _IOR(g,n,t)     _IOC(IOC_OUT,   (g), (n), sizeof(t))
+#define _IOW(g,n,t)     _IOC(IOC_IN,    (g), (n), sizeof(t))
+#define _IOWR(g,n,t)    _IOC(IOC_INOUT, (g), (n), sizeof(t))</pre><p>The <code class="literal">g</code> argument, which stands for <span class="emphasis"><em>group</em></span>, expects an 8-bit magic number. You can choose any number—just use it throughout your driver.</p><p>The <code class="literal">n</code> argument is the ordinal number. This number is used to differentiate your driver’s ioctl commands from one another.<a class="indexterm" id="IDX-CHP-3-0016"/><a class="indexterm" id="IDX-CHP-3-0017"/></p><p>Finally, the <code class="literal">t</code> argument is the type of data transferred during the I/O operation. Obviously, the <code class="literal">_IO</code> macro does not have a <code class="literal">t</code> argument, because no data transfer occurs.</p><p>Generally, ioctl command definitions look like this:</p><a id="I_programlisting3_d1e3670"/><pre class="programlisting">#define FOO_DO_SOMETHING        _IO('F', 1)
+#define FOO_GET_SOMETHING       _IOR('F', 2, int)
+#define FOO_SET_SOMETHING       _IOW('F', 3, int)
+#define FOO_SWITCH_SOMETHING    _IOWR('F', 10, <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>struct foo)</pre><p>Here, <code class="literal">'F'</code> is the magic number for these ioctl commands. Customarily, the first letter of your driver’s name—in uppercase—is selected as the magic number.</p><p>Naturally, all of the ordinal numbers are unique. But they don’t have to be consecutive. You can leave gaps.</p><p>Lastly, note that you can pass <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3688"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> structures as the <code class="literal">t</code> argument. Using a structure is how you’ll pass multiple arguments to an ioctl-based operation.</p></div>
+<div class="sect1" title="Implementing ioctl"><div class="titlepage"><div><div><h1 class="title"><a id="implementing_ioctl"/>Implementing ioctl</h1></div></div></div><p><a class="xref" href="ch03s03.html#echo-3.0.c" title="Example 3-1. echo-3.0.c">Example 3-1</a> is a revision of <a class="xref" href="ch02s03.html#echo-2.0.c" title="Example 2-1. echo-2.0.c">Example 2-1</a> that adds in a <code class="literal">d_ioctl</code> function. As you’ll see, this <code class="literal">d_ioctl</code> function handles two ioctl commands.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Take a quick look at this code and try to discern some of its structure. If you don’t understand all of it, don’t worry; an explanation follows.</p></div><div class="example"><a id="echo-3.0.c"/><p class="title">Example 3-1. echo-3.0.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/param.h&gt;
+  #include &lt;sys/module.h&gt;
+  #include &lt;sys/kernel.h&gt;
+  #include &lt;sys/systm.h&gt;
+
+  #include &lt;sys/conf.h&gt;
+  #include &lt;sys/uio.h&gt;
+  #include &lt;sys/malloc.h&gt;
+  #include &lt;sys/ioccom.h&gt;
+
+  MALLOC_DEFINE(M_ECHO, "echo_buffer", "buffer for echo driver");
+
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/> #define ECHO_CLEAR_BUFFER       _IO('E', 1)
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/> #define ECHO_SET_BUFFER_SIZE    _IOW('E', 2, <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>int)
+
+  static d_open_t         echo_open;
+  static d_close_t        echo_close;
+  static d_read_t         echo_read;
+  static d_write_t        echo_write;
+  static d_ioctl_t        echo_ioctl;
+
+  static struct cdevsw echo_cdevsw = {
+          .d_version =    D_VERSION,
+          .d_open =       echo_open,
+          .d_close =      echo_close,
+          .d_read =       echo_read,
+          .d_write =      echo_write,
+        <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>.d_ioctl =      echo_ioctl,
+          .d_name =       "echo"
+  };
+
+  typedef struct echo {
+        <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>int buffer_size;
+          char *buffer;
+          int length;
+  } echo_t;
+
+  static echo_t *echo_message;
+  static struct cdev *echo_dev;
+
+  static int
+  echo_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
+  {
+          uprintf("Opening echo device.\n");
+          return (0);
+  }
+
+  static int
+  echo_close(struct cdev *dev, int fflag, int devtype, struct thread *td)
+  {
+          uprintf("Closing echo device.\n");
+          return (0);
+  }
+
+  static int
+  echo_write(struct cdev *dev, struct uio *uio, int ioflag)
+  {
+          int error = 0;
+          int amount;
+
+          amount = MIN(uio-&gt;uio_resid,
+              (<img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>echo_message-&gt;buffer_size - 1 - uio-&gt;uio_offset &gt; 0) ?
+               <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>echo_message-&gt;buffer_size - 1 - uio-&gt;uio_offset : 0);
+          if (amount == 0)
+                  return (error);
+
+          error = uiomove(echo_message-&gt;buffer, amount, uio);
+          if (error != 0) {
+                  uprintf("Write failed.\n");
+                  return (error);
+          }
+
+          echo_message-&gt;buffer[amount] = '\0';
+          echo_message-&gt;length = amount;
+
+          return (error);
+  }
+
+  static int
+  echo_read(struct cdev *dev, struct uio *uio, int ioflag)
+  {
+          int error = 0;
+          int amount;
+
+          amount = MIN(uio-&gt;uio_resid,
+              (echo_message-&gt;length - uio-&gt;uio_offset &gt; 0) ?
+               echo_message-&gt;length - uio-&gt;uio_offset : 0);
+
+          error = uiomove(echo_message-&gt;buffer + uio-&gt;uio_offset, amount, uio);
+          if (error != 0)
+                  uprintf("Read failed.\n");
+
+          return (error);
+  }
+
+  static int
+  echo_set_buffer_size(int size)
+  {
+          int error = 0;
+
+          if (echo_message-&gt;buffer_size == size)
+                  return (error);
+
+          if (size &gt;= 128 &amp;&amp; size &lt;= 512) {
+                  echo_message-&gt;buffer = realloc(echo_message-&gt;buffer, size,
+                      M_ECHO, M_WAITOK);
+                  echo_message-&gt;buffer_size = size;
+
+                  if (echo_message-&gt;length &gt;= size) {
+                          echo_message-&gt;length = size - 1;
+                          echo_message-&gt;buffer[size - 1] = '\0';
+                  }
+          } else
+                  error = EINVAL;
+
+          return (error);
+  }
+
+  static int
+  echo_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag,
+      struct thread *td)
+  {
+          int error = 0;
+
+          switch (cmd) {
+          case ECHO_CLEAR_BUFFER:
+                  memset(echo_message-&gt;buffer, '\0',
+                      echo_message-&gt;buffer_size);
+                  echo_message-&gt;length = 0;
+                  uprintf("Buffer cleared.\n");
+                  break;
+          case ECHO_SET_BUFFER_SIZE:
+                  error = echo_set_buffer_size(*(int *)data);
+                  if (error == 0)
+                          uprintf("Buffer resized.\n");
+                  break;
+          default:
+                  error = ENOTTY;
+                  break;
+          }
+
+          return (error);
+  }
+
+  static int
+  echo_modevent(module_t mod __unused, int event, void *arg __unused)
+  {
+          int error = 0;
+
+          switch (event) {
+          case MOD_LOAD:
+                  echo_message = malloc(sizeof(echo_t), M_ECHO, M_WAITOK);
+                  echo_message-&gt;buffer_size = 256;
+                  echo_message-&gt;buffer = malloc(echo_message-&gt;buffer_size,
+                      M_ECHO, M_WAITOK);
+                  echo_dev = make_dev(&amp;echo_cdevsw, 0, UID_ROOT, GID_WHEEL,
+                      0600, "echo");
+                  uprintf("Echo driver loaded.\n");
+                  break;
+          case MOD_UNLOAD:
+                  destroy_dev(echo_dev);
+                  free(echo_message-&gt;buffer, M_ECHO);
+                  free(echo_message, M_ECHO);
+                  uprintf("Echo driver unloaded.\n");
+                  break;
+          default:
+                  error = EOPNOTSUPP;
+                  break;
+          }
+
+          return (error);
+  }
+
+  DEV_MODULE(echo, echo_modevent, NULL);</pre></div></div><p>This driver starts by defining two ioctl commands: <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3764"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">ECHO_CLEAR_BUFFER</code> (which clears the memory buffer) and <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3773"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">ECHO_SET_BUFFER_SIZE</code> (which takes an <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3782"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> integer to resize the memory buffer).<a class="indexterm" id="IDX-CHP-3-0018"/><a class="indexterm" id="IDX-CHP-3-0019"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>Usually, ioctl commands are defined in a header file—they were defined in <a class="xref" href="ch03s03.html#echo-3.0.c" title="Example 3-1. echo-3.0.c">Example 3-1</a> solely to simplify this discussion.</p></div><p>Obviously, to accommodate adding in a <code class="literal">d_ioctl</code> function, the character device switch table was <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3805"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> adapted. Moreover, <code class="literal">struct echo</code> was adjusted to include a variable (<span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3814"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <code class="literal">buffer_size</code>) to maintain the buffer size (because it can be changed now). Naturally, <a class="xref" href="ch03s03.html#echo-3.0.c" title="Example 3-1. echo-3.0.c">Example 3-1</a> was <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3826"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3832"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> altered to use this new variable.<a class="indexterm" id="IDX-CHP-3-0020"/><a class="indexterm" id="IDX-CHP-3-0021"/><a class="indexterm" id="IDX-CHP-3-0022"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>Interestingly, only <code class="literal">echo_write</code> had to be altered. The <code class="literal">echo_open</code>, <code class="literal">echo_close</code>, and <code class="literal">echo_read</code> functions remain the same.</p></div><p>The <code class="literal">echo_write</code>, <code class="literal">echo_set_buffer_size</code>, <code class="literal">echo_ioctl</code>, and <code class="literal">echo_modevent</code> functions call for a more in-depth explanation and are therefore described in their own sections.</p><div class="sect2" title="echo_write Function"><div class="titlepage"><div><div><h2 class="title"><a id="echo_underscore_write_function-id1"/>echo_write Function</h2></div></div></div><p>As mentioned above, the <code class="literal">echo_write</code> function was altered from its <a class="xref" href="ch02s03.html#echo-2.0.c" title="Example 2-1. echo-2.0.c">Example 2-1</a> (and <a class="xref" href="ch01s06.html#echo.c" title="Example 1-2. echo.c">Example 1-2</a>) form. Here is its function definition (again):</p><a id="I_programlisting3_d1e3894"/><pre class="programlisting">static int
+echo_write(struct cdev *dev, struct uio *uio, int ioflag)
+{
+        int error = 0;
+        int amount;
+
+        amount = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>MIN(<img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>uio-&gt;uio_resid,
+          <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>(echo_message-&gt;buffer_size - 1 - uio-&gt;uio_offset &gt; 0) ?
+            echo_message-&gt;buffer_size - 1 - uio-&gt;uio_offset : 0);
+        if (amount == 0)
+                return (error);
+
+        error = <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>uiomove(<img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>echo_message-&gt;buffer, <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>amount,
+ <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>uio);
+        if (error != 0) {
+                uprintf("Write failed.\n");
+                return (error);
+        }
+
+        echo_message-&gt;buffer[amount] = '\0';
+        echo_message-&gt;length = amount;
+
+        return (error);
+}</pre><p>This version of <code class="literal">echo_write</code> uses <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3944"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">uiomove</code> (as described in <a class="xref" href="ch01.html" title="Chapter 1. Building and Running Modules">Chapter 1</a>) instead of <code class="literal">copyin</code>. Note that <code class="literal">uiomove</code> decrements <code class="literal">uio-&gt;uio_resid</code> (by one) and increments <code class="literal">uio-&gt;uio_offset</code> (by one) for each byte copied. This lets multiple calls to <code class="literal">uiomove</code> effortlessly copy a chunk of data.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>You’ll recall that <code class="literal">uio-&gt;uio_resid</code> and <code class="literal">uio-&gt;uio_offset</code> denote the number of bytes remaining to be transferred and an offset into the data (that is, the character string), respectively.<a class="indexterm" id="IDX-CHP-3-0023"/><a class="indexterm" id="IDX-CHP-3-0024"/><a class="indexterm" id="IDX-CHP-3-0025"/></p></div><p>This function starts by <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e3997"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> determining the number of bytes to copy—either the <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4003"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> amount the user sent or <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4009"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> whatever the buffer can accommodate. Then it <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4015"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> transfers that <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4021"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> amount from <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4028"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> user space to <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4034"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> kernel space.</p><p>The remainder of this function should be self-explanatory.</p></div><div class="sect2" title="echo_set_buffer_size Function"><div class="titlepage"><div><div><h2 class="title"><a id="echo_underscore_set_underscore_buffer_un"/>echo_set_buffer_size Function</h2></div></div></div><p>As its name implies, the <code class="literal">echo_set_buffer_size</code> function takes an integer to resize the memory buffer <code class="literal">echo_message-&gt;buffer</code>. Here is its function definition (again):</p><a id="I_programlisting3_d1e4053"/><pre class="programlisting">static int
+echo_set_buffer_size(int size)
+{
+        int error = 0;
+
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>if (<img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>echo_message-&gt;buffer_size == <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>size)
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>return (error);
+
+        if (size &gt;= 128 &amp;&amp; size &lt;= 512) {
+                echo_message-&gt;buffer = <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>realloc(echo_message-&gt;buffer, size,
+                    M_ECHO, M_WAITOK);
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>echo_message-&gt;buffer_size = size;
+
+              <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>if (echo_message-&gt;length &gt;= size) {
+                        <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>echo_message-&gt;length = size - 1;
+                        <img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/>echo_message-&gt;buffer[size - 1] = '\0';
+                }
+        } else
+                error = EINVAL;
+
+        return (error);
+}</pre><p>This function can be split into three parts. The first part <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4112"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> confirms that the <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4118"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> current and <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4124"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> proposed buffer sizes are distinct (or else <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4130"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> nothing needs to occur).</p><p>The second part <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4138"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> changes the size of the memory buffer. Then it <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4144"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> records the new buffer size. Note that if the data stored in the buffer is longer than the proposed buffer size, the resize operation (that is, <code class="literal">realloc</code>) will truncate that data.</p><p>The third part comes about only <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4155"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> if the data stored in the buffer was truncated. It begins by <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4161"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> correcting the stored data’s length. Then it <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4167"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/></span> null-terminates the data.</p></div><div class="sect2" title="echo_ioctl Function"><div class="titlepage"><div><div><h2 class="title"><a id="echo_underscore_ioctl_function"/>echo_ioctl Function</h2></div></div></div><p>The <code class="literal">echo_ioctl</code> function is the <code class="literal">d_ioctl</code> function for <a class="xref" href="ch03s03.html#echo-3.0.c" title="Example 3-1. echo-3.0.c">Example 3-1</a>. Here is its function definition (again):<a class="indexterm" id="IDX-CHP-3-0026"/><a class="indexterm" id="IDX-CHP-3-0027"/><a class="indexterm" id="IDX-CHP-3-0028"/><a class="indexterm" id="IDX-CHP-3-0029"/><a class="indexterm" id="IDX-CHP-3-0030"/><a class="indexterm" id="IDX-CHP-3-0031"/></p><a id="I_programlisting3_d1e4218"/><pre class="programlisting">static int
+echo_ioctl(struct cdev *dev, u_long cmd, caddr_t <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>data, int fflag,
+    struct thread *td)
+{
+        int error = 0;
+
+        switch (cmd) {
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>case ECHO_CLEAR_BUFFER:
+                <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>memset(echo_message-&gt;buffer, '\0',
+                    echo_message-&gt;buffer_size);
+                <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>echo_message-&gt;length = 0;
+                uprintf("Buffer cleared.\n");
+                break;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>case ECHO_SET_BUFFER_SIZE:
+                error = <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>echo_set_buffer_size(*(int *)<img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>data);
+                if (error == 0)
+                        uprintf("Buffer resized.\n");
+                break;
+        default:
+                error = ENOTTY;
+                break;
+        }
+
+        return (error);
+}</pre><p>This function can perform one of two ioctl-based operations. The first <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4265"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> clears the memory buffer. It begins by <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4271"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> zeroing the buffer. Then it <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4277"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> sets the data length to <code class="literal">0</code>.</p><p>The second <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4288"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> resizes the memory buffer by calling <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4294"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <code class="literal">echo_set_buffer_size</code>. Note that this operation requires an <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4303"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> argument: the proposed buffer size. This argument is obtained from user space through <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4309"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">data</code>.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>Remember that you must cast <code class="literal">data</code> before it can be dereferenced.</p></div></div><div class="sect2" title="echo_modevent Function"><div class="titlepage"><div><div><h2 class="title"><a id="echo_underscore_modevent_function-id1"/>echo_modevent Function</h2></div></div></div><p>As you know, the <code class="literal">echo_modevent</code> function is the module event handler. Like <code class="literal">echo_write</code>, this function had to be altered to accommodate adding in <code class="literal">echo_ioctl</code>. Here is its function definition (again):</p><a id="I_programlisting3_d1e4339"/><pre class="programlisting">static int
+echo_modevent(module_t mod __unused, int event, void *arg __unused)
+{
+        int error = 0;
+        switch (event) {
+        case MOD_LOAD:
+                echo_message = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>malloc(sizeof(echo_t), M_ECHO, M_WAITOK);
+                echo_message-&gt;buffer_size = 256;
+                echo_message-&gt;buffer = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>malloc(echo_message-&gt;buffer_size,
+                    M_ECHO, M_WAITOK);
+                echo_dev = make_dev(&amp;echo_cdevsw, 0, UID_ROOT, GID_WHEEL,
+                    0600, "echo");
+                uprintf("Echo driver loaded.\n");
+                break;
+        case MOD_UNLOAD:
+                destroy_dev(echo_dev);
+                free(echo_message-&gt;buffer, M_ECHO);
+                free(echo_message, M_ECHO);
+                uprintf("Echo driver unloaded.\n");
+                break;
+        default:
+                error = EOPNOTSUPP;
+                break;
+        }
+
+        return (error);
+}</pre><p>This version of <code class="literal">echo_modevent</code> allocates memory for the <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4358"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">echo</code> structure and <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4367"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> memory buffer individually—that’s the only change. Previously, the memory buffer couldn’t be resized. So, individual memory allocations were unnecessary.<a class="indexterm" id="IDX-CHP-3-0032"/><a class="indexterm" id="IDX-CHP-3-0033"/></p></div><div class="sect2" title="Don’t Panic"><div class="titlepage"><div><div><h2 class="title"><a id="donat_panic-id1"/>Don’t Panic</h2></div></div></div><p>Now that we’ve walked through <a class="xref" href="ch03s03.html#echo-3.0.c" title="Example 3-1. echo-3.0.c">Example 3-1</a>, let’s give it a try:</p><a id="I_programlisting3_d1e4392"/><pre class="programlisting">$ <strong class="userinput"><code>sudo kldload ./echo-3.0.ko</code></strong>
+Echo driver loaded.
+$ <strong class="userinput"><code>su</code></strong>
+Password:
+# <strong class="userinput"><code>echo "DON'T PANIC" &gt; /dev/echo</code></strong>
+Opening echo device.
+Closing echo device.
+# <strong class="userinput"><code>cat /dev/echo</code></strong>
+Opening echo device.
+DON'T PANIC
+Closing echo device.</pre><p>Apparently it works. But how do we invoke <code class="literal">echo_ioctl</code>?</p></div></div>
+<div class="sect1" title="Invoking ioctl"><div class="titlepage"><div><div><h1 class="title"><a id="invoking_ioctl"/>Invoking ioctl</h1></div></div></div><p>To invoke a <code class="literal">d_ioctl</code> function, you’d use the <code class="literal">ioctl(2)</code> system call.</p><a id="I_programlisting3_d1e4422"/><pre class="programlisting">#include &lt;sys/ioctl.h&gt;
+
+int
+ioctl(int d, unsigned long request, ...);</pre><p>The <code class="literal">d</code> argument, which stands for <span class="emphasis"><em>descriptor</em></span>, expects a file descriptor for a device node. The <code class="literal">request</code> argument is the ioctl command to be issued (for example, <code class="literal">ECHO_CLEAR_BUFFER</code>). The remaining argument (<code class="literal">...</code>) is a pointer to the data that’ll be passed to the <code class="literal">d_ioctl</code> function.<a class="indexterm" id="IDX-CHP-3-0034"/><a class="indexterm" id="IDX-CHP-3-0035"/></p><p><a class="xref" href="ch03s04.html#echo_underscore_config.c" title="Example 3-2. echo_config.c">Example 3-2</a> presents a command-line utility designed to invoke the <code class="literal">echo_ioctl</code> function in <a class="xref" href="ch03s03.html#echo-3.0.c" title="Example 3-1. echo-3.0.c">Example 3-1</a>:</p><div class="example"><a id="echo_underscore_config.c"/><p class="title">Example 3-2. echo_config.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/types.h&gt;
+  #include &lt;sys/ioctl.h&gt;
+
+  #include &lt;err.h&gt;
+  #include &lt;fcntl.h&gt;
+  #include &lt;limits.h&gt;
+  #include &lt;stdio.h&gt;
+  #include &lt;stdlib.h&gt;
+  #include &lt;unistd.h&gt;
+
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/> #define ECHO_CLEAR_BUFFER       _IO('E', 1)
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/> #define ECHO_SET_BUFFER_SIZE    _IOW('E', 2, int)
+
+  static enum {UNSET, CLEAR, SETSIZE} action = UNSET;
+
+
+  /*
+   * The usage statement: echo_config -c | -s size
+   */
+
+  static void
+  usage()
+  {
+          /*
+           * Arguments for this program are "either-or." That is,
+           * 'echo_config -c' and 'echo_config -s size' are valid; however,
+           * 'echo_config -c -s size' is invalid.
+           */
+
+          fprintf(stderr, "usage: echo_config -c | -s size\n");
+          exit(1);
+  }
+
+
+  /*
+   * This program clears or resizes the memory buffer
+   * found in /dev/echo.
+   */
+
+  int
+  main(int argc, char *argv[])
+  {
+          int ch, fd, i, size;
+          char *p;
+
+          /*
+           * Parse the command-line argument list to determine
+           * the correct course of action.
+           *
+           *    -c:      clear the memory buffer
+           *    -s size: resize the memory buffer to size.
+           */
+
+          while ((ch = getopt(argc, argv, "cs:")) != −1)
+                  switch (ch) {
+                  case 'c':
+                          if (action != UNSET)
+                                  usage();
+                          action = CLEAR;
+                          break;
+                  case 's':
+                          if (action != UNSET)
+                                  usage();
+                          action = SETSIZE;
+                          size = (int)strtol(optarg, &amp;p, 10);
+                          if (*p)
+                                  errx(1, "illegal size -- %s", optarg);
+                          break;
+                  default:
+                          usage();
+                  }
+
+          /*
+           * Perform the chosen action.
+           */
+
+          if (action == CLEAR) {
+                  fd = <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>open("/dev/echo", O_RDWR);
+                  if (fd &lt; 0)
+                          err(1, "open(/dev/echo)");
+
+                  i = <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>ioctl(fd, ECHO_CLEAR_BUFFER, <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>NULL);
+                  if (i &lt; 0)
+                          err(1, "ioctl(/dev/echo)");
+
+                  close (fd);
+          } else if (action == SETSIZE) {
+                  fd = <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>open("/dev/echo", O_RDWR);
+                  if (fd &lt; 0)
+                          err(1, "open(/dev/echo)");
+
+                  i = <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>ioctl(fd, ECHO_SET_BUFFER_SIZE, &amp;size);
+                  if (i &lt; 0)
+                          err(1, "ioctl(/dev/echo)");
+
+                  close (fd);
+          } else
+                  usage();
+
+          return (0);
+  }</pre></div></div><div class="note" title="Note"><h3 class="title">Note</h3><p><a class="xref" href="ch03s04.html#echo_underscore_config.c" title="Example 3-2. echo_config.c">Example 3-2</a> is a fairly standard command-line utility. As such, I won’t cover its program structure. Instead, I’ll concentrate on how it invokes <code class="literal">echo_ioctl</code>.<a class="indexterm" id="IDX-CHP-3-0036"/><a class="indexterm" id="IDX-CHP-3-0037"/></p></div><p>This program begins by redefining <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4528"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">ECHO_CLEAR_BUFFER</code> and <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4537"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">ECHO_SET_BUFFER_SIZE</code>.<sup>[<a class="footnote" href="#ftn.CHP-3-FN-2" id="CHP-3-FN-2">4</a>]</sup> To issue an ioctl command, <a class="xref" href="ch03s04.html#echo_underscore_config.c" title="Example 3-2. echo_config.c">Example 3-2</a> starts by <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4556"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4562"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> opening <code class="literal">/dev/echo</code>. Then it <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4571"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4577"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> calls <code class="literal">ioctl(2)</code> with the appropriate arguments.</p><p>Note that since <code class="literal">ECHO_CLEAR_BUFFER</code> doesn’t transmit any data, <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4592"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <code class="literal">NULL</code> is passed as the third argument to <code class="literal">ioctl(2)</code>.</p><p>The following shows the results from executing <a class="xref" href="ch03s04.html#echo_underscore_config.c" title="Example 3-2. echo_config.c">Example 3-2</a> to clear the memory buffer:</p><a id="I_programlisting3_d1e4608"/><pre class="programlisting">$ <strong class="userinput"><code>sudo cat /dev/echo</code></strong>
+Opening echo device.
+DON'T PANIC
+Closing echo device.
+$ <strong class="userinput"><code>sudo ./echo_config -c</code></strong>
+Opening echo device.
+Buffer cleared.
+Closing echo device.
+$ <strong class="userinput"><code>sudo cat /dev/echo</code></strong>
+Opening echo device.
+Closing echo device.</pre><p>The following shows the results from executing <a class="xref" href="ch03s04.html#echo_underscore_config.c" title="Example 3-2. echo_config.c">Example 3-2</a> to resize the memory buffer:</p><a id="I_programlisting3_d1e4624"/><pre class="programlisting">$ <strong class="userinput"><code>sudo ./echo_config -s 128</code></strong>
+Opening echo device.
+Buffer resized.
+Closing echo device.</pre><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-3-FN-2" id="ftn.CHP-3-FN-2">4</a>] </sup>This step could have been avoided by defining those <code class="literal">ioctl</code> commands in a header file.</p></div></div></div>
+<div class="sect1" title="sysctl"><div class="titlepage"><div><div><h1 class="title"><a id="sysctl"/>sysctl</h1></div></div></div><p>As mentioned earlier, the sysctl interface is used to dynamically change or examine the kernel’s parameters, which includes device drivers. For example, some drivers let you enable (or disable) debug options using sysctls.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>This book was written under the assumption that you know how to work with sysctls; if you don’t, see the <code class="literal">sysctl(8)</code> manual page.</p></div><p>Unlike with previous topics, I’m going to take a holistic approach to explain sysctl. That is, I’m going to show an example first, and then I’ll describe the sysctl functions. I found this to be the easiest way to grok implementing sysctls.</p></div>
+<div class="sect1" title="Implementing sysctls, Part 1"><div class="titlepage"><div><div><h1 class="title"><a id="implementing_sysctls_comma_part_1"/>Implementing sysctls, Part 1</h1></div></div></div><p><a class="xref" href="ch03s06.html#pointless.c" title="Example 3-3. pointless.c">Example 3-3</a> is a complete KLD (based on code written by Andrzej Bialecki) that creates multiple sysctls.</p><div class="example"><a id="pointless.c"/><p class="title">Example 3-3. pointless.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/param.h&gt;
+  #include &lt;sys/module.h&gt;
+  #include &lt;sys/kernel.h&gt;
+  #include &lt;sys/systm.h&gt;
+  #include &lt;sys/sysctl.h&gt;
+
+  static long  a = 100;
+  static int   b = 200;
+  static char *c = "Are you suggesting coconuts migrate?";
+
+  static struct sysctl_ctx_list clist;
+  static struct sysctl_oid *poid;
+
+  static int
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/> sysctl_pointless_procedure(SYSCTL_HANDLER_ARGS)
+  {
+          char *buf = "Not at all. They could be carried.";
+          return (sysctl_handle_string(oidp, buf, strlen(buf), req));
+  }
+
+  static int
+  pointless_modevent(module_t mod __unused, int event, void *arg __unused)
+  {
+          int error = 0;
+
+          switch (event) {
+          case MOD_LOAD:
+                  <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>sysctl_ctx_init(&amp;clist);
+
+                  poid = <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>SYSCTL_ADD_NODE(&amp;clist,
+                      SYSCTL_STATIC_CHILDREN(/* tree top */), OID_AUTO,
+                      "example", CTLFLAG_RW, 0, "new top-level tree");
+                  if (poid == NULL) {
+                          uprintf("SYSCTL_ADD_NODE failed.\n");
+                          return (EINVAL);
+                  }
+                  <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>SYSCTL_ADD_LONG(&amp;clist, SYSCTL_CHILDREN(poid), OID_AUTO,
+                      "long", CTLFLAG_RW, &amp;a, "new long leaf");
+                  <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>SYSCTL_ADD_INT(&amp;clist, SYSCTL_CHILDREN(poid), OID_AUTO,
+                      "int", CTLFLAG_RW, &amp;b, 0, "new int leaf");
+
+                  poid = <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>SYSCTL_ADD_NODE(&amp;clist, SYSCTL_CHILDREN(poid),
+                      OID_AUTO, "node", CTLFLAG_RW, 0,
+                      "new tree under example");
+                  if (poid == NULL) {
+                          uprintf("SYSCTL_ADD_NODE failed.\n");
+                          return (EINVAL);
+                  }
+                  <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>SYSCTL_ADD_PROC(&amp;clist, SYSCTL_CHILDREN(poid), OID_AUTO,
+                      "proc", CTLFLAG_RD, 0, 0, sysctl_pointless_procedure,
+                      "A", "new proc leaf");
+
+                  poid = <img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/>SYSCTL_ADD_NODE(&amp;clist,
+                      SYSCTL_STATIC_CHILDREN(_debug), OID_AUTO, "example",
+                      CTLFLAG_RW, 0, "new tree under debug");
+                  if (poid == NULL) {
+                          uprintf("SYSCTL_ADD_NODE failed.\n");
+                          return (EINVAL);
+                  }
+                  <img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/>SYSCTL_ADD_STRING(&amp;clist, SYSCTL_CHILDREN(poid), OID_AUTO,
+                      "string", CTLFLAG_RD, c, 0, "new string leaf");
+
+                  uprintf("Pointless module loaded.\n");
+                  break;
+          case MOD_UNLOAD:
+                  if (<img alt="" src="httpatomoreillycomsourcenostarchimages1137517.png"/>sysctl_ctx_free(&amp;clist)) {
+                          uprintf("sysctl_ctx_free failed.\n");
+                          return (ENOTEMPTY);
+                  }
+                  uprintf("Pointless module unloaded.\n");
+                  break;
+          default:
+                  error = EOPNOTSUPP;
+                  break;
+          }
+
+          return (error);
+  }
+
+  static moduledata_t pointless_mod = {
+          "pointless",
+          pointless_modevent,
+          NULL
+  };
+
+  DECLARE_MODULE(pointless, pointless_mod, SI_SUB_EXEC, SI_ORDER_ANY);</pre></div></div><p>On module load, <a class="xref" href="ch03s06.html#pointless.c" title="Example 3-3. pointless.c">Example 3-3</a> starts by <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4718"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> initializing a sysctl context named <code class="literal">clist</code>. Generally speaking, <span class="emphasis"><em>sysctl contexts</em></span> are responsible for keeping track of dynamically created sysctls—this is why <code class="literal">clist</code> gets passed to every <code class="literal">SYSCTL_ADD_*</code> call.<a class="indexterm" id="IDX-CHP-3-0038"/><a class="indexterm" id="IDX-CHP-3-0039"/><a class="indexterm" id="IDX-CHP-3-0040"/></p><p>The first <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4748"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">SYSCTL_ADD_NODE</code> call creates a new top-level category named <code class="literal">example</code>. The <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4760"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">SYSCTL_ADD_LONG</code> call creates a new sysctl named <code class="literal">long</code> that handles a long variable. Notice that <code class="literal">SYSCTL_ADD_LONG</code>’s second argument is <code class="literal">SYSCTL_CHILDREN(poid)</code><sup>[<a class="footnote" href="#ftn.CHP-3-FN-3" id="CHP-3-FN-3">5</a>]</sup> and that <code class="literal">poid</code> contains the return value from <code class="literal">SYSCTL_ADD_NODE</code>. Thus, <code class="literal">long</code> is placed under <code class="literal">example</code>, like so:<a class="indexterm" id="IDX-CHP-3-0041"/><a class="indexterm" id="IDX-CHP-3-0042"/><a class="indexterm" id="IDX-CHP-3-0043"/><a class="indexterm" id="IDX-CHP-3-0044"/></p><a id="I_programlisting3_d1e4812"/><pre class="programlisting">example.long</pre><p>The <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4816"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <code class="literal">SYSCTL_ADD_INT</code> call creates a new sysctl named <code class="literal">int</code> that handles an integer variable. For reasons identical to those for <code class="literal">SYSCTL_ADD_LONG</code>, <code class="literal">int</code> is placed under <code class="literal">example</code>:</p><a id="I_programlisting3_d1e4838"/><pre class="programlisting">example.long
+example.int</pre><p>The second <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4842"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <code class="literal">SYSCTL_ADD_NODE</code> call creates a new subcategory named <code class="literal">node</code>, which is placed under <code class="literal">example</code>, like so:</p><a id="I_programlisting3_d1e4857"/><pre class="programlisting">example.long
+example.int
+example.node</pre><p>The <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4861"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> <code class="literal">SYSCTL_ADD_PROC</code> call creates a new sysctl named <code class="literal">proc</code> that employs a <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4873"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> function to handle its read and write requests; in this case, the function simply prints some flavor text. You’ll note that <code class="literal">SYSCTL_ADD_PROC</code>’s second argument is also <code class="literal">SYSCTL_CHILDREN(poid)</code>. But <code class="literal">poid</code> now contains the return value from the second <code class="literal">SYSCTL_ADD_NODE</code> call. So, <code class="literal">proc</code> is placed under <code class="literal">node</code>:</p><a id="I_programlisting3_d1e4899"/><pre class="programlisting">example.long
+example.int
+example.node.proc</pre><p>The third <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4903"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137513.png"/></span> <code class="literal">SYSCTL_ADD_NODE</code> call creates a new subcategory named <code class="literal">example</code>. As you can see, its second argument is <code class="literal">SYSCTL_STATIC_CHILDREN(_debug)</code>,<sup>[<a class="footnote" href="#ftn.CHP-3-FN-4" id="CHP-3-FN-4">6</a>]</sup> which puts <code class="literal">example</code> under <code class="literal">debug</code> (which is a static top-level category).</p><a id="I_programlisting3_d1e4934"/><pre class="programlisting">debug.example
+example.long
+example.int
+example.node.proc</pre><p>The <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4938"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137515.png"/></span> <code class="literal">SYSCTL_ADD_STRING</code> call creates a new sysctl named <code class="literal">string</code> that handles a character string. For obvious reasons, <code class="literal">string</code> is placed under <code class="literal">debug.example</code>:</p><a id="I_programlisting3_d1e4956"/><pre class="programlisting">debug.example.string
+example.long
+example.int
+example.node.proc</pre><p>On module unload, <a class="xref" href="ch03s06.html#pointless.c" title="Example 3-3. pointless.c">Example 3-3</a> simply passes <code class="literal">clist</code> to <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e4965"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137517.png"/></span> <code class="literal">sysctl_ctx_free</code> to destroy every sysctl created during module load.<a class="indexterm" id="IDX-CHP-3-0045"/><a class="indexterm" id="IDX-CHP-3-0046"/><a class="indexterm" id="IDX-CHP-3-0047"/><a class="indexterm" id="IDX-CHP-3-0048"/><a class="indexterm" id="IDX-CHP-3-0049"/><a class="indexterm" id="IDX-CHP-3-0050"/><a class="indexterm" id="IDX-CHP-3-0051"/><a class="indexterm" id="IDX-CHP-3-0052"/><a class="indexterm" id="IDX-CHP-3-0053"/><a class="indexterm" id="IDX-CHP-3-0054"/></p><p>The following shows the results from loading <a class="xref" href="ch03s06.html#pointless.c" title="Example 3-3. pointless.c">Example 3-3</a>:</p><a id="I_programlisting3_d1e5023"/><pre class="programlisting">$ <strong class="userinput"><code>sudo kldload ./pointless.ko</code></strong>
+Pointless module loaded.
+$ <strong class="userinput"><code>sysctl -A | grep example</code></strong>
+debug.example.string: Are you suggesting coconuts migrate?
+example.long: 100
+example.int: 200
+example.node.proc: Not at all. They could be carried.</pre><p>Now, let’s discuss in detail the different functions and macros used in <a class="xref" href="ch03s06.html#pointless.c" title="Example 3-3. pointless.c">Example 3-3</a>.</p><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-3-FN-3" id="ftn.CHP-3-FN-3">5</a>] </sup>The <code class="literal">SYSCTL_CHILDREN</code> macro is described in <a class="xref" href="ch03s08.html#sysctl_underscore_static_underscore_chil" title="SYSCTL_STATIC_CHILDREN Macro">SYSCTL_STATIC_CHILDREN Macro</a>.</p></div><div class="footnote"><p><sup>[<a class="para" href="#CHP-3-FN-4" id="ftn.CHP-3-FN-4">6</a>] </sup>The <code class="literal">SYSCTL_STATIC_CHILDREN</code> macro is described in <a class="xref" href="ch03s08.html#sysctl_underscore_static_underscore_chil" title="SYSCTL_STATIC_CHILDREN Macro">SYSCTL_STATIC_CHILDREN Macro</a>.</p></div></div></div>
+<div class="sect1" title="sysctl Context Management Routines"><div class="titlepage"><div><div><h1 class="title"><a id="sysctl_context_management_routines"/>sysctl Context Management Routines</h1></div></div></div><p>As mentioned previously, sysctl contexts manage dynamically created sysctls. A sysctl context is initialized via the <code class="literal">sysctl_ctx_init</code> function.</p><a id="I_programlisting3_d1e5043"/><pre class="programlisting">#include &lt;sys/types.h&gt;
+#include &lt;sys/sysctl.h&gt;
+
+int
+sysctl_ctx_init(struct sysctl_ctx_list *clist);</pre><p>After a sysctl context is initialized, it can be passed to the various <code class="literal">SYSCTL_ADD_*</code> macros. These macros will update the sysctl context with pointers to the newly created sysctls.</p><p>Conversely, the <code class="literal">sysctl_ctx_free</code> function takes a sysctl context and destroys every sysctl that it has a pointer to.</p><a id="I_programlisting3_d1e5055"/><pre class="programlisting">#include &lt;sys/types.h&gt;
+#include &lt;sys/sysctl.h&gt;
+
+int
+sysctl_ctx_free(struct sysctl_ctx_list *clist);</pre><p>If a sysctl cannot be destroyed, all the sysctls that were associated with the sysctl context are reinstated.</p></div>
+<div class="sect1" title="Creating Dynamic sysctls"><div class="titlepage"><div><div><h1 class="title"><a id="creating_dynamic_sysctls"/>Creating Dynamic sysctls</h1></div></div></div><p>The FreeBSD kernel provides the following 10 macros for creating sysctls during runtime:</p><a id="I_programlisting3_d1e5065"/><pre class="programlisting">#include &lt;sys/types.h&gt;
+#include &lt;sys/sysctl.h&gt;
+
+struct sysctl_oid *
+SYSCTL_ADD_OID(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int kind, void *arg1, int arg2, int (*handler) (SYSCTL_HANDLER_ARGS),
+    const char *format, const char *descr);
+
+struct sysctl_oid *
+SYSCTL_ADD_NODE(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int access, int (*handler) (SYSCTL_HANDLER_ARGS), const char *descr);
+
+struct sysctl_oid *
+SYSCTL_ADD_STRING(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int access, char *arg, int len, const char *descr);
+
+struct sysctl_oid *
+SYSCTL_ADD_INT(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int access, int *arg, int len, const char *descr);
+
+struct sysctl_oid *
+SYSCTL_ADD_UINT(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int access, unsigned int *arg, int len, const char *descr);
+
+struct sysctl_oid *
+SYSCTL_ADD_LONG(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int access, long *arg, const char *descr);
+
+struct sysctl_oid *
+SYSCTL_ADD_ULONG(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int access, unsigned long *arg, const char *descr);
+
+struct sysctl_oid *
+SYSCTL_ADD_OPAQUE(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int access, void *arg, int len, const char *format,
+    const char *descr);
+
+struct sysctl_oid *
+SYSCTL_ADD_STRUCT(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int access, void *arg, STRUCT_NAME, const char *descr);
+
+struct sysctl_oid *
+SYSCTL_ADD_PROC(struct sysctl_ctx_list *ctx,
+    struct sysctl_oid_list *parent, int number, const char *name,
+    int access, void *arg, int len,
+    int (*handler) (SYSCTL_HANDLER_ARGS), const char *format,
+    const char *descr);</pre><p>The <code class="literal">SYSCTL_ADD_OID</code> macro creates a new sysctl that can handle any data type. If successful, a pointer to the sysctl is returned; otherwise, <code class="literal">NULL</code> is returned.<a class="indexterm" id="IDX-CHP-3-0055"/><a class="indexterm" id="IDX-CHP-3-0056"/><a class="indexterm" id="IDX-CHP-3-0057"/><a class="indexterm" id="IDX-CHP-3-0058"/><a class="indexterm" id="IDX-CHP-3-0059"/><a class="indexterm" id="IDX-CHP-3-0060"/><a class="indexterm" id="IDX-CHP-3-0061"/><a class="indexterm" id="IDX-CHP-3-0062"/><a class="indexterm" id="IDX-CHP-3-0063"/><a class="indexterm" id="IDX-CHP-3-0064"/><a class="indexterm" id="IDX-CHP-3-0065"/></p><p>The other <code class="literal">SYSCTL_ADD_*</code> macros are alternatives to <code class="literal">SYSCTL_ADD_OID</code> that create a sysctl that can handle a specific data type. These macros are explained in <a class="xref" href="ch03s08.html#sysctl_underscore_add_underscore_asteris" title="Table 3-2. SYSCTL_ADD_* Macros">Table 3-2</a>.</p><div class="table"><a id="sysctl_underscore_add_underscore_asteris"/><p class="title">Table 3-2. SYSCTL_ADD_* Macros</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="SYSCTL_ADD_* Macros"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Macro</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">SYSCTL_ADD_NODE</code></p></td><td style="text-align: left" valign="top"><p>Creates a new node (or category) to which child nodes may be added</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYSCTL_ADD_STRING</code></p></td><td style="text-align: left" valign="top"><p>Creates a new sysctl that handles a null-terminated character string</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYSCTL_ADD_INT</code></p></td><td style="text-align: left" valign="top"><p>Creates a new sysctl that handles an integer variable</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYSCTL_ADD_UINT</code></p></td><td style="text-align: left" valign="top"><p>Creates a new sysctl that handles an unsigned integer variable</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYSCTL_ADD_LONG</code></p></td><td style="text-align: left" valign="top"><p>Creates a new sysctl that handles a long variable</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYSCTL_ADD_ULONG</code></p></td><td style="text-align: left" valign="top"><p>Creates a new sysctl that handles an unsigned long variable</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYSCTL_ADD_OPAQUE</code></p></td><td style="text-align: left" valign="top"><p>Creates a new sysctl that handles a chunk of opaque data; the size of this data is specified by the <code class="literal">len</code> argument</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYSCTL_ADD_STRUCT</code></p></td><td style="text-align: left" valign="top"><p>Creates a new sysctl that handles a structure</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">SYSCTL_ADD_PROC</code></p></td><td style="text-align: left" valign="top"><p>Creates a new sysctl that uses a function to handle its read and write requests; this “handler function” is normally used to process the data before importing or exporting it</p></td></tr></tbody></table></div></div><p>In most cases, you should use a <code class="literal">SYSCTL_ADD_*</code> macro instead of the generic <code class="literal">SYSCTL_ADD_OID</code> macro.</p><p>The arguments for the <code class="literal">SYSCTL_ADD_*</code> macros are described in <a class="xref" href="ch03s08.html#sysctl_underscore_add_underscore_ast" title="Table 3-3. SYSCTL_ADD_* Arguments">Table 3-3</a>.</p><div class="table"><a id="sysctl_underscore_add_underscore_ast"/><p class="title">Table 3-3. SYSCTL_ADD_* Arguments</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="SYSCTL_ADD_* Arguments"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Argument</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">ctx</code></p></td><td style="text-align: left" valign="top"><p>Expects a pointer to a sysctl context</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">parent</code></p></td><td style="text-align: left" valign="top"><p>Expects a pointer to the parent sysctl’s list of children; more on this later</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">number</code></p></td><td style="text-align: left" valign="top"><p>Expects the sysctl’s number; this should always be set to <code class="literal">OID_AUTO</code></p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">name</code></p></td><td style="text-align: left" valign="top"><p>Expects the sysctl’s name</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">access</code></p></td><td style="text-align: left" valign="top"><p>Expects an access flag; <span class="emphasis"><em>access flags</em></span> specify whether the sysctl is read-only (<code class="literal">CTLFLAG_RD</code>) or read-write (<code class="literal">CTLFLAG_RW</code>)</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">arg</code></p></td><td style="text-align: left" valign="top"><p>Expects a pointer to the data that the sysctl will manage (or <code class="literal">NULL</code>)</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">len</code></p></td><td style="text-align: left" valign="top"><p>Set this to <code class="literal">0</code> unless you’re calling <code class="literal">SYSCTL_ADD_OPAQUE</code></p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">handler</code></p></td><td style="text-align: left" valign="top"><p>Expects a pointer to the function that will handle the sysctl’s read and write requests (or <code class="literal">0</code>)</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">format</code></p></td><td style="text-align: left" valign="top"><p>Expects a format name; <span class="emphasis"><em>format names</em></span> identify the type of data that the sysctl will manage; the complete list of format names is: <code class="literal">"N"</code> for node, <code class="literal">"A"</code> for <code class="literal">char *</code>, <code class="literal">"I"</code> for <code class="literal">int</code>, <code class="literal">"IU"</code> for <code class="literal">unsigned int</code>, <code class="literal">"L"</code> for <code class="literal">long</code>, <code class="literal">"LU"</code> for <code class="literal">unsigned long</code>, and <code class="literal">"S,foo"</code> for <code class="literal">struct foo</code></p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">descr</code></p></td><td style="text-align: left" valign="top"><p>Expects a textual description of the sysctl; this description is printed by <code class="literal">sysctl -d</code><a class="indexterm" id="IDX-CHP-3-0066"/></p></td></tr></tbody></table></div></div><p>A sysctl created by a <code class="literal">SYSCTL_ADD_*</code> macro must be connected to a parent sysctl. This is done by passing <code class="literal">SYSCTL_STATIC_CHILDREN</code> or <code class="literal">SYSCTL_CHILDREN</code> as the <code class="literal">parent</code> argument.<a class="indexterm" id="IDX-CHP-3-0067"/><a class="indexterm" id="IDX-CHP-3-0068"/><a class="indexterm" id="IDX-CHP-3-0069"/><a class="indexterm" id="IDX-CHP-3-0070"/><a class="indexterm" id="IDX-CHP-3-0071"/><a class="indexterm" id="IDX-CHP-3-0072"/><a class="indexterm" id="IDX-CHP-3-0073"/></p><div class="sect2" title="SYSCTL_STATIC_CHILDREN Macro"><div class="titlepage"><div><div><h2 class="title"><a id="sysctl_underscore_static_underscore_chil"/>SYSCTL_STATIC_CHILDREN Macro</h2></div></div></div><p>The <code class="literal">SYSCTL_STATIC_CHILDREN</code> macro is passed as <code class="literal">parent</code> when connecting to a static node. A <span class="emphasis"><em>static node</em></span> is part of the base system.<a class="indexterm" id="IDX-CHP-3-0074"/></p><a id="I_programlisting3_d1e5456"/><pre class="programlisting">#include &lt;sys/types.h&gt;
+#include &lt;sys/sysctl.h&gt;
+
+struct sysctl_oid_list *
+SYSCTL_STATIC_CHILDREN(struct sysctl_oid_list OID_NAME);</pre><p>This macro takes the name of the parent sysctl preceded by an underscore. And all dots must be replaced by an underscore. So to connect to <code class="literal">hw.usb</code>, you would use <code class="literal">_hw_usb</code>.</p><p>If <code class="literal">SYSCTL_STATIC_CHILDREN(/* no argument */)</code> is passed as <code class="literal">parent</code> to <code class="literal">SYSCTL_ADD_NODE</code>, a new top-level category will be created.</p></div><div class="sect2" title="SYSCTL_CHILDREN Macro"><div class="titlepage"><div><div><h2 class="title"><a id="sysctl_underscore_children_macro"/>SYSCTL_CHILDREN Macro</h2></div></div></div><p>The <code class="literal">SYSCTL_CHILDREN</code> macro is passed as <code class="literal">parent</code> when connecting to a dynamic node. A <span class="emphasis"><em>dynamic node</em></span> is created by a <code class="literal">SYSCTL_ADD_NODE</code> call.<a class="indexterm" id="IDX-CHP-3-0075"/></p><a id="I_programlisting3_d1e5498"/><pre class="programlisting">#include &lt;sys/types.h&gt;
+#include &lt;sys/sysctl.h&gt;
+
+struct sysctl_oid_list *
+SYSCTL_CHILDREN(struct sysctl_oid *oidp);</pre><p>This macro takes as its sole argument the pointer returned by a <code class="literal">SYSCTL_ADD_NODE</code> call.</p></div></div>
+<div class="sect1" title="Implementing sysctls, Part 2"><div class="titlepage"><div><div><h1 class="title"><a id="implementing_sysctls_comma_part_2"/>Implementing sysctls, Part 2</h1></div></div></div><p>Now that you know how to create sysctls during runtime, let’s do some actual device control (as opposed to quoting Monty Python).</p><p><a class="xref" href="ch03s09.html#echo-4.0.c" title="Example 3-4. echo-4.0.c">Example 3-4</a> is a revision of <a class="xref" href="ch03s03.html#echo-3.0.c" title="Example 3-1. echo-3.0.c">Example 3-1</a> that employs a sysctl to resize the memory buffer.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>To save space, the functions <code class="literal">echo_open</code>, <code class="literal">echo_close</code>, <code class="literal">echo_write</code>, and <code class="literal">echo_read</code> aren’t listed here, as they haven’t been changed.</p></div><div class="example"><a id="echo-4.0.c"/><p class="title">Example 3-4. echo-4.0.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/param.h&gt;
+#include &lt;sys/module.h&gt;
+#include &lt;sys/kernel.h&gt;
+#include &lt;sys/systm.h&gt;
+
+#include &lt;sys/conf.h&gt;
+#include &lt;sys/uio.h&gt;
+#include &lt;sys/malloc.h&gt;
+#include &lt;sys/ioccom.h&gt;
+#include &lt;sys/sysctl.h&gt;
+
+MALLOC_DEFINE(M_ECHO, "echo_buffer", "buffer for echo driver");
+
+#define ECHO_CLEAR_BUFFER       _IO('E', 1)
+
+static d_open_t         echo_open;
+static d_close_t        echo_close;
+static d_read_t         echo_read;
+static d_write_t        echo_write;
+static d_ioctl_t        echo_ioctl;
+
+static struct cdevsw echo_cdevsw = {
+        .d_version =    D_VERSION,
+        .d_open =       echo_open,
+        .d_close =      echo_close,
+        .d_read =       echo_read,
+        .d_write =      echo_write,
+        .d_ioctl =      echo_ioctl,
+        .d_name =       "echo"
+};
+
+typedef struct echo {
+        int buffer_size;
+        char *buffer;
+        int length;
+} echo_t;
+
+static echo_t *echo_message;
+static struct cdev *echo_dev;
+
+static struct sysctl_ctx_list clist;
+static struct sysctl_oid *poid;
+
+static int
+echo_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
+{
+...
+}
+
+static int
+echo_close(struct cdev *dev, int fflag, int devtype, struct thread *td)
+{
+...
+}
+
+static int
+echo_write(struct cdev *dev, struct uio *uio, int ioflag)
+{
+...
+}
+
+static int
+echo_read(struct cdev *dev, struct uio *uio, int ioflag)
+{
+...
+}
+
+static int
+echo_ioctl(struct cdev *dev, u_long cmd, caddr_t data, int fflag,
+    struct thread *td)
+{
+        int error = 0;
+
+        switch (cmd) {
+        case ECHO_CLEAR_BUFFER:
+                memset(echo_message-&gt;buffer, '\0',
+                    echo_message-&gt;buffer_size);
+                echo_message-&gt;length = 0;
+                uprintf("Buffer cleared.\n");
+                break;
+        default:
+                error = ENOTTY;
+                break;
+        }
+
+        return (error);
+}
+
+static int
+sysctl_set_buffer_size(SYSCTL_HANDLER_ARGS)
+{
+        int error = 0;
+        int size = echo_message-&gt;buffer_size;
+
+        error = sysctl_handle_int(oidp, &amp;size, 0, req);
+        if (error || !req-&gt;newptr || echo_message-&gt;buffer_size == size)
+                return (error);
+
+        if (size &gt;= 128 &amp;&amp; size &lt;= 512) {
+                echo_message-&gt;buffer = realloc(echo_message-&gt;buffer, size,
+                    M_ECHO, M_WAITOK);
+                echo_message-&gt;buffer_size = size;
+
+                if (echo_message-&gt;length &gt;= size) {
+                        echo_message-&gt;length = size - 1;
+                        echo_message-&gt;buffer[size - 1] = '\0';
+                }
+        } else
+                error = EINVAL;
+
+        return (error);
+}
+
+static int
+echo_modevent(module_t mod __unused, int event, void *arg __unused)
+{
+        int error = 0;
+
+        switch (event) {
+        case MOD_LOAD:
+                echo_message = malloc(sizeof(echo_t), M_ECHO, M_WAITOK);
+                echo_message-&gt;buffer_size = 256;
+                echo_message-&gt;buffer = malloc(echo_message-&gt;buffer_size,
+                    M_ECHO, M_WAITOK);
+                sysctl_ctx_init(&amp;clist);
+                poid = SYSCTL_ADD_NODE(&amp;clist,
+                    SYSCTL_STATIC_CHILDREN(/* tree top */), OID_AUTO,
+                    "echo", CTLFLAG_RW, 0, "echo root node");
+                SYSCTL_ADD_PROC(&amp;clist, SYSCTL_CHILDREN(poid), OID_AUTO,
+                    "buffer_size", CTLTYPE_INT | CTLFLAG_RW,
+                   <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>&amp;echo_message-&gt;buffer_size, 0,
+ <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>sysctl_set_buffer_size,
+                    "I", "echo buffer size");
+                echo_dev = make_dev(&amp;echo_cdevsw, 0, UID_ROOT, GID_WHEEL,
+                    0600, "echo");
+                uprintf("Echo driver loaded.\n");
+                break;
+        case MOD_UNLOAD:
+                destroy_dev(echo_dev);
+                sysctl_ctx_free(&amp;clist);
+                free(echo_message-&gt;buffer, M_ECHO);
+                free(echo_message, M_ECHO);
+                uprintf("Echo driver unloaded.\n");
+                break;
+        default:
+                error = EOPNOTSUPP;
+                break;
+        }
+
+        return (error);
+}
+
+DEV_MODULE(echo, echo_modevent, NULL);</pre></div></div><p>On module load, <a class="xref" href="ch03s09.html#echo-4.0.c" title="Example 3-4. echo-4.0.c">Example 3-4</a> creates a sysctl named <code class="literal">echo.buffer_size</code> that manages the <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5554"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> size of the memory buffer. Moreover, this sysctl uses a <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5560"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> handler function named <code class="literal">sysctl_set_buffer_size</code> to resize the memory buffer.<a class="indexterm" id="IDX-CHP-3-0076"/><a class="indexterm" id="IDX-CHP-3-0077"/><a class="indexterm" id="IDX-CHP-3-0078"/></p><div class="sect2" title="sysctl_set_buffer_size Function"><div class="titlepage"><div><div><h2 class="title"><a id="sysctl_underscore_set_underscore_buffer"/>sysctl_set_buffer_size Function</h2></div></div></div><p>As stated above, the <code class="literal">sysctl_set_buffer_size</code> function resizes the memory buffer. Before I describe this function, let’s identify its arguments.</p><a id="I_programlisting3_d1e5593"/><pre class="programlisting">static int
+sysctl_set_buffer_size(<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>SYSCTL_HANDLER_ARGS)</pre><p>The constant <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5603"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">SYSCTL_HANDLER_ARGS</code> is defined in <code class="literal">&lt;sys/sysctl.h&gt;</code> like so:<a class="indexterm" id="IDX-CHP-3-0079"/></p><a id="I_programlisting3_d1e5618"/><pre class="programlisting">#define SYSCTL_HANDLER_ARGS struct sysctl_oid <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>*oidp, void <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>*arg1, \
+        int <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>arg2, struct sysctl_req <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>*req</pre><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5646"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">oidp</code> points to the sysctl, <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5655"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">arg1</code> points to the data that the sysctl manages, <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5664"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <code class="literal">arg2</code> is the length of the data, and <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5674"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">req</code> depicts the sysctl request.</p><p>Now, keeping these arguments in mind, let’s examine the function <code class="literal">sysctl_set_buffer_size</code>.</p><a id="I_programlisting3_d1e5688"/><pre class="programlisting">static int
+sysctl_set_buffer_size(SYSCTL_HANDLER_ARGS)
+{
+        int error = 0;
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>int size = echo_message-&gt;buffer_size;
+
+        error = <img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>sysctl_handle_int(oidp, <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>&amp;size, 0, req);
+      <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>if (<img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>error ||
+ <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>!req-&gt;newptr || echo_message-&gt;buffer_size == size)
+                return (error);
+
+        if (size &gt;= 128 &amp;&amp; size &lt;= 512) {
+                echo_message-&gt;buffer = realloc(echo_message-&gt;buffer, size,
+                    M_ECHO, M_WAITOK);
+                echo_message-&gt;buffer_size = size;
+
+                if (echo_message-&gt;length &gt;= size) {
+                        echo_message-&gt;length = size - 1;
+                        echo_message-&gt;buffer[size - 1] = '\0';
+                }
+        } else
+                error = EINVAL;
+
+        return (error);
+}</pre><p>This function first sets <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5729"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">size</code> to the current buffer size. Afterward, <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5738"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">sysctl_handle_int</code> is called to obtain the new sysctl value (that is, the proposed buffer size) from user space.</p><p>Note that the <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5749"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> second argument to <code class="literal">sysctl_handle_int</code> is <code class="literal">&amp;size</code>. See, this function takes a pointer to the original sysctl value and overwrites it with the new sysctl value.</p><p>This <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5763"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">if</code> statement ensures that the new sysctl value was obtained successfully. It works by verifying that <code class="literal">sysctl_handle_int</code> returned <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5775"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> error free and that <span class="inlinemediaobject"><a id="I_inlinemediaobject3_d1e5781"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <code class="literal">req-&gt;newptr</code> is valid.</p><p>The remainder of <code class="literal">sysctl_set_buffer_size</code> is identical to <code class="literal">echo_set_buffer_size</code>, which was described in <a class="xref" href="ch03s03.html#echo_underscore_set_underscore_buffer_un" title="echo_set_buffer_size Function">echo_set_buffer_size Function</a>.</p></div><div class="sect2" title="Don’t Panic"><div class="titlepage"><div><div><h2 class="title"><a id="donat_panic-id2"/>Don’t Panic</h2></div></div></div><p>Now, let’s give <a class="xref" href="ch03s09.html#echo-4.0.c" title="Example 3-4. echo-4.0.c">Example 3-4</a> a try:</p><a id="I_programlisting3_d1e5809"/><pre class="programlisting">$ <strong class="userinput"><code>sudo kldload ./echo-4.0.ko</code></strong>
+Echo driver loaded.
+$ <strong class="userinput"><code>sudo sysctl echo.buffer_size=128</code></strong>
+echo.buffer_size: 256 -&gt; 128</pre><p>Success!</p></div></div>
+<div class="sect1" title="Conclusion"><div class="titlepage"><div><div><h1 class="title"><a id="conclusion-id2"/>Conclusion</h1></div></div></div><p>This chapter has described the traditional methods for device communication and control: sysctl and ioctl. Generally, sysctls are employed to adjust parameters, and ioctls are used for everything else—that’s why ioctls are the catchall of I/O operations. Note that if you find yourself creating a device node just for ioctl requests, you should probably use sysctls instead.</p><p>Incidentally, be aware that it’s fairly trivial to write user-mode programs that interact with drivers. Thus, your drivers—<span class="emphasis"><em>not</em></span> your user-mode programs (for example, <a class="xref" href="ch03s04.html#echo_underscore_config.c" title="Example 3-2. echo_config.c">Example 3-2</a>)—should always validate user input.</p></div></body></html>

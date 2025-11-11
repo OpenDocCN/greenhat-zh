@@ -1,0 +1,218 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;2.&#xA0;Allocating Memory"><div class="titlepage"><div><div><h1 class="title"><a id="allocating_memory"/>Chapter 2. Allocating Memory</h1></div></div></div><div class="informalfigure"><a id="image_no_caption-id2"/><div class="mediaobject"><a id="I_mediaobject2_d1e2213"/><img alt="image with no caption" src="httpatomoreillycomsourcenostarchimages1137497.png.jpg"/></div></div><p>In the previous chapter we used <code class="literal">malloc</code> and <code class="literal">free</code> for the allocation and release of memory. The FreeBSD kernel, however, contains a richer set of memory allocation primitives. In this chapter we’ll look at the stock kernel memory management routines. This includes describing <code class="literal">malloc</code> and <code class="literal">free</code> in more detail and introducing the <code class="literal">malloc_type</code> structure. We’ll finish this chapter by describing the contiguous physical memory management routines.<a class="indexterm" id="IDX-CHP-2-0001"/></p><div class="sect1" title="Memory Management Routines"><div class="titlepage"><div><div><h1 class="title"><a id="memory_management_routines"/>Memory Management Routines</h1></div></div></div><p>The FreeBSD kernel provides four functions for non-pageable memory allocation and release: <code class="literal">malloc</code>, <code class="literal">free</code>, <code class="literal">realloc</code>, and <code class="literal">reallocf</code>. These functions can handle requests of arbitrary size or alignment, and they are the preferred way to allocate kernel memory.</p><a id="I_programlisting2_d1e2258"/><pre class="programlisting">#include &lt;sys/types.h&gt;
+#include &lt;sys/malloc.h&gt;
+
+void *
+malloc(unsigned long size, struct malloc_type *type, int flags);
+
+void
+free(void *addr, struct malloc_type *type);
+
+void *
+realloc(void *addr, unsigned long size, struct malloc_type *type,
+    int flags);
+
+void *
+reallocf(void *addr, unsigned long size, struct malloc_type *type,
+    int flags);</pre><p>The <code class="literal">malloc</code> function allocates <code class="literal">size</code> bytes of memory in kernel space. If successful, a kernel virtual address is returned; otherwise, <code class="literal">NULL</code> is returned.<a class="indexterm" id="IDX-CHP-2-0002"/><a class="indexterm" id="IDX-CHP-2-0003"/><a class="indexterm" id="IDX-CHP-2-0004"/><a class="indexterm" id="IDX-CHP-2-0005"/><a class="indexterm" id="IDX-CHP-2-0006"/><a class="indexterm" id="IDX-CHP-2-0007"/><a class="indexterm" id="IDX-CHP-2-0008"/></p><p>The <code class="literal">free</code> function releases the memory at <code class="literal">addr</code>—that was previously allocated by <code class="literal">malloc</code>—for reuse. Note that <code class="literal">free</code> doesn’t clear this memory, which means that you should explicitly zero any memory whose contents you need to keep private. If <code class="literal">addr</code> is <code class="literal">NULL</code>, then <code class="literal">free</code> does nothing.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>If <code class="literal">INVARIANTS</code> is enabled, then <code class="literal">free</code> will stuff any released memory with <code class="literal">0xdeadc0de</code>.</p><p>Thus, if you get a page fault panic and the faulting address is around <code class="literal">0xdeadc0de</code>, this can be a sign that you’re using <code class="literal">freed</code> memory.<sup>[<a class="footnote" href="#ftn.CHP-2-FN-1" id="CHP-2-FN-1">1</a>]</sup></p></div><p>The <code class="literal">realloc</code> function changes the size of the memory at <code class="literal">addr</code> to <code class="literal">size</code> bytes. If successful, a kernel virtual address is returned; otherwise, <code class="literal">NULL</code> is returned, and the memory is left alone. Note that the returned address may differ from <code class="literal">addr</code>, because when the size changes, the memory may be relocated to acquire or provide additional room. Interestingly, this implies that you should not have any pointers into the memory at <code class="literal">addr</code> when calling <code class="literal">realloc</code>. If <code class="literal">addr</code> is <code class="literal">NULL</code>, then <code class="literal">realloc</code> behaves identically to <code class="literal">malloc</code>.</p><p>The <code class="literal">reallocf</code> function is identical to <code class="literal">realloc</code> except that on failure it releases the memory at <code class="literal">addr</code>.</p><p>The <code class="literal">malloc</code>, <code class="literal">realloc</code>, and <code class="literal">reallocf</code> functions provide a <code class="literal">flags</code> argument to further qualify their operational characteristics. Valid values for this argument are shown in <a class="xref" href="ch02.html#malloc_comma_realloc_comma_and_reallocf" title="Table 2-1. malloc, realloc, and reallocf Symbolic Constants">Table 2-1</a>.</p><div class="table"><a id="malloc_comma_realloc_comma_and_reallocf"/><p class="title">Table 2-1. malloc, realloc, and reallocf Symbolic Constants</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="malloc, realloc, and reallocf Symbolic Constants"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Constant<a class="indexterm" id="IDX-CHP-2-0009"/><a class="indexterm" id="IDX-CHP-2-0010"/><a class="indexterm" id="IDX-CHP-2-0011"/><a class="indexterm" id="IDX-CHP-2-0012"/><a class="indexterm" id="IDX-CHP-2-0013"/><a class="indexterm" id="IDX-CHP-2-0014"/><a class="indexterm" id="IDX-CHP-2-0015"/><a class="indexterm" id="IDX-CHP-2-0016"/></p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">M_ZERO</code></p></td><td style="text-align: left" valign="top"><p>Causes the allocated memory to be set to zero</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">M_NOWAIT</code></p></td><td style="text-align: left" valign="top"><p>Causes <code class="literal">malloc</code>, <code class="literal">realloc</code>, and <code class="literal">reallocf</code> to return <code class="literal">NULL</code> if the allocation cannot be immediately fulfilled due to resource shortage; <code class="literal">M_NOWAIT</code> is required when running in an interrupt context</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">M_WAITOK</code></p></td><td style="text-align: left" valign="top"><p>Indicates that it is okay to wait for resources; if the allocation cannot be immediately fulfilled, the current process is put to sleep to wait for resources to become available; when <code class="literal">M_WAITOK</code> is specified, <code class="literal">malloc</code>, <code class="literal">realloc</code>, and <code class="literal">reallocf</code> cannot return <code class="literal">NULL</code></p></td></tr></tbody></table></div></div><p>The <code class="literal">flags</code> argument must include either <code class="literal">M_NOWAIT</code> or <code class="literal">M_WAITOK</code>.</p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-2-FN-1" id="ftn.CHP-2-FN-1">1</a>] </sup><code class="literal">INVARIANTS</code> is a kernel debugging option. For more on <code class="literal">INVARIANTS</code>, see <span class="emphasis"><em>/sys/conf/NOTES</em></span>.</p></div></div></div>
+<div class="sect1" title="malloc_type Structures"><div class="titlepage"><div><div><h1 class="title"><a id="malloc_underscore_type_structures"/>malloc_type Structures</h1></div></div></div><p>The <code class="literal">malloc</code>, <code class="literal">free</code>, <code class="literal">realloc</code>, and <code class="literal">reallocf</code> functions include a <code class="literal">type</code> argument, which expects a pointer to a <code class="literal">malloc_type</code> structure; this structure describes the purpose of the allocated memory. The <code class="literal">type</code> argument has no impact on performance; it is used for memory profiling and for basic sanity checks.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>You can profile kernel dynamic memory usage, sorted by <code class="literal">type</code>, with the <code class="literal">vmstat -m</code> command.</p></div><div class="sect2" title="MALLOC_DEFINE Macro"><div class="titlepage"><div><div><h2 class="title"><a id="malloc_underscore_define_macro"/>MALLOC_DEFINE Macro</h2></div></div></div><p>The <code class="literal">MALLOC_DEFINE</code> macro defines a new <code class="literal">malloc_type</code> structure. Here is its function prototype:</p><a id="I_programlisting2_d1e2567"/><pre class="programlisting">#include &lt;sys/param.h&gt;
+#include &lt;sys/malloc.h&gt;
+#include &lt;sys/kernel.h&gt;
+
+MALLOC_DEFINE(type, shortdesc, longdesc);</pre><p>The <code class="literal">type</code> argument is the new <code class="literal">malloc_type</code> structure’s name. In general, <code class="literal">type</code> should begin with <code class="literal">M_</code> and be in uppercase letters; for example, <code class="literal">M_FOO</code>.</p><p>The <code class="literal">shortdesc</code> argument expects a short description of the new <code class="literal">malloc_type</code> structure. This argument is used in the output of <code class="literal">vmstat -m</code>. As a result, it shouldn’t contain any spaces so that it’s easier to parse <code class="literal">vmstat -m</code>’s output in scripts.</p><p>The <code class="literal">longdesc</code> argument expects a long description of the new <code class="literal">malloc_type</code> structure.</p></div><div class="sect2" title="MALLOC_DECLARE Macro"><div class="titlepage"><div><div><h2 class="title"><a id="malloc_underscore_declare_macro"/>MALLOC_DECLARE Macro</h2></div></div></div><p>The <code class="literal">MALLOC_DECLARE</code> macro declares a new <code class="literal">malloc_type</code> structure with the <code class="literal">extern</code> keyword. Here is its function prototype:<a class="indexterm" id="IDX-CHP-2-0017"/><a class="indexterm" id="IDX-CHP-2-0018"/><a class="indexterm" id="IDX-CHP-2-0019"/><a class="indexterm" id="IDX-CHP-2-0020"/><a class="indexterm" id="IDX-CHP-2-0021"/><a class="indexterm" id="IDX-CHP-2-0022"/></p><a id="I_programlisting2_d1e2649"/><pre class="programlisting">#include &lt;sys/types.h&gt;
+#include &lt;sys/malloc.h&gt;
+
+MALLOC_DECLARE(type);</pre><p>This macro is defined in the <code class="literal">&lt;sys/malloc.h&gt;</code> header as follows:</p><a id="I_programlisting2_d1e2656"/><pre class="programlisting">#define MALLOC_DECLARE(type) \
+        extern struct malloc_type type[1]</pre><p>As an aside, if you require a private <code class="literal">malloc_type</code> structure, you would prefix the <code class="literal">MALLOC_DEFINE</code> call with the <code class="literal">static</code> keyword. In fact, a non-static <code class="literal">MALLOC_DEFINE</code> call without a corresponding <code class="literal">MALLOC_DECLARE</code> call actually causes a warning under gcc 4.<span class="emphasis"><em>x</em></span>.</p></div></div>
+<div class="sect1" title="Tying Everything Together"><div class="titlepage"><div><div><h1 class="title"><a id="tying_everything_together"/>Tying Everything Together</h1></div></div></div><p><a class="xref" href="ch02s03.html#echo-2.0.c" title="Example 2-1. echo-2.0.c">Example 2-1</a> is a revision of <a class="xref" href="ch01s06.html#echo.c" title="Example 1-2. echo.c">Example 1-2</a> that uses its own <code class="literal">malloc_type</code> structure instead of the kernel-defined <code class="literal">M_TEMP</code>.<sup>[<a class="footnote" href="#ftn.CHP-2-FN-2" id="CHP-2-FN-2">2</a>]</sup> <a class="xref" href="ch02s03.html#echo-2.0.c" title="Example 2-1. echo-2.0.c">Example 2-1</a> should clarify any misunderstandings you may have about <code class="literal">MALLOC_DEFINE</code> and <code class="literal">MALLOC_DECLARE</code>.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>To save space, the functions <code class="literal">echo_open</code>, <code class="literal">echo_close</code>, <code class="literal">echo_write</code>, and <code class="literal">echo_read</code> aren’t listed here, as they haven’t been changed.</p></div><div class="example"><a id="echo-2.0.c"/><p class="title">Example 2-1. echo-2.0.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/param.h&gt;
+  #include &lt;sys/module.h&gt;
+  #include &lt;sys/kernel.h&gt;
+  #include &lt;sys/systm.h&gt;
+
+  #include &lt;sys/conf.h&gt;
+  #include &lt;sys/uio.h&gt;
+  #include &lt;sys/malloc.h&gt;
+
+  #define BUFFER_SIZE     256
+
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/> MALLOC_DECLARE(M_ECHO);
+<img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/> MALLOC_DEFINE(M_ECHO, "echo_buffer", "buffer for echo driver");
+
+  static d_open_t         echo_open;
+  static d_close_t        echo_close;
+  static d_read_t         echo_read;
+  static d_write_t        echo_write;
+
+  static struct cdevsw echo_cdevsw = {
+          .d_version =    D_VERSION,
+          .d_open =       echo_open,
+          .d_close =      echo_close,
+          .d_read =       echo_read,
+          .d_write =      echo_write,
+          .d_name =       "echo"
+  };
+
+  typedef struct echo {
+          char buffer[BUFFER_SIZE];
+          int length;
+  } echo_t;
+
+  static echo_t *echo_message;
+  static struct cdev *echo_dev;
+
+  static int
+  echo_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
+  {
+  ...
+  }
+
+  static int
+  echo_close(struct cdev *dev, int fflag, int devtype, struct thread *td)
+  {
+  ...
+  }
+
+  static int
+  echo_write(struct cdev *dev, struct uio *uio, int ioflag)
+  {
+  ...
+  }
+
+  static int
+  echo_read(struct cdev *dev, struct uio *uio, int ioflag)
+  {
+  ...
+  }
+
+  static int
+  echo_modevent(module_t mod __unused, int event, void *arg __unused)
+  {
+          int error = 0;
+
+          switch (event) {
+          case MOD_LOAD:
+                  echo_message = malloc(sizeof(echo_t), <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>M_ECHO, M_WAITOK);
+                  echo_dev = make_dev(&amp;echo_cdevsw, 0, UID_ROOT, GID_WHEEL,
+                      0600, "echo");
+                  uprintf("Echo driver loaded.\n");
+                  break;
+          case MOD_UNLOAD:
+                  destroy_dev(echo_dev);
+                  free(echo_message, <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>M_ECHO);
+                  uprintf("Echo driver unloaded.\n");
+                  break;
+          default:
+                  error = EOPNOTSUPP;
+                  break;
+          }
+
+          return (error);
+  }
+
+  DEV_MODULE(echo, echo_modevent, NULL);</pre></div></div><p>This driver <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e2757"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> declares and <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e2763"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> defines a new <code class="literal">malloc_type</code> structure named <code class="literal">M_ECHO</code>. To use this <code class="literal">malloc_type</code> structure, <code class="literal">malloc</code> and <code class="literal">free</code> are <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e2785"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e2791"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> adjusted accordingly.<a class="indexterm" id="IDX-CHP-2-0023"/><a class="indexterm" id="IDX-CHP-2-0024"/><a class="indexterm" id="IDX-CHP-2-0025"/><a class="indexterm" id="IDX-CHP-2-0026"/><a class="indexterm" id="IDX-CHP-2-0027"/></p><div class="note" title="Note"><h3 class="title">Note</h3><p>Because <code class="literal">M_ECHO</code> is used only locally, <code class="literal">MALLOC_DECLARE</code> is unnecessary—it’s only included here for demonstration purposes.</p></div><p>Now that <a class="xref" href="ch02s03.html#echo-2.0.c" title="Example 2-1. echo-2.0.c">Example 2-1</a> uses a unique <code class="literal">malloc_type</code> structure, we can easily profile its dynamic memory usage, like so:</p><a id="I_programlisting2_d1e2829"/><pre class="programlisting">$ <strong class="userinput"><code>sudo kldload ./echo-2.0.ko</code></strong>
+Echo driver loaded.
+$ <strong class="userinput"><code>vmstat -m | head -n 1 &amp;&amp; vmstat -m | grep "echo_buffer"</code></strong>
+         Type InUse MemUse HighUse Requests  Size(s)
+  echo_buffer     1     1K       -        1  512</pre><p>Notice that <a class="xref" href="ch02s03.html#echo-2.0.c" title="Example 2-1. echo-2.0.c">Example 2-1</a> requests 512 bytes, though <code class="literal">sizeof(echo_t)</code> is only 260 bytes. This is because <code class="literal">malloc</code> rounds up to the nearest power of two when allocating memory. Additionally, note that the second argument to <code class="literal">MALLOC_DEFINE</code> (<code class="literal">echo_buffer</code> in this example) is used in the output of <code class="literal">vmstat</code> (instead of the first argument).</p><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-2-FN-2" id="ftn.CHP-2-FN-2">2</a>] </sup><code class="literal">M_TEMP</code> is defined in <span class="emphasis"><em>/sys/kern/kern_malloc.c</em></span>.</p></div></div></div>
+<div class="sect1" title="Contiguous Physical Memory Management Routines"><div class="titlepage"><div><div><h1 class="title"><a id="contiguous_physical_memory_management_ro"/>Contiguous Physical Memory Management Routines</h1></div></div></div><p>The FreeBSD kernel provides two functions for contiguous physical memory management: <code class="literal">contigmalloc</code> and <code class="literal">contigfree</code>. Ordinarily, you’ll never use these functions. They’re primarily for dealing with machine-dependent code and the occasional network driver.<a class="indexterm" id="IDX-CHP-2-0028"/><a class="indexterm" id="IDX-CHP-2-0029"/></p><a id="I_programlisting2_d1e2876"/><pre class="programlisting">#include &lt;sys/types.h&gt;
+#include &lt;sys/malloc.h&gt;
+
+void *
+contigmalloc(unsigned long size, struct malloc_type *type, int flags,
+    vm_paddr_t low, vm_paddr_t high, unsigned long alignment,
+    unsigned long boundary);
+
+void
+contigfree(void *addr, unsigned long size, struct malloc_type *type);</pre><p>The <code class="literal">contigmalloc</code> function allocates <code class="literal">size</code> bytes of contiguous physical memory. If <code class="literal">size</code> is <code class="literal">0</code>, <code class="literal">contigmalloc</code> will panic. If successful, the allocation will reside between physical addresses <code class="literal">low</code> and <code class="literal">high</code>, inclusive.<a class="indexterm" id="IDX-CHP-2-0030"/><a class="indexterm" id="IDX-CHP-2-0031"/><a class="indexterm" id="IDX-CHP-2-0032"/><a class="indexterm" id="IDX-CHP-2-0033"/><a class="indexterm" id="IDX-CHP-2-0034"/><a class="indexterm" id="IDX-CHP-2-0035"/></p><p>The <code class="literal">alignment</code> argument denotes the physical alignment, in bytes, of the allocated memory. This argument must be a power of two.</p><p>The <code class="literal">boundary</code> argument specifies the physical address boundaries that cannot be crossed by the allocated memory; that is, it cannot cross any multiple of <code class="literal">boundary</code>. This argument must be <code class="literal">0</code>, which indicates no boundary restrictions, or a power of two.</p><p>The <code class="literal">flags</code> argument modifies <code class="literal">contigmalloc</code>’s behavior. Valid values for this argument are shown in <a class="xref" href="ch02s04.html#contigmalloc_symbolic_constants" title="Table 2-2. contigmalloc Symbolic Constants">Table 2-2</a>.</p><div class="table"><a id="contigmalloc_symbolic_constants"/><p class="title">Table 2-2. contigmalloc Symbolic Constants</p><div class="table-contents"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; " summary="contigmalloc Symbolic Constants"><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Constant</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">M_ZERO</code></p></td><td style="text-align: left" valign="top"><p>Causes the allocated physical memory to be zero filled</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">M_NOWAIT</code></p></td><td style="text-align: left" valign="top"><p>Causes <code class="literal">contigmalloc</code> to return <code class="literal">NULL</code> if the allocation cannot be immediately fulfilled due to resource shortage</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">M_WAITOK</code></p></td><td style="text-align: left" valign="top"><p>Indicates that it is okay to wait for resources; if the allocation cannot be immediately fulfilled, the current process is put to sleep to wait for resources to become available</p></td></tr></tbody></table></div></div><p>The <code class="literal">contigfree</code> function releases the memory at <code class="literal">addr</code>—that was previously allocated by <code class="literal">contigmalloc</code>—for reuse. The <code class="literal">size</code> argument is the amount of memory to release. Generally, <code class="literal">size</code> should equal the amount allocated.</p></div>
+<div class="sect1" title="A Straightforward Example"><div class="titlepage"><div><div><h1 class="title"><a id="a_straightforward_example"/>A Straightforward Example</h1></div></div></div><p><a class="xref" href="ch02s05.html#echo_underscore_contig.c" title="Example 2-2. echo_contig.c">Example 2-2</a> modifies <a class="xref" href="ch02s03.html#echo-2.0.c" title="Example 2-1. echo-2.0.c">Example 2-1</a> to use <code class="literal">contigmalloc</code> and <code class="literal">contigfree</code> instead of <code class="literal">malloc</code> and <code class="literal">free</code>. <a class="xref" href="ch02s05.html#echo_underscore_contig.c" title="Example 2-2. echo_contig.c">Example 2-2</a> should clarify any misunderstandings you may have about <code class="literal">contigmalloc</code> and <code class="literal">contigfree</code>.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>To save space, the functions <code class="literal">echo_open</code>, <code class="literal">echo_close</code>, <code class="literal">echo_write</code>, and <code class="literal">echo_read</code> aren’t listed here, as they haven’t been changed.</p></div><div class="example"><a id="echo_underscore_contig.c"/><p class="title">Example 2-2. echo_contig.c</p><div class="example-contents"><pre class="programlisting">#include &lt;sys/param.h&gt;
+#include &lt;sys/module.h&gt;
+#include &lt;sys/kernel.h&gt;
+#include &lt;sys/systm.h&gt;
+
+#include &lt;sys/conf.h&gt;
+#include &lt;sys/uio.h&gt;
+#include &lt;sys/malloc.h&gt;
+
+#define BUFFER_SIZE     256
+
+MALLOC_DEFINE(M_ECHO, "echo_buffer", "buffer for echo driver");
+
+static d_open_t         echo_open;
+static d_close_t        echo_close;
+static d_read_t         echo_read;
+static d_write_t        echo_write;
+
+static struct cdevsw echo_cdevsw = {
+        .d_version =    D_VERSION,
+        .d_open =       echo_open,
+        .d_close =      echo_close,
+        .d_read =       echo_read,
+        .d_write =      echo_write,
+        .d_name =       "echo"
+};
+
+typedef struct echo {
+        char buffer[BUFFER_SIZE];
+        int length;
+} echo_t;
+
+static echo_t *echo_message;
+static struct cdev *echo_dev;
+
+static int
+echo_open(struct cdev *dev, int oflags, int devtype, struct thread *td)
+{
+...
+}
+
+static int
+echo_close(struct cdev *dev, int fflag, int devtype, struct thread *td)
+{
+...
+}
+
+static int
+echo_write(struct cdev *dev, struct uio *uio, int ioflag)
+{
+...
+}
+
+static int
+echo_read(struct cdev *dev, struct uio *uio, int ioflag)
+{
+...
+}
+
+static int
+echo_modevent(module_t mod __unused, int event, void *arg __unused)
+{
+        int error = 0;
+
+        switch (event) {
+        case MOD_LOAD:
+                echo_message = <img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/>contigmalloc(<img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/>sizeof(echo_t), M_ECHO,
+                    M_WAITOK | <img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/>M_ZERO, <img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/>0, <img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/>0xffffffff,
+ <img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/>PAGE_SIZE,
+                    <img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/>1024 * 1024);
+                echo_dev = make_dev(&amp;echo_cdevsw, 0, UID_ROOT, GID_WHEEL,
+                    0600, "echo");
+                uprintf("Echo driver loaded.\n");
+                break;
+        case MOD_UNLOAD:
+                destroy_dev(echo_dev);
+                contigfree(echo_message, sizeof(echo_t), M_ECHO);
+                uprintf("Echo driver unloaded.\n");
+                break;
+        default:
+                error = EOPNOTSUPP;
+                break;
+        }
+
+        return (error);
+}
+
+DEV_MODULE(echo, echo_modevent, NULL);</pre></div></div><p>Here, <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e3102"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137499.png"/></span> <code class="literal">contigmalloc</code> allocates <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e3111"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137501.png"/></span> <code class="literal">sizeof(echo_t)</code> bytes of <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e3120"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137503.png"/></span> zero-filled memory. This memory resides between physical address <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e3127"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137505.png"/></span> <code class="literal">0</code> and <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e3136"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137507.png"/></span> <code class="literal">0xffffffff</code>, is aligned on a <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e3145"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137509.png"/></span> <code class="literal">PAGE_SIZE</code> boundary, and does not cross a <span class="inlinemediaobject"><a id="I_inlinemediaobject2_d1e3155"/><img alt="" src="httpatomoreillycomsourcenostarchimages1137511.png"/></span> 1MB address boundary.</p><p>The following output shows the results from <code class="literal">vmstat -m</code> after loading <a class="xref" href="ch02s05.html#echo_underscore_contig.c" title="Example 2-2. echo_contig.c">Example 2-2</a>:</p><a id="I_programlisting2_d1e3168"/><pre class="programlisting">$ <strong class="userinput"><code>sudo kldload ./echo_contig.ko</code></strong>
+Echo driver loaded.
+$ <strong class="userinput"><code>vmstat -m | head -n 1 &amp;&amp; vmstat -m | grep "echo_buffer"</code></strong>
+         Type InUse MemUse HighUse Requests  Size(s)
+  echo_buffer     1     4K       -        1</pre><p>Notice that <a class="xref" href="ch02s05.html#echo_underscore_contig.c" title="Example 2-2. echo_contig.c">Example 2-2</a> uses 4KB of memory, though <code class="literal">sizeof(echo_t)</code> is only 260 bytes. This is because <code class="literal">contigmalloc</code> allocates memory in <code class="literal">PAGE_SIZE</code> blocks. Predictably, this example was run on an <span class="emphasis"><em>i386</em></span> machine, which uses a page size of 4KB.</p></div>
+<div class="sect1" title="Conclusion"><div class="titlepage"><div><div><h1 class="title"><a id="conclusion-id1"/>Conclusion</h1></div></div></div><p>This chapter detailed FreeBSD’s memory management routines and contiguous physical memory management routines. It also introduced the <code class="literal">malloc_type</code> structure.</p><p>Incidentally, most drivers should define their own <code class="literal">malloc_type</code> structure.</p></div></body></html>
