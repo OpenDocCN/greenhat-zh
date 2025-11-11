@@ -1,17 +1,25 @@
 - en: Chapter 7. A Bug Older Than 4.4BSD
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第七章：比 4.4BSD 更古老的漏洞
 - en: Note
+  id: totrans-1
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Saturday, March 3, 2007*'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: '*2007年3月3日星期六*'
 - en: '*Dear Diary*,'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: '*亲爱的日记*，'
 - en: 'Last week my Apple MacBook finally arrived. After getting acquainted with the
     Mac OS X platform, I decided to take a closer look at the XNU kernel of OS X.
     After a few hours of digging through the kernel code, I found a nice bug that
@@ -21,144 +29,223 @@
     if the bug allows arbitrary code execution. At this point, things got a bit more
     complicated. To develop the exploit code, I needed a way to debug the OS X kernel.
     That’s not a problem if you own two Macs, but I only had one: my brand-new MacBook.'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 上周我的 Apple MacBook 终于到了。在熟悉了 Mac OS X 平台后，我决定更仔细地查看 OS X 的 XNU 内核。在花了几小时挖掘内核代码后，我发现了一个当内核尝试处理特殊
+    TTY IOCTL 时出现的良好漏洞。这个漏洞很容易触发，我编写了一个 POC 代码，允许无特权的本地用户通过内核恐慌使系统崩溃。像往常一样，我接着尝试开发一个利用程序，看看这个漏洞是否允许任意代码执行。这时，事情变得有点复杂。为了开发利用代码，我需要一种调试
+    OS X 内核的方法。如果你拥有两台 Mac，这不成问题，但我只有一台：我的全新 MacBook。
 - en: 7.1 Vulnerability Discovery
+  id: totrans-5
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 7.1 漏洞发现
 - en: 'First I downloaded the latest source code release of the XNU kernel,^([[75](ch07s05.html#ftn.CHP-7-FN-1)])
     and then I searched for a vulnerability in the following way:'
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我下载了 XNU 内核的最新源代码版本，^([[75](ch07s05.html#ftn.CHP-7-FN-1)]) 然后我以以下方式搜索漏洞：
 - en: Note
+  id: totrans-7
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*I used an Intel Mac with OS X 10.4.8 and kernel version xnu-792.15.4.obj~4/
     RELEASE_I386 as a platform throughout this chapter*.'
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: '*我在本章中使用了装有 OS X 10.4.8 和内核版本 xnu-792.15.4.obj~4/RELEASE_I386 的 Intel Mac 作为平台*。'
 - en: 'Step 1: List the IOCTLs of the kernel.'
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第一步：列出内核的 IOCTL。
 - en: 'Step 2: Identify the input data.'
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第二步：确定输入数据。
 - en: 'Step 3: Trace the input data.'
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第三步：跟踪输入数据。
 - en: These steps will be detailed in the following sections.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些步骤将在以下章节中详细说明。
 - en: 'Step 1: List the IOCTLs of the Kernel'
+  id: totrans-13
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第一步：列出内核的 IOCTL
 - en: 'To generate a list of the IOCTLs of the kernel, I simply searched the kernel
     source code for the usual IOCTL macros. Every IOCTL is assigned its own number,
     which is usually created by a macro. Depending on the IOCTL type, the XNU kernel
     of OS X defines the following macros: `_IOR`, `_IOW`, and `_IOWR`.'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 要生成内核的 IOCTL 列表，我只需在内核源代码中搜索常用的 IOCTL 宏。每个 IOCTL 都分配了自己的编号，通常由宏创建。根据 IOCTL 类型，OS
+    X 的 XNU 内核定义了以下宏：`_IOR`、`_IOW` 和 `_IOWR`。
 - en: '[PRE0]'
+  id: totrans-15
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'I now had a list of IOCTLs supported by the XNU kernel. To find the source
     files that implement the IOCTLs, I searched the whole kernel source for each IOCTL
     name from the list. Here’s an example of the `BIOCGRSIG` IOCTL:'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，我有了 XNU 内核支持的 IOCTL 列表。为了找到实现 IOCTL 的源文件，我搜索了整个内核源代码中的列表中的每个 IOCTL 名称。以下是一个
+    `BIOCGRSIG` IOCTL 的示例：
 - en: '[PRE1]'
+  id: totrans-17
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'Step 2: Identify the Input Data'
+  id: totrans-18
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第二步：确定输入数据
 - en: To identify the user-supplied input data of an IOCTL request, I took a look
     at some of the kernel functions that process the requests. I discovered that such
     functions typically expect an argument called `cmd` of type `u_long` and a second
     argument called `data` of type `caddr_t`.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了确定 IOCTL 请求的用户提供的输入数据，我查看了一些处理请求的内核函数。我发现这些函数通常期望一个名为 `cmd` 的 `u_long` 类型的参数和一个名为
+    `data` 的 `caddr_t` 类型的第二个参数。
 - en: 'Here are some examples:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里有一些示例：
 - en: '**Source code file**'
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: '**源代码文件**'
 - en: '*xnu-792.13.8/bsd/netat/at.c*'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: '*xnu-792.13.8/bsd/netat/at.c*'
 - en: '[PRE2]'
+  id: totrans-23
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: '**Source code file**'
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: '**源代码文件**'
 - en: '*xnu-792.13.8/bsd/net/if.c*'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: '*xnu-792.13.8/bsd/net/if.c*'
 - en: '[PRE3]'
+  id: totrans-26
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: '**Source code file**'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: '**源代码文件**'
 - en: '*xnu-792.13.8/bsd/dev/vn/vn.c*'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: '*xnu-792.13.8/bsd/dev/vn/vn.c*'
 - en: '[PRE4]'
+  id: totrans-29
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'The names of these function arguments are quite descriptive: The `cmd` argument
     holds the requested IOCTL code, and the `data` argument holds the user-supplied
     IOCTL data.'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些函数参数的名称相当描述性：`cmd` 参数包含请求的 IOCTL 代码，而 `data` 参数包含用户提供的 IOCTL 数据。
 - en: 'On Mac OS X, an IOCTL request is typically sent to the kernel using the `ioctl()`
     system call. This system call has the following prototype:'
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Mac OS X 上，通常使用 `ioctl()` 系统调用来向内核发送 IOCTL 请求。这个系统调用的原型如下：
 - en: '[PRE5]'
+  id: totrans-32
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: If an IOCTL request is sent to the kernel, the argument `request` has to be
     filled with the appropriate IOCTL code, and `argp` has to be filled with the user-supplied
     IOCTL input data. The `request` and `argp` arguments of `ioctl()` correspond to
     the kernel function arguments `cmd` and `data`.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果向内核发送 IOCTL 请求，则必须将 `request` 参数填充为适当的 IOCTL 代码，并将 `argp` 参数填充为用户提供的 IOCTL
+    输入数据。`ioctl()` 的 `request` 和 `argp` 参数对应于内核函数参数 `cmd` 和 `data`。
 - en: 'I had found what I was looking for: Most kernel functions that process incoming
     IOCTL requests take an argument called `data` that holds, or points to, the user-supplied
     IOCTL input data.'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 我找到了我想要的东西：大多数处理传入 IOCTL 请求的内核函数都接受一个名为 `data` 的参数，该参数包含或指向用户提供的 IOCTL 输入数据。
 - en: 'Step 3: Trace the Input Data'
+  id: totrans-35
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第 3 步：追踪输入数据
 - en: After I found the locations in the kernel where IOCTL requests are handled,
     I traced the input data through the kernel functions while looking for potentially
     vulnerable locations. While reading the code, I stumbled upon some locations that
     looked intriguing. The most interesting potential bug I found happens if the kernel
     tries to handle a special TTY IOCTL request. The following listing shows the relevant
     lines from the source code of the XNU kernel.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我发现内核中处理 IOCTL 请求的位置后，我在寻找潜在漏洞位置的同时追踪了内核函数中的输入数据。在阅读代码时，我遇到了一些看起来很有趣的位置。我发现的最有意思的潜在漏洞是当内核尝试处理一个特殊的
+    TTY IOCTL 请求时。以下列表显示了 XNU 内核源代码中的相关行。
 - en: '**Source code file**'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: '**源代码文件**'
 - en: '*xnu-792.13.8/bsd/kern/tty.c*'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: '*xnu-792.13.8/bsd/kern/tty.c*'
 - en: '[PRE6]'
+  id: totrans-39
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'If a `TIOCSETD` IOCTL request is sent to the kernel, the switch case in line
     1089 is chosen. In line 1090, the user-supplied `data` of type `caddr_t`, which
     is simply a typedef for `char *`, is stored in the signed int variable `t`. Then
@@ -168,30 +255,48 @@
     value due to the type conversion in line 1090\. [Example 7-1](ch07.html#example_program_that_demonstrates_the
     "Example 7-1. Example program that demonstrates the type conversion behavior (conversion_bug_example.c)")
     illustrates how `t` can become negative:'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果向内核发送 `TIOCSETD` IOCTL 请求，则选择第 1089 行的 switch case。在第 1090 行，用户提供的 `data`
+    类型为 `caddr_t`，它仅仅是 `char *` 的 typedef，被存储在有符号整型变量 `t` 中。然后在第 1093 行，将 `t` 的值与
+    `nlinesw` 进行比较。由于 `data` 是由用户提供的，因此可能提供一个字符串值，该值对应于 `0x80000000` 或更大的无符号整数值。如果这样做，由于第
+    1090 行的类型转换，`t` 将会得到一个负值。[示例 7-1](ch07.html#example_program_that_demonstrates_the
+    "示例 7-1. 展示类型转换行为的示例程序 (conversion_bug_example.c)") 说明了 `t` 如何变成负值：
 - en: Example 7-1. Example program that demonstrates the type conversion behavior
     (*conversion_bug_example.c*)
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 7-1. 展示类型转换行为的示例程序 (*conversion_bug_example.c*)
 - en: '[PRE7]'
+  id: totrans-42
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: 'Lines 30, 31, and 33 are nearly identical to lines in the OS X kernel source
     code. In this example, I chose the hardcoded value `0xffffffff` as IOCTL input
     data (see line 30). After the type conversion in line 33, the bit patterns, as
     well as the decimal value of `t`, are printed to the console. The example program
     results in the following output when it’s executed:'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 第 30、31 和 33 行几乎与 OS X 内核源代码中的行相同。在这个例子中，我选择了硬编码的值 `0xffffffff` 作为 IOCTL 输入数据（见第
+    30 行）。在第 33 行进行类型转换后，打印了位模式以及 `t` 的十进制值到控制台。当执行示例程序时，会得到以下输出：
 - en: '[PRE8]'
+  id: totrans-44
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: The output shows that `t` gets the value −1 if a character string consisting
     of 4 `0xff` byte values is converted into a signed int. See Section A.3 for more
     information on type conversions and the associated security problems.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 输出显示，如果将由 4 个 `0xff` 字节值组成的字符串转换为有符号整型，`t` 将得到 -1 的值。有关类型转换及其相关安全问题的更多信息，请参阅附录
+    A.3。
 - en: If `t` is negative, the check in line 1093 of the kernel code will return `FALSE`
     because the signed int variable `nlinesw` has a value greater than zero. If that
     happens, the user-supplied value of `t` gets further processing. In line 1098,
@@ -199,259 +304,395 @@
     I could control the index into that array, I could specify an arbitrary memory
     location that would be executed by the kernel. This leads to full control of the
     kernel execution flow. Thank you, Apple, for the terrific bug. ![](httpatomoreillycomsourcenostarchimages939227.png)
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果 `t` 为负，内核代码第 1093 行的检查将返回 `FALSE`，因为有符号整型变量 `nlinesw` 的值大于零。如果发生这种情况，用户提供的
+    `t` 值将得到进一步的处理。在第 1098 行，`t` 的值被用作函数指针数组中的索引。由于我可以控制该数组中的索引，我可以指定内核将执行的任意内存位置。这导致了对内核执行流程的完全控制。感谢苹果公司，这个出色的漏洞！![更多信息](httpatomoreillycomsourcenostarchimages939227.png)
 - en: 'Here is the anatomy of the bug, as diagrammed in [Figure 7-1](ch07.html#description_of_the_vulnerability_that_i
     "Figure 7-1. Description of the vulnerability that I discovered in the XNU kernel
     of OS X"):'
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是漏洞的解剖结构，如图 [图 7-1](ch07.html#description_of_the_vulnerability_that_i "图 7-1.
+    我在 OS X 的 XNU 内核中发现的漏洞描述") 所示：
 - en: The function pointer array `linesw[]` gets referenced.
+  id: totrans-48
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 函数指针数组`linesw[]`被引用。
 - en: The user-controlled value of `t` is used as an array index for `linesw[]`.
+  id: totrans-49
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 用户控制的`t`值被用作`linesw[]`数组的索引。
 - en: A pointer to the assumed address of the `l_open()` function gets referenced
     based on the user-controllable memory location.
+  id: totrans-50
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 根据 用户可控的内存位置，引用了`l_open()`函数的假设地址。
 - en: The assumed address of `l_open()` gets referenced and called.
+  id: totrans-51
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '`l_open()` 假设地址被引用并调用。'
 - en: The value at the assumed address of `l_open()` gets copied into the instruction
     pointer (`EIP` register).
+  id: totrans-52
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '`l_open()` 假设地址的值被复制到指令指针（`EIP`寄存器）。'
 - en: '![Description of the vulnerability that I discovered in the XNU kernel of OS
     X](httpatomoreillycomsourcenostarchimages939323.png.jpg)'
+  id: totrans-53
   prefs: []
   type: TYPE_IMG
+  zh: '![我在OS X的XNU内核中发现的漏洞描述](httpatomoreillycomsourcenostarchimages939323.png.jpg)'
 - en: Figure 7-1. Description of the vulnerability that I discovered in the XNU kernel
     of OS X
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 图7-1. 我在OS X的XNU内核中发现的漏洞描述
 - en: Because the value of `t` is supplied by the user (see (2)), it is possible to
     control the address of the value that gets copied into `EIP`.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 因为`t`的值是由用户提供的（见（2）），所以可以控制被复制到`EIP`的值的地址。
 - en: 7.2 Exploitation
+  id: totrans-56
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 7.2 利用
 - en: 'After I found the bug, I did the following to gain control over `EIP`:'
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我发现这个漏洞之后，我做了以下操作来控制`EIP`：
 - en: 'Step 1: Trigger the bug to crash the system (denial of service).'
+  id: totrans-58
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第一步：触发系统崩溃（拒绝服务）的漏洞
 - en: 'Step 2: Prepare a kernel-debugging environment.'
+  id: totrans-59
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第二步：准备内核调试环境。
 - en: 'Step 3: Connect the debugger to the target system.'
+  id: totrans-60
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第三步：将调试器连接到目标系统。
 - en: 'Step 4: Get control over `EIP`.'
+  id: totrans-61
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第四步：控制`EIP`。
 - en: 'Step 1: Trigger the Bug to Crash the System (Denial of Service)'
+  id: totrans-62
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第一步：触发系统崩溃（拒绝服务）
 - en: Once I had found the bug, it was easy to trigger it and cause a system crash.
     All I had to do was send a malformed `TIOCSETD` IOCTL request to the kernel. [Example 7-2](ch07s02.html#poc_code_open_parenthesis-id1
     "Example 7-2. POC code (poc.c) I wrote to trigger the bug I found in the kernel
     of OS X") shows the source code of the POC I developed to cause a crash.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦我发现了这个漏洞，触发它并导致系统崩溃就变得很容易。我需要做的只是向内核发送一个格式错误的`TIOCSETD` IOCTL请求。[示例7-2](ch07s02.html#poc_code_open_parenthesis-id1
+    "示例7-2. 我编写的用于触发在OS X内核中发现的漏洞的POC代码（poc.c）")展示了我所开发的用于导致崩溃的POC的源代码。
 - en: Example 7-2. POC code (*poc.c*) I wrote to trigger the bug I found in the kernel
     of OS X
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例7-2. 我编写的用于触发在OS X内核中发现的漏洞的POC代码（*poc.c*）
 - en: '[PRE9]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'A brand-new MacBook: $1,149\. An LED Cinema Display Monitor: $899\. Crashing
     a Mac OS X system with only 11 lines of code: priceless.'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 一台全新的MacBook：$1,149。一台LED Cinema Display显示器：$899。仅用11行代码就崩溃了Mac OS X系统：无价之宝。
 - en: 'I then compiled and tested the POC code as an unprivileged user:'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 我随后以非特权用户身份编译并测试了POC代码：
 - en: '[PRE10]'
+  id: totrans-68
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: Immediately after executing the POC code, I got the standard crash screen of
     Mac OS X,^([[76](ch07s05.html#ftn.CHP-7-FN-2)]) as shown in [Figure 7-2](ch07s02.html#mac_os_x_kernel_panic_message
     "Figure 7-2. Mac OS X kernel panic message").
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 执行POC代码后，我看到了标准的Mac OS X崩溃屏幕，^([[76](ch07s05.html#ftn.CHP-7-FN-2)]) 如[图7-2](ch07s02.html#mac_os_x_kernel_panic_message
+    "图7-2. Mac OS X内核恐慌信息")所示。
 - en: '![Mac OS X kernel panic message](httpatomoreillycomsourcenostarchimages939325.png.jpg)'
+  id: totrans-70
   prefs: []
   type: TYPE_IMG
+  zh: '![Mac OS X内核恐慌信息](httpatomoreillycomsourcenostarchimages939325.png.jpg)'
 - en: Figure 7-2. Mac OS X kernel panic message
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 图7-2. Mac OS X内核恐慌信息
 - en: If such a kernel panic occurs, the details of the crash are added to a log file
     in the folder */Library/Logs/*. I rebooted the system and opened that file.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果发生此类内核恐慌，崩溃的详细信息将被添加到 */Library/Logs/* 文件夹中的日志文件中。我重新启动了系统并打开了该文件。
 - en: '[PRE11]'
+  id: totrans-73
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: It appeared that I could crash the system as an unprivileged user. Could I also
     execute arbitrary code in the privileged context of the OS X kernel? To answer
     that question, I had to peer inside the inner workings of the kernel.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 看起来我可以作为一个非特权用户使系统崩溃。我是否也可以在OS X内核的特权上下文中执行任意代码？为了回答这个问题，我必须深入了解内核的内部工作原理。
 - en: 'Step 2: Prepare a Kernel-Debugging Environment'
+  id: totrans-75
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第二步：准备内核调试环境
 - en: At this point I needed to be able to debug the kernel. As I mentioned earlier,
     this is no problem if you own two Macs, but I had only one MacBook at hand. Therefore,
     I had to find another way to debug the kernel. I solved the problem by building
     and installing Apple’s GNU debugger on a Linux host and then connecting the host
     to my MacBook. Instructions for building such a debugger host system are described
     in Section B.5.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 到这一点，我需要能够调试内核。如我之前提到的，如果你拥有两台Mac，这没问题，但我手头只有一台MacBook。因此，我必须找到另一种调试内核的方法。我通过在Linux主机上构建和安装Apple的GNU调试器来解决这个问题，然后将主机连接到我的MacBook。有关构建此类调试器主机系统的说明，请参阅第B.5节。
 - en: 'Step 3: Connect the Debugger to the Target System'
+  id: totrans-77
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第3步：将调试器连接到目标系统
 - en: After I had built Apple’s gdb on a Linux host, I linked the systems with an
     Ethernet crossover cable, as shown in [Figure 7-3](ch07s02.html#my_setup_for_remotely_debugging_the_kern
     "Figure 7-3. My setup for remotely debugging the kernel of Mac OS X").
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Linux主机上构建完Apple的gdb之后，我使用以太网交叉线缆将系统连接起来，如图[图7-3](ch07s02.html#my_setup_for_remotely_debugging_the_kern
+    "图7-3. 我为远程调试Mac OS X内核的设置")所示。
 - en: '![My setup for remotely debugging the kernel of Mac OS X](httpatomoreillycomsourcenostarchimages939327.png.jpg)'
+  id: totrans-79
   prefs: []
   type: TYPE_IMG
+  zh: '![我为远程调试Mac OS X内核的设置](httpatomoreillycomsourcenostarchimages939327.png.jpg)'
 - en: Figure 7-3. My setup for remotely debugging the kernel of Mac OS X
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 图7-3. 我为远程调试Mac OS X内核的设置
 - en: I then started the Mac OS X target system, enabled remote kernel debugging,
     and rebooted the system so that the changes could take effect:^([[77](ch07s05.html#ftn.CHP-7-FN-3)])
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，我启动了Mac OS X目标系统，启用了远程内核调试，并重新启动了系统，以便更改生效:^([[77](ch07s05.html#ftn.CHP-7-FN-3)])
 - en: '[PRE12]'
+  id: totrans-82
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'After the Mac OS X target machine had restarted, I booted the Linux host and
     made sure that I could connect to the target machine:'
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Mac OS X目标机器重新启动后，我启动了Linux主机，并确保我能够连接到目标机器：
 - en: '[PRE13]'
+  id: totrans-84
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'I added a permanent ARP entry for the target on the Linux system to establish
     a robust connection between the two machines, ensuring that the connection wouldn’t
     be dropped while the kernel of the target machine was being debugged:'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 我在Linux系统上为目标添加了一个永久的ARP条目，以在两台机器之间建立稳定的连接，确保在调试目标机器的内核时连接不会断开：
 - en: '[PRE14]'
+  id: totrans-86
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'I then logged in to the Mac OS X system as an unprivileged user and generated
     a nonmaskable interrupt (NMI) by tapping the system’s power button. That gave
     me the following output on the screen of the MacBook:'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，我以无权限用户身份登录到Mac OS X系统，并通过轻触系统的电源按钮生成一个不可屏蔽中断（NMI）。这让我在MacBook的屏幕上看到了以下输出：
 - en: '[PRE15]'
+  id: totrans-88
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'Back on the Linux host, I started the kernel debugger (see Section B.5 for
     more information on how to build this gdb version):'
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Linux主机上，我启动了内核调试器（有关如何构建此gdb版本的更多信息，请参阅第B.5节）：
 - en: '[PRE16]'
+  id: totrans-90
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'I then instructed the debugger to use Apple’s kernel debug protocol (kdp):'
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，我指示调试器使用Apple的内核调试协议（kdp）：
 - en: '[PRE17]'
+  id: totrans-92
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'Once the debugger was running, I attached to the kernel of the target system
     for the first time:'
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦调试器开始运行，我就第一次将其连接到目标系统的内核：
 - en: '[PRE18]'
+  id: totrans-94
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'As the debugger output shows, it seemed to work! The OS X system was frozen
     at that time, so I continued the execution of the kernel with the following debugger
     command:'
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 如调试器输出所示，似乎一切正常！当时OS X系统已经冻结，所以我继续使用以下调试器命令执行内核的执行：
 - en: '[PRE19]'
+  id: totrans-96
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: Now everything was set up for remotely debugging the kernel of the Mac OS X
     target system.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在已经为远程调试Mac OS X目标系统的内核做好了准备。
 - en: 'Step 4: Get Control over EIP'
+  id: totrans-98
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第4步：控制EIP
 - en: 'After I had successfully connected the debugger to the kernel of the target
     system, I opened a terminal on the Mac OS X machine and again executed the POC
     code described in [Example 7-2](ch07s02.html#poc_code_open_parenthesis-id1 "Example 7-2. POC
     code (poc.c) I wrote to trigger the bug I found in the kernel of OS X"):'
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 在成功将调试器连接到目标系统的内核之后，我在Mac OS X机器上打开了一个终端，并再次执行了[示例7-2](ch07s02.html#poc_code_open_parenthesis-id1
+    "示例7-2. 我编写的用于触发我在OS X内核中发现的漏洞的POC代码")中描述的POC代码：
 - en: '[PRE20]'
+  id: totrans-100
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: 'The OS X system froze immediately, and I got the following debugger output
     on the Linux host:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: OS X系统立即冻结，我在Linux主机上得到了以下调试器输出：
 - en: '[PRE21]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'To see what exactly caused the `SIGTRAP` signal, I looked at the last executed
     kernel instruction (see Section B.4 for a description of the following debugger
     commands):'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了查看导致`SIGTRAP`信号的真正原因，我查看了最后执行的内核指令（有关以下调试器命令的描述，请参阅第B.4节）：
 - en: '[PRE22]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'Apparently, the crash occurred when the kernel tried to call an address referenced
     by the `EAX` register. Next, I looked at the register values:'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 显然，崩溃发生在内核尝试调用由`EAX`寄存器引用的地址时。接下来，我查看了寄存器的值：
 - en: '[PRE23]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'The debugger output shows that `EAX` had a value of `0xe0000000`. It wasn’t
     apparent to me where this value came from, so I disassembled the instructions
     around `EIP`:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 调试器输出显示 `EAX` 的值为 `0xe0000000`。对我来说，这个值从哪里来并不明显，所以我反汇编了 `EIP` 附近的指令：
 - en: '[PRE24]'
+  id: totrans-108
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: Note
+  id: totrans-109
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Note that the disassembly is in AT&T style*.'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: '*请注意，反汇编是 AT&T 风格*。'
 - en: At address `0x35573d`, the value of `EBX` is copied into `EAX`. The next instruction
     modifies this value by a left shift of 5 bits. At address `0x35574c`, the value
     is used to calculate the operand of the `call` instruction. So where did the value
@@ -461,85 +702,131 @@
     supplied input value by 5 bits. As expected, I was able to control the memory
     location used to find the new value for the `EIP` register. The modification of
     my supplied input data can be expressed as
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 在地址 `0x35573d`，`EBX` 的值被复制到 `EAX`。下一条指令通过左移 5 位修改了这个值。在地址 `0x35574c`，这个值被用于计算
+    `call` 指令的操作数。那么 `EBX` 的值是从哪里来的？快速查看寄存器值揭示，`EBX` 正在保持值 `0xff000000`，这是我作为 `TIOCSETD`
+    IOCTL 输入数据提供的值。`0xe0000000` 是我将提供的输入值左移 5 位的结果。正如预期的那样，我能够控制用于找到 `EIP` 寄存器新值的内存位置。我提供的输入数据的修改可以表示为
 - en: '[PRE25]'
+  id: totrans-112
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: 'I could get an appropriate `TIOCSETD` input data value for a specific memory
     address in either of two ways: I could try to solve the mathematical problem,
     or I could brute force the value. I decided to go with the easy option and wrote
     the following program to brute force the value:'
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: 我可以通过两种方式为特定内存地址获取适当的 `TIOCSETD` 输入数据值：我可以尝试解决数学问题，或者我可以暴力破解这个值。我决定选择简单的方法，并编写以下程序来暴力破解这个值：
 - en: Example 7-3. Code that I wrote to brute force the `TIOCSETD` input data value
     (*addr_brute_force.c*)
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 7-3. 我编写的用于暴力破解 `TIOCSETD` 输入数据值的代码 (*addr_brute_force.c*)
 - en: '[PRE26]'
+  id: totrans-115
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: 'I wrote this program to answer this question: What `TIOCSETD` input data do
     I have to send to the kernel in order to get the value at memory address `0x10203040`
     copied into the `EIP` register?'
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 我编写了这个程序来回答这个问题：为了将内存地址 `0x10203040` 的值复制到 `EIP` 寄存器，我需要向内核发送什么样的 `TIOCSETD`
+    输入数据？
 - en: '[PRE27]'
+  id: totrans-117
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: If `0x10203040` pointed to the value I wanted copied into `EIP`, I had to supply
     the value `0x807ed63f` as an input for the `TIOCSETD` IOCTL.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果 `0x10203040` 指向我想复制到 `EIP` 的值，我必须提供值 `0x807ed63f` 作为 `TIOCSETD` IOCTL 的输入。
 - en: 'I then tried to manipulate `EIP` to make it point to address `0x65656565`.
     To achieve this, I had to find a memory location in the kernel that pointed to
     that value. To find suitable memory locations in the kernel, I wrote the following
     gdb script:'
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，我尝试操纵 `EIP`，使其指向地址 `0x65656565`。为了实现这一点，我必须找到内核中指向该值的内存位置。为了找到内核中的合适内存位置，我编写了以下
+    gdb 脚本：
 - en: Example 7-4. A script for finding memory locations in the kernel that point
     to a special byte pattern (*search_memloc.gdb*)
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 7-4. 用于在内核中查找指向特殊字节模式的内存位置的脚本 (*search_memloc.gdb*)
 - en: '[PRE28]'
+  id: totrans-121
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'The gdb script from [Example 7-4](ch07s02.html#a_script_for_finding_memory_locations
     "Example 7-4. A script for finding memory locations in the kernel that point to
     a special byte pattern (search_memloc.gdb)") takes two arguments: the address
     from where to start the search and the pattern to search for. I wanted to find
     a memory location that pointed to the value `0x65656565`, so I used the script
     in the following way:'
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 7-4](ch07s02.html#a_script_for_finding_memory_locations "示例 7-4. 用于在内核中查找指向特殊字节模式的内存位置的脚本
+    (search_memloc.gdb)") 中的 gdb 脚本接受两个参数：搜索的起始地址和要搜索的模式。我想找到指向值 `0x65656565` 的内存位置，所以我以以下方式使用脚本：'
 - en: '[PRE29]'
+  id: totrans-123
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: 'The output shows the memory locations found by the script that point to the
     value `0x65656565`. I picked the first one from the list, adjusted the `MEMLOC`
     defined in line 3 of [Example 7-3](ch07s02.html#code_that_i_wrote_to_brute_force_the
     "Example 7-3. Code that I wrote to brute force the TIOCSETD input data value (addr_brute_force.c)"),
     and let the program determine the appropriate `TIOCSETD` input value:'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 输出显示了脚本找到的指向值 `0x65656565` 的内存位置。我从列表中选择了第一个，调整了 [示例 7-3](ch07s02.html#code_that_i_wrote_to_brute_force_the
+    "示例 7-3. 我编写的用于暴力破解 TIOCSETD 输入数据值的代码 (addr_brute_force.c)") 中第 3 行定义的 `MEMLOC`，并让程序确定适当的
+    `TIOCSETD` 输入值：
 - en: '[PRE30]'
+  id: totrans-125
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: 'I then changed the IOCTL input value in the POC code illustrated in [Example 7-2](ch07s02.html#poc_code_open_parenthesis-id1
     "Example 7-2. POC code (poc.c) I wrote to trigger the bug I found in the kernel
     of OS X"), connected the kernel debugger to OS X, and executed the code:'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 我随后更改了 [示例 7-2](ch07s02.html#poc_code_open_parenthesis-id1 "示例 7-2. 我编写的用于触发我在
+    OS X 内核中发现的漏洞的 POC 代码") 中的 IOCTL 输入值，将内核调试器连接到 OS X，并执行了以下代码：
 - en: '[PRE31]'
+  id: totrans-127
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: 'The OS X machine froze again, and the debugger on the Linux host displayed
     the following output:'
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: OS X 机器再次冻结，Linux 主机上的调试器显示了以下输出：
 - en: '[PRE32]'
+  id: totrans-129
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: As the debugger output shows, the `EIP` register now had a value of `0x65656565`.
     At this point I was able to control `EIP`, but exploiting the bug to achieve arbitrary
     code execution at the kernel level was still a challenge. Under OS X, including
@@ -550,151 +837,235 @@
     I achieved this by exploiting a memory leak in the kernel of OS X. Then I calculated
     an appropriate `TIOCSETD` input value that pointed to the payload reference. This
     value was then copied into `EIP` and . . . bingo!
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 如调试器输出所示，`EIP` 寄存器的值现在是 `0x65656565`。在此点，我能够控制 `EIP`，但要在内核级别利用该漏洞以实现任意代码执行仍然是一个挑战。在
+    OS X 中，包括 Leopard，内核并没有映射到每个用户空间进程；它有自己的虚拟地址空间。因此，使用 Linux 或 Windows 的常见策略返回用户空间地址是不可能的。我通过使用我的提权有效载荷和对此有效载荷的引用对内核进行堆喷射来解决此问题。我通过利用
+    OS X 内核中的内存泄漏来实现这一点。然后我计算了一个适当的 `TIOCSETD` 输入值，该值指向有效载荷引用。然后将此值复制到 `EIP` 和 . .
+    . bingo!
 - en: Providing you with a full working exploit would be against the law, but if you
     are interested, you can watch a short video I recorded that shows the exploit
     in action on the book’s website.^([[78](ch07s05.html#ftn.CHP-7-FN-4)])
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 提供完整的有效载荷将违反法律，但如果您感兴趣，您可以在本书的网站上观看一段展示有效载荷在行动中的简短视频。[^[[78](ch07s05.html#ftn.CHP-7-FN-4)])
 - en: 7.3 Vulnerability Remediation
+  id: totrans-132
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 7.3 漏洞补救措施
 - en: Note
+  id: totrans-133
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Wednesday, November 14, 2007*'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: '*2007年11月14日，星期三*'
 - en: After I informed Apple about the bug, Apple fixed it by adding an extra check
     for the user-supplied IOCTL data.
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我通知苹果公司有关该漏洞后，苹果公司通过添加对用户提供的 IOCTL 数据的额外检查来修复了它。
 - en: '**Source code file**'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: '**源代码文件**'
 - en: '*xnu-792.24.17/bsd/kern/tty.c*^([[79](ch07s05.html#ftn.CHP-7-FN-5)])'
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: '*xnu-792.24.17/bsd/kern/tty.c*[^[[79](ch07s05.html#ftn.CHP-7-FN-5)])'
 - en: '[PRE33]'
+  id: totrans-138
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: Line 1085 now checks whether the value of `t` is negative. If so, the user-derived
     data will not be processed any further. This little change was enough to successfully
     rectify the vulnerability.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 行 1085 现在检查 `t` 的值是否为负。如果是，则不会进一步处理用户提供的资料。这个小小的改动足以成功修复漏洞。
 - en: 7.4 Lessons Learned
+  id: totrans-140
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 7.4 学到的经验教训
 - en: 'As a programmer:'
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为一名程序员：
 - en: Avoid, where possible, using explicit type conversions (casts).
+  id: totrans-142
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在可能的情况下，避免使用显式的类型转换（类型转换）。
 - en: Always validate input data.
+  id: totrans-143
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 总是验证输入数据。
 - en: 7.5 Addendum
+  id: totrans-144
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 7.5 补遗
 - en: Note
+  id: totrans-145
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Thursday, November 15, 2007*'
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: '*2007年11月15日，星期四*'
 - en: Since the vulnerability has been fixed and a new version of the XNU kernel of
     OS X is available, I released a detailed security advisory on my website today.^([[80](ch07s05.html#ftn.CHP-7-FN-6)])
     The bug was assigned CVE-2007-4686.
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于漏洞已被修复，并且 OS X 的 XNU 内核的新版本已经可用，我今天在我的网站上发布了一份详细的安全公告。[^[[80](ch07s05.html#ftn.CHP-7-FN-6)])
+    该漏洞被分配了 CVE-2007-4686。
 - en: After I published the advisory, Theo de Raadt (the founder of OpenBSD and OpenSSH)
     hinted that this bug is older than 4.4BSD and was fixed roughly 15 years ago by
     everyone but Apple. In the initial revision of FreeBSD from 1994, the implementation
     of the `TIOCSETD` IOCTL looks like this:^([[81](ch07s05.html#ftn.CHP-7-FN-7)])
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我发布公告后，Theo de Raadt（OpenBSD 和 OpenSSH 的创始人）暗示这个漏洞比 4.4BSD 更老，大约 15 年前除了苹果公司外，每个人都已修复。1994
+    年 FreeBSD 的初始版本中，`TIOCSETD` IOCTL 的实现如下所示：[^[[81](ch07s05.html#ftn.CHP-7-FN-7)])
 - en: '[PRE34]'
+  id: totrans-149
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: Since `t` gets cast into an unsigned int in line 808, it can never become negative.
     If the user-derived data is greater than `0x80000000`, the function returns with
     an error (see line 809). So Theo was right—the bug was indeed already fixed in
     1994\. [Figure 7-4](ch07s05.html#timeline_from_the_time_i_notified_apple "Figure 7-4. Timeline
     from the time I notified Apple until I released a security advisory") shows the
     timeline of the bug’s fix.
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于在808行`t`被转换为无符号整型，它永远不会变成负数。如果用户提供的数据大于`0x80000000`，函数将返回错误（见809行）。所以Theo是对的——这个漏洞确实在1994年就已经被修复了。[图7-4](ch07s05.html#timeline_from_the_time_i_notified_apple
+    "图7-4. 从通知苹果到发布安全公告的时间线")显示了漏洞修复的时间线。
 - en: '![Timeline from the time I notified Apple until I released a security advisory](httpatomoreillycomsourcenostarchimages939329.png.jpg)'
+  id: totrans-151
   prefs: []
   type: TYPE_IMG
+  zh: '![从通知苹果到发布安全公告的时间线](httpatomoreillycomsourcenostarchimages939329.png.jpg)'
 - en: Figure 7-4. Timeline from the time I notified Apple until I released a security
     advisory
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 图7-4. 从通知苹果到发布安全公告的时间线
 - en: Notes
+  id: totrans-153
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 备注
 - en: ^([[75](#ftn.CHP-7-FN-1)])
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[75](#ftn.CHP-7-FN-1)])
 - en: ^([[76](#ftn.CHP-7-FN-2)])
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[76](#CHP-7-FN-2)])
 - en: ^([[77](#ftn.CHP-7-FN-3)])
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[77](#ftn.CHP-7-FN-3)])
 - en: ^([[78](#ftn.CHP-7-FN-4)])
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[78](#CHP-7-FN-4)])
 - en: ^([[79](#ftn.CHP-7-FN-5)])
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[79](#ftn.CHP-7-FN-5)])
 - en: ^([[80](#ftn.CHP-7-FN-6)])
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[80](#ftn.CHP-7-FN-6)])
 - en: ^([[81](#ftn.CHP-7-FN-7)])
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[81](#ftn.CHP-7-FN-7)])
 - en: '* * *'
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[75](#CHP-7-FN-1)]) The vulnerable source code revision 792.13.8 of XNU can
     be downloaded at [http://www.opensource.apple.com/tarballs/xnu/xnu-792.13.8.tar.gz](http://www.opensource.apple.com/tarballs/xnu/xnu-792.13.8.tar.gz).
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[75](#ftn.CHP-7-FN-1)]) XNU易受攻击的源代码修订版792.13.8可在[http://www.opensource.apple.com/tarballs/xnu/xnu-792.13.8.tar.gz](http://www.opensource.apple.com/tarballs/xnu/xnu-792.13.8.tar.gz)下载。
 - en: ^([[76](#CHP-7-FN-2)]) See “‘You need to restart your computer’ (kernel panic)
     message appears (Mac OS X v10.5, 10.6)” at [http://support.apple.com/kb/TS3742](http://support.apple.com/kb/TS3742).
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[76](#CHP-7-FN-2)]) 请参阅[“您需要重新启动计算机”（内核恐慌）消息出现（Mac OS X v10.5, 10.6）](http://support.apple.com/kb/TS3742)。
 - en: '^([[77](#CHP-7-FN-3)]) See “Kernel Extension Programming Topics: Debugging
     a Kernel Extension with GDB” in *Mac OS X Developer Library* at [http://developer.apple.com/library/mac/#documentation/Darwin/Conceptual/KEXTConcept/KEXTConceptDebugger/debug_tutorial.html](http://developer.apple.com/library/mac/#documentation/Darwin/Conceptual/KEXTConcept/KEXTConceptDebugger/debug_tutorial.html)
     and “Kernel Programming Guide: When Things Go Wrong; Debugging the Kernel” in
     *Mac OS X Developer Library* at [http://developer.apple.com/library/mac/documentation/Darwin/Conceptual/KernelProgramming/build/build.html#//apple_ref/doc/uid/TP30000905-CH221-CIHBJCGC](http://developer.apple.com/library/mac/documentation/Darwin/Conceptual/KernelProgramming/build/build.html#//apple_ref/doc/uid/TP30000905-CH221-CIHBJCGC).'
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[77](#CHP-7-FN-3)]) 请参阅*Mac OS X开发者库*中的“内核扩展编程主题：使用GDB调试内核扩展”以及“内核编程指南：出错时；调试内核”，链接为[http://developer.apple.com/library/mac/#documentation/Darwin/Conceptual/KEXTConcept/KEXTConceptDebugger/debug_tutorial.html](http://developer.apple.com/library/mac/#documentation/Darwin/Conceptual/KEXTConcept/KEXTConceptDebugger/debug_tutorial.html)和[http://developer.apple.com/library/mac/documentation/Darwin/Conceptual/KernelProgramming/build/build.html#//apple_ref/doc/uid/TP30000905-CH221-CIHBJCGC](http://developer.apple.com/library/mac/documentation/Darwin/Conceptual/KernelProgramming/build/build.html#//apple_ref/doc/uid/TP30000905-CH221-CIHBJCGC)。
 - en: ^([[78](#CHP-7-FN-4)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[78](#CHP-7-FN-4)]) 请参阅[http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/)。
 - en: ^([[79](#CHP-7-FN-5)]) The source code of the fixed XNU version 792.24.17 is
     available at [http://www.opensource.apple.com/tarballs/xnu/xnu-792.24.17.tar.gz](http://www.opensource.apple.com/tarballs/xnu/xnu-792.24.17.tar.gz).
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[79](#CHP-7-FN-5)]) 修复后的XNU版本792.24.17的源代码可在[http://www.opensource.apple.com/tarballs/xnu/xnu-792.24.17.tar.gz](http://www.opensource.apple.com/tarballs/xnu/xnu-792.24.17.tar.gz)找到。
 - en: ^([[80](#CHP-7-FN-6)]) My security advisory that describes the details of the
     Mac OS X kernel vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2007-001.txt](http://www.trapkit.de/advisories/TKADV2007-001.txt).
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[80](#CHP-7-FN-6)]) 描述Mac OS X内核漏洞详细信息的我的安全公告可以在[http://www.trapkit.de/advisories/TKADV2007-001.txt](http://www.trapkit.de/advisories/TKADV2007-001.txt)找到。
 - en: ^([[81](#CHP-7-FN-7)]) The initial FreeBSD version of *tty.c* from 1994 can
     be found at [http://www.freebsd.org/cgi/cvsweb.cgi/src/sys/kern/tty.c?rev=1.1;content-type=text/plain](http://www.freebsd.org/cgi/cvsweb.cgi/src/sys/kern/tty.c?rev=1.1;content-type=text/plain).
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[81](#CHP-7-FN-7)]) 1994年*tty.c*的初始FreeBSD版本可在[http://www.freebsd.org/cgi/cvsweb.cgi/src/sys/kern/tty.c?rev=1.1;content-type=text/plain](http://www.freebsd.org/cgi/cvsweb.cgi/src/sys/kern/tty.c?rev=1.1;content-type=text/plain)找到。
