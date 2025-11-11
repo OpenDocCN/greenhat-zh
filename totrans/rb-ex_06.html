@@ -1,0 +1,410 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;6.&#xA0;Functionalism with Blocks and Procs"><div class="titlepage"><div><div><h1 class="title"><a id="functionalism_with_blocks_and_procs"/>Chapter 6. Functionalism with Blocks and Procs</h1></div></div></div><div class="informalfigure"><div class="mediaobject"><a id="I_mediaobject6_d1e9122"/><img alt="image with no caption" src="httpatomoreillycomsourcenostarchimages686190.png.jpg"/></div></div><p><a class="indexterm" id="idx-CHP-6-0569"/>Ruby has two main ancestors: Smalltalk and Lisp.<sup>[<a class="footnote" href="#ftn.CHP-6-FNOTE-1" id="CHP-6-FNOTE-1">16</a>]</sup> From Smalltalk, Ruby gets its heavy object orientation, which we’ve explored in some depth up to this point. From Lisp it derives several ideas from <span class="emphasis"><em>functional programming</em></span>, which is a very mathematically inclined approach to programming with a few notable characteristics. First, variables tend to be defined once, without having their values changed later on. Additionally, functions tend to be simple, abstract, and used as building blocks for other functions; the line between <span class="emphasis"><em>functions</em></span>, which perform operations, and <span class="emphasis"><em>data</em></span>, on which functions operate, is often blurry, compared with non-functional approaches. Functions also tend to do their work by returning values, rather than having side effects—in Ruby terms, methods that end with an exclamation point are less common.<a class="indexterm" id="idx-CHP-6-0570"/></p><p>Ruby’s support for functional programming is extensive and exciting. Let’s dive in.</p><div class="sect1" title="#20 Our First lambda (make_incrementer.rb)"><div class="titlepage"><div><div><h1 class="title"><a id="sharp20_our_first_lambda_make_incremente"/>#20 Our First lambda (make_incrementer.rb)</h1></div></div></div><p>This script explores how Ruby creates functions that should be treated as objects. Every “thing” in Ruby is an object, so the notion of <a class="indexterm" id="idx-CHP-6-0571"/>treating functions as objects is not conceptually odd. In Ruby, we do this with the command <code class="literal">lambda</code>, which takes a block. Let’s look at that in irb.<a class="indexterm" id="idx-CHP-6-0572"/><a class="indexterm" id="idx-CHP-6-0573"/></p><a id="I_programlisting6_d1e9172"/><pre class="programlisting">irb(main):001:0&gt; double_me = lambda { |x| x * 2 }
+=&gt; #&lt;<a class="indexterm" id="idx-CHP-6-0574"/>Proc:0xb7d1f890@(irb):1&gt;
+irb(main):002:0&gt; double_me.<a class="indexterm" id="idx-CHP-6-0575"/>call(5)
+=&gt; 10</pre><p>You can see by the return value of line one that the result of calling <code class="literal">lambda</code> is an instance of class <span class="emphasis"><em>Proc</em></span>. Proc is short for <span class="emphasis"><em>procedure</em></span>, and while most objects are defined by what they <span class="emphasis"><em>are</em></span>, Procs can be thought of primarily as defined by what they <span class="emphasis"><em>do</em></span>. Procs have a method called <span class="emphasis"><em>call</em></span>, which tells that Proc instance to do whatever it does. In our irb example, we have a Proc instance called <code class="literal">double_me</code> that takes an argument and returns that argument, times two. On line two, we see that feeding the number <span class="emphasis"><em>5</em></span> into <code class="literal">double_me.call</code> results in a return value of <span class="emphasis"><em>10</em></span>, just as you would expect. It is easy to create other Procs that do other operations.</p><a id="I_programlisting6_d1e9215"/><pre class="programlisting">irb(main):003:0&gt; triple_me = lambda { |x| x * 3 }
+=&gt; #&lt;Proc:0xb7d105bc@(irb):3&gt;
+irb(main):004:0&gt; triple_me.call(5)
+=&gt; 15</pre><p>Since Procs are objects, just like everything else in Ruby, we can treat them like any other object. They can be the returned value of a method, either the key or value of a Hash, arguments to other <a class="indexterm" id="idx-CHP-6-0576"/>methods, and whatever else any object can be. Let’s look at the script that demonstrates this.</p><div class="sect2" title="The Code"><div class="titlepage"><div><div><h2 class="title"><a id="the_code-id019"/>The Code</h2></div></div></div><a id="I_programlisting6_d1e9228"/><pre class="programlisting">  #!/usr/bin/env ruby
+  # <a class="indexterm" id="idx-CHP-6-0577"/>make_incrementer.rb
+
+❶ def make_incrementer(delta)
+    return lambda { |x| x + delta }    <em class="lineannotation"><span class="lineannotation">Procs</span></em>
+  end
+
+❷ incrementer_proc_of = Hash.new()
+  [10, 20].each do |delta|
+    incrementer_proc_of[delta] = make_incrementer(delta)
+  end
+
+❸ incrementer_proc_of.each_pair do |delta,incrementer_proc|
+    puts "#{delta} + 5 = #{incrementer_proc.call(5)}\n"    <em class="lineannotation"><span class="lineannotation">Calling Procs</span></em>
+  end
+
+❹ puts
+
+❺ incrementer_proc_of.each_pair do |delta,incrementer_proc|    <em class="lineannotation"><span class="lineannotation">The<strong class="userinput"><code> each_pair</code></strong> Method</span></em>
+❻   (0..5).to_a.each do |other_addend|
+      puts "#{delta} + #{other_addend} = " +
+        incrementer_proc.call(other_addend) + "\n"
+    end
+  end</pre></div><div class="sect2" title="How It Works"><div class="titlepage"><div><div><h2 class="title"><a id="how_it_works-id018"/>How It Works</h2></div></div></div><p>At ❶ we define a method called <code class="literal">make_incrementer</code>. It takes a single argument called <code class="literal">delta</code> and returns a Proc (created via <code class="literal">lambda</code>) that adds <code class="literal">delta</code> to something else, represented by <em class="replaceable"><code>x</code></em>. What is that something else? We don’t know yet. That is precisely the point of this method—it allows us to define an operation that can be performed multiple times using different parameters, just like any other function.<a class="indexterm" id="idx-CHP-6-0578"/><a class="indexterm" id="idx-CHP-6-0579"/></p><p>We can see how this is useful in the rest of this script. At ❷ we define a new Hash called <code class="literal">incrementer_proc_of</code>. For each of the values <code class="literal">10</code> and <code class="literal">20</code>, we make an incrementer (using either <code class="literal">10</code> or <code class="literal">20</code> for the value of <code class="literal">delta</code> in the <code class="literal">make_incrementer</code> method) and assign the resulting Proc into the <code class="literal">incrementer_proc_of</code> Hash. Starting at ❸, we read each <code class="literal">delta</code> and Proc pair out of the Hash using the <code class="literal">each_pair</code> method and then use <code class="literal">puts</code> to print a line describing that <code class="literal">delta</code> value and the result of calling its Proc with the argument of <code class="literal">5</code>.</p><p>We ❹ print a spacer with <code class="literal">puts</code> (just for ease of reading the output), and finally ❺ output another set of data. This time we add another loop for a value called <code class="literal">other_addend</code>; this is a variable that serves a role analogous to our static value of <code class="literal">5</code> in the loop (❸). Let’s run this program with <code class="literal">ruby -w make_incrementer.rb</code> and look at the output.<a class="indexterm" id="idx-CHP-6-0580"/></p></div><div class="sect2" title="The Results"><div class="titlepage"><div><div><h2 class="title"><a id="the_results-id017"/>The Results</h2></div></div></div><a id="I_programlisting6_d1e9338"/><pre class="programlisting">20 + 5 = 25
+10 + 5 = 15
+
+20 + 0 = 20
+20 + 1 = 21
+20 + 2 = 22
+20 + 3 = 23
+20 + 4 = 24
+20 + 5 = 25
+10 + 0 = 10
+10 + 1 = 11
+10 + 2 = 12
+10 + 3 = 13
+10 + 4 = 14
+10 + 5 = 15</pre><p>The first two lines before the empty line show the output of the first loop (with the static value of <code class="literal">5</code> for the addend), while the rest of the output shows the result of the second loop, which uses the <code class="literal">other_addend</code> variable. Notice also that <code class="literal">each_pair</code> does not order by key, which is why my output has the delta value of <code class="literal">20</code> appearing first. Depending on your implementation of Ruby, you might see a <code class="literal">delta</code> of <code class="literal">10</code> first.</p><p>Now you know how to create Procs. Let’s learn how to use them for something more useful than just demonstrating themselves.</p></div></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-6-FNOTE-1" id="ftn.CHP-6-FNOTE-1">16</a>] </sup>This is a potentially contentious statement. At a RubyConf, I once asked Matz which other languages he thought were most influential on Ruby. His response was “Smalltalk and Common Lisp”. Other folks in the Ruby community (many of them ex-Perl users) stress Ruby’s clear similarity to Perl. Probably the safest statement is that Ruby descends from Smalltalk and Lisp, and while it’s a lot like Perl, Perl is more like an aunt or uncle.</p></div></div></div>
+<div class="sect1" title="#21 Using Procs for Filtering (matching_members.rb)"><div class="titlepage"><div><div><h1 class="title"><a id="sharp21_using_procs_for_filtering_matchi"/>#21 Using Procs for Filtering (matching_members.rb)</h1></div></div></div><p>So far, we’ve seen that to create a <a class="indexterm" id="idx-CHP-6-0581"/>Proc, we call <code class="literal">lambda</code> with a block describing what that Proc should do. This would lead you to believe that there is a special relationship between <a class="indexterm" id="idx-CHP-6-0582"/>Procs and blocks, which there is. Our next <a class="indexterm" id="idx-CHP-6-0583"/>script demonstrates how to use Procs in place of blocks.<a class="indexterm" id="idx-CHP-6-0584"/><a class="indexterm" id="idx-CHP-6-0585"/><a class="indexterm" id="I_indexterm6_d1e9396"/><a class="indexterm" id="I_indexterm6_d1e9399"/></p><div class="sect2" title="The Code"><div class="titlepage"><div><div><h2 class="title"><a id="the_code-id020"/>The Code</h2></div></div></div><a id="I_programlisting6_d1e9407"/><pre class="programlisting">  #!/usr/bin/env ruby
+  # <a class="indexterm" id="idx-CHP-6-0586"/>matching_members.rb
+
+  =begin rdoc
+  Extend the built-in &lt;b&gt;Array&lt;/b&gt; class.
+  =end
+  class Array
+
+  =begin rdoc
+  Takes a &lt;b&gt;Proc&lt;/b&gt; as an argument, and returns all members
+  matching the criteria defined by that &lt;b&gt;Proc&lt;/b&gt;.
+  =end
+❶   def matching_members(some_proc)    <em class="lineannotation"><span class="lineannotation">Procs as Arguments</span></em>
+      find_all { |i| some_proc.call(i) }
+    end
+
+  end
+
+❷ digits = (0..9).to_a
+  lambdas = Hash.new()
+  lambdas['five+']   = lambda { |i| i &gt;= 5 }
+  lambdas['is_even'] = lambda { |i| (i % 2).zero? }
+
+❸ lambdas.keys.sort.each do |lambda_name|
+❹   lambda_proc  = lambdas[lambda_name]
+❺   lambda_value = digits.matching_members(lambda_proc).join(',')
+❻   puts "#{lambda_name}\t[#{lambda_value}]\n"
+  end</pre></div><div class="sect2" title="How It Works"><div class="titlepage"><div><div><h2 class="title"><a id="how_it_works-id019"/>How It Works</h2></div></div></div><p>In this script, we open the Array class in order to add a new method called <code class="literal">matching_members</code> (❶). It takes a Proc (creatively called <code class="literal">some_proc</code>—see the note below) as an argument and returns the result of calling <code class="literal">find_all</code>, which (as its name suggests) finds all members for which the block is true. In this case, the condition in the block is the result of calling the <a class="indexterm" id="idx-CHP-6-0587"/>Proc argument on the Array with the Array member in question as the argument to <code class="literal">call</code>. After we finish defining our new <a class="indexterm" id="idx-CHP-6-0588"/>method, we set up our <code class="literal">digits</code> Array and our Procs with appropriate names in the <code class="literal">lambdas</code> Hash at ❷.</p><div class="note" title="Note"><h3 class="title"><a id="note-38"/>Note</h3><p><span class="emphasis"><em>Some of my co-workers make fun of the variable and method names I use—like <em class="replaceable"><code>some_proc</code></em>, for example. I think names should either be very specific, like <em class="replaceable"><code>save_rates_to_local_file!</code></em>, or explicitly generic, like <em class="replaceable"><code>some_proc</code></em>. For truly generic operations, I often use variable names like <em class="replaceable"><code>any_proc</code></em> or <em class="replaceable"><code>any_hash</code></em>, which tell you explicitly that the operations being performed on them are meant to be useful for any Proc or Hash</em></span>.</p></div><p>At ❸, we loop through each sorted <code class="literal">lambda_name</code>, and at ❹ we extract each Proc out as a variable called <code class="literal">lambda_proc</code>. We then <code class="literal">find_all</code> members of the <code class="literal">digits</code> Array that match the condition described by that Proc at ❺ and <code class="literal">puts</code> an appropriate message at ❻.</p></div><div class="sect2" title="Running the Script"><div class="titlepage"><div><div><h2 class="title"><a id="running_the_script-id018"/>Running the Script</h2></div></div></div><p>Let’s see it in action with <code class="literal">ruby -w matching_members.rb</code>.<a class="indexterm" id="idx-CHP-6-0589"/></p></div><div class="sect2" title="The Results"><div class="titlepage"><div><div><h2 class="title"><a id="the_results-id018"/>The Results</h2></div></div></div><a id="I_programlisting6_d1e9503"/><pre class="programlisting">five+   [5,6,7,8,9]
+is_even [0,2,4,6,8]</pre><p>In each case, we filter the members of the <code class="literal">digits</code> Array based on some specific conditions. Hopefully, you’ll find that the names I chose for each Proc match what that Proc does. The <code class="literal">five+</code> Proc returns <code class="literal">true</code> for any argument that is five or greater.<sup>[<a class="footnote" href="#ftn.CHP-6-FNOTE-2" id="CHP-6-FNOTE-2">17</a>]</sup> We see that the results of calling <code class="literal">five+</code> on each digit in turn returns the correct digits. Similarly, the <code class="literal">is_even</code> Proc filters its input, only returning <code class="literal">true</code> for arguments that are even, where <span class="emphasis"><em>evenness</em></span> is defined as having a modulus two equal to zero. Again, we get the correct numbers.</p><p>What happens when we want to filter based on multiple criteria? We could filter once with one Proc, assign that result into an Array, and then filter that result by the second criterion. That’s perfectly valid, but what if we have an unknown number of <a class="indexterm" id="idx-CHP-6-0590"/><a class="indexterm" id="idx-CHP-6-0591"/>filtering conditions? We want a version of <code class="literal">matching_members</code> that can take an arbitrary number of Procs. That’s our next script.<a class="indexterm" id="idx-CHP-6-0592"/><a class="indexterm" id="I_indexterm6_d1e9555"/><a class="indexterm" id="I_indexterm6_d1e9558"/><a class="indexterm" id="I_indexterm6_d1e9563"/><a class="indexterm" id="I_indexterm6_d1e9568"/></p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-6-FNOTE-2" id="ftn.CHP-6-FNOTE-2">17</a>] </sup>It does this by implicit Boolean evaluation of the expression <code class="literal">i &gt;= 5</code>.</p></div></div></div>
+<div class="sect1" title="#22 Using Procs for Compounded Filtering (matching_compound_members.rb)"><div class="titlepage"><div><div><h1 class="title"><a id="sharp22_using_procs_for_compounded_filte"/>#22 Using Procs for Compounded Filtering (matching_compound_members.rb)</h1></div></div></div><p>In this script, we’ll filter Arrays using an arbitrary number of Procs. As before, we’ll open up the Array class, this time adding two <a class="indexterm" id="idx-CHP-6-0593"/>methods. Again, we’ll filter digits based on simple mathematical tests. Let’s take a look at the source code and see what’s different.<a class="indexterm" id="idx-CHP-6-0594"/><a class="indexterm" id="idx-CHP-6-0595"/></p><div class="sect2" title="The Code"><div class="titlepage"><div><div><h2 class="title"><a id="the_code-id021"/>The Code</h2></div></div></div><a id="I_programlisting6_d1e9595"/><pre class="programlisting">  #!/usr/bin/env ruby
+  # <a class="indexterm" id="idx-CHP-6-0596"/>matching_compound_members.rb
+
+  =begin rdoc
+  Extend the built-in &lt;b&gt;Array&lt;/b&gt; class.
+  =end
+  class Array
+
+  =begin rdoc
+  Takes a block as an argument and returns a list of
+  members matching the criteria defined by that block.
+  =end
+❶   def matching_members(&amp;some_block)    <em class="lineannotation"><span class="lineannotation">Block Arguments</span></em>
+      find_all(&amp;some_block)
+    end
+
+  =begin rdoc
+  Takes an &lt;b&gt;Array&lt;/b&gt; of &lt;b&gt;<a class="indexterm" id="idx-CHP-6-0597"/>Proc&lt;/b&gt;s as an argument
+  and returns all members matching the criteria defined
+  by each &lt;b&gt;Proc&lt;/b&gt; via &lt;b&gt;Array.matching_members&lt;/b&gt;.
+  Note that it uses the ampersand to convert from
+  &lt;b&gt;Proc&lt;/b&gt; to block.
+  =end
+❷   def matching_compound_members(procs_array)
+      procs_array.map do |some_proc|
+        # collect each proc operation
+❸       matching_members(&amp;some_proc)
+❹     end.inject(self) do |memo,matches|
+        # find all the intersections, starting with self
+        # and whittling down until we only have members
+        # that have matched every proc
+❺       memo &amp; matches    <em class="lineannotation"><span class="lineannotation">Array Intersections</span></em>
+      end
+❻   end
+
+  end
+
+  # Now use these methods in some operations.
+❼ digits = (0..9).to_a
+  lambdas = Hash.new()
+  lambdas['five+']   = lambda { |i| i if i &gt;= 5 }
+  lambdas['is_even'] = lambda { |i| i if (i % 2).zero? }
+  lambdas['div_by3'] = lambda { |i| i if (i % 3).zero? }
+
+  lambdas.keys.sort.each do |lambda_name|
+    lambda_proc   = lambdas[lambda_name]
+    lambda_values = digits.matching_members(&amp;lambda_proc).join(',')
+❽   puts "#{lambda_name}\t[#{lambda_values}]\n"
+  end
+
+❾ puts "ALL\t[#{digits.matching_compound_members(lambdas.values).join(',')}]"</pre></div><div class="sect2" title="How It Works"><div class="titlepage"><div><div><h2 class="title"><a id="how_it_works-id020"/>How It Works</h2></div></div></div><p>We start by defining a <a class="indexterm" id="idx-CHP-6-0598"/>method called <code class="literal">matching_members</code> (❶), just as before. However, this time our argument is called <code class="literal">some_block</code> instead of <code class="literal">some_proc</code>, and it is preceded by an <a class="indexterm" id="idx-CHP-6-0599"/>ampersand. Why?<a class="indexterm" id="idx-CHP-6-0600"/><a class="indexterm" id="idx-CHP-6-0601"/><a class="indexterm" id="idx-CHP-6-0602"/></p><div class="sect3" title="Blocks, Procs, and the Ampersand"><div class="titlepage"><div><div><h3 class="title"><a id="blocks_procs_and_the_ampersand"/>Blocks, Procs, and the Ampersand</h3></div></div></div><p>The ampersand (<code class="literal">&amp;</code>) is Ruby’s way of expressing blocks and Procs in terms of each other. It’s very useful for arguments to methods, as you might imagine. <span class="emphasis"><em>Blocks</em></span>, you may remember, are simply bits of code between delimiters such as braces (<code class="literal">{ “I’m a block!” }</code>) or the <code class="literal">do</code> and <code class="literal">end</code> keywords (<code class="literal">do “I’m also a block!” end</code>). <span class="emphasis"><em>Procs</em></span> are objects made from blocks via the <code class="literal">lambda</code> method. Either of them can be passed into methods, and the ampersand is the way to use one as the other. Let’s test this in irb.<a class="indexterm" id="idx-CHP-6-0603"/><a class="indexterm" id="idx-CHP-6-0604"/><a class="indexterm" id="idx-CHP-6-0605"/><a class="indexterm" id="idx-CHP-6-0606"/></p><a id="I_programlisting6_d1e9695"/><pre class="programlisting">irb(main):001:0&gt; class Array
+irb(main):002:1&gt; def <a class="indexterm" id="idx-CHP-6-0607"/>matches_block( &amp;some_block )    <em class="lineannotation"><span class="lineannotation">&amp; Notation for Blocks and Procs</span></em>
+irb(main):003:2&gt; find_all( &amp;some_block )
+irb(main):004:2&gt; end
+irb(main):005:1&gt; def matches_proc( some_proc )
+irb(main):006:2&gt; find_all( &amp;some_proc )
+irb(main):007:2&gt; end
+irb(main):008:1&gt; end
+=&gt; nil</pre><p>We open the Array class and add a method called <code class="literal">matches_block</code>; this method takes a block (with an ampersand prefix), effectively duplicating the behavior of the existing <code class="literal">find_all</code> method, which it calls. We also add another method called <code class="literal">matches_proc</code> that calls <code class="literal">find_all</code> again, but takes a Proc this time. Then we try them out.</p><a id="I_programlisting6_d1e9718"/><pre class="programlisting">irb(main):009:0&gt; digits = (0..9).to_a
+=&gt; [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+irb(main):010:0&gt; digits.matches_block { |x| x &gt; 5 }
+=&gt; [6, 7, 8, 9]
+irb(main):011:0&gt; digits.matches_proc( lambda { |x| x &gt; 5 } )
+=&gt; [6, 7, 8, 9]</pre><p>The <code class="literal">matches_block</code> method dutifully takes a block and passes it along to the <code class="literal">find_all</code> method, transforming it along the way with the ampersand—once on input and again when passed to <code class="literal">find_all</code>. The <code class="literal">matches_proc</code> method takes a Proc and passes that on to <code class="literal">find_all</code>, but it only needs to transform with the ampersand once.</p><p>You might think that we could omit the ampersand and just treat a block argument as a standard variable, like in irb below.</p><a id="I_programlisting6_d1e9739"/><pre class="programlisting">irb(main):001:0&gt; class Array
+irb(main):002:1&gt; def matches_block( some_block )
+irb(main):003:2&gt; find_all( some_block )
+irb(main):004:2&gt; end
+irb(main):005:1&gt; end
+=&gt; nil
+irb(main):006:0&gt; digits = (0..9).to_a
+=&gt; [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+irb(main):007:0&gt; digits.matches_block { |x| x &gt; 5 }
+<a class="indexterm" id="idx-CHP-6-0608"/>ArgumentError: wrong number of arguments (0 for 1)
+        from (irb):7:in `matches_block'
+        from (irb):7
+        from :0</pre><p>That doesn’t work, as you see. Ruby keeps track of the number of arguments that a given <a class="indexterm" id="idx-CHP-6-0609"/>method, block, or <a class="indexterm" id="idx-CHP-6-0610"/>Proc expects (a concept called <span class="emphasis"><em>arity</em></span>) and complains when there is a mismatch. Our irb example expected a “real” argument, not just a block, and complained when it didn’t get one.<a class="indexterm" id="idx-CHP-6-0611"/></p><div class="note" title="Note"><h3 class="title"><a id="note-39"/>Note</h3><p><span class="emphasis"><em>The gist of the ArgumentError is that blocks are akin to “partial” or “unborn” blocks and need the <em class="replaceable"><code>lambda</code></em> method to be made into full-fledged Procs, which can be used as real arguments to methods. Some methods, like <em class="replaceable"><code>find_all</code></em>, can handle block arguments, but these block arguments are treated differently than regular arguments and don’t count toward the number of “real” arguments. We’ll cover this later when we discuss the <em class="replaceable"><code>willow_and_anya.rb</code></em> script. For now, note that our new version of <em class="replaceable"><code>matching_members</code></em> takes a block instead of a Proc</em></span>.<a class="indexterm" id="idx-CHP-6-0612"/><a class="indexterm" id="idx-CHP-6-0613"/></p></div></div><div class="sect3" title="Filtering with Each Proc via map"><div class="titlepage"><div><div><h3 class="title"><a id="filtering_with_each_proc_via_map"/>Filtering with Each Proc via map</h3></div></div></div><p>We also define a new method called <code class="literal">matching_compound_members</code> at ❷. The <code class="literal">matching_compound_members</code> method takes an Array argument called <code class="literal">procs_array</code> and maps a call to <code class="literal">matching_members</code> onto each of <code class="literal">procs_array</code>’s Proc elements; this transforms the elements into blocks with the <a class="indexterm" id="idx-CHP-6-0614"/>ampersand at ❸ while doing the mapping. This results in an Array, each of whose members is an Array containing all members of the original Array that match the conditions defined by the Proc. Confused? Take a look in irb.<a class="indexterm" id="idx-CHP-6-0615"/><a class="indexterm" id="idx-CHP-6-0616"/><a class="indexterm" id="idx-CHP-6-0617"/><a class="indexterm" id="I_indexterm6_d1e9824"/></p><a id="I_programlisting6_d1e9827"/><pre class="programlisting">irb(main):001:1&gt; class Array
+irb(main):002:1&gt; def matching_compound_members( procs_array )
+irb(main):003:2&gt; procs_array.map do |some_proc|
+irb(main):004:3* find_all( &amp;some_proc )
+irb(main):005:3&gt; end
+irb(main):006:2&gt; end
+irb(main):007:1&gt; end
+=&gt; nil
+irb(main):008:0&gt; digits.matching_compound_members( [ lambda { |x| x &gt; 5 },
+lambda { |x| (x % 2).zero? }])
+=&gt; [[6, 7, 8, 9], [0, 2, 4, 6, 8]]</pre><p>On lines one through seven, we add a shortened version of <code class="literal">matching_members</code> to all Arrays. We call it on line eight, and find that the result is an Array of Arrays. The first sub-array is all digits greater than five—the result of the first Proc. The second sub-array is all even digits—the result of the second Proc. That’s what we have at the end of the <code class="literal">map</code> (❹) inside <code class="literal">matching_compound_members</code>.</p></div><div class="sect3" title="Finding the Intersections with inject"><div class="titlepage"><div><div><h3 class="title"><a id="finding_the_intersections_with_inject"/>Finding the Intersections with inject</h3></div></div></div><p>We don’t stop there. Next we call our old friend the <code class="literal">inject</code> method on that Array of Arrays. You may remember that <code class="literal">inject</code> performs an operation successively and has a memory for intermediate results. That will be very useful for us. The <code class="literal">inject</code> method takes an optional non-block element for the initial state of its memory. In our script we use <code class="literal">self</code> (❹), meaning that the memory state will be the <code class="literal">self</code> Array as it exists prior to any <a class="indexterm" id="idx-CHP-6-0618"/>filtering. We also say that each member of the Array resulting from the <code class="literal">map</code> operation will be called <code class="literal">matches</code>. This makes sense because the <code class="literal">matches</code> variable represents members of the initial Array that were found to match the <a class="indexterm" id="idx-CHP-6-0619"/>Proc used for that particular stage of the <code class="literal">map</code> operation.<a class="indexterm" id="idx-CHP-6-0620"/><a class="indexterm" id="idx-CHP-6-0621"/></p></div><div class="sect3" title="Array Intersections"><div class="titlepage"><div><div><h3 class="title"><a id="array_intersections"/>Array Intersections</h3></div></div></div><p>At ❺, we call a method we haven’t seen before on <code class="literal">memo</code>. This method happens to be expressed with the ampersand character, but it has nothing to do with converting blocks and Procs into each other; it has more to do with set math.</p><a id="I_programlisting6_d1e9900"/><pre class="programlisting">irb(main):001:0&gt; digits = (0..9).to_a
+=&gt; [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+irb(main):002:0&gt; evens = digits.find_all { |x| (x % 2).zero? }
+=&gt; [0, 2, 4, 6, 8]
+irb(main):003:0&gt; digits &amp; evens
+=&gt; [0, 2, 4, 6, 8]
+irb(main):004:0&gt; half_digits = digits.find_all { |x| x &lt; 5 }
+=&gt; [0, 1, 2, 3, 4]
+irb(main):005:0&gt; evens &amp; half_digits
+=&gt; [0, 2, 4]</pre><p>Can you guess what this ampersand means? It represents the intersection of two composite data sets. It basically means <span class="emphasis"><em>Find all members of myself that also belong to this other thing</em></span>. When we call it within our <code class="literal">inject</code>, we ensure that once a given Array element fails one test, it no longer appears as a candidate for the next test. This happens because the memory of the <code class="literal">inject</code> method (represented by the variable called <code class="literal">memo</code>) is automatically set to the return value of each iteration of the <code class="literal">inject</code> method. At ❻, when we’re done with all of our <code class="literal">map</code> ping and <code class="literal">inject</code>ing, we’re left with only those members of the original Array that pass the tests defined by every single Proc in the <code class="literal">procs_array</code> argument. Since Ruby returns the last expression evaluated in a method, <code class="literal">matching_compound_members</code> returns an Array of all members of <code class="literal">self</code> that pass every test represented by the members of <code class="literal">procs_array</code>.</p><p>After some setup at ❼ similar to that for the previous script, we output results using <code class="literal">puts</code> at both ❽ and ❾. Let’s see it in action.</p></div></div><div class="sect2" title="The Results"><div class="titlepage"><div><div><h2 class="title"><a id="the_results-id019"/>The Results</h2></div></div></div><a id="I_programlisting6_d1e9946"/><pre class="programlisting">div_by3 [0,3,6,9]
+five+   [5,6,7,8,9]
+is_even [0,2,4,6,8]
+ALL     [6]</pre><p>We call each of these <a class="indexterm" id="idx-CHP-6-0622"/>filtering Procs on the digits from zero to nine, getting the correct members each time. We finally output the prefix <code class="literal">ALL</code> followed by the members that pass all the tests. The number six is the only digit from zero to nine that is divisible by three, is greater than or equal to five, and is even. Therefore, it is the only member of the final output.</p></div><div class="sect2" title="Hacking the Script"><div class="titlepage"><div><div><h2 class="title"><a id="hacking_the_script-id012"/>Hacking the Script</h2></div></div></div><p>Try defining your own Procs using <code class="literal">lambda</code>. You can add them to the section at ❼ or replace some of the existing Procs. Feel free to alter the range used to create the <code class="literal">digits</code> Array as well. A larger range of values in <code class="literal">digits</code> could help demonstrate more complex relationships among a greater number of <a class="indexterm" id="idx-CHP-6-0623"/>filtering Procs.</p></div></div>
+<div class="sect1" title="#23 Returning Procs as Values (return_proc.rb)"><div class="titlepage"><div><div><h1 class="title"><a id="sharp23_returning_procs_as_values_return"/>#23 Returning Procs as Values (return_proc.rb)</h1></div></div></div><p>Let’s look at a further demonstration of how to use Procs as data generated by another function. It’s very similar to the <code class="literal">make_incrementer.rb</code> script.<a class="indexterm" id="idx-CHP-6-0624"/><a class="indexterm" id="idx-CHP-6-0625"/><a class="indexterm" id="idx-CHP-6-0626"/><a class="indexterm" id="I_indexterm6_d1e9998"/><a class="indexterm" id="I_indexterm6_d1e10001"/><a class="indexterm" id="I_indexterm6_d1e10006"/></p><div class="sect2" title="The Code"><div class="titlepage"><div><div><h2 class="title"><a id="the_code-id022"/>The Code</h2></div></div></div><a id="I_programlisting6_d1e10014"/><pre class="programlisting">  #!/usr/bin/env ruby
+  # return_<a class="indexterm" id="idx-CHP-6-0627"/>proc.rb
+
+❶ def return_proc(criterion, further_criterion=1)
+
+    proc_of_criterion = {    <em class="lineannotation"><span class="lineannotation">Procs as Hash Values</span></em>
+      'div_by?' =&gt; lambda { |i| i if (i % further_criterion).zero? },
+      'is?'     =&gt; lambda { |i| i == further_criterion }
+    }
+
+    # allow 'is_even' as an alias for divisible by 2
+❷   return return_proc('div_by?', 2) if criterion == ('is_even')
+
+❸   proc_to_return = proc_of_criterion[criterion]
+    fail "I don't understand the criterion #{criterion}" unless proc_to_return
+    return proc_to_return
+
+  end
+
+❹ require 'boolean_golf.rb'
+
+  # Demonstrate calling the proc directly
+❺ even_proc = return_proc('is_even') # could have been ('div_by', 2)
+  div3_proc = return_proc('div_by?', 3)
+  is10_proc = return_proc('is?', 10)
+❻ [4, 5, 6].each do |num|
+    puts <a class="indexterm" id="idx-CHP-6-0628"/>%Q[Is #{num} even?: #{even_proc[num].true?}]    <em class="lineannotation"><span class="lineannotation">Making Strings with<strong class="userinput"><code> %Q</code></strong></span></em>
+    puts %Q[Is #{num} divisible by 3?: #{div3_proc[num].true?}]
+    puts <a class="indexterm" id="idx-CHP-6-0629"/>%Q[Is #{num} 10?: #{is10_proc[num].true?}]
+❼   printf("%d is %s.\n\n", num, even_proc[num].true? ? 'even' : 'not even')
+  end
+
+  # Demonstrate using the proc as a block for a method
+❽ digits = (0..9).to_a
+  even_results = digits.find_all(&amp;(return_proc('is_even')))
+  div3_results = digits.find_all(&amp;(return_proc('div_by?', 3)))
+❾ puts %Q[The even digits are #{even_results.inspect}.]    <em class="lineannotation"><span class="lineannotation">The<strong class="userinput"><code> inspect</code></strong> Method</span></em>
+  puts %Q[The digits divisible by 3 are #{div3_results.inspect}.]
+  puts</pre></div><div class="sect2" title="The Results"><div class="titlepage"><div><div><h2 class="title"><a id="the_results-id020"/>The Results</h2></div></div></div><p>If we call this with the command <code class="literal">ruby -w return_proc.rb</code>, we get the following output, all of which is true.<a class="indexterm" id="idx-CHP-6-0630"/></p><a id="I_programlisting6_d1e10056"/><pre class="programlisting">Is 4 even?: true
+Is 4 divisible by 3?: false
+Is 4 10?: false
+4 is even.
+
+Is 5 even?: false
+Is 5 divisible by 3?: false
+Is 5 10?: false
+5 is not even.
+
+Is 6 even?: true
+Is 6 divisible by 3?: true
+Is 6 10?: false
+6 is even.
+
+The even digits are [0, 2, 4, 6, 8].
+The digits divisible by 3 are [0, 3, 6, 9].</pre></div><div class="sect2" title="How It Works"><div class="titlepage"><div><div><h2 class="title"><a id="how_it_works-id021"/>How It Works</h2></div></div></div><p>We define a method called <code class="literal">return_proc</code> starting at ❶ that takes a mandatory <code class="literal">criterion</code> and an optional <code class="literal">further_criterion</code>, assumed to be one. It then defines a Hash called <code class="literal">proc_of_criterion</code> with keys that match a specific criterion and <a class="indexterm" id="idx-CHP-6-0631"/>values that are <a class="indexterm" id="idx-CHP-6-0632"/>Procs corresponding to each criterion. It then allows a caller to use an alias <code class="literal">is_even</code> to mean <span class="emphasis"><em>Divisible by two</em></span> at ❷. It does this by recursively calling itself with the arguments <code class="literal">div_by?</code> and <code class="literal">2</code> when the alias is used.</p><p>Assuming that the <code class="literal">is_even</code> alias is not used, the method tries to read the appropriate Proc to use at ❸; it fails if it gets a criterion it doesn’t understand.<sup>[<a class="footnote" href="#ftn.CHP-6-FNOTE-3" id="CHP-6-FNOTE-3">18</a>]</sup> If it gets past this point, we know that the method understands its criteria, because it found a Proc to use. It then returns that Proc, appropriately called <code class="literal">proc_to_return</code>.</p><p>We now know that <code class="literal">return_proc</code> lives up to its name and returns a Proc. Let’s use it. At ❹, we <code class="literal">require</code> one of our first scripts, <code class="literal">boolean_golf.rb</code>. You may recall that that <a class="indexterm" id="idx-CHP-6-0633"/>script adds the methods <code class="literal">true?</code> and <code class="literal">false?</code> to every object. This will come in handy for our next few lines. At ❺, we define three Procs that can test numbers for certain conditions. We then use those Procs within the <code class="literal">each</code> block starting at ❻. For each of the Integers <code class="literal">4, 5</code>, and <code class="literal">6</code>, we test for evenness, being divisible by three, and being equal to ten. We also use both the <code class="literal">printf</code> command that we saw in the <code class="literal">line_num.rb</code> script and the main ternary operator, both of which happen at ❼.</p><div class="sect3" title="Proc.call(args) vs. Proc[args]"><div class="titlepage"><div><div><h3 class="title"><a id="proccallargs_vs_procargs"/>Proc.call(args) vs. Proc[args]</h3></div></div></div><p>Notice that we call our Procs with a different syntax here—we don’t use the <code class="literal">call</code> method at all. We can simply put whatever arguments we would use inside <a class="indexterm" id="idx-CHP-6-0634"/>square brackets, and it’s just like <a class="indexterm" id="idx-CHP-6-0635"/>using the <code class="literal">call</code> method. Let’s verify this in irb.<a class="indexterm" id="idx-CHP-6-0636"/></p><a id="I_programlisting6_d1e10180"/><pre class="programlisting">irb(main):001:0&gt; is_ten = lambda { |x| x == 10 }
+=&gt; #&lt;Proc:0xb7d0c8a4@(irb):1&gt;
+irb(main):002:0&gt; is_ten.call(10)
+=&gt; true
+irb(main):003:0&gt; is_ten[10]
+=&gt; true
+irb(main):004:0&gt; is_ten.call(9)
+=&gt; false
+irb(main):005:0&gt; is_ten[9]
+=&gt; false</pre><p>I chose to use the bracket syntax in these examples for the sake of brevity. So far, I’ve shown how to use Procs that have been returned directly from the <code class="literal">return_proc</code> method. But we can also do other things, such as converting between blocks and Procs.</p></div><div class="sect3" title="Using Procs as Blocks"><div class="titlepage"><div><div><h3 class="title"><a id="using_procs_as_blocks"/>Using Procs as Blocks</h3></div></div></div><p>From ❽ to the end of the script, we see how we can cast the output of <code class="literal">return_proc</code> (which we know to be a Proc) into a block with the ampersand without ever storing the Proc in a variable. After defining our usual <code class="literal">digits</code> Array, we call <code class="literal">find_all</code> twice, assigning the results into <code class="literal">even_results</code> and <code class="literal">div3_results</code>, respectively. Remember that <code class="literal">find_all</code> takes a block. The ampersand can convert any expression that evaluates to a Proc into a block, and <code class="literal">(return_proc(‘is_even’)</code> is an expression that returns (evaluates to) a Proc. Therefore, we can coerce (or cast) the expression <code class="literal">(return_proc(‘is_even’)</code> into a perfectly valid block for <code class="literal">find_all</code>. We do this, outputting the results via <code class="literal">puts</code> at ❾.<a class="indexterm" id="idx-CHP-6-0637"/><a class="indexterm" id="idx-CHP-6-0638"/></p></div><div class="sect3" title="The inspect Method"><div class="titlepage"><div><div><h3 class="title"><a id="the_inspect_method"/>The inspect Method</h3></div></div></div><p>Notice that we call a new method called <code class="literal">inspect</code> on each set of results to retain the brackets and commas that we normally associate with members of Arrays. The <code class="literal">inspect</code> method returns a String representation of whatever object it’s called on. It is slightly different from the <code class="literal">to_s</code> method we’ve already seen. Let’s check that out in irb.<a class="indexterm" id="idx-CHP-6-0639"/></p><a id="I_programlisting6_d1e10251"/><pre class="programlisting">irb(main):001:0&gt; digits = (0..9).to_a
+=&gt; [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+irb(main):002:0&gt; digits.to_s=
+&gt; "0123456789"
+irb(main):003:0&gt; digits.<a class="indexterm" id="idx-CHP-6-0640"/>inspect
+=&gt; "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]"</pre><p>You can see that the output of <code class="literal">inspect</code> is a bit prettier than the output of <code class="literal">to_s</code>. It also retains more information about what type of object it was called on.</p><p>You should now be pretty comfortable with calling <a class="indexterm" id="idx-CHP-6-0641"/>Procs, passing them around, reading them out of Hashes, and converting them to and from blocks, whether with a <code class="literal">lambda</code> or when passing around to methods. Now let’s look at <a class="indexterm" id="idx-CHP-6-0642"/>nesting <code class="literal">lambda</code>s within other <code class="literal">lambda</code>s.</p></div></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-6-FNOTE-3" id="ftn.CHP-6-FNOTE-3">18</a>] </sup>Were you to modify or extend this method, you could simply add more options to the <code class="literal">proc_of_criterion</code> Hash.</p></div></div></div>
+<div class="sect1" title="#24 Nesting lambdas"><div class="titlepage"><div><div><h1 class="title"><a id="sharp24_nesting_lambdas"/>#24 Nesting lambdas</h1></div></div></div><p>Let’s review Procs for a bit. Procs are just functions that can be treated as data, what functional programming languages call <span class="emphasis"><em>first-class functions</em></span>. Functions can create Procs; we saw that both <code class="literal">make_incrementer</code> and <code class="literal">return_proc</code> return Procs of different sorts. Given all that, what prevents us from making a Proc that returns another Proc when called? Nothing at all.<a class="indexterm" id="idx-CHP-6-0643"/><a class="indexterm" id="idx-CHP-6-0644"/></p><p>In the <code class="literal">make_exp</code> example below, we create specific versions of Procs that raise an argument to some specified power. That power is the <code class="literal">exp</code> argument taken by the outer <code class="literal">lambda</code>, which is described as a <span class="emphasis"><em>free variable</em></span> because it is not an explicit argument to the inner <code class="literal">lambda</code>.<a class="indexterm" id="idx-CHP-6-0645"/><a class="indexterm" id="idx-CHP-6-0646"/></p><p>The inner <code class="literal">lambda</code>, which is returned, has a <span class="emphasis"><em>bound variable</em></span> called <em class="replaceable"><code>x</code></em>. It is bound because it is an explicit argument to that inner <code class="literal">lambda</code>. That variable <em class="replaceable"><code>x</code></em> is the number that will be raised to the specified power. This example is short, and the returned value at each stage is very important, so we’ll do this entirely in irb.<a class="indexterm" id="idx-CHP-6-0647"/><a class="indexterm" id="I_indexterm6_d1e10355"/><a class="indexterm" id="I_indexterm6_d1e10358"/><a class="indexterm" id="I_indexterm6_d1e10363"/></p><div class="sect2" title="The Code"><div class="titlepage"><div><div><h2 class="title"><a id="the_code-id023"/>The Code</h2></div></div></div><a id="I_programlisting6_d1e10371"/><pre class="programlisting">irb(main):001:0&gt; digits = (0..9).to_a
+=&gt; [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+irb(main):002:0&gt; make_exp_proc = lambda { |exp| lambda { |x| x ** exp } }    <em class="lineannotation"><span class="lineannotation">Nested Lambdas</span></em>
+=&gt; #&lt;Proc:0xb7c97adc@(irb):2&gt;
+irb(main):003:0&gt; square_proc = make_exp_proc.call(2)
+=&gt; #&lt;Proc:0xb7c97b18@(irb):2&gt;
+irb(main):004:0&gt; square_proc.call(5)
+=&gt; 25
+irb(main):005:0&gt; squares = digits.map { |x| square_proc[x] }
+=&gt; [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]</pre></div><div class="sect2" title="How It Works"><div class="titlepage"><div><div><h2 class="title"><a id="how_it_works-id022"/>How It Works</h2></div></div></div><p>We see up to this point that <code class="literal">make_exp_proc</code> is a Proc, which returns a Proc when called. That resulting Proc raises its argument to the exponent used in the initial call of <code class="literal">make_exp_proc</code>. Since in our example, we called <code class="literal">make_exp_proc</code> with <code class="literal">2</code>, we created a Proc that squares its argument, appropriately calling it <code class="literal">square_proc</code>. We also see that the squaring Proc can be used in a mapping operation onto the digits Array, and that it returns the correct squared values.<a class="indexterm" id="idx-CHP-6-0648"/></p><a id="I_programlisting6_d1e10400"/><pre class="programlisting">irb(main):006:0&gt; cube_proc = make_exp_proc.call(3)
+=&gt; #&lt;Proc:0xb7c97b18@(irb):2&gt;
+irb(main):007:0&gt; cube_proc.call(3)
+=&gt; 27
+irb(main):008:0&gt; cubes = digits.map { |x| cube_proc[x] }
+=&gt; [0, 1, 8, 27, 64, 125, 216, 343, 512, 729]</pre><p>We also see in the rest of the example that <code class="literal">make_exp_proc</code> is flexible and can take arguments other than <code class="literal">2</code>. It works perfectly well with an argument of <code class="literal">3</code>, producing a cubing Proc, which we can use in the same ways as the squaring Proc.</p><p>Up to this point, our Procs have tended to implement simple mathematical operations, like addition, multiplication, or exponentiation. But Procs are functions like any other, and they can output any type of value. Let’s move on to the next script, which uses Procs that manipulate Strings.</p></div></div>
+<div class="sect1" title="#25 Procs for Text (willow_and_anya.rb)"><div class="titlepage"><div><div><h1 class="title"><a id="sharp25_procs_for_text_willow_and_anyarb"/>#25 Procs for Text (willow_and_anya.rb)</h1></div></div></div><p>As I was planning the functional programming chapter of this book, I was watching DVDs of Joss Whedon’s <em class="citetitle">Buffy the Vampire Slayer</em>. I mention this because I had Procs and blocks on my brain, and I happened to encounter two very good candidates for text-based examples of <code class="literal">lambda</code> operations. In an episode called “Him,” there is discussion of a “love spell”, an “anti-(love spell) spell”, and an “anti-(anti-(love spell) spell) spell”. That’s a great example of successive modifications via a simple function. In another episode called “Same Time, Same Place,” there is a conversation that demonstrates simple variable substitution. Both are great examples of simple functions and are good venues to explore how Procs in Ruby differ based on how we choose to create them. Here’s the source code.<a class="indexterm" id="idx-CHP-6-0649"/><a class="indexterm" id="idx-CHP-6-0650"/></p><div class="note" title="Note"><h3 class="title"><a id="note-40"/>Note</h3><p><span class="emphasis"><em>You obviously don’t need to like Buffy to benefit from reading about these examples. The specific content that the scripts modify is essentially arbitrary</em></span>.<a class="indexterm" id="I_indexterm6_d1e10437"/><a class="indexterm" id="I_indexterm6_d1e10442"/></p></div><div class="sect2" title="The Code"><div class="titlepage"><div><div><h2 class="title"><a id="the_code-id024"/>The Code</h2></div></div></div><p>This code consists of three distinct files: one each for the two necessary classes, and one separate script meant to be directly executed.</p><div class="sect3" title="The Him Class"><div class="titlepage"><div><div><h3 class="title"><a id="the_him_class"/>The Him Class</h3></div></div></div><a id="I_programlisting6_d1e10455"/><pre class="programlisting">  #!/usr/bin/env ruby -w
+  # him.rb
+
+❶ class Him
+
+    EPISODE_NAME = 'Him'
+    BASE         = 'love spell'
+
+    ANTIDOTE_FOR = lambda { |input| "anti-(#{input}) spell" }    <em class="lineannotation"><span class="lineannotation">Constant <a class="indexterm" id="idx-CHP-6-0651"/>Procs</span></em>
+
+❷   def Him.describe()    <em class="lineannotation"><span class="lineannotation">Class Methods</span></em>
+      return &lt;&lt;DONE_WITH_HEREDOC
+
+  In #{EPISODE_NAME},
+    Willow refers to an "#{ANTIDOTE_FOR[BASE]}".
+    Anya mentions an "#{ANTIDOTE_FOR[ANTIDOTE_FOR[BASE]]}".
+    Xander mentioning an "#{ANTIDOTE_FOR[ANTIDOTE_FOR[ANTIDOTE_FOR[BASE]]]}"
+  might have been too much.
+
+  DONE_WITH_HEREDOC
+    end
+
+  end</pre></div><div class="sect3" title="The SameTimeSamePlace Class"><div class="titlepage"><div><div><h3 class="title"><a id="the_sametimesameplace_class"/>The SameTimeSamePlace Class</h3></div></div></div><a id="I_programlisting6_d1e10470"/><pre class="programlisting">  #!/usr/bin/env ruby -w
+  # same_time_same_place.rb
+
+❸ class SameTimeSamePlace
+
+    EPISODE_NAME = 'Same Time, Same Place'
+
+  =begin rdoc
+  This Hash holds various procedure objects. One is formed by the generally
+  preferred Kernel.lambda method. Others are created with the older Proc.new
+  method, which has the benefit of allowing more flexibility in its argument
+  stack.
+  =end
+❹   QUESTIONS = {
+
+      :ternary =&gt; Proc.new do |args|
+        state    = args ? args[0] : 'what'
+        location = args ? args[1] : 'what'
+        "Spike's #{state} in the #{location}ment?"
+      end,
+
+      :unless0th =&gt; Proc.new do |*args|
+        args = <a class="indexterm" id="idx-CHP-6-0652"/>%<a class="indexterm" id="idx-CHP-6-0653"/>w/what what/ unless args[0]
+        "Spike's #{args[0]} in the #{args[1]}ment?"
+      end,
+
+      :nitems =&gt; Proc.new do |*args|    <em class="lineannotation"><span class="lineannotation">Flexible Arity with<strong class="userinput"><code> Proc.new</code></strong></span></em>
+        args.nitems &gt;= 2 || args.replace(['what', 'what'])
+        "Spike's #{args[0]} in the #{args[1]}ment?"
+      end,
+
+      :second_or =&gt; Proc.new do |*args|
+        args[0] || args.replace(['what', 'what'])
+        "Spike's #{args[0]} in the #{args[1]}ment?"
+      end,
+
+      :needs_data =&gt; lambda do |args|
+        "Spike's #{args[0]} in the #{args[1]}ment?"
+      end
+
+    }
+
+❺   DATA_FROM_ANYA = ['insane', 'base']
+
+❻   def <a class="indexterm" id="idx-CHP-6-0654"/>SameTimeSamePlace.describe()
+
+      same_as_<a class="indexterm" id="idx-CHP-6-0655"/>procs = [
+        SameTimeSamePlace.yield_block(&amp;QUESTIONS[:nitems]),
+        QUESTIONS[:second_or].call(),
+        QUESTIONS[:unless0th].call(),
+        SameTimeSamePlace.willow_ask,
+      ]
+
+           return &lt;&lt;DONE
+  In #{EPISODE_NAME},
+    Willow asks "#{QUESTIONS[:ternary].call(nil)}",
+    #{same_as_procs.map do |proc_output|
+      'which is the same as "' + proc_output + '"'
+      end.join("\n  ")
+    }
+    Anya provides "#{DATA_FROM_ANYA.join(', ')}", which forms the full question
+    "#{SameTimeSamePlace.yield_block(DATA_FROM_ANYA, &amp;QUESTIONS[:needs_data])}".
+
+  DONE
+    end
+
+  =begin rdoc
+  Wrapping a lambda call within a function can provide
+  default values for arguments.
+  =end
+❼   def SameTimeSamePlace.willow_ask(args = ['what', 'what'])
+      QUESTIONS[:needs_data][args]
+    end
+  =begin rdoc
+  Passing a block as an argument to a method
+  =end
+❽   def SameTimeSamePlace.yield_block(*args, &amp;block)
+      # yield with any necessary args is the same as calling block.call(*args)
+      yield(*args)    <em class="lineannotation"><span class="lineannotation">The<strong class="userinput"><code> yield</code></strong> Method</span></em>
+    end
+
+  end</pre></div><div class="sect3" title="The willow_and_anya.rb Script"><div class="titlepage"><div><div><h3 class="title"><a id="the_willow_and_anyarb_script"/>The willow_and_anya.rb Script</h3></div></div></div><a id="I_programlisting6_d1e10503"/><pre class="programlisting">  #!/usr/bin/env ruby -w
+  # willow_and_anya.rb
+
+  <a class="indexterm" id="idx-CHP-6-0656"/>%<a class="indexterm" id="idx-CHP-6-0657"/>w[him same_time_same_place].each do |lib_file|    <em class="lineannotation"><span class="lineannotation">Arrays with<strong class="userinput"><code> %w</code></strong></span></em>
+    require "#{lib_file}"
+  end
+
+  [Him, SameTimeSamePlace].each do |episode|
+❾   puts episode.describe()
+  end</pre></div></div><div class="sect2" title="How It Works"><div class="titlepage"><div><div><h2 class="title"><a id="how_it_works-id023"/>How It Works</h2></div></div></div><p>This script performs some complex operations. Let’s consider each class individually and then look at the separate script that uses them.<a class="indexterm" id="idx-CHP-6-0658"/><a class="indexterm" id="idx-CHP-6-0659"/><a class="indexterm" id="idx-CHP-6-0660"/></p><div class="sect3" title="The Him Class: Creating Procs with lambda"><div class="titlepage"><div><div><h3 class="title"><a id="the_him_class_creating_procs_with_lambda"/>The Him Class: Creating Procs with lambda</h3></div></div></div><p>We define a class called <code class="literal">Him</code> at ❶. It has three constants: its own <code class="literal">EPISODE_NAME</code>, a <code class="literal">BASE</code> item, and a <code class="literal">lambda</code> operation to create an <code class="literal">ANTIDOTE_FOR</code> something.<sup>[<a class="footnote" href="#ftn.CHP-6-FNOTE-4" id="CHP-6-FNOTE-4">19</a>]</sup> It has one class method called <code class="literal">Him.describe</code> (❷) that returns a long String constructed via a <code class="literal">here doc</code>. Remember that you can call a Proc with either <code class="literal">some_proc.call(args)</code> or <code class="literal">some_proc[args]</code>. In this case, we’ll use the shorter bracket version again. We’ll report that the character named Willow refers to the antidote for the base spell. Her associate Anya then mentions the antidote for that antidote. Whedon avoided yet another call to the antidote-creating Proc in his show, but our method will continue, outputting the antidote for the antidote for the antidote.</p></div><div class="sect3" title="The SameTimeSamePlace Class: Alternatives to lambda for Creating Procs"><div class="titlepage"><div><div><h3 class="title"><a id="the_sametimesameplace_class_alternatives"/>The SameTimeSamePlace Class: Alternatives to lambda for Creating Procs</h3></div></div></div><p>Our next class explores more options. <code class="literal">SameTimeSamePlace</code> starts at ❸ and it defines a Hash constant called <code class="literal">QUESTIONS</code> right away at ❹. Its keys are Symbols, and its values are Procs. Up until now, we’ve always created Procs with the <code class="literal">lambda</code> method, but we know that Procs are instances of the class Proc. Traditionally, you can create an instance by calling the new method on a class. Let’s try that in irb.<a class="indexterm" id="idx-CHP-6-0664"/><a class="indexterm" id="idx-CHP-6-0665"/></p><a id="I_programlisting6_d1e10607"/><pre class="programlisting">irb(main):001:0&gt; is_even_proc1 = lambda { |x| (x % 2).zero? }
+=&gt; #&lt;Proc:0xb7cb687c@(irb):1&gt;
+irb(main):002:0&gt; is_even_proc2 = Proc.new { |x| (x % 2).zero? }
+=&gt; #&lt;Proc:0xb7cacb4c@(irb):2&gt;
+irb(main):003:0&gt; is_even_proc1.call(7)
+=&gt; false
+irb(main):004:0&gt; is_even_proc2.call(7)
+=&gt; false
+irb(main):005:0&gt; is_even_proc1.call(8)
+=&gt; true
+irb(main):006:0&gt; is_even_proc2.call(8)
+=&gt; true</pre><p>That seems to work fine, and each Proc behaves as expected. In actual practice, there is little difference between <a class="indexterm" id="idx-CHP-6-0666"/>Procs created via <code class="literal">lambda</code> and Procs created via <code class="literal">Proc.new</code>. <code class="literal">Proc.new</code> is a bit more <a class="indexterm" id="idx-CHP-6-0667"/>flexible about how it handles arguments, which we’ll soon see. For now, note that the value for the key <code class="literal">:ternary</code> in our <code class="literal">QUESTIONS</code> Hash at ❹ is a Proc that asks if someone named Spike has a certain <code class="literal">state</code> (which is neither already known nor static) in a certain <code class="literal">location</code> (which is also neither already known nor static).</p><div class="note" title="Note"><h3 class="title"><a id="note-41"/>Note</h3><p><span class="emphasis"><em>Don’t be fooled by this script’s surface-level silliness. It actually clarifies some very interesting behavior in Ruby’s Procs with regard to arguments and arity. Later scripts that use these techniques for tasks that are more useful in the real world include scripts that convert temperatures and play audio files for a radio station</em></span>.<a class="indexterm" id="idx-CHP-6-0668"/><a class="indexterm" id="idx-CHP-6-0669"/></p></div></div><div class="sect3" title="Flexible Arity for Proc.new"><div class="titlepage"><div><div><h3 class="title"><a id="flexible_arity_for_procnew"/>Flexible Arity for Proc.new</h3></div></div></div><p>Next, we’ll start exploring <code class="literal">Proc.new</code> more for the <code class="literal">:unless0th</code> Symbol key. You’ll notice that the <code class="literal">*args</code> argument to this Proc has a preceding asterisk. This option is available to Procs created with <code class="literal">Proc.new</code>, but not to Procs created with <code class="literal">lambda</code>. It indicates that the argument with the asterisk is optional. Immediately inside the <code class="literal">:unless0th</code> Proc, we set the value of <code class="literal">args</code> if it has no value at the zeroth index; then we output the same question as the <code class="literal">:ternary</code> version. The only difference is that the <code class="literal">args</code> Array is optional for this version. Note also that we create our double <code class="literal">“what”</code> default Array with a <code class="literal">%w</code> with slash delimiters. This is a very handy way to create <a class="indexterm" id="idx-CHP-6-0670"/>single-word Arrays.<a class="indexterm" id="idx-CHP-6-0671"/><a class="indexterm" id="idx-CHP-6-0672"/></p><p>For the <code class="literal">:nitems</code> Symbol key, we use an optional <code class="literal">*args</code> with <code class="literal">Proc.new</code> again. The only difference between this version and the <code class="literal">:unless0th</code> version is the way this tests <code class="literal">args</code>. In this version, we call the <code class="literal">nitems</code> method on the <code class="literal">args</code> Array, which returns the number of non-<code class="literal">nil</code> items. That number needs to be two or greater; if it isn’t, that means we don’t have enough elements, and so we will replace <code class="literal">args</code> with our default set of two <code class="literal">“what”</code>s, just as in the previous Procs.<a class="indexterm" id="idx-CHP-6-0673"/><a class="indexterm" id="idx-CHP-6-0674"/></p><p>For the <code class="literal">:second_or</code> Symbol key, we see yet another Proc within optional <code class="literal">args</code> created with <code class="literal">Proc.new</code>. This version simply tests whether or not the second item in the <code class="literal">args</code> Array can be read. If it cannot be read, we replace <code class="literal">args</code> just as in the <code class="literal">:nitems</code> version.<a class="indexterm" id="I_indexterm6_d1e10771"/></p><p>Finally, we create a Proc the way we always have, using <code class="literal">lambda</code>. Since arguments to <code class="literal">lambda</code> Procs are not optional, we identify this one with the Symbol <code class="literal">:needs_data</code>. Note that this makes the internals of the Proc simpler. It returns its output value, and we assume that it gets what it needs. After defining our <a class="indexterm" id="idx-CHP-6-0675"/>Procs, the last of which needs data, we should probably have some data. Our source is Anya again, and we define her <code class="literal">DATA_FROM_ANYA</code> Array at ❺.<a class="indexterm" id="idx-CHP-6-0676"/></p><p>On to the method <code class="literal">SameTimeSamePlace.describe</code> at ❻. It takes no arguments and defines a local Array variable called <code class="literal">same_as_procs</code>. Its first element is the return value of calling <code class="literal">SameTimeSamePlace.yield_block</code> (defined at ❽) with an argument that is the Proc associated with the <code class="literal">:nitems</code> key in the <code class="literal">QUESTIONS</code> Hash. All of this is cast into a block with the ampersand. We haven’t seen the <code class="literal">yield_block</code> method yet, but it takes two arguments: <code class="literal">*args</code> and <code class="literal">&amp;block</code>. The first of these indicates <span class="emphasis"><em>All of your regular arguments</em></span>, and the second means <span class="emphasis"><em>Whatever block you got</em></span>.<a class="indexterm" id="idx-CHP-6-0677"/></p></div><div class="sect3" title="Blocks, Arguments, and yield"><div class="titlepage"><div><div><h3 class="title"><a id="blocks_arguments_and_yield"/>Blocks, Arguments, and yield</h3></div></div></div><p>Remember how I mentioned that blocks are not considered “real” arguments? Using an ampersand is the way to explicitly refer to the block used to call a method. Since we have the group of arguments, whatever they may be, and we have the block, we could call it via <code class="literal">block.call(*args)</code>. That approach would work, but we have yet another alternative. Ruby has a method called <code class="literal">yield</code> that means <span class="emphasis"><em>Call whichever block you received with whichever arguments are passed to</em></span> <em class="replaceable"><code>yield</code></em>. When you get comfortable with this <a class="indexterm" id="idx-CHP-6-0678"/>script, try replacing the <code class="literal">yield</code> line in <code class="literal">yield_block</code> with <code class="literal">block.call(*args)</code>. It will not change the script’s behavior at all. Let’s verify some of this in irb.</p><a id="I_programlisting6_d1e10865"/><pre class="programlisting">irb(main):001:0&gt; def yield_block(*args, &amp;block)
+irb(main):002:1&gt; yield(*args)
+irb(main):003:1&gt; end
+=&gt; nil
+irb(main):004:0&gt; yield_block(0) { |x| x + 1 }
+=&gt; 1
+irb(main):005:0&gt; yield_block("I am a String") { |x| x.class }
+=&gt; String
+irb(main):006:0&gt; yield_block("How many words?") { |x| x.split(' ').nitems }
+=&gt; 3
+irb(main):007:0&gt; yield_block(0, 1) { |x,y| x == y }
+=&gt; false
+irb(main):008:0&gt; yield_block(0, 1) { |x,y| x &lt; y }
+=&gt; true</pre><p>Handy, isn’t it? The <code class="literal">yield_block</code> method is completely generic, taking any number of regular arguments and any block and executing (or <code class="literal">yield</code>ing) that block with those arguments. It’s a very powerful technique.</p><p>Now we understand how our script is using the <code class="literal">yield_block</code> method within <code class="literal">SameTimeSamePlace.describe</code> (❻). The next two elements of <code class="literal">same_as_procs</code> are the return values of Procs pulled out of the <code class="literal">QUESTIONS</code> Hash with the <code class="literal">call</code> method. Our last element is the return value of <code class="literal">SameTimeSamePlace.willow_ask</code> (❼). This method provides a workaround for Procs created with <code class="literal">lambda</code> that need a specific number of arguments. <code class="literal">willow_ask</code> wraps a call to such a Proc within a traditional method that takes an optional argument. That argument is forcibly set to whatever the Proc expects before it ever gets to the Proc. This is another alternative for dealing with the arguments to a Proc.<a class="indexterm" id="I_indexterm6_d1e10902"/></p><p>That’s it for the elements of our <code class="literal">same_as_procs</code> Array. Now let’s use it. We <code class="literal">return</code> a long <code class="literal">here doc</code> String inside <code class="literal">SameTimeSamePlace.describe</code> (❻). This <code class="literal">here doc</code> String consists of several lines. The first calls the <code class="literal">QUESTIONS[:ternary]</code> Proc with one explicitly <code class="literal">nil</code> argument. This will cause our <code class="literal">state</code> and <code class="literal">location</code> variables to be set to their default values within the Proc. The next four lines of output are the result of mapping a String outputter onto the elements of <code class="literal">same_as_procs</code>. Remember that those elements are the <code class="literal">return</code> values of their respective Procs, not the Procs themselves. They have already been evaluated before being put into the Array.<a class="indexterm" id="idx-CHP-6-0679"/></p><p>The last few lines of the <code class="literal">here doc</code> report the data provided by Anya, which is defined as the constant Array <code class="literal">DATA_FROM_ANYA</code> (❺). We call the <code class="literal">yield_block</code> method, passing in <code class="literal">DATA_FROM_ANYA</code> as the “real” arguments and the value returned from <code class="literal">QUESTIONS[:needs_data]</code>, cast from a Proc into a block. Then we close our <code class="literal">here doc</code> and end the <code class="literal">SameTimeSamePlace.describe</code> method.</p></div><div class="sect3" title="Using Both Him and SameTimeSamePlace in willow_and_anya.rb"><div class="titlepage"><div><div><h3 class="title"><a id="using_both_him_and_sametimesameplace_in_"/>Using Both Him and SameTimeSamePlace in willow_and_anya.rb</h3></div></div></div><p>The first thing we do in the main running script, <code class="literal">willow_and_anya.rb</code>, is <code class="literal">require</code> each <code class="literal">lib_file</code> needed. Then we cycle through each class, referred to by the name <code class="literal">episode</code>, and describe that episode (❾), implemented in each specific case, as already discussed.<a class="indexterm" id="idx-CHP-6-0680"/></p></div></div><div class="sect2" title="Running the Script"><div class="titlepage"><div><div><h2 class="title"><a id="running_the_script-id019"/>Running the Script</h2></div></div></div><p>Let’s look at the output returned by executing <code class="literal">ruby -w willow_and_anya.rb</code>.</p></div><div class="sect2" title="The Results"><div class="titlepage"><div><div><h2 class="title"><a id="the_results-id021"/>The Results</h2></div></div></div><a id="I_programlisting6_d1e11002"/><pre class="programlisting">In Him,
+  Willow refers to an "anti-(love spell) spell".
+  Anya mentions an "anti-(anti-(love spell) spell) spell".
+  Xander mentioning an "anti-(anti-(anti-(love spell) spell) spell) spell"
+  might have been too much.
+
+In Same Time, Same Place,
+  Willow asks "Spike's what in the whatment?",
+  which is the same as "Spike's what in the whatment?"
+  which is the same as "Spike's what in the whatment?"
+  which is the same as "Spike's what in the whatment?"
+  which is the same as "Spike's what in the whatment?"
+  Anya provides "insane, base", which forms the full question
+  "Spike's insane in the basement?".</pre><p>That’s a lot of data about some pretty esoteric programming topics. Congratulations for sticking with me this far. If you’re genuinely curious about how this all works, I have some questions for you to ponder.</p></div><div class="sect2" title="Hacking the Script"><div class="titlepage"><div><div><h2 class="title"><a id="hacking_the_script-id013"/>Hacking the Script</h2></div></div></div><p>How would you duplicate just the successive <code class="literal">lambda</code> outputs of <code class="literal">Him.describe</code> using <code class="literal">inject</code>? Here’s what I came up with. Maybe you can find a better alternative.<a class="indexterm" id="idx-CHP-6-0681"/><a class="indexterm" id="idx-CHP-6-0682"/></p><a id="I_programlisting6_d1e11026"/><pre class="programlisting">def Him.<a class="indexterm" id="idx-CHP-6-0683"/>describe2(iterations=3)
+  (1..iterations).to_a.inject(BASE) do |memo,output|
+    ANTIDOTE_FOR[memo]
+  end
+end</pre><p>Another question you may find interesting is why the <code class="literal">describe</code> methods are attached to classes, rather than instances. The reason is that the <code class="literal">episode</code> variable at ❾ represents a class, not an instance. If we wanted to use instance methods, we would need to create an instance of either <code class="literal">Him</code> or <code class="literal">SameTimeSamePlace</code>, rather than just calling the <code class="literal">describe</code> method on each class directly.</p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-6-FNOTE-4" id="ftn.CHP-6-FNOTE-4">19</a>] </sup>I mentioned earlier in the book that <code class="literal">lambda</code>s can make excellent Class Constants. Now you can see that in action.<a class="indexterm" id="idx-CHP-6-0661"/><a class="indexterm" id="idx-CHP-6-0662"/><a class="indexterm" id="idx-CHP-6-0663"/></p></div></div></div>
+<div class="sect1" title="Chapter Recap"><div class="titlepage"><div><div><h1 class="title"><a id="chapter_recap-id004"/>Chapter Recap</h1></div></div></div><p>What was new in this chapter?</p><div class="itemizedlist"><ul class="itemizedlist"><li class="listitem"><p>Creating <a class="indexterm" id="idx-CHP-6-0684"/>Procs with <code class="literal">lambda</code></p></li><li class="listitem"><p>Using Procs as arguments to methods</p></li><li class="listitem"><p>Using blocks as arguments to methods, including your own new methods</p></li><li class="listitem"><p>Using Procs as first-class functions</p></li><li class="listitem"><p>The <code class="literal">inspect</code> method</p></li><li class="listitem"><p>Nesting <code class="literal">lambda</code>s within other <code class="literal">lambda</code>s</p></li><li class="listitem"><p><code class="literal">Proc.new</code></p></li><li class="listitem"><p>The <code class="literal">yield</code> method<a class="indexterm" id="I_indexterm6_d1e11098"/></p></li></ul></div><p>I have a confession to make. I love object orientation for many programming tasks, but this chapter about Ruby’s functional heritage was the most fun to write so far. Functional programming has been respected in academia for decades, and it is starting to get some well-deserved attention from folks in the computer programming industry and others who are just curious about what it can do. Now that we know some functional programming techniques, let’s put them to use and even try to optimize them, which is the subject of our next chapter.</p></div></body></html>

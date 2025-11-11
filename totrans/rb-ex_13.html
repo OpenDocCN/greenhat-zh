@@ -1,0 +1,457 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;13.&#xA0;A Simple Rails Project"><div class="titlepage"><div><div><h1 class="title"><a id="a_simple_rails_project"/>Chapter 13. A Simple Rails Project</h1></div></div></div><div class="informalfigure"><div class="mediaobject"><a id="I_mediaobject13_d1e20936"/><img alt="image with no caption" src="httpatomoreillycomsourcenostarchimages686190.png.jpg"/></div></div><p>In the previous chapter, you installed Rails and became acquainted with the basics of the internal structure of a Rails application. In this chapter, we’ll be <a class="indexterm" id="idx-CHP-13-1201"/>creating a Rails app that is a bit more complex—it retrieves multiple instances of a given data type from a database and iterates over those instances for presentation. We’ll also look into some more sophisticated ways of organizing code within Rails.</p><div class="sect1" title="Creating the Application"><div class="titlepage"><div><div><h1 class="title"><a id="creating_the_application"/>Creating the Application</h1></div></div></div><p>For our purposes, any simple application will suffice. I’ve chosen to create a <a class="indexterm" id="idx-CHP-13-1202"/>photo album that will display a few photos from my wedding. It will be able to display all of the photos in a list as thumbnail images with accompanying descriptive text, as well as display each individual image in greater detail. It will also provide navigation tools to allow the user to jump around within the list. All of this will be accomplished via HTML, the default presentation format for the Web. In addition, the <a class="indexterm" id="idx-CHP-13-1203"/>application will provide an <a class="indexterm" id="idx-CHP-13-1204"/>RSS feed (the XML format we used as a data source in <code class="literal">currency_converter2.rb</code>) that will describe all the images.</p><div class="sect2" title="Initial Creation"><div class="titlepage"><div><div><h2 class="title"><a id="initial_creation"/>Initial Creation</h2></div></div></div><p>We’ll create our application (called <code class="literal">photo_album</code>) within an appropriate directory with the command <code class="literal">rails photo_album</code>. Then type <code class="literal">cd photo_album</code> and <code class="literal">ruby script/server</code> to start the app. We can verify that Rails is running by browsing to http://localhost:3000, as we did in <a class="xref" href="ch12s02.html#viewing_your_rails_application" title="Viewing Your Rails Application">Viewing Your Rails Application</a> on page 230.</p></div><div class="sect2" title="Preparing the Database"><div class="titlepage"><div><div><h2 class="title"><a id="preparing_the_database"/>Preparing the Database</h2></div></div></div><p>For this application, I’ll be using the <a class="indexterm" id="idx-CHP-13-1205"/>MySQL database. I’ll assume that you can get MySQL running on your machine and are able to do simple queries. If that’s not the case, you may want to brush up on MySQL with a book specifically on that topic, such as <em class="citetitle">Managing and Using MySQL</em>, by George Reese, Randy Jay Yarger, and Tim King (O’Reilly, 2002). If you are using a database other than MySQL, I’ll assume you are able to work out the subtle differences in the resulting Rails app on your own, with the help of the documentation available from your database vendor and at <a class="ulink" href="http://rubyonrails.org">http://rubyonrails.org</a>.<a class="indexterm" id="idx-CHP-13-1206"/></p><p>One thing you may need to do is alter the config/database.yml file, especially if you’re using a database program other than MySQL. I had to edit the value for <code class="literal">socket:</code> to be <code class="literal">/var/run/mysqld/mysqld.sock</code>. If you get the error <code class="literal">No such file or directory - /tmp/mysql.sock</code>, a mismatch in the socket description is the most likely cause. Rails is looking for the MySQL socket file at <code class="literal">/tmp/mysql.sock</code>, and you need to set it to the right file location. You can find the location of the socket file with this command (preferably as root) on a Unix-like operating system: <code class="literal">find / mysqld.sock | grep mysqld.sock</code>.</p></div><div class="sect2" title="Adding Data"><div class="titlepage"><div><div><h2 class="title"><a id="adding_data"/>Adding Data</h2></div></div></div><p>The <a class="indexterm" id="idx-CHP-13-1207"/>photo album app differs from the simple structural example in <a class="xref" href="ch12.html" title="Chapter 12. RubyGems and Rails Preparation">Chapter 12</a> in that it has real data in a database, which we will now assume is handling that data. One of the most convenient ways to manage data for Rails (especially for simple test data like ours), is by using a migration. A <span class="emphasis"><em>migration</em></span> in Rails is a description of data in Ruby that is created and deleted as needed. Let’s take a look at our migration file at <code class="literal">db/migrate/001_create_photos.rb</code>:</p><a id="I_programlisting13_d1e21043"/><pre class="programlisting">  class CreatePhotos &lt; ActiveRecord::Migration    <em class="lineannotation"><span class="lineannotation"><a class="indexterm" id="idx-CHP-13-1208"/>Migrations</span></em>
+❶   COLUMN_NAMES = [:description, :image_path, :title, :photographer]
+
+❷   SAMPLE_PHOTOS = [
+      {
+        :title        =&gt; 'Tonawanda Creek',
+        :description  =&gt; 'A waterway in Tonawanda, NY.',
+        :image_path   =&gt; '001_creek.jpg',
+        :photographer =&gt; 'Vince',
+      },
+      {
+        :title        =&gt; 'Travis',
+        :description  =&gt; <a class="indexterm" id="idx-CHP-13-1209"/>%q[My friend Travis. His wife Laura's head is partly in
+  view as well.],
+        :image_path   =&gt; '002_travis.jpg',
+        :photographer =&gt; 'Vince',
+      },
+      {
+        :title        =&gt; 'Liam &amp; Ducks',
+        :description  =&gt; 'My nephew Liam with some ducks.',
+        :image_path   =&gt; '003_liam.jpg',
+        :photographer =&gt; 'Vince',
+      },
+    ]
+
+❸   def self.up
+
+❹     <a class="indexterm" id="idx-CHP-13-1210"/>create_table :photos do |t|
+        COLUMN_NAMES.each { |c| t.column c, :text }
+      end
+
+❺     SAMPLE_PHOTOS.each do |sp|
+        p = <a class="indexterm" id="idx-CHP-13-1211"/>Photo.create(sp)
+        p.save!
+      end
+
+    end
+
+❻   def self.down
+      drop_table :photos
+    end
+  end</pre><p>At ❶ and ❷, we define Constants for both the <code class="literal">COLUMN_NAMES</code> and <code class="literal">SAMPLE_PHOTOS</code>, which we use for data insertion. <code class="literal">COLUMN_NAMES</code> should be obvious, and each element of <code class="literal">SAMPLE_PHOTOS</code> is a Hash representing a database record, in which each key is the Symbol representation of a column name and the value is whatever data will be in that database field. At ❸, we define the <code class="literal">self.up</code> method, which contains all the code that will run when we perform our migration.</p><p>One of the most important tasks within <code class="literal">self.up</code> is the creation of the table, which is done at ❹. The <code class="literal">create_table</code> method takes a Symbol argument for the table name and a block describing what should be done to that table. In our case, <code class="literal">create_table</code> loops through the <code class="literal">COLUMN_NAMES</code>, <a class="indexterm" id="idx-CHP-13-1212"/>creating a column for table <code class="literal">t</code>, named with the current value of <code class="literal">c</code>, of type text.<a class="indexterm" id="I_indexterm13_d1e21107"/></p><div class="note" title="Note"><h3 class="title"><a id="note-67"/>Note</h3><p><span class="emphasis"><em>All our database table fields are of type text. If we had more complex data with different types, we would probably replace the Array <em class="replaceable"><code>COLUMN_NAMES</code></em> with a Hash called <em class="replaceable"><code>COLUMNS</code></em>, in which each key would be the column’s name and each key’s value would be the column’s data type</em></span>.</p></div><p>At ❺, we create a new Photo instance called <code class="literal">p</code>; it is based on each member of <code class="literal">SAMPLE_PHOTOS</code>, which we call <code class="literal">sp</code> in turn. We then <code class="literal">save!</code> each version of <code class="literal">p</code>, which stores its data into the database table. At ❻, we show that when we’re done with this migration, the <code class="literal">:photos</code> table will be dropped. We execute the migration with the command <code class="literal">rake db:migrate</code>. Let’s examine the results.<a class="indexterm" id="idx-CHP-13-1213"/></p><div class="note" title="Note"><h3 class="title"><a id="note-68"/>Note</h3><p><span class="emphasis"><em>Note that <em class="replaceable"><code>save!</code></em> is named with a bang, because it is destructive (since it saves to the database). Also, running <em class="replaceable"><code>rake db:migrate</code></em> runs whichever of your defined migrations is needed to make your migrations current. We only have one, so that’s the only one that runs</em></span>.</p></div><a id="I_programlisting13_d1e21159"/><pre class="programlisting">== CreatePhotos: migrating
+====================================================
+-- create_table(:photos)
+   -&gt; 0.1226s
+== CreatePhotos: migrated (0.3359s)
+===========================================</pre><p>The migration was successful. We can double check that by querying MySQL (or whichever database you’re using).</p><div class="note" title="Note"><h3 class="title"><a id="note-69"/>Note</h3><p><span class="emphasis"><em>At the prompt, I entered the password I have already set up for my specific MySQL installation. Yours is whatever you have already chosen, or it may be unset. This will depend on the specific way you installed MySQL on your machine</em></span>.</p></div><a id="I_programlisting13_d1e21169"/><pre class="programlisting">echo 'select * from photo_album_development.photos' | mysql -uroot -p
+Enter password:
+id      description     image_path      title   photographer
+1       A waterway in Tonawanda, NY.    001_creek.jpg   Tonawanda Creek Vince
+2       My friend Travis. His wife Laura's head is partly in view as well.
+002_travis.jpg   Travis  Vince
+3       My nephew Liam with some ducks. 003_liam.jpg    Liam &amp; Ducks    Vince</pre><p>We can now see that we have data in the database for use in our Rails app. Let’s move on to <a class="indexterm" id="idx-CHP-13-1214"/>creating the other portions of the app.</p></div><div class="sect2" title="Creating the Model and Controllers"><div class="titlepage"><div><div><h2 class="title"><a id="creating_the_model_and_controllers"/>Creating the Model and Controllers</h2></div></div></div><p>As you’ve already seen in the previous chapter, Rails makes it very easy to create Models, Controllers, and Views. For the <a class="indexterm" id="idx-CHP-13-1215"/>photo album application, we’ll be creating a Model called <span class="emphasis"><em>Photo</em></span> and Controllers called <span class="emphasis"><em>Album</em></span> and <span class="emphasis"><em>Feed</em></span>.</p><div class="sect3" title="Creating the Photo Model"><div class="titlepage"><div><div><h3 class="title"><a id="creating_the_photo_model"/>Creating the Photo Model</h3></div></div></div><p>Within the <code class="literal">photo_album</code> directory, execute <code class="literal">ruby script/generate model photo</code>, which creates the Model file <code class="literal">app/models/photo.rb</code>.</p></div><div class="sect3" title="Creating the Album and Feed Controllers"><div class="titlepage"><div><div><h3 class="title"><a id="creating_the_album_and_feed_controllers"/>Creating the Album and Feed Controllers</h3></div></div></div><p>Next, within <code class="literal">photo_album</code>, execute <code class="literal">ruby script/generate controller album index show</code> and <code class="literal">ruby script/generate controller feed images</code>. These create the Album Controller with the <code class="literal">index</code> and <code class="literal">show</code> Views and the Feed Controller with the <code class="literal">images</code> View, implemented by multiple files within the <code class="literal">app/controllers</code> and <code class="literal">app/views</code> subdirectories.<a class="indexterm" id="idx-CHP-13-1216"/></p></div></div></div></div>
+<div class="sect1" title="Dissecting the Application"><div class="titlepage"><div><div><h1 class="title"><a id="dissecting_the_application"/>Dissecting the Application</h1></div></div></div><p>Now that we have created the basic skeleton of our application, let’s examine how it works. Think of this section as similar to the sections <a class="xref" href="ch11s06.html#the_code-id043" title="The Code">The Code</a> or <a class="xref" href="ch11s06.html#how_it_works-id042" title="How It Works">How It Works</a> in previous chapters.<a class="indexterm" id="idx-CHP-13-1217"/></p><div class="sect2" title="Dissecting the Photo Model"><div class="titlepage"><div><div><h2 class="title"><a id="dissecting_the_photo_model"/>Dissecting the Photo Model</h2></div></div></div><p>Our <a class="indexterm" id="idx-CHP-13-1218"/>photo album app has one basic piece of data, represented in a Model called Photo. Let’s add some code to what’s already there and explore what it does. Edit <code class="literal">app/models/photo.rb</code> to match the following:<a class="indexterm" id="I_indexterm13_d1e21274"/><a class="indexterm" id="I_indexterm13_d1e21277"/></p><a id="I_programlisting13_d1e21282"/><pre class="programlisting">  class Photo &lt; ActiveRecord::Base
+
+  =begin explain
+  Closely follows Object-Relational Model, each instance is
+  also a record in the table called 'photos'.
+  =end
+❶   def next_id()
+      return Photo.minimum(:id) if last_id?
+      next_id = @attributes['id'].to_i.succ
+      next_id.succ! until Photo.find(next_id)
+      next_id.to_s
+    end
+
+❷   def prev_id()
+      return Photo.maximum(:id) if first_id?
+      prev_id = (@attributes['id'].to_i - 1)
+      prev_id = (prev_id - 1) until Photo.find(prev_id)
+      prev_id.to_s
+    end
+
+    private
+
+❸   def last_id?()
+      @attributes['id'] == Photo.maximum(:id).to_s
+    end
+
+❹   def first_id?()
+      @attributes['id'] == Photo.minimum(:id).to_s
+    end
+
+
+  end</pre><p>At ❶ and ❷, we have the <code class="literal">next_id</code> and <code class="literal">prev_id</code> methods, respectively. Within them, we make free use of built-in Rails methods. One of these is <code class="literal">minimum</code>, which is available to all Models; it takes a Symbol argument that establishes which attribute of that Model the minimum status will be based on. Another method is the <code class="literal">find</code> method, which is a wrapper for SELECT statements in SQL that takes specific arguments for filtering. Also available in Rails is the <code class="literal">@attributes</code> instance variable, which is a Hash whose keys are the field names from the database table and whose values are that column’s content for that particular instance of the Model. The Photo instance representing the database record with the ID <code class="literal">2</code> would have an <code class="literal">@attributes[‘id’]</code> equal to <code class="literal">2</code>, for example.<a class="indexterm" id="idx-CHP-13-1219"/><a class="indexterm" id="idx-CHP-13-1220"/></p><p>At ❸ and ❹, we also have two private predicates that inform us if our Photo instance is the one with the <code class="literal">last_id?</code> and <code class="literal">first_id?</code>, respectively. We accomplish this by performing some simple equality testing with the known maximum and minimum <code class="literal">id</code> values. Note that the returned <code class="literal">id</code> values from <code class="literal">maximum</code> and <code class="literal">minimum</code> are Integers, while the values stored in <code class="literal">@attributes</code> are Strings. The <code class="literal">photo.rb</code> Model therefore makes liberal use of the <code class="literal">to_i</code> and <code class="literal">to_s</code> methods as needed.</p></div><div class="sect2" title="Dissecting the Controllers"><div class="titlepage"><div><div><h2 class="title"><a id="dissecting_the_controllers"/>Dissecting the Controllers</h2></div></div></div><p>Now that we understand our Photo Model, we need to interact with it in some way. That’s the job of one or more Controllers. Our photo album app has two Controllers, Album and Feed, each of which have their own Views.<a class="indexterm" id="idx-CHP-13-1221"/></p><div class="sect3" title="Dissecting the Album Controller"><div class="titlepage"><div><div><h3 class="title"><a id="dissecting_the_album_controller"/>Dissecting the Album Controller</h3></div></div></div><p>Similar to what we did with the Photo Model, let’s add code to the Album Controller and explore what it does. Edit <code class="literal">app/controllers/album_controller.rb</code> to match the following:</p><a id="I_programlisting13_d1e21370"/><pre class="programlisting">  class AlbumController &lt; ApplicationController
+
+  =begin explain
+  This metaprogramming directive allows us to define a specific
+  helper called FooterHelper in app/helpers/footer_helper.rb
+  that can be shared among multiple Controllers.
+  =end
+❶   helper :footer
+
+  =begin explain
+  As with HTML files, this is the default implicit behavior.
+  all_photos is found in app/controllers/application.rb
+  =end
+❷   def index()
+      @photos = all_photos()
+    end
+
+  =begin explain
+  Set up any instance variables to be used in the View
+  or Helper, such as @photo here.
+  =end
+
+❸   def <a class="indexterm" id="idx-CHP-13-1222"/>show()
+      @photo = Photo.find(params[:id])
+    end
+
+  end</pre><p>As is customary in an MVC application, <code class="literal">album_controller.rb</code> will be responsible for manipulating and processing data in ways that pertain to our photo album. In this particular case, <code class="literal">album_controller.rb</code>’s methods generally redirect to something defined in another file or simply provide a useful shortcut.</p><p>For this demonstration Rails app, I wanted to have an HTML <a class="indexterm" id="idx-CHP-13-1223"/>footer that would remain consistent across multiple pages within the Album Controller. The question is then how to implement that feature and where to place its code. One answer would be to duplicate the necessary code in every View that has the footer, but that would be bad design. A better option would be to place the footer creation code in the appropriate Controller and simply call that code in every View where it’s needed.</p><p>However, there are situations in which you’d want the code outside of the base Controller. What if you want to implement a common feature across multiple Controllers? Each Controller in a Rails app is a child of the next file we’ll look at (<code class="literal">app/controllers/application.rb</code>), so putting the code in that file is an option. Another option is to use what Rails calls <a class="indexterm" id="idx-CHP-13-1224"/>Helpers. <span class="emphasis"><em>Helpers</em></span> are add-ons to the MVC framework and are similar to the mixin concept we used in <code class="literal">to_lang.rb</code> in <a class="xref" href="ch10.html" title="Chapter 10. More Complex Utilities and Tricks, Part II">Chapter 10</a>. At ❶ in <code class="literal">album_controller.rb</code>, we see from the RDoc that our footer-related code is in a distinct file called <code class="literal">app/helpers/footer_helper.rb</code>, and we can make use of that code within <code class="literal">album_controller.rb</code> by simply including the line <code class="literal">helper :footer</code>. If we had a Helper at <code class="literal">app/helpers/credit_card_authorization_helper.rb</code>, we could make use of its code in a Controller with the line <code class="literal">helper :credit_card_authorization</code>, and so on. In true object-oriented fashion, this allows us to organize code according to problem domain or topic in separate files, make use of them where needed, and not have to worry about the specific implementations. Of course, we’ll discuss the implementation of the footer code when we get to <code class="literal">app/helpers/footer_helper.rb</code>, but it’s very convenient that <code class="literal">album_controller.rb</code> needn’t concern itself with that level of detail.<a class="indexterm" id="idx-CHP-13-1225"/><a class="indexterm" id="idx-CHP-13-1226"/></p><div class="note" title="Note"><h3 class="title"><a id="note-70"/>Note</h3><p><span class="emphasis"><em>Helpers are even defined as Modules, just as traditional mixins are. This application has a lot of code in Helper files, which I’ll describe shortly, after I talk about the Controllers</em></span>.</p></div><p>Along with the Helper inclusion at ❶, we also have definitions of methods corresponding to the <code class="literal">index</code> and <code class="literal">show</code> Views at ❷ and ❸. The <code class="literal">show</code> method at ❸ is merely a shortcut for the built-in Rails method <code class="literal">find</code>. In this case, it takes an argument of the <code class="literal">id</code> parameter passed into the web application, which is available to us as <code class="literal">params[:id]</code>. This is how we show the specific requested photo. The <code class="literal">index</code> method at ❷ is (as we know from <a class="xref" href="ch12.html" title="Chapter 12. RubyGems and Rails Preparation">Chapter 12</a>) the default method called when none is explicitly provided. It merely establishes an instance variable within the Controller called <code class="literal">@photos</code>. To do so, it calls a method named <code class="literal">all_photos</code>, which is defined in our next file, <code class="literal">app/controllers/application.rb</code>.<a class="indexterm" id="idx-CHP-13-1227"/><a class="indexterm" id="idx-CHP-13-1228"/></p><div class="note" title="Note"><h3 class="title"><a id="note-71"/>Note</h3><p><span class="emphasis"><em>The <em class="replaceable"><code>params</code></em> Hash in a Rails app is equivalent to  <em class="replaceable"><code>cgi.params</code></em>, which we saw in the <em class="replaceable"><code>simple_cgi.rb</code></em> script in <a class="xref" href="ch11.html" title="Chapter 11. CGI and the Web">Chapter 11</a></em></span>.</p></div></div><div class="sect3" title="Dissecting the Application Controller"><div class="titlepage"><div><div><h3 class="title"><a id="dissecting_the_application_controller"/>Dissecting the Application Controller</h3></div></div></div><p>The <code class="literal">application.rb</code> file in any Rails application describes the superclass of all Controllers. If there is any behavior or characteristic that you want to be truly universal across all Controllers, this is the place to put it.<a class="indexterm" id="idx-CHP-13-1229"/></p><div class="note" title="Note"><h3 class="title"><a id="note-72"/>Note</h3><p><span class="emphasis"><em>Note that you can modularize your code (i.e., break it down by topic into Helpers) and still make it universal. Just organize your code into Helpers, and then include all of those Helpers with <em class="replaceable"><code>helper</code></em> lines in <em class="replaceable"><code>app/controllers/application.rb</code></em>. Easy</em></span>.<a class="indexterm" id="idx-CHP-13-1230"/></p></div><p>Edit <code class="literal">app/controllers/application.rb</code> to match the following:</p><a id="I_programlisting13_d1e21541"/><pre class="programlisting">  # Filters added to this Controller apply to all Controllers in the
+  application.
+  # Likewise, all the methods added will be available for all Controllers.
+
+  class ApplicationController &lt; ActionController::Base
+    # Pick a unique cookie name to distinguish our session data from others'
+    session :session_key =&gt; '_photo_album_session_id'
+
+  =begin explain
+  Now all_photos() can be used in any other Controller.
+  =end
+❶   def all_photos()
+      Photo.find(:all)
+    end
+
+  end</pre><p>All we’ve done in this file is define the <code class="literal">all_photos</code> method at ❶. This is arguably silly, in that it only provides a slightly shorter way to call <code class="literal">Photo.find(:all)</code>. However, this is primarily a demonstration app, and it does show that <code class="literal">all_photos</code> is now available to any Controller, anywhere in the application.</p><div class="note" title="Note"><h3 class="title"><a id="note-73"/>Note</h3><p><span class="emphasis"><em>The session information is automatic, and it helps Rails disambiguate among multiple users that are using the app at the same time. For example, I can browse the entire list of photos with the Album’s <em class="replaceable"><code>index</code></em> View, while you simultaneously look in greater detail at the second photo with Album’s <em class="replaceable"><code>show</code></em> View</em></span>.</p></div></div><div class="sect3" title="Dissecting the Feed Controller"><div class="titlepage"><div><div><h3 class="title"><a id="dissecting_the_feed_controller"/>Dissecting the Feed Controller</h3></div></div></div><p>The Album Controller is not our only Controller. I also want to provide an <a class="indexterm" id="idx-CHP-13-1231"/>RSS feed of information about these images, and the Feed Controller is our way of doing so. Just like <code class="literal">album_controller.rb</code>, it descends from <code class="literal">app/controllers/application.rb</code>, so it has the <code class="literal">all_photos</code> method available to it.<a class="indexterm" id="idx-CHP-13-1232"/></p><p>Edit <code class="literal">app/controllers/feed_controller.rb</code> to match the following:<a class="indexterm" id="idx-CHP-13-1233"/></p><a id="I_programlisting13_d1e21598"/><pre class="programlisting">  class FeedController &lt; ApplicationController
+
+❶   CONTENT_TYPE = 'application/rss+xml'
+
+  =begin explain
+  all_photos() found in app/controllers/application.rb
+  =end
+❷   def <a class="indexterm" id="idx-CHP-13-1234"/>images()
+      @photos = all_photos()
+      @headers['Content-Type'] = CONTENT_TYPE
+    end
+
+  end</pre><p>At ❶, we define a constant for the <code class="literal">CONTENT_TYPE</code>, declaring something appropriate for an <a class="indexterm" id="idx-CHP-13-1235"/>RSS feed. Then at ❷, we declare our only method, <code class="literal">images</code>. It establishes the <code class="literal">@photos</code> instance variable just as <code class="literal">album_controller.rb</code> does, and also sets <code class="literal">@headers[‘Content-Type’]</code>. The <code class="literal">@headers</code> variable is, as you might expect, the variable used to define the HTTP headers of the application’s output. Before moving on to the Views, let’s see what’s going on in our Helper files.</p></div></div><div class="sect2" title="Dissecting the Helpers"><div class="titlepage"><div><div><h2 class="title"><a id="dissecting_the_helpers"/>Dissecting the Helpers</h2></div></div></div><p>Models, Controllers, and Views are not the only types of files in a Rails app. I touched on the concept of <a class="indexterm" id="idx-CHP-13-1236"/>Helpers in our discussion of the Photo Model, but now we’ll explore them in depth.<a class="indexterm" id="idx-CHP-13-1237"/></p><div class="sect3" title="Dissecting the Album Helper"><div class="titlepage"><div><div><h3 class="title"><a id="dissecting_the_album_helper"/>Dissecting the Album Helper</h3></div></div></div><p>Edit <code class="literal">app/helpers/album_helper.rb</code> to match the following:<a class="indexterm" id="idx-CHP-13-1238"/><a class="indexterm" id="I_indexterm13_d1e21658"/></p><a id="I_programlisting13_d1e21663"/><pre class="programlisting">  module AlbumHelper
+
+❶   CONFIRM_MESSAGE = <a class="indexterm" id="idx-CHP-13-1239"/>%q[Are you sure you want to see the full list?]
+
+    NUMBER_OF_ROW_TYPES_FOR_DISPLAY = 3
+
+    LISTING_HEADER_COLUMNS =&lt;&lt;END_OF_HERE_DOC
+    &lt;tr&gt;
+      &lt;th&gt;Image&lt;/th&gt;
+      &lt;th&gt;Description&lt;/th&gt;
+    &lt;/tr&gt;
+  END_OF_HERE_DOC
+
+❷   IMAGE_STYLE = {
+      :base  =&gt; 'margin-bottom: 0.5em; padding: 0.5em;',
+      :thumb =&gt; 'height:48px; width:64px;'
+    }
+  =begin explain
+  Outputs a <a class="indexterm" id="idx-CHP-13-1240"/>CSS classname used for prettification.
+  =end
+❸   def <a class="indexterm" id="idx-CHP-13-1241"/>row_class_from_index(i)
+      'row' + ((i % NUMBER_OF_ROW_TYPES_FOR_DISPLAY) + 1).to_s
+    end
+
+❹   def <a class="indexterm" id="idx-CHP-13-1242"/>show_listing_header_columns()
+      LISTING_HEADER_COLUMNS
+    end
+
+❺   def <a class="indexterm" id="idx-CHP-13-1243"/>show_photo(photo)
+      image_tag(
+        photo.image_path,
+        :alt =&gt; "Photo of #{photo.title}"
+      )
+    end
+
+❻   def show_thumbnail_for_list(photo)
+      image_tag(
+        photo.image_path,
+        :alt   =&gt; "Photo of #{photo.title}",
+        :<a class="indexterm" id="idx-CHP-13-1244"/>style =&gt; IMAGE_STYLE[:thumb]
+      )
+    end
+
+❼   def page_title()
+      @photo ? @photo.title : controller.action_name
+    end
+
+❽   def title_with_thumbnail(photo)
+        [h(photo.title), show_thumbnail_for_list(photo)].join(
+            ApplicationHelper::HTML_BREAK
+          )
+    end
+
+  end</pre><p>At ❶, we start defining some useful Constants, including one of our old friends, a Hash with Symbol keys, at ❷. At ❸, we define a method called <code class="literal">row_class_from_index</code>, whose RDoc explains that it merely outputs text representing the appropriate CSS class. This allows us to change the CSS style of a row easily, and the modulus makes it repeat. At ❹, we have a method called <code class="literal">show_listing_header_columns</code> that simply returns the corresponding Constant. The <code class="literal">show_photo</code> method at ❺ uses the built-in Rails method <code class="literal">image_tag</code>, which takes the location of the image (the <code class="literal">src</code> attribute of the <code class="literal">img</code> tag, in other words) as the first argument. The second argument is a Hash whose keys will be any additional <code class="literal">img</code> attributes and whose values will be used as the values for the corresponding <code class="literal">img</code> attributes. The location (i.e., <code class="literal">img src</code>) is the <code class="literal">photo</code>’s <code class="literal">image_path</code>, and since all <code class="literal">img</code> tags should have an <code class="literal">alt</code> attribute, we provide that, with an appropriate identifying String based on the <code class="literal">photo</code>’s <code class="literal">title</code>. At ❻, we define <code class="literal">show_thumbnail_for_list</code>, which is a <a class="indexterm" id="idx-CHP-13-1245"/>Helper method for presentation that is very similar to <code class="literal">show_photo</code>. It only differs by including a <code class="literal">style</code> attribute for the resulting <code class="literal">img</code> tag, whose value is <code class="literal">IMAGE_STYLE[:thumb]</code>.<a class="indexterm" id="idx-CHP-13-1246"/></p><div class="note" title="Note"><h3 class="title"><a id="note-74"/>Note</h3><p><span class="emphasis"><em>One easy way to refactor this code (meaning to change its internal structure without changing its overall behavior) would be to combine <em class="replaceable"><code>show_photo</code></em> and <em class="replaceable"><code>show_thumbnail_for_list</code></em> into a single <em class="replaceable"><code>show_photo</code></em> method that takes an optional third argument, which declares whether or not the photo is a thumbnail. You can read more about the process of refactoring in Martin Fowler’s book</em></span> Refactoring (<span class="emphasis"><em>Addison-Wesley Professional, 1999</em></span>).<a class="indexterm" id="idx-CHP-13-1247"/><a class="indexterm" id="idx-CHP-13-1248"/></p></div><p>Next, at ❼, we define <code class="literal">page_title</code>. If there is a <code class="literal">@photo</code> present, <code class="literal">page_title</code> will return that <code class="literal">@photo</code>’s <code class="literal">title</code>. If there is no <code class="literal">@photo</code>, it will fall back to the <code class="literal">action_name</code> of the <code class="literal">controller</code>. What does that mean? The <code class="literal">@photo.title</code> should be straightforward. The <code class="literal">action_name</code> is essentially the name of the View. This means that when we browse using the <code class="literal">index</code> View (or <code class="literal">action_name</code>) and have not yet selected a specific photo to view in greater detail with the <code class="literal">show</code> View, the <code class="literal">page_title</code> will simply be <code class="literal">index</code>.</p><p>Finally, at ❽, we define <code class="literal">title_with_thumbnail</code>. It uses several other methods and Constants. Rails has a built-in method called <code class="literal">h</code>, which formats its input for HTML presentation. For example, <code class="literal">h(&amp;)</code> returns <code class="literal">&amp;amp;</code>. This is useful in our app because we have a photo whose title is <span class="emphasis"><em>Liam &amp; Ducks</em></span>, but we don’t want that ampersand to break the HTML validity of the output. The <code class="literal">title_with_thumbnail</code> method uses our home-brewed <code class="literal">show_thumbnail_for_list</code> and <code class="literal">join</code>s it with <code class="literal">page_title</code>, using whatever we’ve defined <code class="literal">HTML_BREAK</code> to be within the <code class="literal">ApplicationHelper</code>.<a class="indexterm" id="idx-CHP-13-1249"/><a class="indexterm" id="idx-CHP-13-1250"/></p><div class="sidebar"><a id="where_to_put_codeltlbgtcontroller_or_hel"/><p class="title">WHERE TO PUT CODE: CONTROLLER OR HELPER (OR ELSEWHERE)?</p><p>As you can see, the <a class="indexterm" id="idx-CHP-13-1251"/>Album Helper is noticeably bigger than the Controller it aids. When should you put code in the Controller, and when should you put it in a Helper? That’s a good question. When there isn’t a clear division by topic, such as for the <code class="literal">footer_helper.rb</code> below, it becomes more difficult to answer. When something is truly fundamental to the data, such as the Photo methods that directly pertain to ids, it probably belongs in the Model. When something is completely presentationspecific, it can probably go in the appropriate View. However, it’s considered bad style to have too much dynamic content in a <a class="indexterm" id="idx-CHP-13-1252"/>View file. Anything more complicated than looping over a set of items should probably be abstracted into a method, rather than being in the View itself.</p><p>That leaves either the Controller or a Helper. As you can see, I like to have a fairly sparse, minimalist Controller—critics might say that makes my <a class="indexterm" id="idx-CHP-13-1253"/>Helpers too busy. Other coders might put many methods directly in the Controller, making little use of <a class="indexterm" id="idx-CHP-13-1254"/>Helpers at all. Still others might have broken anything related to thumbnail images into yet another Helper called <code class="literal">thumbnail_helper.rb</code>.</p><p>There are many options. As long as you don’t put presentation-related methods in your Model, and you keep your Views relatively free of code that actually does <span class="emphasis"><em>stuff</em></span> (instead including mostly code that <span class="emphasis"><em>presents stuff</em></span>), you’re probably doing fine.</p></div></div><div class="sect3" title="Dissecting the ApplicationHelper"><div class="titlepage"><div><div><h3 class="title"><a id="dissecting_the_applicationhelper"/>Dissecting the ApplicationHelper</h3></div></div></div><p>We’ve already seen that <code class="literal">album_helper.rb</code> expects a definition for <code class="literal">HTML_BREAK</code> within <code class="literal">ApplicationHelper</code>. Let’s see how it does it.</p><p>Edit <code class="literal">app/helpers/application.rb</code> to match the following:<a class="indexterm" id="idx-CHP-13-1255"/><a class="indexterm" id="idx-CHP-13-1256"/></p><a id="I_programlisting13_d1e21951"/><pre class="programlisting"># Methods added to this helper will be available to all templates in the
+application.
+module ApplicationHelper
+
+  HTML_BREAK = '&lt;br /&gt;'
+
+end</pre><p>There isn’t much there—it’s basically just the Constant definition we expected. Why is it defined here, and not in <code class="literal">AlbumHelper</code>? Because we’ll also need it in <code class="literal">FooterHelper</code>. Note that while Controllers automatically descend from <code class="literal">ApplicationController</code>, <a class="indexterm" id="idx-CHP-13-1257"/>Helpers don’t automatically descend from <code class="literal">ApplicationHelper</code>.</p></div><div class="sect3" title="Dissecting the FeedHelper"><div class="titlepage"><div><div><h3 class="title"><a id="dissecting_the_feedhelper"/>Dissecting the FeedHelper</h3></div></div></div><p>Edit <code class="literal">app/helpers/feed_helper.rb</code> to match the following:<a class="indexterm" id="idx-CHP-13-1258"/></p><a id="I_programlisting13_d1e21988"/><pre class="programlisting">  module FeedHelper
+
+❶   AUTHOR      = 'Kevin C. Baird'
+
+    DESCRIPTION = <a class="indexterm" id="idx-CHP-13-1259"/>%q{Photos from Jenn and Kevin's Wedding}
+
+    ICON        = {
+      :url    =&gt; 'rails.png',
+      :width  =&gt; 77,
+      :height =&gt; 69,
+    }
+
+    LANGUAGE    = 'en-us'
+
+❷   LINK_OPTIONS_DEFAULTS = {
+        :only_path  =&gt; false,
+        :controller =&gt; 'album',
+    }
+
+❸   LINK_OPTIONS = {
+      :index =&gt; LINK_OPTIONS_DEFAULTS.merge( { :action =&gt; 'index' } ),
+      :show  =&gt; LINK_OPTIONS_DEFAULTS.merge( { :action =&gt; 'show'  } ),
+    }
+
+    RSS_OPTIONS = {
+      'version'  =&gt; '2.0',
+      'xmlns:dc' =&gt; 'http://purl.org/dc/elements/1.1/'
+    }
+    TITLE       = 'Baird/Cornish Wedding Photos'
+
+❹   def <a class="indexterm" id="idx-CHP-13-1260"/>feed_description()
+      h( DESCRIPTION )
+    end
+
+❺   def <a class="indexterm" id="idx-CHP-13-1261"/>rss_url_for_image(image)
+      return <a class="indexterm" id="idx-CHP-13-1262"/>url_for( FeedHelper::LINK_OPTIONS[:index] ) unless image
+      url_for( FeedHelper::LINK_OPTIONS[:show].merge( { :id =&gt; image } ) )
+    end
+
+  end</pre><p>At ❶, we start with our usual Constant declarations. These include a declaration at ❷ for <code class="literal">LINK_OPTIONS_DEFAULTS</code>, which stores information common across multiple types of links, and one for <code class="literal">LINK_OPTIONS</code> at ❸, which uses these defaults and also adds a pair whose key is <code class="literal">:action</code> and whose value is either <code class="literal">:index</code> or <code class="literal">:show</code>, depending on how it’s called. These <code class="literal">:index</code> and <code class="literal">:show</code> values represent Views within the Album Controller, of course, as the value for <code class="literal">:controller</code> in <code class="literal">LINK_OPTIONS_DEFAULTS</code> indicates. <code class="literal">FeedHelper</code> also defines several other Constants with values useful for an RSS <a class="indexterm" id="idx-CHP-13-1263"/>feed.</p><p>At ❹ we have a method called <code class="literal">feed_description</code>, which simply passes the value of the <code class="literal">DESCRIPTION</code> Constant through the Rails built-in method <code class="literal">h</code>, which we’ve already seen and which formats for HTML presentation. Finally, <code class="literal">rss_url_for_image</code> at ❺ is a wrapper we’ve built around the Rails method <code class="literal">url_for</code>, which behaves as its name suggests. (It is described in greater detail at <a class="ulink" href="http://api.rubyonrails.org/classes/ActionView/Helpers/UrlHelper.html#M000484">http://api.rubyonrails.org/classes/ActionView/Helpers/UrlHelper.html#M000484</a>.) If an <code class="literal">image</code> is not passed in, <code class="literal">rss_url_for_image</code> returns the <code class="literal">url_for</code> the <code class="literal">LINK_OPTIONS</code> appropriate for an <code class="literal">:index</code> View. If there is an <code class="literal">image, rss_url_for_image</code> returns the <code class="literal">url_for</code> the <code class="literal">LINK_OPTIONS</code> appropriate for a <code class="literal">:show</code> View and includes the <code class="literal">:id</code> of the image to be shown.</p><div class="note" title="Note"><h3 class="title"><a id="note-75"/>Note</h3><p><span class="emphasis"><em>The behavior of <em class="replaceable"><code>rss_url_for_image</code></em>, which differs depending on whether or not there is an <em class="replaceable"><code>image</code></em>, is similar to the potential melding of <em class="replaceable"><code>AlbumHelper.show_photo</code></em> and <em class="replaceable"><code>AlbumHelper.show_thumbnail_for_list</code></em> proposed earlier</em></span>.</p></div></div><div class="sect3" title="Dissecting the FooterHelper"><div class="titlepage"><div><div><h3 class="title"><a id="dissecting_the_footerhelper"/>Dissecting the FooterHelper</h3></div></div></div><p>Edit <code class="literal">app/helpers/footer_helper.rb</code> to match the following:<a class="indexterm" id="idx-CHP-13-1264"/><a class="indexterm" id="idx-CHP-13-1265"/></p><a id="I_programlisting13_d1e22133"/><pre class="programlisting">  module FooterHelper
+❶   BAR_SEPARATOR = <a class="indexterm" id="idx-CHP-13-1266"/>%q[ | ]
+
+    RSS = {
+
+      :icons =&gt; %w[feed-icon16x16.png xmlicon.png],
+
+      :link_options =&gt; {
+        :action     =&gt; %q[images],
+                :controller =&gt; <a class="indexterm" id="idx-CHP-13-1267"/>%q[feed],
+         }
+
+         }
+
+❷      def <a class="indexterm" id="idx-CHP-13-1268"/>show_footer()
+       '&lt;p id="rails_img_wrapper"&gt;' +
+       [<a class="indexterm" id="idx-CHP-13-1269"/>rails_link_to_top, <a class="indexterm" id="idx-CHP-13-1270"/>rss_icon_links].join(
+         ApplicationHelper::HTML_BREAK
+       ) + '&lt;/p&gt;'
+      end
+
+      private
+
+❸     def rails_link_to_top()
+        link_to(    <em class="lineannotation"><span class="lineannotation">The<strong class="userinput"><code> link_to</code></strong> and<strong class="userinput"><code> image_tag</code></strong> Methods</span></em>
+          image_tag(
+            'rails.png',
+            :alt    =&gt; 'Home',
+            :border =&gt; 0,
+            :id     =&gt; 'rails_img',
+            :style  =&gt; AlbumHelper::IMAGE_STYLE[:base]
+          ), :controller =&gt; 'album'
+        )
+      end
+
+❹     def rss_icon_links()
+        RSS[:icons].map do |icon|
+          link_to(
+            image_tag(
+            icon,
+            :alt   =&gt; 'RSS Feed',
+            :class =&gt; 'xmlicon'
+          ), RSS[:link_options]
+        )
+      end.join(BAR_SEPARATOR)
+    end
+
+  end</pre><p>At ❶, we define two Constants, <code class="literal">BAR_SEPARATOR</code> and <code class="literal">RSS</code>. The <code class="literal">BAR_SEPARATOR</code> Constant is a simple delimiter for presentation, while <code class="literal">RSS</code> is another Hash with Symbol keys that details information pertinent to <code class="literal">:icons</code> and <code class="literal">:link_options</code>, respectively. In these definitions, I’ve used <code class="literal">%q[]</code> instead of single quotes to define <code class="literal">BAR_SEPARATOR</code>, just as a reminder that the option is available.<sup>[<a class="footnote" href="#ftn.CHP-13-FNOTE-1" id="CHP-13-FNOTE-1">37</a>]</sup></p><p>At ❷, our main public method, <code class="literal">show_footer</code>, just returns the outputs of the private methods <code class="literal">rails_link_to_top</code> and <code class="literal">rss_icon_links, join</code>ed on the <code class="literal">HTML_BREAK</code> Constant that we’ve already seen, and all wrapped in an HTML paragraph tag with the id <code class="literal">rails_img_wrapper</code>. We create our paragraph tag the old-fashioned way—by outputting plaintext. You can still do that <a class="indexterm" id="idx-CHP-13-1271"/>in Rails, although the availability of methods like <code class="literal">url_for</code> and <code class="literal">image_tag</code> make the practice uncommon.<a class="indexterm" id="idx-CHP-13-1272"/></p><p>So what do the private methods do? The <code class="literal">rails_link_to_top</code> method at ❸ just creates a link with the Rails built-in <code class="literal">link_to</code>, which takes the link argument and a Hash describing the <code class="literal">:controller</code> to be used: <code class="literal">‘album’</code>, in this case. The Hash can also describe the <code class="literal">:action</code>, if needed. The <code class="literal">rss_icon_links</code> method at ❹ <code class="literal">map</code>s an operation onto each member of <code class="literal">RSS[:icons]</code>. That operation is also a call to <code class="literal">link_to</code>, where the linked image is the current element within <code class="literal">RSS[:icons]</code> (called <code class="literal">icon</code>) and the Hash describing the <code class="literal">:controller</code> and <code class="literal">:action</code> is always <code class="literal">RSS[:link_options]</code>. The Array resulting from the <code class="literal">map</code> is then <code class="literal">join</code>ed on the <code class="literal">BAR_SEPARATOR</code>.<a class="indexterm" id="idx-CHP-13-1273"/><a class="indexterm" id="idx-CHP-13-1274"/></p></div></div><div class="sect2" title="Dissecting the Album Controller’s Views"><div class="titlepage"><div><div><h2 class="title"><a id="dissecting_the_album_controllers_views"/>Dissecting the Album Controller’s Views</h2></div></div></div><p>Now, let’s move on to the Views. Since we’ve already defined so much of the application in methods within either the Model, Controller, or various <a class="indexterm" id="idx-CHP-13-1275"/>Helpers, our Views should be fairly sparse. View files differ from the files we’ve seen so far in that they are .rhtml files (similar to <code class="literal">mod_ruby_demo.rhtml</code>), not pure Ruby .rb files. That’s one of the reasons (apart from good application design principles) that having too much dynamic Ruby content in your View files is discouraged. It’s relatively easy to debug Ruby within Ruby, but it isn’t so easy when you have to keep shifting back and forth between Ruby and HTML.<a class="indexterm" id="idx-CHP-13-1276"/></p><div class="sect3" title="Dissecting the index View"><div class="titlepage"><div><div><h3 class="title"><a id="dissecting_the_index_view"/>Dissecting the index View</h3></div></div></div><p>Edit <code class="literal">app/views/album/index.rhtml</code> to match the following:<a class="indexterm" id="idx-CHP-13-1277"/><a class="indexterm" id="I_indexterm13_d1e22328"/><a class="indexterm" id="I_indexterm13_d1e22331"/><a class="indexterm" id="I_indexterm13_d1e22334"/></p><a id="I_programlisting13_d1e22339"/><pre class="programlisting">❶ &lt;!--
+  row_class_from_index()
+  show_listing_header_columns()
+  show_thumbnail_for_list()
+  all in app/<a class="indexterm" id="idx-CHP-13-1278"/>helpers/album_<a class="indexterm" id="idx-CHP-13-1279"/>helper.rb
+
+  @photos derived from AlbumController's index method
+
+  --&gt;
+
+  &lt;h1&gt;Listing photos&lt;/h1&gt;
+
+  &lt;table&gt;
+
+❷   &lt;%= show_listing_header_columns() %&gt;
+
+❸   &lt;% @photos.each_with_index do |photo,i| -%&gt;
+    &lt;tr&gt;
+
+❹         &lt;td class="&lt;%= row_class_from_index(i) %&gt;"&gt;
+❺         &lt;%=
+                   link_to(
+                       title_with_thumbnail(photo),
+                       :action =&gt; 'show',
+                       :id =&gt; photo.id
+                   )
+          %&gt;
+        &lt;/td&gt;
+❻         &lt;td class="&lt;%= row_class_from_<a class="indexterm" id="idx-CHP-13-1280"/>index(i) %&gt;"&gt;
+❼         &lt;%= photo.description %&gt;
+      &lt;/td&gt;
+
+      &lt;/tr&gt;
+❽     &lt;% end %&gt;
+
+  &lt;/table&gt;
+
+  &lt;hr /&gt;
+
+❾ &lt;%= show_footer %&gt;</pre><p>At ❶, we have HTML comments explaining where to find the methods that we put to use within this file. The file then continues with ordinary, unsurprising HTML. You may wonder why there are no <code class="literal">&lt;html&gt;, &lt;head&gt;</code>, or <code class="literal">&lt;body&gt;</code> tags. For that answer, you’ll have to wait until we introduce the concept of layouts and describe the file <code class="literal">app/views/layouts/album.rhtml</code> later in this chapter.<a class="indexterm" id="idx-CHP-13-1281"/></p><p>The first appearance of Ruby at ❷ is a call to <code class="literal">show_listing_header_columns</code>, which we know (and which our HTML comments remind us) was defined in <code class="literal">app/helpers/album_helper.rb</code>. This allows the View to call a method whose name says what it does, without worrying about the implementation. Next, at ❸, we will loop through each <code class="literal">photo</code> within <code class="literal">@photos</code>, along with its index, which we’ll call <code class="literal">i</code>. You’ll notice that the <code class="literal">each_with_index</code> line ends its Ruby escape with <code class="literal">-%&gt;</code>, not just <code class="literal">%&gt;</code>. This tells Rails that there should not be an automatic carriage return in the interpreted output. It’s not critical here, but you can imagine this could be very useful within a <code class="literal">&lt;pre&gt;</code> tag, for example.<a class="indexterm" id="idx-CHP-13-1282"/></p><p>What do we do with each <code class="literal">photo</code>? We’ll present it within a table, applying the CSS class of <code class="literal">row_class_from_index(i)</code> to each <code class="literal">&lt;td&gt;</code> element at ❹. The content within that <code class="literal">&lt;td&gt;</code> element will be the result of a multi-line Ruby call that begins at ❺. Its value is the result of a <code class="literal">link_to</code> call on the <code class="literal">title_with_thumbnail</code> that points to the <code class="literal">‘show’ :action</code> and displays the photo identified by <code class="literal">photo.id</code>.</p><p>In addition to the thumbnail <code class="literal">&lt;td&gt;</code> cell, we also want another <code class="literal">&lt;td&gt;</code> cell that contains the photo’s description. That begins at ❻, with another call to <code class="literal">row_class_from_index</code>. Its <code class="literal">&lt;td&gt;</code> cell contains simply <code class="literal">photo.description</code> at ❼. We then close the <code class="literal">each_with_index</code> call from ❸ with <code class="literal">end</code> at ❽. Finally, at ❾ we call <code class="literal">show_footer</code>, which we’ve already discussed in <code class="literal">footer_helper.rb</code>.</p></div><div class="sect3" title="Dissecting the show View"><div class="titlepage"><div><div><h3 class="title"><a id="dissecting_the_show_view"/>Dissecting the show View</h3></div></div></div><p>Now let’s look at the <code class="literal">show</code> View, which displays a particular photo in greater detail. Edit <code class="literal">app/views/album/show.rhtml</code> to match the following:<a class="indexterm" id="idx-CHP-13-1283"/></p><a id="I_programlisting13_d1e22481"/><pre class="programlisting">  &lt;!--
+  image_tag is built in to Rails
+  prev_id and next_id are in app/models/photo.rb
+  show_photo is in app/helpers/album_helper.rb
+  --&gt;
+
+  &lt;table id="dark_bg"&gt;
+    &lt;tr&gt;
+      &lt;td&gt;
+        &lt;div class="photo"&gt;
+❶           &lt;%= show_photo( @photo ) %&gt;
+        &lt;/div&gt;
+      &lt;/td&gt;
+
+      &lt;td class="desc_wrapper"&gt;
+        &lt;div class="description"&gt;
+❷           &lt;h1&gt;&lt;%= h(@photo.title) %&gt;&lt;/h1&gt;
+❸           &lt;p class="description"&gt;&lt;%= @photo.description %&gt;&lt;/p&gt;
+        &lt;/div&gt;
+      &lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/table&gt;
+
+  &lt;hr style="clear:both;" /&gt;
+
+  &lt;ul class="navlinks"&gt;
+❹     &lt;li&gt;&lt;%=
+           link_to 'First',
+               :action =&gt; 'show',
+               :id     =&gt; Photo.minimum(:id)
+       %&gt;&lt;/li&gt;
+
+❺      &lt;li&gt;&lt;%=
+            link_to 'Previous',
+                :action =&gt; 'show',
+                :id     =&gt; @photo.prev_id %&gt;&lt;/li&gt;
+
+❻      &lt;li&gt;&lt;%=
+            link_to 'Next',
+                :action =&gt; 'show',
+                :id     =&gt; @photo.next_id     %&gt;&lt;/li&gt;
+
+❼      &lt;li&gt;&lt;%=
+            link_to 'Last',
+                :action =&gt; 'show',
+                :id     =&gt; Photo.maximum(:id) %&gt;&lt;/li&gt;
+
+       &lt;!-- You have the option of some GUI helpers in the optional parameters
+   hash --&gt;
+
+       &lt;!-- like :confirm for a JS confirm box --&gt;
+❽      &lt;li&gt;&lt;%= link_to(
+            'Full List',
+            { :action  =&gt; 'index' },
+            { :confirm =&gt; AlbumHelper::CONFIRM_MESSAGE }
+       ) %&gt;&lt;/li&gt;
+
+      &lt;!--
+           See RSS[:link_options] in app/helpers/footer_helper.rb
+           for how to link across multiple Controllers
+      --&gt;
+
+  &lt;/ul&gt;
+
+❾ &lt;%= show_footer %&gt;</pre><p>We start off again with some HTML reminder comments. The first real Ruby appears at ❶—it is a call to <code class="literal">show_photo</code> from AlbumHelper, passing in <code class="literal">@photo</code>, which is the particular photo instance that matches the <code class="literal">id</code> parameter used to call the <code class="literal">show</code> View. Then at ❷, we pass <code class="literal">@photo</code>’s <code class="literal">title</code> through the <code class="literal">h</code> formatter method, and at ❸, we wrap the <code class="literal">@photo</code>’s <code class="literal">description</code> within an appropriately classed paragraph tag.<a class="indexterm" id="idx-CHP-13-1284"/></p><p>Under a horizontal rule, we have an unordered list, each item of which is a call to the <code class="literal">link_to</code> method. At ❹, we provide a link called <code class="literal">‘First’</code> that <code class="literal">show</code>s the photo with the <code class="literal">minimum :id</code>. At ❺, the link destination <code class="literal">show</code>s the photo with the previous <code class="literal">id</code> via the text <code class="literal">‘Previous’</code>, and at ❻, the destination <code class="literal">show</code>s the Photo with the <code class="literal">next_id</code> via the text <code class="literal">‘Next’</code>. At ❼, it <code class="literal">show</code>s the <code class="literal">‘Last’</code> photo, defined as the one with the <code class="literal">maximum :id</code>.</p><p>The links so far have all been formatted in the simple <code class="literal">&lt;a href&gt;</code> style, but there are other options available. For instance, Rails provides many built-in <a class="indexterm" id="idx-CHP-13-1285"/>methods to perform some common JavaScript operations. One of these is the confirm box, which interrupts your browsing with a box asking you to confirm some question. I’m sure you’ve seen them while browsing, but <a class="xref" href="ch13s02.html#a_confirm_box_automatically_generated_by" title="Figure 13-1. A confirm box automatically generated by Rails">Figure 13-1</a> shows one in the Epiphany browser on Ubuntu.</p><p>The code at ❽ creates this box for us. Choosing <code class="literal">Cancel</code> makes it do nothing, while choosing <code class="literal">OK</code> causes it to proceed as if it were a standard link, this time to the <code class="literal">‘index’ :action</code>. The code to describe this also adds a second Hash to <code class="literal">link_to</code>, with the key <code class="literal">:confirm</code> and with a value taken from the <code class="literal">AlbumHelper::CONFIRM_MESSAGE</code> Constant. Notice that this link provides the otherwise-optional curly brace delimiters for the Hashes, to show which pairs go with which Hash. The text for the confirm box link is <code class="literal">‘Full List’</code>, since it brings us back to the <code class="literal">index</code> View. After some more HTML comments, we see a call to <code class="literal">show_footer</code> at ❾.</p><div class="figure"><a id="a_confirm_box_automatically_generated_by"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject13_d1e22605"/><img alt="A confirm box automatically generated by Rails" src="httpatomoreillycomsourcenostarchimages686182.png.jpg"/></div></div><p class="title">Figure 13-1. A confirm box automatically generated by Rails</p></div></div></div><div class="sect2" title="Dissecting the Feed Controller’s images View"><div class="titlepage"><div><div><h2 class="title"><a id="dissecting_the_feed_controllers_images_v"/>Dissecting the Feed Controller’s images View</h2></div></div></div><p>In general, everything I’ve said about the Album Controller’s <a class="indexterm" id="idx-CHP-13-1286"/>Views will also apply to the Feed Controller’s View. The same basic design principles apply. However, there are a few slight differences. The Feed Controller is more lightweight and has fewer responsibilities. It also only has one View, which we’re about to explore.<a class="indexterm" id="idx-CHP-13-1287"/></p><p>As already noted, Album is not our only Controller. We also want to use <a class="indexterm" id="idx-CHP-13-1288"/>Feed to display our <a class="indexterm" id="idx-CHP-13-1289"/>images within an RSS Feed. Let’s see how that’s done. Edit <code class="literal">app/views/feed/images.rxml</code> to match the following. Note that the file extension is <a class="indexterm" id="idx-CHP-13-1290"/>.rxml instead of .rhtml, since we’re creating XML for an RSS Feed instead of regular HTML.</p><a id="I_programlisting13_d1e22653"/><pre class="programlisting">  =begin explain
+  The various FeedHelper:: Constants are in app/helpers/feed_helper.rb,
+  as are the feed_description() and rss_url_for_image() methods.
+  =end
+
+❶ xml.<a class="indexterm" id="idx-CHP-13-1291"/>instruct!    <em class="lineannotation"><span class="lineannotation">Outputting XML</span></em>
+
+❷ xml.rss( FeedHelper::RSS_OPTIONS ) do
+
+❸   xml.channel do
+      xml.title       FeedHelper::TITLE
+      xml.language    FeedHelper::LANGUAGE
+      xml.link        rss_url_for_image( nil )
+      xml.pubDate     Time.now
+      xml.description feed_description()
+
+❹     xml.image do
+        xml.title       FeedHelper::TITLE
+        xml.link        rss_url_for_image( nil )
+        xml.url         FeedHelper::ICON[:url]
+        xml.width       FeedHelper::ICON[:width]
+        xml.height      FeedHelper::ICON[:height]
+        xml.description feed_description()
+      end
+
+❺     @photos.each do |image|
+        xml.item do
+          xml.title       image.title
+          xml.link        rss_url_for_image( image )
+          xml.description h( image.description )
+          xml.pubDate     Time.now
+          xml.guid        rss_url_for_image( image )
+          xml.author      FeedHelper::AUTHOR
+          # image.photographer could also be the author
+        end
+      end
+
+    end
+
+  end</pre><p>This file uses a project called <a class="indexterm" id="idx-CHP-13-1292"/>XML::Builder (<a class="ulink" href="http://rubyforge.org/projects/builder">http://rubyforge.org/projects/builder</a>), an XML generation library that comes built in to Rails. At ❶, we call <code class="literal">xml.instruct!</code>, which starts the XML document. (XML::Builder’s relationship to Rails ensures that the <code class="literal">xml</code> variable is available, and we don’t have to do anything ahead of time.) Then at ❷, we set up our RSS Feed by calling <code class="literal">xml.rss</code> with <code class="literal">FeedHelper::RSS_OPTIONS</code>. Each RSS Feed has a <code class="literal">channel</code>, which we establish at ❸, and an associated <code class="literal">image</code>, which we define at ❹.<a class="indexterm" id="idx-CHP-13-1293"/></p><p>The content (or articles) within our RSS Feed are each a single photo with associated descriptive text. At ❺, we use <code class="literal">@photos</code> from the <code class="literal">FeedController</code>’s <code class="literal">images</code> method, looping through <code class="literal">each</code> of them, calling them <code class="literal">image</code> in turn. Then we create an <code class="literal">xml.item</code>, passing in a block defining each of the appropriate characteristics. Notice how many of them are either expressible as a Constant (such as <code class="literal">FeedHelper::TITLE</code>) or as the result of a method call (such as <code class="literal">rss_url_for_image</code>, with or without an <code class="literal">image</code> argument).<a class="indexterm" id="idx-CHP-13-1294"/></p></div><div class="sect2" title="Dissecting the Album Controller’s Layout"><div class="titlepage"><div><div><h2 class="title"><a id="dissecting_the_album_controllers_layout"/>Dissecting the Album Controller’s Layout</h2></div></div></div><p>Remember when I first talked about <code class="literal">app/views/album/index.rhtml</code> and mentioned that that file lacked certain expected HTML content, such as the <code class="literal">&lt;html&gt;</code> tag? Think about that for a minute. You might expect such content to appear in every View’s .rhtml file, but that would produce a great deal of duplicated content. Duplication is precisely what programmers try to avoid, so we should find some other solution to that problem. One approach would be to define methods in the Controller or a Helper like <code class="literal">doctype_tag, html_tag, head_tag</code>, and so on, similar to the <code class="literal">image_tag</code> method that Rails already provides for us.<a class="indexterm" id="idx-CHP-13-1295"/></p><p>That would be a reasonable approach, except that invariably what is being created is content in a format that is tightly bound to a particular type of View, most commonly HTML. We already have .rhtml files for that express purpose. Shouldn’t we find a way to have some sort of .rhtml template?</p><p>That’s exactly what layouts are. They wrap View output within a template. Edit <code class="literal">app/views/layouts/album.rhtml</code> to match the following:</p><a id="I_programlisting13_d1e22760"/><pre class="programlisting">  &lt;!--
+  This (app/views/layouts/album.html)
+  is a "wrapper" that encloses all Views for the
+  Album Controller.
+  --&gt;
+
+  &lt;html lang="en-us"&gt;
+
+  &lt;head&gt;
+
+  &lt;title&gt;
+❶ Album: &lt;%= page_title %&gt;
+  &lt;/title&gt;
+
+❷ &lt;%= stylesheet_link_tag('master') %&gt;    <em class="lineannotation"><span class="lineannotation">CSS Link Tag</span></em>
+❸ &lt;%= stylesheet_link_tag(controller.action_name) if controller %&gt;
+
+  &lt;/head&gt;
+
+  &lt;body&gt;
+
+  &lt;!--
+  "yield :layout" outputs the View's results, whichever it is.
+  --&gt;
+
+❹ &lt;%= yield :<a class="indexterm" id="idx-CHP-13-1296"/>layout %&gt;
+
+  &lt;/body&gt;
+
+  &lt;/html&gt;</pre><p>At ❶, we use <code class="literal">page_title</code> from <code class="literal">app/helpers/album_helper.rb</code> for the <code class="literal">&lt;title&gt;</code>. At ❷ and ❸, we use Rails’ built-in <code class="literal">stylesheet_link_tag</code> method to include stylesheets. We always want the <code class="literal">master.css</code> stylesheet, and if the Controller has an <code class="literal">action_name</code>, we want that associated stylesheet as well. Finally, at ❹, we see <code class="literal">yield :layout</code>. What does this do?<a class="indexterm" id="idx-CHP-13-1297"/><a class="indexterm" id="idx-CHP-13-1298"/></p><p>We already know that <code class="literal">yield</code> within a method that takes a <code class="literal">block_argument</code> functions the same way as <code class="literal">block_argument.call</code> does. This is similar, except that the output from the requested View takes the place of the block. It’s the equivalent of saying <span class="emphasis"><em>Always wrap whatever is requested inside me, and place whatever was requested at this point</em></span>.</p><div class="note" title="Note"><h3 class="title"><a id="note-76"/>Note</h3><p><span class="emphasis"><em>If you already know Rails, you know that there are other options for solving this problem, such as using partials, which approach the problem from the bottom up, rather than from the top down. Read more at <a class="ulink" href="http://wiki.rubyonrails.org/rails/pages/Partials">http://wiki.rubyonrails.org/rails/pages/Partials</a> if you’re interested</em></span>.<a class="indexterm" id="idx-CHP-13-1299"/><a class="indexterm" id="idx-CHP-13-1300"/></p></div></div><div class="sect2" title="Using CSS"><div class="titlepage"><div><div><h2 class="title"><a id="using_css"/>Using CSS</h2></div></div></div><p>The <code class="literal">master.css</code> stylesheet is used throughout the application, and each action automatically includes a stylesheet with the same name (see ❷ and ❸ in <code class="literal">app/views/layouts/album.rhtml</code> in <a class="xref" href="ch13s02.html#dissecting_the_album_controllers_layout" title="Dissecting the Album Controller’s Layout">Dissecting the Album Controller’s Layout</a> on page 256). When we browse with the <code class="literal">show</code> View, we will make use of the <code class="literal">show.css</code> stylesheet, for example. If you’re curious about CSS, you can learn more at websites like <a class="ulink" href="http://csszengarden.com">http://csszengarden.com</a>. The stylesheets <code class="literal">master.css, public.css</code>, and <code class="literal">index.css</code> are available for download at this book’s website.</p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a class="para" href="#CHP-13-FNOTE-1" id="ftn.CHP-13-FNOTE-1">37</a>] </sup>For example, you might want to use <code class="literal">%q[]</code> instead of quotation marks if the String to be defined included quotation marks; some programmers might simply prefer using <code class="literal">%q[]</code>.</p></div></div></div>
+<div class="sect1" title="Using the Application"><div class="titlepage"><div><div><h1 class="title"><a id="using_the_application"/>Using the Application</h1></div></div></div><p>At this point, we have a photo album application, as well as a decent understanding of how its component parts are organized and how they work, both individually and as part of the whole. Now let’s take a look at this app in action, starting by opening it in a web browser.</p><p><a class="xref" href="ch13s03.html#browsing_the_album_controller" title="Figure 13-2. Browsing the Album Controller">Figure 13-2</a> shows how the default action of the Album Controller looks when I view it with the <a class="indexterm" id="idx-CHP-13-1301"/>Epiphany web browser. Its appearance should differ only trivially in other graphical browsers, like Firefox or Internet Explorer. <a class="xref" href="ch13s03.html#showing_the_first_image_in_the_album_con" title="Figure 13-3. Showing the first image in the Album Controller">Figure 13-3</a> shows the appearance of the first image, as displayed by the <code class="literal">show</code> View of the Album Controller.<a class="indexterm" id="I_indexterm13_d1e22877"/></p><p>Figures <a class="xref" href="ch13s03.html#browsing_the_rss_images_in_the_feed_cont" title="Figure 13-4. Browsing the RSS images in the Feed Controller with Epiphany">Figure 13-4</a> and <a class="xref" href="ch13s03.html#browsing_with_the_akregator_rss_reader" title="Figure 13-5. Browsing with the Akregator RSS reader">Figure 13-5</a> show the appearance of the <code class="literal">images</code> View of the Feed Controller. <a class="xref" href="ch13s03.html#browsing_the_rss_images_in_the_feed_cont" title="Figure 13-4. Browsing the RSS images in the Feed Controller with Epiphany">Figure 13-4</a> shows it (again) in Epiphany, while <a class="xref" href="ch13s03.html#browsing_with_the_akregator_rss_reader" title="Figure 13-5. Browsing with the Akregator RSS reader">Figure 13-5</a> shows it in <a class="indexterm" id="idx-CHP-13-1302"/>Akregator, which is a program designed specifically for <a class="indexterm" id="idx-CHP-13-1303"/>viewing RSS feeds.</p><div class="figure"><a id="browsing_the_album_controller"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject13_d1e22909"/><img alt="Browsing the Album Controller" src="httpatomoreillycomsourcenostarchimages686160.png.jpg"/></div></div><p class="title">Figure 13-2. Browsing the Album Controller</p></div><div class="figure"><a id="showing_the_first_image_in_the_album_con"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject13_d1e22917"/><img alt="Showing the first image in the Album Controller" src="httpatomoreillycomsourcenostarchimages686146.png.jpg"/></div></div><p class="title">Figure 13-3. Showing the first image in the Album Controller</p></div><div class="figure"><a id="browsing_the_rss_images_in_the_feed_cont"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject13_d1e22925"/><img alt="Browsing the RSS images in the Feed Controller with Epiphany" src="httpatomoreillycomsourcenostarchimages686186.png.jpg"/></div></div><p class="title">Figure 13-4. Browsing the RSS images in the Feed Controller with Epiphany</p></div><div class="figure"><a id="browsing_with_the_akregator_rss_reader"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject13_d1e22933"/><img alt="Browsing with the Akregator RSS reader" src="httpatomoreillycomsourcenostarchimages686174.png.jpg"/></div></div><p class="title">Figure 13-5. Browsing with the Akregator RSS reader</p></div></div>
+<div class="sect1" title="Learning More About Rails"><div class="titlepage"><div><div><h1 class="title"><a id="learning_more_about_rails"/>Learning More About Rails</h1></div></div></div><p>This chapter has only scratched the surface of Rails. I’ve barely described some of the Helper methods (like <code class="literal">image_tag</code> and <code class="literal">link_to</code>), and I haven’t even touched on topics like ActiveRecord’s ability to create relationships between multiple Models, Unit Testing within Rails, forms within Rails, user creation and authentication, session handling, and much more. Even so, this is already the longest chapter in a Ruby book that tried very hard to be about Ruby, as distinct from Rails—and I even had to describe the basic anatomy of a Rails application in the chapter before this one. There’s a lot to learn in Rails, and you can always read more at <a class="ulink" href="http://rubyonrails.org">http://rubyonrails.org</a>. Just don’t forget that Ruby has a lot to offer apart from Rails, too, as I hope the other chapters in this book have shown.</p></div>
+<div class="sect1" title="Chapter Recap"><div class="titlepage"><div><div><h1 class="title"><a id="chapter_recap-id011"/>Chapter Recap</h1></div></div></div><p>What was new in this chapter?</p><div class="itemizedlist"><ul class="itemizedlist"><li class="listitem"><p>Using Rails with MySQL</p></li><li class="listitem"><p>Adding data with migration files</p></li><li class="listitem"><p>Creating a Model</p></li><li class="listitem"><p>Creating multi-View Controllers</p></li><li class="listitem"><p>Adding methods to Models and Controllers</p></li><li class="listitem"><p>The ApplicationController superclass</p></li><li class="listitem"><p>Using Helpers</p></li><li class="listitem"><p>The ApplicationHelper module</p></li><li class="listitem"><p>MVC as it relates to Controllers and Helpers</p></li><li class="listitem"><p>Creating Views as .rhtml files</p></li><li class="listitem"><p>Doing common JavaScript with Rails’ built-in Helper methods</p></li><li class="listitem"><p>Using layouts and incorporating the results of [view].rhtml within them</p></li><li class="listitem"><p>Using stylesheets modularized by View type</p></li></ul></div><p>I hope this book has given you some useful information about coding in Ruby. I’ve tried to play to what I see as the language’s greatest strengths: readability, a high level of abstraction (and great ease in extending that abstraction even higher), internal consistency, and conceptual elegance. All of these characteristics of Ruby remain, whether or not you’re working within Rails. If you do find yourself using Rails, don’t forget that along with <code class="literal">each</code>, you can still use <code class="literal">map</code> and <code class="literal">inject</code>.</p><p>Thanks for reading.</p></div></body></html>
