@@ -1,388 +1,565 @@
 - en: Chapter 15. TROUBLESHOOTING
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第15章. 故障排除
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
 - en: With any luck, you're just reading this chapter for fun, not because your server
     has just erupted in a tower of flame. Of course, sysadmins being almost comically
     lazy, it's most likely the latter, but the former is at least vaguely possible,
     right?
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 希望你只是出于兴趣阅读本章，而不是因为你的服务器刚刚爆发成一座火焰之塔。当然，系统管理员几乎可以说是滑稽地懒惰，后者更有可能，但前者至少是模糊可能的，对吧？
 - en: If the machine is in fact already broken, don't panic. Xen is complex, but the
     issues discussed here are fixable problems with known solutions. There's a vast
     arsenal of tools, a great deal of information to work with, and a lot of expertise
     available.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果机器实际上已经损坏，不要慌张。Xen很复杂，但这里讨论的问题都是可以通过已知解决方案修复的问题。有一大批工具，大量的信息可以用来工作，以及大量的专业知识可用。
 - en: In this section, we'll outline a number of troubleshooting steps and techniques,
     with particular reference to Xen's peculiarities. We'll include explanations for
     some of the vague error messages that you might come across, and we'll make some
     suggestions about where to get help if all else fails.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本节中，我们将概述一系列故障排除步骤和技术，特别关注Xen的特有之处。我们将解释一些可能遇到的模糊错误信息，并在所有其他方法都失败时提供一些获取帮助的建议。
 - en: Let's start with a general overview of our approach to troubleshooting, which
     will help to put the specific discussion of Xen-related problems in context.
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们从对故障排除方法的概述开始，这将有助于将Xen相关问题的具体讨论置于上下文中。
 - en: 'The most important thing when troubleshooting is to get a clear idea of the
     machine''s state: what it''s doing, what problems it''s having, what telegraphic
     errors it''s spitting out, and where the errors are coming from. This is doubly
     important in Xen because its modular, standards-based design brings together diverse
     and unrelated tools, each with its own methods of logging and error handling.'
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 在故障排除时，最重要的是清楚地了解机器的状态：它在做什么，它遇到了什么问题，它吐出了什么电报式错误，以及错误来自哪里。这在Xen中尤为重要，因为其模块化和基于标准的架构将各种无关的工具汇集在一起，每个工具都有自己的日志记录和错误处理方法。
 - en: 'Our usual troubleshooting technique is to:'
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们的常规故障排除技术是：
 - en: Reproduce the problem.
+  id: totrans-8
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 重新复制问题。
 - en: If the problem generates an error message, use that as a starting point.
+  id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果问题生成了错误信息，将其作为起点。
 - en: If the error message doesn't provide enough information to solve the problem,
     consult the logs.
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果错误信息没有提供足够的信息来解决问题，请查阅日志。
 - en: If the logs don't help, use `set -x` to make sure the scripts are firing correctly,
     and closely examine the control flow of the non—Xen-specific parts of the system.
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 如果日志没有帮助，使用`set -x`确保脚本正确执行，并仔细检查系统非Xen特定部分的控制流程。
 - en: Use `strace` or `pdb` to track the flow of execution in the more Xen-specific
     bits and see what's failing.
+  id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用`strace`或`pdb`跟踪Xen特定部分的执行流程，看看哪里失败了。
 - en: If you get truly stuck, you might want to think about asking for help. Xen has
     a couple of excellent mailing lists (*xen-devel* and *xen-users*) and a useful
     IRC channel, *#xen* on *irc.oftc.net*. For more information about how and where
     to get help, see the end of the chapter.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你真的遇到了难题，你可能需要考虑寻求帮助。Xen有几个优秀的邮件列表（*xen-devel*和*xen-users*）和一个有用的IRC频道，*#xen*在*irc.oftc.net*上。有关如何以及在哪里获取帮助的更多信息，请参阅本章末尾。
 - en: 'Troubleshooting Phase 1: Error Messages'
+  id: totrans-14
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 故障排除阶段1：错误信息
 - en: The first sign that something's amiss is likely to be an error message and an
     abrupt exit. These usually occur in response to some action—booting the machine,
     perhaps, or creating a domU.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 最早出现的异常迹象可能是错误信息和突然退出。这些通常是对某些操作的响应——可能是启动机器，或者创建domU。
 - en: Xen's error messages can be, frankly, infuriating. They're somewhat vague and
     developer oriented, and they usually come from somewhere deep in the bowels of
     the code where it's difficult to determine what particular class of user error
     is responsible, or even if it's user error at all.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen的错误信息可能相当令人恼火。它们有些模糊，面向开发者，通常来自代码深处，难以确定是哪种特定用户错误导致的，甚至无法确定是否是用户错误。
 - en: Better admins than us have been driven mad, have thrown their machines out the
     window and vowed to spend the rest of their lives wearing animal skins, killing
     dinner with fire-hardened spears. And who can say they are wrong?
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 比我们更好的管理员已经疯了，把机器扔出窗外，发誓余生要穿动物皮，用烧硬的矛捕猎。谁能说他们错了？
 - en: Regardless, the error messages are a useful diagnostic and often provide enough
     information to solve the problem.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 不论如何，错误信息是有用的诊断工具，并且通常提供足够的信息来解决该问题。
 - en: Errors at Dom0 Boot
+  id: totrans-19
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Dom0 引导错误
 - en: The first place to look for information about system-wide problems (if only
     because there's nothing else to do while the machine boots) is the boot output,
     both from the hypervisor and the dom0 kernel.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 在引导过程中寻找有关系统级问题信息的地方（如果只有因为机器引导时没有其他事情可做）是引导输出，包括管理程序和 dom0 内核的输出。
 - en: READING BOOT ERROR MESSAGES
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 读取引导错误信息
 - en: When a machine's broken badly enough that it can't boot, it often reboots itself
     immediately. This can lead to difficulty when trying to diagnose the problem.
     We suggest using a serial console with some sort of scrollback buffer to preserve
     the messages on another computer. This also makes it easy to log output, for example
     by using GNU screen.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 当一台机器损坏到无法引导的程度时，它通常会立即重启。这可能导致在尝试诊断问题时遇到困难。我们建议使用带有某种回滚缓冲区的串行控制台来在其他计算机上保留消息。这也使得记录输出变得容易，例如使用
+    GNU screen。
 - en: If you refuse to use serial consoles, or if you wish to otherwise do something
     before the box reboots, you can append noreboot to both the Xen and Linux kernel
     lines in GRUB. (If you miss either, it'll reboot. It's finicky that way.)
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你拒绝使用串行控制台，或者如果你希望在系统重启之前做其他事情，你可以在 GRUB 中的 Xen 和 Linux 内核行上附加 noreboot。（如果你遗漏了任何一个，它将重启。它在这方面很挑剔。）
 - en: Many of the Xen-specific problems we've encountered at boot have to do with
     kernel/hypervisor mismatches. The Xen kernel must match the dom0 kernel in terms
     of PAE support, and if the hypervisor is 64 bit, the dom0 must be 64 bit or i386-PAE.
     Of course, if the hypervisor is 32 bit, so must be the dom0.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在引导过程中遇到的大多数 Xen 特定问题都与内核/管理程序不匹配有关。Xen 内核必须在 PAE 支持方面与 dom0 内核相匹配，如果管理程序是
+    64 位，dom0 必须是 64 位或 i386-PAE。当然，如果管理程序是 32 位，dom0 也必须是 32 位。
 - en: You can run an i386-PAE dom0 with an x86_64 hypervisor and x86_64 domUs, but
     only on recent Xen kernels (in fact, this is what some versions of the Citrix
     Xen product do). In no case can you mismatch the PAE-ness. Modern versions of
     Xen don't even include the compile-time option to run in i386 non-PAE mode, causing
     all sorts of problems if you want to run older operating systems, such as NetBSD
     4.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以使用 i386-PAE dom0 与 x86_64 管理程序和 x86_64 domUs 一起运行，但仅限于最近的 Xen 内核（实际上，这是 Citrix
+    Xen 产品的一些版本所做的事情）。在任何情况下，都不能不匹配 PAE。Xen 的现代版本甚至不包含在 i386 非PAE 模式下运行的编译时选项，如果你想要运行像
+    NetBSD 4 这样的旧操作系统，这会导致各种问题。
 - en: Of course, many of the problems that we've had at boot aren't especially Xen-specific;
     for example, the machine may not boot properly if the initrd isn't correctly matched
     to the kernel. This often causes people trouble when moving to the Xen.org kernel
     because it puts the drivers for the root device into an initrd, rather than into
     the kernel.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，我们在引导过程中遇到的问题中，许多并不是特别针对 Xen 的；例如，如果 initrd 没有正确匹配内核，机器可能无法正确引导。当人们迁移到 Xen.org
+    内核时，这通常会引起麻烦，因为它将根设备的驱动程序放入 initrd，而不是内核中。
 - en: 'If your distro expects an initrd, you probably want to use your distro''s initrd
     creation script after installing the Xen.org kernel. With CentOS, after installing
     the Xen.org kernel, make sure that */etc/modprobe.conf* correctly describes your
     root device (with an entry like `alias scsi_hostadapter sata_nv`), then run something
     like:'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你的发行版期望一个 initrd，你可能在安装 Xen.org 内核后想要使用你的发行版的 initrd 创建脚本。对于 CentOS，在安装 Xen.org
+    内核后，确保 */etc/modprobe.conf* 正确描述了你的根设备（例如，有一个条目 `alias scsi_hostadapter sata_nv`），然后运行类似以下命令：
 - en: '[PRE0]'
+  id: totrans-28
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: Replace */boot/initrd-2.6.18.8-xen.img* with the desired filename of your new
     initrd, and replace *2.6.18.8-xen* with the output of `uname -r` for the kernel
     that you're building the initrd for. (Other options, such as `--preload`, may
     also come in handy. Refer to the distro manual for more information.)
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 将 */boot/initrd-2.6.18.8-xen.img* 替换为你的新 initrd 所需的文件名，并将 *2.6.18.8-xen* 替换为你为构建
+    initrd 的内核运行的 `uname -r` 的输出。（其他选项，如 `--preload`，也可能很有用。请参阅发行版手册以获取更多信息。）
 - en: Assuming you've booted successfully, there are a variety of informative error
     messages that Xen can give you. Usually these are in response to an attempt to
     do something, like starting `xend` or creating a domain.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 假设你已经成功引导，Xen 可以提供各种有用的错误信息。通常这些是对尝试做某事（如启动 `xend` 或创建一个域）的反应。
 - en: DomU Preboot Errors
+  id: totrans-31
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: DomU 预引导错误
 - en: 'If you''re using PyGRUB (or another bootloader, such as pypxeboot), you may
     see the message `VmError: Boot loader didn''t return any data!` This means that
     PyGRUB, for some reason, wasn''t able to find a kernel. Usually this is either
     because the disks aren''t specified properly or because there isn''t a valid GRUB
     configuration in the domU. Check the disk configuration and make sure that */boot/grub/menu.lst*
     exists in the filesystem on the first domU VBD.'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: '如果您正在使用 PyGRUB（或另一个引导加载程序，如 pypxeboot），您可能会看到消息 `VmError: Boot loader didn''t
+    return any data!` 这意味着由于某种原因，PyGRUB 无法找到内核。通常这是由于磁盘设置不正确或 domU 中没有有效的 GRUB 配置。检查磁盘配置并确保
+    */boot/grub/menu.lst* 存在于第一个 domU VBD 的文件系统中。'
 - en: Note
+  id: totrans-33
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*There''s some leeway; PyGRUB will check a bunch of filenames, including but
     not limited to* /boot/grub/menu.lst, /boot/grub/grub.conf, /grub/menu.lst, *and*
     /grub/grub.conf. *Remember that PyGRUB is a good emulation of GRUB, but it''s
     not exact*.'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: '*有一些灵活性；PyGRUB 会检查一些文件名，包括但不限于* /boot/grub/menu.lst, /boot/grub/grub.conf,
+    /grub/menu.lst, *以及* /grub/grub.conf。*记住，PyGRUB 是 GRUB 的良好模拟，但它并不完全精确*。'
 - en: 'You can troubleshoot PyGRUB problems by running PyGRUB manually:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以通过手动运行 PyGRUB 来排除 PyGRUB 问题：
 - en: '[PRE1]'
+  id: totrans-36
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'This should give you a PyGRUB boot menu. When you choose a kernel from the
     menu, PyGRUB exits with a message like:'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 这应该会给出一个 PyGRUB 启动菜单。当您从菜单中选择一个内核时，PyGRUB 会退出并显示类似的消息：
 - en: '[PRE2]'
+  id: totrans-38
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: This means that PyGRUB successfully loaded a kernel and placed it in the dom0
     filesystem. Check the listed location to make sure it's actually there.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 这意味着 PyGRUB 成功加载了内核并将其放置在 dom0 文件系统中。检查列出的位置以确保它确实在那里。
 - en: PyGRUB is quite picky about the terminal it's connected to. If PyGRUB exits,
     complaining about libncurses, or if PyGRUB on the same domain works for some people
     and not for others, you might have a problem with the terminal.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: PyGRUB 对其连接的终端非常挑剔。如果 PyGRUB 退出，抱怨 libncurses，或者如果同一域中的 PyGRUB 对某些人有效而对另一些人无效，您可能遇到了终端问题。
 - en: For example, with the version of PyGRUB that comes with CentOS 5.1, you can
     repeatedly get a failure by executing `xm create -c` from a terminal window less
     than 19 lines long. If you suspect this may be the problem, resize your console
     to 80 x 24 and try again.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，使用 CentOS 5.1 中的 PyGRUB 版本，您可以通过在少于 19 行的终端窗口中执行 `xm create -c` 来反复遇到失败。如果您怀疑这可能是个问题，请调整您的控制台大小为
+    80 x 24 并再次尝试。
 - en: PyGRUB will also expect to find your terminal type (the value of the `TERM`
     variable) in the terminfo database. Manually setting `TERM=vt100` before creating
     the domain is usually sufficient.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: PyGRUB 还会期望在 terminfo 数据库中找到您的终端类型（`TERM` 变量的值）。在创建域之前手动设置 `TERM=vt100` 通常足够。
 - en: Creating Domains in Low-Memory Conditions
+  id: totrans-43
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 在低内存条件下创建域
 - en: 'This is one of the most informative error messages in Xen''s arsenal:'
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是 Xen 工具箱中最有信息量的错误消息之一：
 - en: '[PRE3]'
+  id: totrans-45
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: The error means that the system doesn't have enough memory to create the domU
     as requested. (The system in this case had only 384MiB, so the error really isn't
     surprising.)
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个错误意味着系统没有足够的内存来创建按请求的 domU。（在这个例子中，系统只有 384MiB，所以这个错误并不令人惊讶。）
 - en: The solution is to adjust `dom0_min_mem` to compensate or adjust the domU to
     require less memory. Or, as in this case, do both (and possibly add more memory).
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 解决方案是调整 `dom0_min_mem` 以补偿或调整 domU 以减少内存需求。或者，在这种情况下，两者都做（并可能添加更多内存）。
 - en: Configuring Devices in the DomU
+  id: totrans-48
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 在 DomU 中配置设备
 - en: Most likely, if the domU fails to start because of missing devices, the problem
     is tied to storage. (Broken network setups don't usually cause the boot to fail
     outright, although they can render your VM less than useful after booting.)
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 很可能，如果 domU 由于缺少设备而无法启动，问题与存储有关。（网络设置损坏通常不会导致启动失败，尽管它们可能会在启动后使您的虚拟机变得几乎无用。）
 - en: Sometimes the domU will load its kernel and get through the first part of its
     boot sequence but then complain about not being able to access its root device,
     despite a correctly specified root kernel parameter. Most likely, the problem
     is that the domU doesn't have the root device node in the */dev* directory in
     the initrd.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 有时 domU 会加载其内核并通过其启动序列的第一部分，但会抱怨无法访问其根设备，尽管根内核参数已正确指定。很可能是 domU 在 initrd 的 */dev*
+    目录中没有根设备节点。
 - en: 'This can lead to trouble when attempting to use the semantically more correct
     `xvd*` devices. Because many distros don''t include the appropriate device nodes,
     they''ll fail to boot. The solution, then, is to use the `hd*` or `sd*` devices
     in the `disk=` line, thus:'
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 这可能导致尝试使用语义上更正确的`xvd*`设备时出现问题。因为许多发行版没有包括适当的设备节点，它们将无法启动。因此，解决方案是使用`disk=`行中的`hd*`或`sd*`设备，如下所示：
 - en: '[PRE4]'
+  id: totrans-52
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: After starting the domain successfully, you can create the `xvd` devices properly
     or edit your udev configuration.
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 成功启动域后，您可以正确创建`xvd`设备或编辑您的udev配置。
 - en: 'The Xen block driver may also have trouble attaching to virtual drives that
     use the `sdX` naming convention if the domU kernel includes a SCSI driver. In
     that case, use the `xvdX` convention, like this:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果domU内核包含SCSI驱动程序，Xen块驱动程序可能也难以连接到使用`sdX`命名约定的虚拟驱动器。在这种情况下，使用`xvdX`约定，如下所示：
 - en: '[PRE5]'
+  id: totrans-55
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: Troubleshooting Disks
+  id: totrans-56
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 故障排除磁盘
 - en: 'Most disk-related errors will cause the domU creation to fail immediately.
     This makes them fairly easy to troubleshoot. Here are some examples:'
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 大多数与磁盘相关的错误会导致domU创建立即失败。这使得它们相当容易进行故障排除。以下是一些示例：
 - en: '[PRE6]'
+  id: totrans-58
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: These pop up frequently and usually mean that something's wrong in the device
     specification. Check the config file for typos in the `vif=` and `disk=` lines.
     If the message refers to a block device, the problem is often that you're referring
     to a nonexistent device or file.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些经常出现，通常意味着设备规范中存在问题。检查配置文件中`vif=`和`disk=`行是否有误。如果消息指的是块设备，问题通常是你引用了一个不存在的设备或文件。
 - en: 'There are a few other errors that have similar causes. For example:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 有一些其他错误具有类似的原因。例如：
 - en: '[PRE7]'
+  id: totrans-61
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: This, too, is usually caused by a `phy:` device with an incorrectly specified
     backing device.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 这通常也是由于一个`phy:`设备具有错误指定的后端设备引起的。
 - en: 'However, this isn''t the only possible cause. If you''re using file-backed
     block devices, rather than LVM volumes, the kernel may have run out of block loops
     on which to mount these devices. (In this case, the message is particularly frustrating
     because it seems entirely independent of the domain''s config.) You can confirm
     this by looking for an error in the logs like:'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，这并不是唯一可能的原因。如果你使用的是基于文件的块设备，而不是LVM卷，内核可能已经耗尽了可以挂载这些设备的块循环。（在这种情况下，消息尤其令人沮丧，因为它似乎完全独立于域的配置。）你可以通过查找日志中的错误来确认这一点：
 - en: '[PRE8]'
+  id: totrans-64
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: Although this message usually means that you've mistyped the name of the domain's
     backing storage device, it may instead mean that you've run out of block loops.
     The default loop driver only creates seven of the things—barely enough for three
     domains with root and swap devices.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然这个消息通常意味着你输入了域的后备存储设备名称错误，但它也可能意味着你耗尽了块循环。默认循环驱动程序只创建了七个这样的设备——对于带有根和交换设备的三个域来说几乎不够。
 - en: 'We might suggest that you move to LVM, but that''s probably overkill. The more
     direct answer is to make more loops. If your loop driver is a module, edit */etc/modules.conf*
     and add:'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可能建议你迁移到LVM，但这可能是过度杀鸡用牛刀。更直接的回答是创建更多的循环。如果你的循环驱动程序是一个模块，编辑`/etc/modules.conf`并添加：
 - en: '[PRE9]'
+  id: totrans-67
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'or another number of your choice; each domU file-backed VBD will require one
     loop device in dom0\. (Do this in whatever domain is used as the backend, usually
     dom0, although Xen''s new stub domains promise to make non-dom0 driver domains
     much more prevalent.) Then reload the module. Shut down all domains that use loop
     devices (and detach loops from the dom0) and then run:'
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 或你选择的另一个数字；每个domU基于文件的VBD在dom0中都需要一个循环设备。（在用作后端的任何域中执行此操作，通常是dom0，尽管Xen的新stub域承诺将非dom0驱动程序域的普及度提高很多。）然后重新加载模块。关闭所有使用循环设备的域（并将循环从dom0中分离），然后运行：
 - en: '[PRE10]'
+  id: totrans-69
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'If the loop driver is built into the kernel, you can add the `max_loop` option
     to the dom0 kernel command line. For example, in */boot/grub/menu.lst*:'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果循环驱动程序集成在内核中，你可以在dom0内核命令行中添加`max_loop`选项。例如，在`/boot/grub/menu.lst`中：
 - en: '[PRE11]'
+  id: totrans-71
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: Reboot and the problem should go away.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 重新启动后，问题应该会消失。
 - en: VM Restarting Too Fast
+  id: totrans-73
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 虚拟机重启过快
 - en: 'Disk problems, if they don''t announce themselves through a specific error
     message, often manifest in log entries like the following:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 磁盘问题，如果它们没有通过特定的错误消息宣布自己，通常会表现为以下日志条目：
 - en: '[PRE12]'
+  id: totrans-75
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: This one is really just Xen's way of asking for help; the domain is stuck in
     a reboot cycle. Start the domain with the `-c` option (for console autoconnect)
     and look at what's causing it to die on startup. In this case, the domain booted
     and immediately panicked for lack of a root device.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 这实际上是Xen请求帮助的一种方式；该域卡在重启循环中。使用带有`-c`选项（用于控制台自动连接）启动域，查看导致它在启动时死亡的原因。在这种情况下，域启动后立即因为缺少根设备而崩溃。
 - en: Note
+  id: totrans-77
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*In this case, the VM is restarting every 4.2 seconds, long enough to get console
     output. If the restarting too fast number is less than 1 or 2 seconds, often *`xm
     create -c`* shows no output. If this happens, check the logs for informative messages.
     See later sections of this chapter for more details on Xen''s logging*.'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: '*在这种情况下，虚拟机每4.2秒重启一次，足够长以获取控制台输出。如果重启速度太快，小于1或2秒，通常`xm create -c`不会显示输出。如果发生这种情况，请检查日志以获取信息性消息。本章后面的部分将提供有关Xen日志的更多详细信息*。'
 - en: Troubleshooting Xen's Networking
+  id: totrans-79
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 排查Xen的联网问题
 - en: In our experience, troubleshooting Xen's networking is a straightforward process,
     given some general networking knowledge. Unless you've modified the networking
     scripts, Xen will fairly reliably create the `vif` devices. However, if you have
     problems, here are some general guidelines.(We'll focus on `network-bridge` here,
     although similar steps apply to `network-route` and `network-nat`.)
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 根据我们的经验，在具备一些基本的网络知识的情况下，排查Xen的联网问题是一个直接的过程。除非你修改了网络脚本，否则Xen会相当可靠地创建`vif`设备。然而，如果你遇到问题，这里有一些通用的指南。（我们将重点关注`network-bridge`，尽管类似的步骤也适用于`network-route`和`network-nat`。）
 - en: To troubleshoot networking, you really need to understand how Xen does networking.
     There are a number of scripts and systems working together, and it's important
     to decompose each problem and isolate it to the appropriate components. Check
     [Chapter 5](ch05.html "Chapter 5. NETWORKING") for a general overview of Xen's
     network components.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 要排查联网问题，你真的需要了解Xen是如何进行联网的。有许多脚本和系统协同工作，分解每个问题并将其隔离到适当的组件是很重要的。查看[第5章](ch05.html
+    "第5章。联网")以了解Xen网络组件的概述。
 - en: The first thing to do is run the network script with the `status` argument.
     For example, if you're using `network-bridge, /etc/xen/scripts/network-bridge
     status` will provide a helpful dump of the state of your network as seen in dom0\.
@@ -390,143 +567,212 @@
     and use the `xm vnet-create` and `vnet-delete` commands in conjunction with the
     rest of the userspace tools to get a properly set up bridge and Xen virtual network
     devices.
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 首件事是使用`status`参数运行网络脚本。例如，如果你使用`network-bridge`，则`/etc/xen/scripts/network-bridge
+    status`将提供在dom0中看到的网络状态的有助于诊断的转储。此时，你可以使用`brctl show`来更详细地检查网络，并使用`xm vnet-create`和`vnet-delete`命令与用户空间工具的其余部分结合，以获得正确配置的桥接和Xen虚拟网络设备。
 - en: When you've got the backend sorted, you can address the frontend. Check the
     logs and check `dmesg` from within the domU to make sure that the domU is initializing
     its network devices.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你解决了后端问题后，你可以处理前端问题。检查日志，并在domU内部检查`dmesg`，以确保domU正在初始化其网络设备。
 - en: If these look normal, we usually attack the problem more systematically, from
     bottom to top. First, make sure that the relevant devices show up in the domU.
     Xen creates these pretty reliably. If they aren't there, check the domU config
     and the logs for relevant-looking error messages.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果这些看起来正常，我们通常会从下到上更系统地解决问题。首先，确保相关的设备出现在domU中。Xen会相当可靠地创建这些设备。如果它们不存在，请检查domU的配置和日志，寻找相关的错误信息。
 - en: At the next level (because we know that the dom0's networking works, right?)
     we want to check that the link is functioning. Our basic tool for that is `arping`
     from within the domU, combined with `tcpdump -i [interface]` on the domU's interface
     in the dom0.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一级（因为我们知道dom0的联网是正常工作的，对吧？）我们想要检查链路是否正常工作。我们基本的工具是在domU内部使用`arping`，结合在dom0中domU接口上的`tcpdump
+    -i [interface]`。
 - en: '[PRE13]'
+  id: totrans-86
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: Here we're going to demonstrate connectivity between the domain *caliban* (IP
     address 192.0.2.86) and the dom0 (at 192.0.2.67).
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们将演示域*caliban*（IP地址192.0.2.86）与dom0（位于192.0.2.67）之间的连接性。
 - en: '[PRE14]'
+  id: totrans-88
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: Note that the dom0 replies with its MAC address when queried via ARP.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，当通过ARP查询时，dom0会回复其MAC地址。
 - en: '[PRE15]'
+  id: totrans-90
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: The ARP queries show up correctly in the dom0.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: ARP查询在dom0中正确显示。
 - en: 'Now, most of the time, you will see appropriate output in `tcpdump` as shown.
     This tells you that Xen is moving packets from the domU to the dom0\. Do you see
     a response to the ARP who-has? (It should be ARP is-at.) If not, it''s possible
     your bridge in the dom0 isn''t set up correctly. One easy way to check the bridge
     is to run `brctl show`:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，大多数情况下，你会在`tcpdump`中看到适当的输出，如所示。这表明Xen正在将数据包从domU移动到dom0。你是否看到了对ARP who-has的响应？（应该是ARP
+    is-at。）如果没有，可能你的dom0中的桥接设置不正确。检查桥接的一个简单方法是通过运行`brctl show`：
 - en: '[PRE16]'
+  id: totrans-93
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: Note
+  id: totrans-94
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*In Xen.org versions before Xen 3.2, the bridge name is, by default*, *`xenbr0`*
     *for* *`network-bridge`*. *Xen 3.2 and later, however, named the bridge eth0 (0,
     in this case, is the number of the related network interface). RHEL/CentOS, by
     default, creates another bridge*, *`virbr0`*, *which is part of the libvirt stuff.
     In practical terms, it functions like* *`network-nat`*, *with a DHCP server handing
     out private addresses on the dom0*.'
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Xen.org版本低于Xen 3.2之前，默认的桥接名称是`xenbr0`，用于`network-bridge`。然而，Xen 3.2及以后的版本将桥接名称命名为eth0（在这种情况下，0是相关网络接口的编号）。RHEL/CentOS默认创建另一个桥接，名为`virbr0`，它是libvirt组件的一部分。在实际情况中，它类似于`network-nat`，由DHCP服务器在dom0上分配私有地址。
 - en: Now, for troubleshooting purposes, a bridge is like a switch. Make sure the
     bridge (switch) your domU interface is connected to is also connected to an interface
     that touches the network you want the domU on, usually a `pethX` device. (As explained
     in [Chapter 5](ch05.html "Chapter 5. NETWORKING"), `network-bridge` renames `ethX`
     to `pethX` and creates a fake `ethX` device from `vif0.x` when it starts up.)
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，为了故障排除的目的，一个桥接就像一个交换机。确保你的domU接口连接到的桥接（交换机）也连接到接触你想要domU所在的网络的接口，通常是一个`pethX`设备。（如[第5章](ch05.html
+    "第5章。网络")中所述，`network-bridge`在启动时将`ethX`重命名为`pethX`，并从`vif0.x`创建一个假的`ethX`设备。）
 - en: Check the easy stuff. Can anything else on the bridge see traffic from the outside
     world? Do `tcpdump -n -i peth0`. Are the packets flowing properly?
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 检查简单的事情。桥接上是否有其他设备可以看到来自外部世界的流量？执行`tcpdump -n -i peth0`。数据包是否正常流动？
 - en: Check your routes. Don't forget higher-level stuff, like DNS servers.
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 检查你的路由。不要忘记更高层次的东西，比如DNS服务器。
 - en: The DomU Interface Number Increments with Every Reboot
+  id: totrans-99
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: DomU接口编号在每次重启时增加
 - en: When Xen creates a domain, it looks at the `vif=[]` statement. Each string within
     the `[ ]` characters (it's a Python array) is another network device. If I just
     say `vif=['','']` it creates two network devices for me, with random MAC addresses.
     In the domU, they are (ideally) named `eth0` and `eth1`. In the dom0, they are
     named `vifX.0` and `vifX.1`, where `X` is the domain number.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 当Xen创建一个域时，它会查看`vif=[]`语句。`[]`字符内的每个字符串（它是一个Python数组）都是另一个网络设备。如果我只说`vif=['','']`，它就会为我创建两个具有随机MAC地址的网络设备。在domU中，它们理想上被命名为`eth0`和`eth1`。在dom0中，它们被命名为`vifX.0`和`vifX.1`，其中`X`是域编号。
 - en: 'Most modern Linux distros, by default, lock `ethX` to a particular MAC address
     on the first boot. In RHEL/CentOS, the setting is `HWADDR=` in */etc/sysconfig/network-scripts/ifcfg-ethX*.
     Most other distros use `udev` to handle persistent MAC addresses, as described
     in [Chapter 5](ch05.html "Chapter 5. NETWORKING"). We circumvent the problem by
     specifying the MAC address on the `vif=` line in the `xm config` file:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 大多数现代Linux发行版默认在第一次启动时将`ethX`锁定到特定的MAC地址。在RHEL/CentOS中，设置是`HWADDR=`在`/etc/sysconfig/network-scripts/ifcfg-ethX`中。大多数其他发行版使用`udev`来处理持久MAC地址，如[第5章](ch05.html
+    "第5章。网络")中所述。我们通过在`xm config`文件中的`vif=`行上指定MAC地址来规避这个问题：
 - en: '[PRE17]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: Here we're using the XenSource MAC prefix, `00:16:3E`. If you start your MAC
     with that prefix, you know it won't conflict with any assigned hardware MAC addresses.
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们使用XenSource MAC前缀`00:16:3E`。如果你的MAC地址以这个前缀开始，你知道它不会与任何分配的硬件MAC地址冲突。
 - en: If you don't specify the MAC address, it'll be randomly generated every time
     the domU boots, which causes some inconvenience if your domU OS has locked down
     `ethX` to a particular MAC. For more on the possible effects and why it's a good
     idea to specify a MAC address, see [Chapter 5](ch05.html "Chapter 5. NETWORKING").
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你没有指定MAC地址，每次domU启动时都会随机生成，如果你的domU操作系统将`ethX`锁定到特定的MAC地址，这可能会带来一些不便。有关可能的影响以及为什么指定MAC地址是一个好主意，请参阅[第5章](ch05.html
+    "第5章。网络")。
 - en: iptables
+  id: totrans-105
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: iptables
 - en: The `iptables` rules can also be a source of trouble with Xen. As with any `iptables`
     setup, it's easy to mess up in subtle ways and break everything. The best way
     we've found to make sure that `iptables` rules are working is to send packets
     through and watch what happens to them. Run `iptables -L -v` to see counters for
     how many packets have hit each rule or have been affected by the chain policy.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: '`iptables` 规则也可能是Xen出现问题的原因。与任何 `iptables` 设置一样，很容易以微妙的方式出错并破坏一切。我们找到的确保 `iptables`
+    规则正常工作的最佳方法是发送数据包并观察它们发生了什么。运行 `iptables -L -v` 以查看每个规则被击中或受链策略影响的包计数器。'
 - en: Note
+  id: totrans-107
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*The interface counters for vifs that are examined from the dom0 end will be
     inverted; outgoing traffic will report as incoming, and vice versa. See [Chapter 5](ch05.html
     "Chapter 5. NETWORKING") for more information about why that happens*.'
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: '*从dom0端检查的vif接口计数器将被反转；出站流量将报告为入站，反之亦然。有关为什么会出现这种情况的更多信息，请参阅[第5章](ch05.html
+    "第5章. 网络配置")*。'
 - en: 'You may also have trouble getting antispoof to work. If you enable antispoof
     but find you can still spoof arbitrary IP addresses in the domU, add the following
     to your network startup:'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能也会遇到反欺骗无法正常工作的问题。如果你启用了反欺骗但发现你仍然可以在domU中欺骗任意IP地址，请将以下内容添加到你的网络启动脚本中：
 - en: '[PRE18]'
+  id: totrans-110
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: This will cause packets sent through the bridges to traverse the forward chain,
     where Xen puts the antispoof rules. We added the command to the end of */etc/xen/scripts/network-bridge*.
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将导致通过网桥发送的数据包穿越前向链路，其中Xen放置了反欺骗规则。我们已将命令添加到 */etc/xen/scripts/network-bridge*
+    文件的末尾。
 - en: Another problem can occur if you're using vifnames, as we suggest in [Chapter 5](ch05.html
     "Chapter 5. NETWORKING"). Make sure the names are short—eight characters or less.
     Longer names can get truncated, and different parts of the system truncate at
@@ -534,278 +780,417 @@
     where the actual vifnames were truncated at one length, and our firewall rules
     (for antispoof) were truncated at another length, blocking all packets from the
     domain in question. It is better to avoid the problem and keep the vifnames short.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你正在使用我们建议在[第5章](ch05.html "第5章. 网络配置")中使用的vifnames，可能会出现另一个问题。确保名称短——不超过八个字符。较长的名称可能会被截断，并且系统的不同部分可能在不同的长度处截断（至少在CentOS
+    5.0中）。在我们特定的案例中，我们看到了实际vifnames在一个长度处被截断，而我们的防火墙规则（用于反欺骗）在另一个长度处被截断，阻止了来自相关域的所有数据包。最好避免这个问题并保持vifnames短。
 - en: Memory Issues
+  id: totrans-113
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 内存问题
 - en: Xen (or rather, the Linux driver domain) can act rather strangely when memory
     is running low. Because Xen and the dom0 require a certain amount of contiguous,
     unswappable memory, it's surprisingly easy (in our experience) to find the oom-killer
     snacking on processes like candy. This even happens when there's plenty of swap
     available.
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 当内存不足时，Xen（或者更确切地说，Linux驱动程序域）可能会表现得相当奇怪。由于Xen和dom0需要一定量的连续、不可交换的内存，因此在我们经验中，发现oom-killer像吃糖果一样吞噬进程是惊人的容易。即使有足够的交换空间，这种情况也可能发生。
 - en: The best solution we've found—and we freely admit that it's not perfect—is to
     give dom0 more memory. We also prefer to fix its memory allocation at something
     like 512MB so that it doesn't have to cope with Xen constantly adjusting its memory
     size.
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们找到的最佳解决方案——我们坦白地说，这并不完美——是给dom0分配更多的内存。我们还更喜欢将其内存分配固定在512MB左右，这样它就不必应对Xen不断调整其内存大小。
 - en: The basic way of tuning dom0's memory allocation is by adjusting the `dom0_mem`
     kernel parameter, which sets an upper limit, and the `dom0-min-mem` parameter
     in */etc/xen/xend-config.sxp*, which sets a lower limit. Again, we usually set
     both of these to the same value.
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 调整dom0内存分配的基本方法是调整 `dom0_mem` 内核参数，它设置一个上限，以及 */etc/xen/xend-config.sxp* 文件中的
+    `dom0-min-mem` 参数，它设置一个下限。同样，我们通常将这两个参数设置为相同的值。
 - en: 'To set the maximum amount of memory available to the dom0, edit *menu.lst*
     and put the option after the kernel line, like this:'
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: 要设置dom0可用的最大内存量，请编辑 *menu.lst* 文件，并在内核行之后放置选项，如下所示：
 - en: '[PRE19]'
+  id: totrans-118
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: In the absence of units, Xen will assume that the value is in KB.
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果没有单位，Xen将假设该值以KB为单位。
 - en: Next, edit */etc/xen/xend-config.sxp* and add a line that says:^([[85](#ftn.CHP-15-FNOTE-1)])
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，编辑 */etc/xen/xend-config.sxp* 文件并添加一行，内容如下：^([[85](#ftn.CHP-15-FNOTE-1)])
 - en: '[PRE20]'
+  id: totrans-121
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: We do this because we've seen the dom0 have problems with ballooning. Ballooning
     usually works, but, like taking backups from a nonquiescent filesystem, *usually
     works* is not good enough for something as important as the dom0.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们这样做是因为我们看到了dom0在膨胀方面存在问题。膨胀通常可以工作，但，就像从非静默文件系统备份一样，“通常可以工作”对于像dom0这样重要的东西来说还不够好。
 - en: '* * *'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[85](#CHP-15-FNOTE-1)]) Recent versions of Xen also support the option `(enable-dom0-ballooning
     no)`.
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[85](#CHP-15-FNOTE-1)]) Xen的最新版本也支持`(enable-dom0-ballooning no)`选项。
 - en: Other Messages
+  id: totrans-125
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 其他消息
 - en: '[PRE21]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: This message usually shows up in response to an attempt to connect to a domain's
     virtual console (especially when Xen's kernel doesn't match its userland; for
     example, if we've upgraded Xen's supporting tools without changing the hypervisor).
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 这条消息通常是在尝试连接到域的虚拟控制台时出现的（尤其是在Xen的内核与其用户空间不匹配时；例如，如果我们已经升级了Xen的支持工具而没有更改虚拟机管理程序）。
 - en: If this is a paravirtualized domain, first try killing and restarting the `xenconsoled`
     process. Make sure it dies. We have seen cases where `xenconsoled` hangs and must
     be killed with a `-9`.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果这是一个半虚拟化域，首先尝试杀死并重新启动`xenconsoled`进程。确保它已经停止。我们见过`xenconsoled`挂起，必须使用`-9`强制停止的情况。
 - en: '[PRE22]'
+  id: totrans-129
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: Then reconnect with `xm console`.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后使用`xm console`重新连接。
 - en: 'If the problem persists, you''re most likely trying to access a domain that
     doesn''t have the necessary Xen frontend console device configured in. There are
     several possibilities: If this is a custom kernel, you may have simply forgotten
     to include it, for example. Check the configuration of the domain''s kernel and
     the initrd for the xvc driver.'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果问题仍然存在，你很可能是试图访问一个没有配置必要的Xen前端控制台设备的域。有几种可能性：如果这是一个自定义内核，你可能只是忘记包含它，例如。检查域内核和initrd中xvc驱动程序的配置。
 - en: 'If you are accessing an HVM domain running a default (nonenlightened) kernel
     that doesn''t include the console driver, try using the framebuffer or booting
     a different kernel. You might also be able to set `serial=pty` in the domain config
     file and set the domU OS to use com1 as the console. See [Chapter 12](ch12.html
     "Chapter 12. HVM: BEYOND PARAVIRTUALIZATION") for details.'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你正在访问运行默认（非启发式）内核的HVM域，该内核不包括控制台驱动程序，请尝试使用framebuffer或启动不同的内核。你还可以在域配置文件中设置`serial=pty`，并将domU操作系统设置为使用com1作为控制台。参见[第12章](ch12.html
+    "第12章。HVM：超越半虚拟化")以获取详细信息。
 - en: '[PRE23]'
+  id: totrans-133
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'This error can mean a number of things. Often the problem is a version mismatch
     between the tools and the running Xen hypervisor. Although the binaries installed
     in */usr/sbin* may be correct, the underlying Python modules may be wrong. Check
     that they''re correct using whatever evidence is available: dates, comments in
     the files themselves, output of `xm info`, and so on.'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个错误可能意味着许多事情。通常问题是工具和运行的Xen虚拟机管理程序之间的版本不匹配。尽管安装在*/usr/sbin*中的二进制文件可能是正确的，但底层的Python模块可能是错误的。请确保它们是正确的，使用任何可用的证据进行检查：日期、文件中的注释、`xm
+    info`的输出等等。
 - en: 'The error can also indicate a PAE mismatch. In this case *xend-debug.log* will
     give a succinct description of the problem:'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个错误也可能表明PAE不匹配。在这种情况下，*xend-debug.log*将给出关于问题的简短描述：
 - en: '[PRE24]'
+  id: totrans-136
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: Incidentally, your dom0—which is, after all, just a special Xen guest domain—can
     also suffer from this problem. If it happens, the hypervisor will report a PAE
     mismatch in a large boxed-off error message at boot time and immediately reboot.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 顺便说一句，你的dom0——毕竟，它只是一个特殊的Xen客户域——也可能遇到这个问题。如果发生这种情况，虚拟机管理程序将在启动时报告一个大的错误消息中的PAE不匹配，并立即重新启动。
 - en: '[PRE25]'
+  id: totrans-138
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: We got this error while trying to install the binary Xen distribution on a Slackware
     machine. The binary distro comes with a very minimal kernel, so it needs an initrd
     with appropriate modules. For some reason, the default script loaded modules in
     the wrong order, causing some loads to fail with the preceding message.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在尝试在Slackware机器上安装二进制Xen发行版时遇到了这个错误。二进制发行版附带了一个非常基础的内核，因此需要一个带有适当模块的initrd。由于某种原因，默认脚本以错误的顺序加载了模块，导致某些加载失败并出现前面的消息。
 - en: We fixed the problem by changing the load order in the initrd; specific directions
     would depend on your distro.
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们通过更改initrd中的加载顺序来解决这个问题；具体方向将取决于你的发行版。
 - en: A Constant Stream of 4GiB seg fixup Messages
+  id: totrans-141
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 持续的4GiB段修复消息流
 - en: 'Sometimes, on booting a newly installed i386 domain, you''ll be greeted with
     screens full of messages like this:'
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 有时，在启动新安装的i386域时，你会看到满屏类似的消息：
 - en: '[PRE26]'
+  id: totrans-143
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: 'These are related to the */lib/tls* problem: Xen is complaining because it''s
     having to emulate a 4GiB segment for the benefit of some process that''s using
     negative offsets to access the stack. You may also see a giant message at boot,
     reminding you to address this issue.'
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些与*/lib/tls*问题相关：Xen抱怨因为它必须为使用负偏移访问堆栈的一些进程模拟一个4GiB段。你也可能在启动时看到一个巨大的消息，提醒你解决这个问题。
 - en: To solve this problem, you want to use a glibc that does not do this. You can
     compile glibc with the `-mno-tls-direct-seg-refs` option or install the appropriate
     libc6-xen package for your distribution (both Red Hat–like and Debian-like distros
     have created packages to address this problem).
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了解决这个问题，你想要使用不执行此操作的 glibc。你可以使用 `-mno-tls-direct-seg-refs` 选项编译 glibc，或者为你的发行版安装适当的
+    libc6-xen 软件包（Red Hat 类型和 Debian 类型的发行版都创建了软件包来解决这个问题）。
 - en: 'With Red Hat (and its derived distros), you can also run these commands:'
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于 Red Hat（及其衍生发行版），你还可以运行以下命令：
 - en: '[PRE27]'
+  id: totrans-147
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: This will instruct the dynamic loader to avoid that particular optimization.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将指示动态加载器避免这种特定的优化。
 - en: 'For Debian-based distros (using the 2.6.18 kernel), you can simply run:'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于基于 Debian 的发行版（使用 2.6.18 内核），你可以简单地运行：
 - en: '[PRE28]'
+  id: totrans-150
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'If all else fails (or if you are just too lazy to find a version of gcc with
     `no-tls-direct-seg-refs`), you can do as the error message advises and move the
     TLS library out of the way:'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果所有其他方法都失败了（或者你太懒了，不想找到一个带有 `no-tls-direct-seg-refs` 的 gcc 版本），你可以按照错误信息建议的那样，将
+    TLS 库移开：
 - en: '[PRE29]'
+  id: totrans-152
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: In our experience, there isn't any problem with moving the library. Everything
     will continue to function as expected.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 根据我们的经验，移动库没有问题。一切都将按预期继续运行。
 - en: The Importance of Disk Drivers (initrd Problems)
+  id: totrans-154
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 磁盘驱动程序的重要性（initrd 问题）
 - en: 'Often when using a distro kernel, a Xen domU will boot but be unable to locate
     its root device. For example:'
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 在使用发行版内核时，Xen domU 通常可以引导，但无法找到其根设备。例如：
 - en: '[PRE30]'
+  id: totrans-156
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: 'The underlying problem here—at least in this case—is that the domU kernel doesn''t
     have the necessary drivers compiled in, and the ramdisk was not specified. A look
     at the boot output confirms this, with the messages:'
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，至少在这个案例中，根本问题在于 domU 内核没有编译进必要的驱动程序，并且没有指定 ramdisk。查看引导输出可以确认这一点，其中包含以下消息：
 - en: '[PRE31]'
+  id: totrans-158
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: Nearly all distro kernels come with a minimal kernel and require an initrd with
     the disk driver to finish booting. These messages may simply come from the kernel
     before the initrd has loaded, or they can indicate a serious problem if the initrd
     doesn't contain the necessary drivers.
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 几乎所有发行版内核都包含一个最小内核，并且需要带有磁盘驱动程序的 initrd 来完成引导。这些消息可能只是来自在 initrd 加载之前的内核，或者如果
+    initrd 不包含必要的驱动程序，它们可以指示一个严重问题。
 - en: If the kernel managed to load its initrd correctly and failed to switch to its
     real root, you'll find yourself stuck in the initrd with a very limited selection
     of files. In this case, make sure that your devices exist (`/dev/sda1` in this
     example) and that you've got the Xen disk frontend kernel module.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果内核成功加载了其 initrd 并未能切换到其真实根目录，你将发现自己卡在 initrd 中，文件选择非常有限。在这种情况下，请确保你的设备存在（例如，本例中的
+    `/dev/sda1`）并且你已经安装了 Xen 磁盘前端内核模块。
 - en: We also commonly see this within PyGRUB domUs after a kernel upgrade (and new
     initrd) if the modules config (*/etc/modules* on Debian, */etc/modprobe.conf*
     on Red Hat) didn't specify `xenblk`. For RHEL/CentOS domUs, you can solve this
     problem by running `mkinitrd` with the `--preload xenblk` switch.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们也经常在内核升级（以及新的 initrd）后看到 PyGRUB domUs 中出现这种情况，如果模块配置（在 Debian 上为 */etc/modules*，在
+    Red Hat 上为 */etc/modprobe.conf*）没有指定 `xenblk`。对于 RHEL/CentOS domUs，你可以通过运行带有 `--preload
+    xenblk` 选项的 `mkinitrd` 来解决这个问题。
 - en: If you use an external kernel and want to use a distro kernel, you must specify
     a `ramdisk=` line in the domain config file, and specify a ramdisk that includes
     the `xenblk` (and `xennet`, if you want network before boot) drivers.
+  id: totrans-162
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你使用外部内核并想使用发行版内核，你必须指定域配置文件中的 `ramdisk=` 行，并指定包含 `xenblk`（如果你想在引导前使用网络，还需要
+    `xennet`）驱动程序的 ramdisk。
 - en: Another solution to this problem would be to compile Xen from source and build
     a sufficiently generic domU kernel, with the `xenblk` and `xennet` drivers already
     compiled in. Even if you continue to boot the dom0 from the distro kernel (probably
     a good idea), this will sidestep the distro-specific issues found with both Red
     Hat and Debian kernels.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 解决这个问题的另一个方法是从源代码编译 Xen 并构建一个足够通用的 domU 内核，其中已经编译了 `xenblk` 和 `xennet` 驱动程序。即使你继续从发行版内核（可能是一个好主意）引导
+    dom0，这也会避开 Red Hat 和 Debian 内核中发现的特定于发行版的问题。
 - en: This may cause problems with some domU distros because the expected initrd won't
     be there. Sometimes it can be difficult to build an initrd against a kernel with
     disk drivers built in. However, the generic kernel will usually at least boot.
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 这可能会对某些 domU 发行版造成问题，因为预期的 initrd 不会在那里。有时，在带有内置磁盘驱动程序的内核上构建 initrd 可能很困难。然而，通用内核通常至少可以引导。
 - en: We often find it useful to keep these generic kernels as a secondary rescue
     boot option within the domU PyGRUB config because they work no matter how badly
     the initrd is messed up.
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们通常发现将这两个通用内核作为domU PyGRUB配置中的二级救援启动选项很有用，因为无论initrd有多混乱，它们都能正常工作。
 - en: XenStore
+  id: totrans-166
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: XenStore
 - en: Sometimes the XenStore gets corrupted, or `xenstored` dies, or for various other
     reasons the XenStore ceases to store and report information. For example, this
     may happen if the block device holding the XenStore database becomes full.
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: 有时XenStore会损坏，或者`xenstored`进程崩溃，或者由于各种其他原因，XenStore停止存储和报告信息。例如，如果包含XenStore数据库的块设备已满，就可能会发生这种情况。
 - en: 'The most obvious symptom is that `xm list` will report domain names incorrectly,
     for example:'
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 最明显的症状是`xm list`将报告域名称错误，例如：
 - en: '[PRE32]'
+  id: totrans-169
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: Obviously, this is problematic. For one thing, it means that all commands that
     can take a name or ID, such as `xm console`, will no longer recognize names.
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 显然，这是问题。首先，这意味着所有可以接受名称或ID的命令，如`xm console`，将不再识别名称。
 - en: Unfortunately, `xenstored` cannot be restarted, so you'll have to reboot. If
     you're running a version of Xen prior to 3.1 (including the RHEL 5.x version),
     you'll have to remove */var/lib/xenstored/tdb* first, then reboot.
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: 不幸的是，`xenstored` 不能被重新启动，所以你必须重新启动。如果你运行的是Xen 3.1之前的版本（包括RHEL 5.x版本），你必须首先删除
+    */var/lib/xenstored/tdb*，然后重新启动。
 - en: Xen's Logs
+  id: totrans-172
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Xen的日志
 - en: These error messages make a good start for Xen troubleshooting, but sometimes
     they're not helpful enough to solve the problem. In these cases, we need to dig
     deeper.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些错误信息是Xen故障排除的良好起点，但有时它们不足以解决问题。在这些情况下，我们需要深入挖掘。
 - en: dmesg and xm dmesg
+  id: totrans-174
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: dmesg 和 xm dmesg
 - en: Although the output of `xm dmesg` isn't a log in the usual sense of a log file,
     it's an important source of diagnostic output. If you've got a problem whose source
     isn't obvious from the error message, begin by looking at the Xen kernel message
@@ -813,106 +1198,153 @@
     message buffer, which ordinarily contains all kernel messages since the system's
     last boot (or, if the system's been up for a while, it displays a succession of
     boring status messages).
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然通常意义上的日志文件不是`xm dmesg`的输出，但它是一个重要的诊断输出源。如果你遇到的问题从错误信息中不明显，首先查看Xen内核消息缓冲区。正如你可能知道的，Linux
+    `dmesg`命令打印出Linux内核的消息缓冲区，通常包含自系统上次启动以来的所有内核消息（或者，如果系统运行了一段时间，它将显示一系列无聊的状态消息）。
 - en: 'Because Xen could be said to act as a kernel in its own right, it includes
     an equivalent tool, `xm dmesg`, to print out messages from the hypervisor boot
     (the lines that begin with `(XEN)` in the startup messages). For example:'
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 因为Xen可以说是一个自己的内核，它包括一个等效的工具，`xm dmesg`，用于打印出管理程序启动时的消息（启动消息中以`(XEN)`开头的行）。例如：
 - en: '[PRE33]'
+  id: totrans-177
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: In this case, the errors are harmless. The processor simply runs on its factory-installed
     microcode.
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这种情况下，错误是无害的。处理器只是在其出厂预装的微码上运行。
 - en: Note
+  id: totrans-179
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Like the kernel, Xen retains only a fixed-size message buffer. Older messages
     go off into oblivion*.'
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: '*就像内核一样，Xen只保留固定大小的消息缓冲区。较旧的消息将消失在无垠之中*。'
 - en: Logs and What Xen Writes to Them
+  id: totrans-181
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 日志和Xen写入的内容
 - en: If `xm dmesg` isn't enlightening, Xen's next line of communication is its extensive
     logging. Let's look at the various logs that Xen uses and what we can do with
     them.
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果`xm dmesg`没有提供有用的信息，Xen的下一条通信途径是其广泛的日志记录。让我们看看Xen使用的各种日志以及我们可以做什么。
 - en: 'We can summarize Xen''s logs as follows, in rough order of importance:'
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以按以下顺序总结Xen的日志，按重要性粗略排序：
 - en: '*/var/log/xen/xend.log*'
+  id: totrans-184
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*/var/log/xen/xend.log*'
 - en: '*/var/log/xen/xend-debug.log*'
+  id: totrans-185
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*/var/log/xen/xend-debug.log*'
 - en: '*/var/log/xen/xen-hotplug.log*'
+  id: totrans-186
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*/var/log/xen/xen-hotplug.log*'
 - en: '*/var/log/syslog*'
+  id: totrans-187
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*/var/log/syslog*'
 - en: '*/var/log/debug*'
+  id: totrans-188
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '*/var/log/debug*'
 - en: Most of your Xen troubleshooting will involve the first two logs. *xend.log*
     is the main `xend` log, as you might suppose. It records domain startups, shutdowns,
     device creation, debugging whatever, and occasionally includes giant incomprehensible
     Python dumps. It's the first thing to check.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 大多数的Xen故障排除都将涉及前两个日志。*xend.log* 是主要的 `xend` 日志，正如你可能想象的那样。它记录了域的启动、关闭、设备创建、调试等，偶尔还会包括巨大的难以理解的Python转储。这是首先要检查的。
 - en: '*xend-debug.log* has information relating to more experimental features of
     Xen, such as the framebuffer. It''ll also have verbose tracebacks when Xen runs
     into trouble.'
+  id: totrans-190
   prefs: []
   type: TYPE_NORMAL
+  zh: '*xend-debug.log* 包含与Xen的更多实验性功能相关的信息，例如帧缓冲区。当Xen遇到问题时，它还会包含详细的回溯信息。'
 - en: Because `xend` uses the syslog facility, messages from Xen also show up in the
     system-wide */var/log/syslog* and */var/log/debug*.
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: 因为`xend`使用syslog设施，Xen的消息也会出现在系统级的`/var/log/syslog`和`/var/log/debug`中。
 - en: Note
+  id: totrans-192
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*We hasten to add that syslog is almost humorously configurable. Even the term*
     system-wide *only applies to the default configuration; syslog can consolidate
     logs across multiple hosts, categorize messages into various channels, write to
     arbitrary files, and so on, but we''re going to assume that, if you''ve configured
     syslog, you can translate what we say about Xen''s use of it to apply to your
     configuration*.'
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: '*我们急忙补充说，syslog的配置几乎是幽默的。即使是术语*系统级*也仅适用于默认配置；syslog可以跨多个主机合并日志，将消息分类到各种通道，写入任意文件等等，但我们假设，如果您已经配置了syslog，您可以将我们关于Xen使用它的说法应用到您的配置中*。'
 - en: Finally, if you're using HVM, `qemu-dm` will write its own logs. By and large,
     you can safely ignore these. In our experience, problems with HVM domains haven't
     been the fault of QEMU's device emulation.
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，如果您使用HVM，`qemu-dm`将写入它自己的日志。总的来说，您可以安全地忽略这些日志。根据我们的经验，HVM域的问题并不是QEMU设备仿真的过错。
 - en: If the kernel messages prove to be unenlightening, it's time to take a look
     at the log files. First, let's configure Xen to ensure that they're as round,
     firm, and fully packed as possible.
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果内核消息证明无法提供启示，那么是时候查看日志文件了。首先，让我们配置Xen以确保它们尽可能圆滑、坚实和完全填充。
 - en: THE IMPORTANCE OF A DEBUG BUILD
+  id: totrans-196
   prefs: []
   type: TYPE_NORMAL
+  zh: 调试构建的重要性
 - en: For troubleshooting (and, in fact, general use) we recommend building Xen with
     all of its debugging options turned on. This makes the error messages more informative
     and plentiful, making it easier to figure out where problems are coming from and,
     with any luck, eliminate them.
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于故障排除（实际上，对于一般使用），我们建议使用所有调试选项构建Xen。这使得错误信息更加丰富和有用，更容易找出问题所在，并希望消除它们。
 - en: Although it might seem that copious debugging output would cause a perfor-mance
     hit, in our experience it's negligible when running Xen normally. A debug build
     gives you the option of running Xen with excessive debugging output, but it performs
@@ -921,366 +1353,541 @@
     have all the the debugging knobs set to **full**. To enable full output for the
     hypervisor, add the options `loglvl=all guest_loglvl=all` to your hypervisor command
     line (usually in */boot/grub/menu.lst*).
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然大量的调试输出可能会造成性能影响，但根据我们的经验，在正常运行Xen时它几乎可以忽略不计。调试构建为您提供了在Xen上运行大量调试输出的选项，但如果不使用该模式，其性能与正常构建相当。如果您发现错误信息无帮助，确保您已经将所有调试旋钮设置为**完全**可能是个好主意。为了为虚拟机管理程序启用完整输出，请将`loglvl=all
+    guest_loglvl=all`选项添加到您的虚拟机管理程序命令行（通常在`/boot/grub/menu.lst`中）。
 - en: See [Chapter 14](ch14.html "Chapter 14. TIPS") for more information on building
     Xen, including how to set the debugging options.
+  id: totrans-199
   prefs: []
   type: TYPE_NORMAL
+  zh: 有关构建Xen的更多信息，包括如何设置调试选项，请参阅[第14章](ch14.html "第14章。技巧")。
 - en: Applying the Debugger
+  id: totrans-200
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 应用调试器
 - en: If even the maximum-verbosity logging isn't enough, it's time to attack the
     problem at the Python level, with the debugger.
+  id: totrans-201
   prefs: []
   type: TYPE_NORMAL
+  zh: 即使是最大详细度的日志记录也不够，那么是时候在Python级别上攻击问题，使用调试器。
 - en: One investigation to try is to run the `xend` server in the foreground and watch
     its debug output. This will let you see somewhat more information than simply
     following the logs.
+  id: totrans-202
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个可以尝试的调查是运行`xend`服务器在前台并观察其调试输出。这将让您看到比仅仅跟踪日志更多的一些信息。
 - en: 'With current versions of Xen, the debug functionality is included in the releases.^([[86](#ftn.CHP-15-FNOTE-2)])
     Enable the debug output with the following:'
+  id: totrans-203
   prefs: []
   type: TYPE_NORMAL
+  zh: 在当前版本的Xen中，调试功能包含在发布中.^([[86](#ftn.CHP-15-FNOTE-2)]) 使用以下命令启用调试输出：
 - en: '[PRE34]'
+  id: totrans-204
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: This will start `xend` in the foreground and tell it to print debug messages
     as it goes along.
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将启动`xend`在前台，并告诉它在执行过程中打印调试信息。
 - en: You can also get copious debugging information for the XenStore by setting `XENSTORED_TRACE=1`
     somewhere where `xend`'s environment will pick it up, perhaps at the top of */etc/init.d/xend*
     or in root's *.bashrc*.
+  id: totrans-206
   prefs: []
   type: TYPE_NORMAL
+  zh: 您还可以通过设置`XENSTORED_TRACE=1`来获取XenStore的大量调试信息，可能是在`xend`的环境变量中，例如在`/etc/init.d/xend`的顶部或在root的`.bashrc`中。
 - en: 'Xen''s Backend Architecture: Making Sense of the Debug Information'
+  id: totrans-207
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Xen的后端架构：理解调试信息
 - en: Of course, all this debugging output is more useful with some idea of how Xen
     is structured.
+  id: totrans-208
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，所有这些调试输出如果对Xen的结构有所了解会更有用。
 - en: If you take a look at the actual `xend` executable, the first thing you'll notice
     is that it's really very short. There's not much to it; all of the heavy lifting
     is done in external Python libraries, which live in */xen/xend/server* in one
     of the Python library directories. (In the case of the system I'm sitting in front
     of, this is */usr/lib/python2.4/site-packages/xen/xend/server*.)
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你查看实际的`xend`可执行文件，你首先会注意到它真的很短。里面没什么内容；所有的重活都是在外部Python库中完成的，这些库位于Python库目录中的`/xen/xend/server`。
+    (在我面前的系统中，这是`/usr/lib/python2.4/site-packages/xen/xend/server`。)
 - en: 'Likewise, `xm` is also a short Python script. The take-home message here is
     that most of the error messages that you''ll see emanate from somewhere in this
     directory tree, and they''ll helpfully print the responsible file and line number
     so you can examine the Python script more closely. For example, look at this line
     from */var/log/xen/xend.log*:'
+  id: totrans-210
   prefs: []
   type: TYPE_NORMAL
+  zh: 同样，`xm`也是一个简短的Python脚本。这里的关键信息是，你将看到的绝大多数错误消息都来自这个目录树中的某个地方，并且它们会友好地打印出负责的文件和行号，这样你就可以更仔细地检查Python脚本。例如，看看`/var/log/xen/xend.log`中的这一行：
 - en: '[PRE35]'
+  id: totrans-211
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: At the beginning is the date, time, and `xend`'s Process ID (PID). Then comes
     the severity of the error (in this case, `WARNING`, which is merely irritating).
     After that is the file and line number where the error occurred, followed by the
     contents of the error message.
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: 开头是日期、时间和`xend`的进程ID (PID)。然后是错误的严重性（在这种情况下，`WARNING`，这仅仅令人烦恼）。之后是错误发生的位置的文件和行号，接着是错误消息的内容。
 - en: XEN'S HIERARCHY OF INFORMATIVE MESSAGES
+  id: totrans-213
   prefs: []
   type: TYPE_NORMAL
+  zh: XEN的信息消息层次结构
 - en: '`WARNING` is only one point along the continuum of messages. At the lowest
     extreme of severity, we have `DEBUG`, which the developers use for whatever output
     strikes their fancy. It''s often useful, but it generates a lot of data to wade
     through. Slightly more significantly, we have `INFO`. Messages at this level are
     supposed to be interesting or useful to the administrator but not indicative of
     a problem.'
+  id: totrans-214
   prefs: []
   type: TYPE_NORMAL
+  zh: '`WARNING`只是消息连续体上的一个点。在严重性最低的极端，我们有`DEBUG`，开发者会使用它来输出任何他们感兴趣的内容。这通常很有用，但会产生大量数据需要处理。稍微重要一些的是`INFO`。这个级别的消息应该是管理员感兴趣或有用的，但不应该表明存在问题。'
 - en: Then comes `WARNING`, which indicates a problem, but not a critical one. For
     example, the previous message tells us that we'd have trouble if we're relying
     on the `VM.get_auto_power_on` function but that nothing bad will happen if we
     don't try touseit.
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后是`WARNING`，这表明存在问题，但不是关键问题。例如，之前的消息告诉我们，如果我们依赖于`VM.get_auto_power_on`函数，我们可能会遇到麻烦，但如果我们不尝试使用它，就不会发生任何坏事。
 - en: Finally, Xen uses `ERROR` for genuine, beyond-denial errors—the sort of thing
     thatcan't be put off or ignored. Generally this means that a domain is exiting
     abnormally.
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，Xen使用`ERROR`来表示真正的、无法否认的错误——那种不能推迟或忽视的事情。通常这意味着一个域正在异常退出。
 - en: Armed with this information, you can do several things. To continue our earlier
     example, we'll open */usr/lib/python2.5/site-packages/xen/xend/XendAPI.py* and
     add a line near the top of the file to import the debugger module, `pdb`.
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: 带着这些信息，你可以做几件事情。继续我们之前的例子，我们将打开`/usr/lib/python2.5/site-packages/xen/xend/XendAPI.py`，并在文件顶部附近添加一行来导入调试模块`pdb`。
 - en: '[PRE36]'
+  id: totrans-218
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: 'Having done that, you can set a breakpoint. Just add a line near line 672:'
+  id: totrans-219
   prefs: []
   type: TYPE_NORMAL
+  zh: 做完这些之后，你可以设置一个断点。只需在行672附近添加一行：
 - en: '[PRE37]'
+  id: totrans-220
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: Then try rerunning the server (or redoing whatever other behavior you're concerned
     with) and note that `xend` starts the debugger when it hits your new breakpoint.
+  id: totrans-221
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后尝试重新运行服务器（或重做你关心的任何其他行为），并注意当`xend`遇到你新设置的断点时，它会启动调试器。
 - en: 'At this point you can do everything that you might expect in a debugger: change
     the values of variables, step through a function, step into subroutines, and so
     forth. In this case, we might backtrace, figure out why it''s trying to call `VM.get_auto_power_on`,
     and maybe wrap it in an error-handling block.'
+  id: totrans-222
   prefs: []
   type: TYPE_NORMAL
+  zh: 到这个阶段，你可以做在调试器中可能期望做的任何事情：改变变量的值，逐步执行函数，逐步进入子例程等等。在这种情况下，我们可能会回溯，找出为什么它试图调用`VM.get_auto_power_on`，并可能将其包裹在错误处理块中。
 - en: Domain Stays in Blocked State
+  id: totrans-223
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 域保持阻塞状态
 - en: This heading is a bit of a misnomer. The reality is that the "blocked" state
     reported by tools like `xm list` simply means that the domain is idle. The true
     problem is that the domain seems unresponsive.
+  id: totrans-224
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个标题有点误导。实际情况是，像`xm list`这样的工具报告的“阻塞”状态仅仅意味着该域处于空闲状态。真正的问题是该域似乎没有响应。
 - en: 'Usually we find that this problem is related to the console; for example:'
+  id: totrans-225
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常我们发现这个问题与控制台有关；例如：
 - en: '[PRE38]'
+  id: totrans-226
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: (and then an indefinite hang). Upon breaking out and looking at the output of
     `xm list`, we note that the domain stays in a blocked state and consumes very
     little CPU time.
+  id: totrans-227
   prefs: []
   type: TYPE_NORMAL
+  zh: （然后无限期地挂起）。当我们跳出并查看 `xm list` 的输出时，我们注意到域保持阻塞状态并且消耗的 CPU 时间非常少。
 - en: '[PRE39]'
+  id: totrans-228
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: 'A quick look at */var/log/xen/xend-debug.log* suggested an answer:'
+  id: totrans-229
   prefs: []
   type: TYPE_NORMAL
+  zh: 快速查看 */var/log/xen/xend-debug.log* 提示了一个答案：
 - en: '[PRE40]'
+  id: totrans-230
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE40]'
 - en: Port 5900 is VNC. Aha! The problem was that Xen wasn't using the virtual console
     device that `xm` console connects to. In this case, we traced it to user error.
     We specified the framebuffer and forgot about it. The kernel, as instructed, used
     the framebuffer as console rather than emulated serial console that we were expecting.
     When we started a VNC client and connected to port 5900, it gave us the expected
     graphical console.
+  id: totrans-231
   prefs: []
   type: TYPE_NORMAL
+  zh: 端口 5900 是 VNC。啊！问题是 Xen 没有使用 `xm` 控制连接到的虚拟控制台设备。在这种情况下，我们将其追溯到用户错误。我们指定了帧缓冲区并忘记了它。内核按照指示，使用帧缓冲区作为控制台而不是我们预期的仿真串行控制台。当我们启动
+    VNC 客户端并连接到端口 5900 时，它给了我们预期的图形控制台。
 - en: Note
+  id: totrans-232
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*If we had put a* *`getty`* *on xvc0, even though we wouldn''t have seen boot
     output, we''d at least get a login prompt when the machine booted*.'
+  id: totrans-233
   prefs: []
   type: TYPE_NORMAL
+  zh: '*如果我们把一个* *`getty`* *放在 xvc0 上，即使我们看不到引导输出，当机器启动时至少会得到一个登录提示*。'
 - en: Debugging Hotplug
+  id: totrans-234
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 热插拔调试
 - en: Xen makes extensive use of udev to create and destroy virtual devices, both
     in the dom0 and the domU. Most of its interaction with Linux's hotplug subsystem
     gets logged in */var/log/xen/xen-hotplug.log*. (We're going to treat hotplug as
     synonymous with udev because we can't think of any system that still uses the
     pre-udev hotplug implementation.)
+  id: totrans-235
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen 在 dom0 和 domU 中广泛使用 udev 来创建和销毁虚拟设备。它与 Linux 的热插拔子系统的交互大部分记录在 */var/log/xen/xen-hotplug.log*
+    中。（我们将热插拔视为与 udev 同义词，因为我们想不出任何仍在使用 pre-udev 热插拔实现的系统。）
 - en: First, we examine the effects of the script. In this case, we use `udevmonitor`
     to see udev events. It should show an `add` event for each `vif` and `vbd` as
     well as an `online` event for the `vif`. These go through the rules in */etc/udev/rules.d/xen-backend.rules*,
     which executes appropriate scripts in */etc/xen/scripts*.
+  id: totrans-236
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我们检查脚本的效果。在这种情况下，我们使用 `udevmonitor` 来查看 udev 事件。它应该显示每个 `vif` 和 `vbd` 的 `add`
+    事件以及 `vif` 的 `online` 事件。这些事件通过 */etc/udev/rules.d/xen-backend.rules* 中的规则进行，该规则在
+    */etc/xen/scripts* 中执行适当的脚本。
 - en: 'At this point you can add some extra logging. At the top of the script for
     the device you''re interested in (e.g., blktap), put:'
+  id: totrans-237
   prefs: []
   type: TYPE_NORMAL
+  zh: 到这一点，你可以添加一些额外的日志。在对你感兴趣的设备（例如，blktap）的脚本顶部添加：
 - en: '[PRE41]'
+  id: totrans-238
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE41]'
 - en: This will cause the shell to expand the commands in the script and write them
     to *xen-hotplug.log*, enabling you (hopefully) to trace down the source of the
     problem and eliminate it.
+  id: totrans-239
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将导致 shell 扩展脚本中的命令并将它们写入 *xen-hotplug.log*，使你（希望）能够追踪问题的根源并消除它。
 - en: 'Hotplug can also act as a bit of a catchall for any virtual device problem.
     Some hotplug-related errors take the form of the dreaded `Hotplug scripts not
     working` message, like the following:'
+  id: totrans-240
   prefs: []
   type: TYPE_NORMAL
+  zh: 热插拔也可以作为任何虚拟设备问题的万能解决方案。一些与热插拔相关的错误以令人恐惧的 `Hotplug 脚本不工作` 消息的形式出现，如下所示：
 - en: '[PRE42]'
+  id: totrans-241
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE42]'
 - en: 'This seems to be associated with messages like the following:'
+  id: totrans-242
   prefs: []
   type: TYPE_NORMAL
+  zh: 这似乎与以下类似的消息有关：
 - en: '[PRE43]'
+  id: totrans-243
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE43]'
 - en: 'In this case, however, these messages turned out to be red herrings. The answer
     came out of *xend-debug.log*, which said:'
+  id: totrans-244
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个情况下，然而，这些信息最终证明是误导。答案出现在 *xend-debug.log* 文件中，它说：
 - en: '[PRE44]'
+  id: totrans-245
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE44]'
 - en: As it developed, `libvncserver` was installed in */usr/local*, which the runtime
     linker had been ignoring. After adding */usr/local/lib* to */etc/ld.so.conf*,
     `xen-vncfb` started up happily.
+  id: totrans-246
   prefs: []
   type: TYPE_NORMAL
+  zh: 随着问题的逐步发展，`libvncserver` 被安装在 */usr/local*，而运行时链接器之前一直在忽略它。在将 */usr/local/lib*
+    添加到 */etc/ld.so.conf* 之后，`xen-vncfb` 开始顺利启动。
 - en: strace
+  id: totrans-247
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: strace
 - en: 'One important generic troubleshooting technique is to use strace to look at
     what the Xen control tools are really doing. For example, if Xen is failing to
     find an external binary (like xen-vncfb), strace can reveal that problem with
     a command like the following:'
+  id: totrans-248
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个重要的通用故障排除技术是使用 strace 来查看 Xen 控制工具实际上在做什么。例如，如果 Xen 无法找到外部二进制文件（如 xen-vncfb），strace
+    可以通过以下命令揭示该问题：
 - en: '[PRE45]'
+  id: totrans-249
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE45]'
 - en: Unfortunately, it'll also give you a lot of other, entirely harmless output
     while Python proceeds to pull in the entirety of its runtime environment based
     on crude guesses about filenames.
+  id: totrans-250
   prefs: []
   type: TYPE_NORMAL
+  zh: 不幸的是，它还会在 Python 根据对文件名的粗略猜测拉入其整个运行时环境的同时，给你带来很多其他完全无害的输出。
 - en: 'Another example of strace''s usefulness comes from when we were setting up
     PyGRUB:'
+  id: totrans-251
   prefs: []
   type: TYPE_NORMAL
+  zh: strace 的另一个有用例子来自我们设置 PyGRUB 时：
 - en: '[PRE46]'
+  id: totrans-252
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE46]'
 - en: 'As it turned out, we didn''t have a directory required by PyGRUB''s backend.
     Thus:'
+  id: totrans-253
   prefs: []
   type: TYPE_NORMAL
+  zh: 结果证明，我们没有PyGRUB后端所需的目录。因此：
 - en: '[PRE47]'
+  id: totrans-254
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE47]'
 - en: and everything works fine.
+  id: totrans-255
   prefs: []
   type: TYPE_NORMAL
+  zh: 一切都正常工作。
 - en: '* * *'
+  id: totrans-256
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[86](#CHP-15-FNOTE-2)]) Once upon a time you had to download a patch and
     rebuild. Thankfully, this is no longer the case.
+  id: totrans-257
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[86](#CHP-15-FNOTE-2)]) 以前你不得不下载补丁并重新构建。幸运的是，现在不再是这种情况了。
 - en: Python Path Issues
+  id: totrans-258
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Python路径问题
 - en: 'The Python path itself can be the subject of some irritation. Just as you''ve
     got your shell executable path, manpath, library path, and so forth, Python has
     its own internal search path that it examines for modules. If the path doesn''t
     include the Xen modules, you can wind up with errors like the following:'
+  id: totrans-259
   prefs: []
   type: TYPE_NORMAL
+  zh: Python路径本身可能会引起一些烦恼。就像你有你的shell可执行路径、manpath、库路径等等一样，Python也有它自己的内部搜索路径，它会检查模块。如果路径不包括Xen模块，你可能会遇到以下错误：
 - en: '[PRE48]'
+  id: totrans-260
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE48]'
 - en: Unfortunately, the mechanisms for adjusting the search path aren't exactly intuitive.
     In most cases, we just fall back to either creating some symlinks or moving the
     Xen files into some directory that's already in Python's path.
+  id: totrans-261
   prefs: []
   type: TYPE_NORMAL
+  zh: 不幸的是，调整搜索路径的机制并不完全直观。在大多数情况下，我们只能退而求其次，创建一些符号链接或将Xen文件移动到Python路径中已经存在的某个目录。
 - en: 'The correct solution is to add a *.pth* file to a directory that''s already
     in Python''s path. This *.pth* file should contain the path of a directory with
     Python modules. For example:'
+  id: totrans-262
   prefs: []
   type: TYPE_NORMAL
+  zh: 正确的解决方案是在Python路径中已经存在的某个目录中添加一个*.pth*文件。这个*.pth*文件应该包含包含Python模块的目录的路径。例如：
 - en: '[PRE49]'
+  id: totrans-263
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE49]'
 - en: 'Confirm that the path updated correctly by starting Python:'
+  id: totrans-264
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过启动Python来确认路径是否已正确更新：
 - en: '[PRE50]'
+  id: totrans-265
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE50]'
 - en: Mysterious Lockups
+  id: totrans-266
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 神秘的挂起
 - en: Mysterious lockups are among the most frustrating aspects of dealing with computers;
     sometimes they just don't work.
+  id: totrans-267
   prefs: []
   type: TYPE_NORMAL
+  zh: 神秘的挂起是处理计算机时最令人沮丧的方面之一；有时它们就是不起作用。
 - en: 'If Xen (or the dom0) hangs mysteriously, chances are you have a kernel panic
     in the dom0\. In this case, you have two problems: first, the crash; second, your
     console logging isn''t adequate to its task.'
+  id: totrans-268
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果Xen（或dom0）神秘地挂起，那么很可能是dom0中发生了内核恐慌。在这种情况下，你有两个问题：首先，崩溃；其次，你的控制台日志不足以完成任务。
 - en: A serial console improves your life immensely. If you're using serial, you should
     see an informative panic message on the serial console. If you don't see that,
     you may want to try typing CTRL-A three times on the console to switch the input
     to the Xen hypervisor. This will at least confirm that Xen and the hardware are
     still up.
+  id: totrans-269
   prefs: []
   type: TYPE_NORMAL
+  zh: 串行控制台极大地改善了你的生活。如果你使用串行，你应该在串行控制台上看到一条有用的恐慌信息。如果你没有看到，你可能想尝试在控制台上连续三次按CTRL-A来切换到Xen虚拟机管理程序。这至少可以确认Xen和硬件仍然正常。
 - en: If you don't have a serial console, try to keep your VGA console on tty1 because
     often the panic message won't go anywhere else. Sometimes a digital camera is
     handy for saving the output of a kernel panic.
+  id: totrans-270
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你没有串行控制台，尽量保持你的VGA控制台在tty1上，因为恐慌信息通常不会出现在其他地方。有时数码相机可以用来保存内核恐慌的输出。
 - en: If the box reboots before you can see the panic message on your console, and
     serial isn't an option, you can try adding `panic=0` to the `module` line that
     specifies your Linux kernel in the domU *menu.lst* file. This has the obvious
     disadvantage of hanging your computer rather than rebooting, but it's good for
     test setups because it'll at least let you see the computer's final messages.
+  id: totrans-271
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果在你能看到控制台上的恐慌信息之前，机器已经重新启动，并且串行不是选项，你可以在domU *menu.lst* 文件中指定你的Linux内核的`module`行上尝试添加`panic=0`。这显然有一个缺点，就是让你的电脑挂起而不是重新启动，但这对测试设置来说是个好主意，因为它至少会让你看到电脑的最终消息。
 - en: 'Kernel Parameters: A Safe Mode'
+  id: totrans-272
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 内核参数：安全模式
 - en: If even the hypervisor serial console doesn't work—that is, if the machine is
     *really* frozen—there are some kernel parameters that we've had good luck with
     in the past.
+  id: totrans-273
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果即使是虚拟机管理程序的串行控制台也不工作——也就是说，如果机器真的冻结了——我们过去在内核参数上取得了一些成功。
 - en: The `ignorebiostables` option to the Linux kernel (on the `module` line) may
     help to avoid hangs when under I/O stress on certain Intel chipsets. If your machine
     is crashing—the hardware is full-on ceasing to function—it might be worth a shot.
     (I know, it's only one step removed from waving a dead chicken over the server,
     but you work with what you've got.)
+  id: totrans-274
   prefs: []
   type: TYPE_NORMAL
+  zh: Linux内核的`ignorebiostables`选项（在`module`行上）可能有助于避免在特定英特尔芯片组在I/O压力下的挂起。如果你的机器崩溃了——硬件完全停止工作——这值得一试。（我知道，这和挥舞死鸡在服务器上没什么区别，但你只能用你拥有的东西。）
 - en: In a similar vein, `acpi=off` and `nousb` have been reported to improve stability
     on some hardware. You may also want to disable hyperthreading in the BIOS. Some
     Xen versions have had trouble with it.
+  id: totrans-275
   prefs: []
   type: TYPE_NORMAL
+  zh: 类似地，`acpi=off` 和 `nousb` 已被报告在某些硬件上提高了稳定性。你也许还希望在 BIOS 中禁用超线程。一些 Xen 版本曾因此遇到问题。
 - en: 'If you want to add all of these options at once, your */boot/grub/menu.lst*
     entry for Xen will look something like this:'
+  id: totrans-276
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你想一次性添加所有这些选项，你的 */boot/grub/menu.lst* 中的 Xen 条目看起来可能如下所示：
 - en: '[PRE51]'
+  id: totrans-277
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE51]'
 - en: Getting Help
+  id: totrans-278
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 获取帮助
 - en: You can, of course, email us directly with Xen-related questions. No guarantee
     that we'll be able to help, but asking is easy enough. There's also a list of
     Xen consultants on the Xen wiki at [http://wiki.xensource.com/xenwiki/Consultants](http://wiki.xensource.com/xenwiki/Consultants).
     (If you happen to be a Xen consultant, feel free to add yourself.)
+  id: totrans-279
   prefs: []
   type: TYPE_NORMAL
+  zh: 你当然可以直接给我们发送与 Xen 相关的邮件。我们无法保证一定能提供帮助，但提问很容易。Xen 维基上还有一个 Xen 咨询师列表 [http://wiki.xensource.com/xenwiki/Consultants](http://wiki.xensource.com/xenwiki/Consultants)。如果你恰好是
+    Xen 咨询师，请随时添加自己。
 - en: Mailing Lists
+  id: totrans-280
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 邮件列表
 - en: There are several popular mailing lists devoted to Xen. You can sign up and
     read digests at [http://lists.xensource.com/](http://lists.xensource.com/). We
     recommend reading the Xen-users mailing list at least. Xen-devel can be interesting,
@@ -1288,110 +1895,161 @@
     in Xen development. At any rate, both lists are good places to look for help,
     but Xen-users is a much better place to start if you have a question that involves
     *using* Xen, rather than hacking at it.
+  id: totrans-281
   prefs: []
   type: TYPE_NORMAL
+  zh: 有几个流行的 Xen 邮件列表。你可以在 [http://lists.xensource.com/](http://lists.xensource.com/)
+    上注册并阅读摘要。我们建议至少阅读 Xen-users 邮件列表。Xen-devel 可能很有趣，但大量的补丁可能会让不积极参与 Xen 开发的人感到沮丧。无论如何，这两个列表都是寻找帮助的好地方，但如果你有一个关于使用
+    Xen 的问题，Xen-users 是一个更好的起点。
 - en: The Xen Wiki
+  id: totrans-282
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Xen 维基
 - en: Xen has a fairly extensive wiki at [http://wiki.xensource.com/](http://wiki.xensource.com/).
     Some of it is out of date, but it's still a valuable starting point. Of course,
     new contributors are always welcome. Take a look, poke around, and add your own
     experiences, tips, and cool tidbits.
+  id: totrans-283
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen 在 [http://wiki.xensource.com/](http://wiki.xensource.com/) 上有一个相当全面的维基。其中一些内容可能已经过时，但它仍然是一个有价值的起点。当然，新贡献者总是受欢迎的。看看，四处逛逛，并添加你自己的经验、技巧和有趣的小知识。
 - en: The Xen IRC Channel
+  id: totrans-284
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Xen IRC 频道
 - en: There's a fairly popular Xen IRC channel, *#xen* on *irc.oftc.net*. Feel free
     to stop by and chat.
+  id: totrans-285
   prefs: []
   type: TYPE_NORMAL
+  zh: 有一个相当受欢迎的 Xen IRC 频道，*#xen* 在 *irc.oftc.net* 上。随时可以过来聊天。
 - en: Bugzilla
+  id: totrans-286
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Bugzilla
 - en: Xen maintains a bug database, just like all software projects above a certain
     size. It's publicly accessible at [http://bugzilla.xensource.com/](http://bugzilla.xensource.com/).
     Type keywords into the search box, press the button, and read the results.
+  id: totrans-287
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen 维护了一个类似所有较大规模软件项目的错误数据库。它可以在 [http://bugzilla.xensource.com/](http://bugzilla.xensource.com/)
+    上公开访问。在搜索框中输入关键词，按按钮，然后阅读结果。
 - en: Your Distro Vendor
+  id: totrans-288
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 你的发行版供应商
 - en: Don't forget the specific documentation and support resources of your vendor.
     Xen is a complex piece of software, and the specifics of how it's integrated vary
     between distros. Although the distro documentation may not be as complete as,
     say, this book, it's likely to at least point in the correct direction.
+  id: totrans-289
   prefs: []
   type: TYPE_NORMAL
+  zh: 不要忘记查看你的供应商提供的具体文档和支持资源。Xen 是一个复杂的软件，它在不同发行版中的集成方式各不相同。尽管发行版的文档可能不如这本书完整，但它至少能指明正确的方向。
 - en: xen-bugtool
+  id: totrans-290
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`xen-bugtool`'
 - en: If all else fails, you can use `xen-bugtool` to annoy the developers directly.
     The purpose of `xen-bugtool` is to collect the relevant troubleshooting information
     so you can conveniently attach it to a bug report or make it available to a mailing
     list.
+  id: totrans-291
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果其他方法都失败了，你可以直接使用 `xen-bugtool` 来打扰开发者。`xen-bugtool` 的目的是收集相关的故障排除信息，以便你可以方便地将它们附加到错误报告或提供给邮件列表。
 - en: Simply run `xen-bugtool` on the affected box (in the dom0, of course). It'll
     start an interactive session and ask you what data to include and what to do with
     the data.
+  id: totrans-292
   prefs: []
   type: TYPE_NORMAL
+  zh: 在受影响的机器上（当然是在 dom0 中）简单地运行 `xen-bugtool`。它将启动一个交互式会话，询问你想要包含哪些数据以及如何处理这些数据。
 - en: 'The `xen-bugtool` script collects the following information:'
+  id: totrans-293
   prefs: []
   type: TYPE_NORMAL
+  zh: '`xen-bugtool` 脚本收集以下信息：'
 - en: The output of `xm dmesg`
+  id: totrans-294
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '`xm dmesg` 的输出'
 - en: The output of `xm info`
+  id: totrans-295
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '`xm info` 的输出'
 - en: '*/var/log/messages* (if desired)'
+  id: totrans-296
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '*/var/log/messages*（如果需要）'
 - en: '*/var/log/xen/xend-debug.log* (if desired)'
+  id: totrans-297
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '*/var/log/xen/xend-debug.log*（如果需要）'
 - en: '*/var/log/xen/xen-hotplug.log*'
+  id: totrans-298
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '*/var/log/xen/xen-hotplug.log*'
 - en: '*/var/log/xen/xend.log*'
+  id: totrans-299
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '*/var/log/xen/xend.log*'
 - en: '`xen-bugtool` will save this data as a *.tar.bz2*, after which it''s up to
     you to decide what to do with it. We recommend uploading it somewhere web-accessible
     and sending a message to the Xen-devel mailing list.'
+  id: totrans-300
   prefs: []
   type: TYPE_NORMAL
+  zh: '`xen-bugtool`会将这些数据保存为*.tar.bz2*文件，之后你可以决定如何处理它。我们建议将其上传到可网络访问的地方，并向Xen-devel邮件列表发送消息。'
 - en: Some Last Words of Encouragement
+  id: totrans-301
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 一些鼓励的话语
 - en: This chapter describes a troubleshooting work flow that works for us. In general,
     we try to hit the obvious stuff before escalating to more invasive and labor-intensive
     methods.
+  id: totrans-302
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章描述了一个对我们有效的故障排除工作流程。一般来说，我们试图在升级到更侵入性和劳动密集型的方法之前解决明显的问题。
 - en: We've also tried to list error messages that we've seen, along with possible
     solutions. Obviously, we can't be encyclopedic, but we've probably hit most of
     the common error messages in our years working with Xen, and we can at least give
     you a decent starting point.
+  id: totrans-303
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们还尝试列出我们见过的错误信息，以及可能的解决方案。显然，我们不可能做到百科全书式的详尽，但我们在与Xen合作多年的时间里，可能已经遇到了大多数常见的错误信息，并且至少可以为你提供一个不错的起点。
 - en: 'Don''t get depressed! Concentrate! Remember that the odds are very good that
     someone has seen and solved this problem before. And, don''t forget: There''s
     no shame in giving up occasionally. You can''t beat the computer all the time.
     Well, maybe you can, but we can''t. Good luck.'
+  id: totrans-304
   prefs: []
   type: TYPE_NORMAL
+  zh: 别灰心！集中注意力！记住，很可能有人之前已经见过并解决了这个问题。而且，别忘了：偶尔放弃并不丢人。你不可能总是打败电脑。嗯，也许你可以，但我们不行。祝你好运。
