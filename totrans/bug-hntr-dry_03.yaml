@@ -1050,14 +1050,19 @@
   id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 [示例 3-2](ch03s02.html#poc_code_open_parenthesis "示例 3-2. 用于获取 EIP/RIP 控制并实现内核任意代码执行的
+    POC 代码 (poc2.c)") 的第 19 行，零页通过 `mmap()` 进行映射。但 POC 代码中最有趣的部分是零页数据的布局（见第 32-63
+    行）。[图 3-6](ch03s02.html#data_layout_of_the_zero_page "图 3-6. 零页数据布局") 展示了该布局的相关部分。
 - en: '![Data layout of the zero page](httpatomoreillycomsourcenostarchimages939259.png.jpg)'
   id: totrans-162
   prefs: []
   type: TYPE_IMG
+  zh: '![零页数据布局](httpatomoreillycomsourcenostarchimages939259.png.jpg)'
 - en: Figure 3-6. Data layout of the zero page
   id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 3-6. 零页数据布局
 - en: The left-hand side of [Figure 3-6](ch03s02.html#data_layout_of_the_zero_page
     "Figure 3-6. Data layout of the zero page") shows the offsets into the zero page.
     The middle lists the actual values of the zero page. The right-hand side shows
@@ -1068,18 +1073,24 @@
   id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: '[图 3-6](ch03s02.html#data_layout_of_the_zero_page "图 3-6. 零页数据布局") 的左侧显示了零页的偏移量。中间列出了零页的实际值。右侧显示了内核对零页的引用。[表
+    3-1](ch03s02.html#description_of_the_zero_page_data_layout "表 3-1. 零页数据布局描述")
+    描述了 [图 3-6](ch03s02.html#data_layout_of_the_zero_page "图 3-6. 零页数据布局") 中展示的零页数据布局。'
 - en: Table 3-1. Description of the Zero Page Data Layout
   id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 3-1. 零页数据布局描述
 - en: '| Function/Line of code | Data referenced by the kernel | Description |'
   id: totrans-166
   prefs: []
   type: TYPE_TB
+  zh: '| 函数/代码行 | 内核引用的数据 | 描述 |'
 - en: '| --- | --- | --- |'
   id: totrans-167
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- | --- |'
 - en: '| `ip_sioctl_tunparam()`9432 | `ill = ipif-> ipif_ill;` | `ipif` is `NULL`,
     and the offset of `ipif_ill` within the `ipif` structure is `0x8`. Therefore,
     `ipif->ipif_ill` references address `0x8`. The value at address `0x8` is assigned
@@ -1088,6 +1099,10 @@
   id: totrans-168
   prefs: []
   type: TYPE_TB
+  zh: '| `ip_sioctl_tunparam()`9432 | `ill = ipif-> ipif_ill;` | `ipif` 是 `NULL`，`ipif_ill`
+    在 `ipif` 结构体中的偏移量是 `0x8`。因此，`ipif->ipif_ill` 引用地址 `0x8`。地址 `0x8` 中的值被分配给 `ill`。所以
+    `ill` 结构体从地址 `0x10` 开始（见 [图 3-6](ch03s02.html#data_layout_of_the_zero_page "图
+    3-6. 零页数据布局") 中的（1））。|'
 - en: '| `ip_sioctl_tunparam()`9446 | `putnext(ill-> ill_wq, mp1);` | The value of
     `ill->ill_wq` is used as a parameter for `putnext()`. The offset of `ill_wq` inside
     the `ill` structure is `0x10`. The `ill` structure starts at address `0x10`, so
@@ -1095,6 +1110,9 @@
   id: totrans-169
   prefs: []
   type: TYPE_TB
+  zh: '| `ip_sioctl_tunparam()`9446 | `putnext(ill-> ill_wq, mp1);` | `ill->ill_wq`
+    的值用作 `putnext()` 的参数。`ill_wq` 在 `ill` 结构体中的偏移量是 `0x10`。`ill` 结构体从地址 `0x10` 开始，因此
+    `ill->ill_wq` 在地址 `0x20` 处被引用。|'
 - en: '| `putnext()`147 | `putnext(queue_t *qp, mblk_t *mp)` | The address of `qp`
     equals the value pointed to by `ill->ill_wq`. Therefore, `qp` starts at address
     `0x28` (see (2) in [Figure 3-6](ch03s02.html#data_layout_of_the_zero_page "Figure 3-6. Data
@@ -1102,6 +1120,9 @@
   id: totrans-170
   prefs: []
   type: TYPE_TB
+  zh: '| `putnext()`147 | `putnext(queue_t *qp, mblk_t *mp)` | `qp` 的地址等于 `ill->ill_wq`
+    指向的值。因此，`qp` 从地址 `0x28` 开始（见 [图 3-6](ch03s02.html#data_layout_of_the_zero_page
+    "图 3-6. 零页数据布局") 中的（2））。|'
 - en: '| `putnext()`176 | `qp = qp->q_next;` | The offset of `q_next` inside the `qp`
     structure is `0x18`. Therefore, the next `qp` gets assigned the value from address
     `0x40:` the start address of `qp` (`0x28`) + offset of `q_next` (`0x18`). The
@@ -1111,6 +1132,10 @@
   id: totrans-171
   prefs: []
   type: TYPE_TB
+  zh: '| `putnext()`176 | `qp = qp->q_next;` | `q_next` 在 `qp` 结构体中的偏移量是 `0x18`。因此，下一个
+    `qp` 被分配从地址 `0x40:` 开始的值，即 `qp` 的起始地址（`0x28`）加上 `q_next` 的偏移量（`0x18`）。地址 `0x40`
+    中的值再次是 `0x28`，所以下一个 `qp` 结构体从与之前相同的地址开始（见 [图 3-6](ch03s02.html#data_layout_of_the_zero_page
+    "图 3-6. 零页数据布局") 中的（3））。|'
 - en: '| `putnext()`177 | `sq = qp->q_syncq;` | The offset of `q_syncq` inside the
     `qp` structure is `0x78`. Since `q_syncq` is referenced later, it has to point
     to a valid memory address. I chose `0x7d0`, which is an address in the mapped
@@ -1260,6 +1285,7 @@
   id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为系统管理员：
 - en: Don’t blindly trust zones, compartments, fine-grained access controls, or virtualization.
     If there is a bug in the kernel, there’s a good chance that every security feature
     can be bypassed or evaded. And that’s true not only for Solaris Zones.
@@ -1267,20 +1293,24 @@
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 不要盲目相信区域、组件、细粒度访问控制或虚拟化。如果内核中存在漏洞，那么几乎每个安全特性都有可能被绕过或规避。这不仅仅适用于 Solaris Zones。
 - en: 3.5 Addendum
   id: totrans-195
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 3.5 补遗
 - en: Note
   id: totrans-196
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 备注
 - en: '*Wednesday, December 17, 2008*'
   id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: '*周三，2008年12月17日*'
 - en: Since the vulnerability was fixed and a patch for Solaris is available, I released
     a detailed security advisory on my website today.^([[36](ch03s05.html#ftn.CHP-3-FN-14)])
     The bug was assigned CVE-2008-568\. Sun took **471 days** to provide a fixed version
@@ -1290,107 +1320,136 @@
   id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于漏洞已修复且提供了 Solaris 的补丁，我今天在我的网站上发布了一份详细的安全警告。[^([[36](ch03s05.html#ftn.CHP-3-FN-14)])]
+    该漏洞被分配了 CVE-2008-568。Sun 公司用了 **471 天** 才提供了其操作系统的修复版本（见 [图 3-7](ch03s05.html#timeline_from_notification_of_the_bug_to
+    "图 3-7. 从通知到发布修复操作系统的时序图")）。这简直是一个难以置信的漫长时间！
 - en: '![Timeline from notification of the bug to the release of the fixed operating
     system](httpatomoreillycomsourcenostarchimages939261.png.jpg)'
   id: totrans-199
   prefs: []
   type: TYPE_IMG
+  zh: '![从通知到发布修复操作系统的时序图](httpatomoreillycomsourcenostarchimages939261.png.jpg)'
 - en: Figure 3-7. Timeline from notification of the bug to the release of the fixed
     operating system
   id: totrans-200
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 3-7. 从通知到发布修复操作系统的时序图
 - en: Notes
   id: totrans-201
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 备注
 - en: ^([[23](#ftn.CHP-3-FN-1)])
   id: totrans-202
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[23](#CHP-3-FN-1)])
 - en: ^([[24](#ftn.CHP-3-FN-2)])
   id: totrans-203
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[24](#ftn.CHP-3-FN-2)])
 - en: ^([[25](#ftn.CHP-3-FN-3)])
   id: totrans-204
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[25](#CHP-3-FN-3)])
 - en: ^([[26](#ftn.CHP-3-FN-4)])
   id: totrans-205
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[26](#ftn.CHP-3-FN-4)])
 - en: ^([[27](#ftn.CHP-3-FN-5)])
   id: totrans-206
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[27](#ftn.CHP-3-FN-5)])
 - en: ^([[28](#ftn.CHP-3-FN-6)])
   id: totrans-207
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[28](#CHP-3-FN-6)])
 - en: ^([[29](#ftn.CHP-3-FN-7)])
   id: totrans-208
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[29](#ftn.CHP-3-FN-7)])
 - en: ^([[30](#ftn.CHP-3-FN-8)])
   id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[30](#ftn.CHP-3-FN-8)])
 - en: ^([[31](#ftn.CHP-3-FN-9)])
   id: totrans-210
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[31](#ftn.CHP-3-FN-9)])
 - en: ^([[32](#ftn.CHP-3-FN-10)])
   id: totrans-211
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[32](#ftn.CHP-3-FN-10)])
 - en: ^([[33](#ftn.CHP-3-FN-11)])
   id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[33](#ftn.CHP-3-FN-11)])
 - en: ^([[34](#ftn.CHP-3-FN-12)])
   id: totrans-213
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[34](#ftn.CHP-3-FN-12)])
 - en: ^([[35](#ftn.CHP-3-FN-13)])
   id: totrans-214
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[35](#ftn.CHP-3-FN-13)])
 - en: ^([[36](#ftn.CHP-3-FN-14)])
   id: totrans-215
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[36](#ftn.CHP-3-FN-14)])
 - en: '* * *'
   id: totrans-216
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[23](#CHP-3-FN-1)]) The source code of OpenSolaris can be downloaded at [http://dlc.sun.com/osol/on/downloads/](http://dlc.sun.com/osol/on/downloads/).
   id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[23](#CHP-3-FN-1)]) OpenSolaris 的源代码可在 [http://dlc.sun.com/osol/on/downloads/](http://dlc.sun.com/osol/on/downloads/)
+    下载。
 - en: ^([[24](#CHP-3-FN-2)]) See [http://en.wikipedia.org/wiki/Ioctl](http://en.wikipedia.org/wiki/Ioctl).
   id: totrans-218
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[24](#CHP-3-FN-2)]) 请参阅 [http://en.wikipedia.org/wiki/Ioctl](http://en.wikipedia.org/wiki/Ioctl)。
 - en: ^([[25](#CHP-3-FN-3)]) For more information on the IP-in-IP tunneling mechanism,
     refer to [http://download.oracle.com/docs/cd/E19455-01/806-0636/6j9vq2bum/index.html](http://download.oracle.com/docs/cd/E19455-01/806-0636/6j9vq2bum/index.html).
   id: totrans-219
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[25](#CHP-3-FN-3)]) 关于 IP-in-IP 隧道机制的更多信息，请参阅 [http://download.oracle.com/docs/cd/E19455-01/806-0636/6j9vq2bum/index.html](http://download.oracle.com/docs/cd/E19455-01/806-0636/6j9vq2bum/index.html)。
 - en: ^([[26](#CHP-3-FN-4)]) See the *STREAMS Programming Guide* from Sun Microsystems
     Inc., which can be downloaded at [http://download.oracle.com/docs/cd/E19504-01/802-5893/802-5893.pdf](http://download.oracle.com/docs/cd/E19504-01/802-5893/802-5893.pdf).
   id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[26](#CHP-3-FN-4)]) 请参阅 Sun Microsystems Inc. 的 *STREAMS 编程指南*，可在 [http://download.oracle.com/docs/cd/E19504-01/802-5893/802-5893.pdf](http://download.oracle.com/docs/cd/E19504-01/802-5893/802-5893.pdf)
+    下载。
 - en: '^([[27](#CHP-3-FN-5)]) OpenGrok source browser reference of OpenSolaris: [http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/sys/stream.h?r=4823%3A7c9aaea16585](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/sys/stream.h?r=4823%3A7c9aaea16585).'
   id: totrans-221
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[27](#CHP-3-FN-5)]) OpenGrok 源代码浏览器参考 of OpenSolaris：[http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/sys/stream.h?r=4823%3A7c9aaea16585](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/sys/stream.h?r=4823%3A7c9aaea16585).
 - en: '^([[28](#CHP-3-FN-6)]) OpenGrok source browser reference of OpenSolaris: [http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip.c?r=4823%3A7c9aaea16585](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip.c?r=4823%3A7c9aaea16585).'
   id: totrans-222
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[28](#CHP-3-FN-6)]) OpenSolaris 的 OpenGrok 源代码浏览器参考：[http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip.c?r=4823%3A7c9aaea16585](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip.c?r=4823%3A7c9aaea16585).
 - en: '^([[29](#CHP-3-FN-7)]) OpenGrok source browser reference of OpenSolaris: [http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c?r=5240%3Ae7599510dd03](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c?r=5240%3Ae7599510dd03).'
   id: totrans-223
   prefs: []

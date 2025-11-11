@@ -1,15 +1,19 @@
 - en: Chapter 4. NULL Pointer FTW
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-1
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: '*Saturday, January 24, 2009*'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
 - en: '*Dear Diary*,'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
 - en: 'I found a really beautiful bug today: a type conversion vulnerability leading
@@ -18,43 +22,53 @@
     means that at worst it would crash a user space application. But this bug is different
     from the average user space NULL pointer dereferences, and it’s possible to exploit
     this vulnerability to execute arbitrary code.'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
 - en: The vulnerability affects the FFmpeg multimedia library that is used by many
     popular software projects, including Google Chrome, VLC media player, MPlayer,
     and Xine to name just a few. There are also rumors that YouTube uses FFmpeg as
     backend conversion software.^([[37](ch04s05.html#ftn.CHP-4-FN-1)])
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-6
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: '*There are other examples of exploitable user space NULL pointer dereferences.
     See Mark Dowd’s MacGyver exploit for Flash* ([http://blogs.iss.net/archive/flash.html](http://blogs.iss.net/archive/flash.html))
     *or Justin Schuh’s Firefox bug* ([http://blogs.iss.net/archive/cve-2008-0017.html](http://blogs.iss.net/archive/cve-2008-0017.html)).'
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
 - en: 4.1 Vulnerability Discovery
+  id: totrans-8
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: 'To find the vulnerability I did the following:'
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
 - en: 'Step 1: List the demuxers of FFmpeg.'
+  id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Step 2: Identify the input data.'
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Step 3: Trace the input data.'
+  id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Step 1: List the Demuxers of FFmpeg'
+  id: totrans-13
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -63,24 +77,30 @@
     which is included with FFmpeg (see [Figure 4-1](ch04.html#ffmpeg_libavformat_demuxers
     "Figure 4-1. FFmpeg libavformat demuxers")). I noticed that FFmpeg separates most
     demuxers in different C files under the directory *libavformat/*.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
 - en: '![FFmpeg libavformat demuxers](httpatomoreillycomsourcenostarchimages939263.png.jpg)'
+  id: totrans-15
   prefs: []
   type: TYPE_IMG
 - en: Figure 4-1. FFmpeg libavformat demuxers
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-17
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: FFmpeg development has moved to a Git repository,^([[38](ch04s05.html#ftn.CHP-4-FN-2)])and
     the SVN repository is no longer updated. The vulnerable source code revision (SVN-r16556)
     of FFmpeg can now be downloaded from this book’s website.^([[39](ch04s05.html#ftn.CHP-4-FN-3)])
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
 - en: 'Step 2: Identify the Input Data'
+  id: totrans-19
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -88,18 +108,23 @@
     the source code, I discovered that most demuxers declare a function called *`demuxername`*`_read_header()`,
     which usually takes a parameter of the type `AVFormatContext`. This function declares
     and initializes a pointer that looks like this:'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE0]'
+  id: totrans-21
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: Many different `get_`*`something`* functions (e.g., `get_le32()`, `get_buffer()`)
     and special macros (e.g., `AV_RL32`, `AV_RL16`) are then used to extract portions
     of the data pointed to by `pb`. At this point, I was pretty sure that `pb` had
     to be a pointer to the input data of the media files being processed.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
 - en: 'Step 3: Trace the Input Data'
+  id: totrans-23
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -107,23 +132,35 @@
     source code level. I started with the first demuxer file from the list, called
     *4xm.c*. While auditing the demuxer of the 4X movie file format,^([[40](ch04s05.html#ftn.CHP-4-FN-4)])
     I found the vulnerability shown in the listing below.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 我决定通过在源代码级别跟踪每个解复用器的输入数据来寻找错误。我从列表中的第一个解复用器文件开始，称为*4xm.c*。在审计4X电影文件格式的解复用器时（^([[40](ch04s05.html#ftn.CHP-4-FN-4)]))，我发现了下述列表中显示的漏洞。
 - en: '**Source code file**'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: '**源代码文件**'
 - en: '*libavformat/4xm.c*'
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: '*libavformat/4xm.c*'
 - en: '**Function**'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: '**函数**'
 - en: '`fourxm_read_header()`'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: '`fourxm_read_header()`'
 - en: '[PRE1]'
+  id: totrans-29
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: The `get_buffer()` function in line 124 copies input data from the processed
     media file into the heap buffer pointed to by `header` (see lines 101 and 121).
     If the media file contains a so-called `strk` chunk (see line 160) the `AV_RL32()`
@@ -132,8 +169,10 @@
     user-controlled unsigned int value from the media file to a signed int could cause
     a conversion bug! My interest piqued, I continued to search through the code,
     excited that I might be on to something.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 第124行的`get_buffer()`函数将输入数据从处理过的媒体文件复制到由`header`指向的堆缓冲区（见第101和121行）。如果媒体文件包含所谓的`strk`数据块（见第160行），第166行的`AV_RL32()`宏从头部数据中读取一个无符号整数值并将其存储在带符号整型变量`current_track`（见第103行）中。将媒体文件中的用户控制的无符号整数值转换为带符号整型可能会导致转换错误！我的兴趣被激发，我继续在代码中搜索，兴奋地认为自己可能找到了一些东西。
 - en: The `if` statement in line 167 checks whether the user-controlled value of `current_track
     + 1` is greater than `fourxm->track_count`. The signed int variable `fourxm->track_count`
     is initialized with 0 (see line 106). Supplying a value >= `0x80000000` for `current_track`
@@ -143,133 +182,175 @@
     `fourxm->track_count` has a value of zero), and the buffer allocation in line
     171 will never be reached. Clearly, it was a bad idea to convert that user-controlled
     unsigned int to a signed int.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 第167行的`if`语句检查用户控制的`current_track + 1`的值是否大于`fourxm->track_count`。带符号整型变量`fourxm->track_count`被初始化为0（见第106行）。为`current_track`提供值`>=
+    0x80000000`会导致符号变化，使得`current_track`被解释为负数（要了解原因，请参阅第A.3节）。如果`current_track`被解释为负数，第167行的`if`语句将始终返回`false`（因为带符号整型变量`fourxm->track_count`的值为零），并且第171行的缓冲区分配永远不会被执行。显然，将那个用户控制的无符号整型转换为带符号整型是一个糟糕的主意。
 - en: Since `fourxm->tracks` is initialized with `NULL` (see line 107) and line 171
     is never reached, the write operations in lines 178–181 lead to four NULL pointer
     dereferences. Because NULL is dereferenced by the user-controlled value of `current_track`,
     it’s possible to write user-controlled data at a wide range of memory locations.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于`fourxm->tracks`被初始化为`NULL`（见第107行）且第171行永远不会被执行，因此第178至181行的写操作导致了四个空指针解引用。因为`NULL`是通过用户控制的`current_track`值解引用的，所以有可能在广泛的内存位置写入用户控制的数据。
 - en: Note
+  id: totrans-33
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Perhaps you wouldn’t technically call this a NULL pointer “dereference,” since
     I’m not actually dereferencing NULL but a nonexistent structure that’s located
     at a user-controlled offset from NULL. In the end it depends on how you define
     the term *NULL pointer dereference*.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 可能你不会从技术上称这为空指针的“解引用”，因为我实际上并没有解引用NULL，而是位于从NULL开始的用户控制偏移量处的不存在结构。最终这取决于你如何定义术语*空指针解引用*。
 - en: 'The expected behavior of FFmpeg is shown in [Figure 4-2](ch04.html#expected_behavior_when_ffmpeg_operates_n
     "Figure 4-2. Expected behavior when FFmpeg operates normally") as follows:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: FFmpeg的预期行为如图4-2所示（见ch04.html#expected_behavior_when_ffmpeg_operates_n "图4-2.
+    FFmpeg正常运行时的预期行为"）如下：
 - en: '`fourxm->tracks` is initialized with `NULL` (see line 107).'
+  id: totrans-36
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '`fourxm->tracks`被初始化为`NULL`（见第107行）。'
 - en: If the processed media file contains a `strk` chunk, the value of `current_track`
     is extracted from the user-controlled data of the chunk (see line 166).
+  id: totrans-37
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如果处理过的媒体文件包含一个`strk`数据块，`current_track`的值将从数据块的用户控制数据中提取出来（见第166行）。
 - en: If the value of `current_track + 1` is greater than zero, a heap buffer is allocated.
+  id: totrans-38
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 如果`current_track + 1`的值大于零，则分配堆缓冲区。
 - en: The heap buffer pointed to by `fourxm->tracks` is allocated (see lines 171 and
     172).
+  id: totrans-39
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 由`fourxm->tracks`指向的堆缓冲区被分配（见第171和172行）。
 - en: Data from the media file is copied into the heap buffer, while `current_track`
     is used as an array index into the buffer (see lines 178–181).
+  id: totrans-40
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: When this behavior occurs, there is no security problem.
+  id: totrans-41
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '![Expected behavior when FFmpeg operates normally](httpatomoreillycomsourcenostarchimages939265.png.jpg)'
+  id: totrans-42
   prefs: []
   type: TYPE_IMG
 - en: Figure 4-2. Expected behavior when FFmpeg operates normally
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
 - en: '[Figure 4-3](ch04.html#unexpected_behavior_of_ffmpeg_causing_me "Figure 4-3. Unexpected
     behavior of FFmpeg causing memory corruption") shows what happens when this bug
     affects FFmpeg:'
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
 - en: '`fourxm->tracks` is initialized with `NULL` (see line 107).'
+  id: totrans-45
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: If the processed media file contains a `strk` chunk, the value of `current_track`
     is extracted from the user-controlled data of the chunk (see line 166).
+  id: totrans-46
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: If the value of `current_track + 1` is less than zero, the heap buffer isn’t
     allocated.
+  id: totrans-47
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '`fourxm->tracks` still points to memory address `NULL`.'
+  id: totrans-48
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: The resulting NULL pointer is then dereferenced by the user-controlled value
     of `current_track`, and four 32-bit values of user-controlled data are assigned
     to the dereferenced locations (see lines 178–181).
+  id: totrans-49
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Four user-controlled memory locations can be overwritten with four user-controlled
     data bytes each.
+  id: totrans-50
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: '![Unexpected behavior of FFmpeg causing memory corruption](httpatomoreillycomsourcenostarchimages939267.png.jpg)'
+  id: totrans-51
   prefs: []
   type: TYPE_IMG
 - en: Figure 4-3. Unexpected behavior of FFmpeg causing memory corruption
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
 - en: What a beautiful bug!
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
 - en: 4.2 Exploitation
+  id: totrans-54
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: 'To exploit the vulnerability I did the following:'
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-56
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: '*The vulnerability affects all operating system platforms supported by FFmpeg.
     The platform that I used throughout this chapter was the default installation
     of Ubuntu Linux 9.04 (32-bit)*.'
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
 - en: 'Step 1: Find a sample 4X movie file with a valid `strk` chunk.'
+  id: totrans-58
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Step 2: Learn about the layout of the `strk` chunk.'
+  id: totrans-59
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Step 3: Manipulate the `strk` chunk to crash FFmpeg.'
+  id: totrans-60
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'Step 4: Manipulate the `strk` chunk to get control over `EIP`.'
+  id: totrans-61
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -278,131 +359,192 @@
     latter approach. I used the website [http://samples.mplayerhq.hu/](http://samples.mplayerhq.hu/)
     to find a 4X movie file suitable for testing this vulnerability. I could have
     built a file myself, but downloading a preexisting file is fast and easy.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
 - en: 'Step 1: Find a Sample 4X Movie File with a Valid strk Chunk'
+  id: totrans-63
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: I used the following to get a sample file from [http://samples.mplayerhq.hu/](http://samples.mplayerhq.hu/).
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE2]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: After downloading the file, I renamed it *original.4xm*.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
 - en: 'Step 2: Learn About the Layout of the strk Chunk'
+  id: totrans-67
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'According to the 4X movie file format description, a `strk` chunk has the following
     structure:'
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE3]'
+  id: totrans-69
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'The `strk` chunk of the downloaded sample file starts at file offset `0x1a6`,
     as shown in [Figure 4-4](ch04s02.html#a_strk_chunk_from_the_4x_movie_sample_fi
     "Figure 4-4. A strk chunk from the 4X movie sample file I downloaded. The numbers
     shown are referenced in Table 4-1."):'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
 - en: '![A strk chunk from the 4X movie sample file I downloaded. The numbers shown
     are referenced in .](httpatomoreillycomsourcenostarchimages939269.png.jpg)'
+  id: totrans-71
   prefs: []
   type: TYPE_IMG
+  zh: '![从我下载的4X电影样本文件中提取的strk数据块。图中显示的数字在 .](httpatomoreillycomsourcenostarchimages939269.png.jpg)'
 - en: Figure 4-4. A `strk` chunk from the 4X movie sample file I downloaded. The numbers
     shown are referenced in [Table 4-1](ch04s02.html#components_of_strk_chunk_layout_shown_in
     "Table 4-1. Components of strk Chunk Layout Shown in Figure 4-4").
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 图4-4. 从我下载的4X电影样本文件中提取的`strk`数据块。图中显示的数字在[表4-1](ch04s02.html#components_of_strk_chunk_layout_shown_in
+    "表4-1. 表4-1. strk数据块布局，如图4-4所示")中有引用。
 - en: '[Table 4-1](ch04s02.html#components_of_strk_chunk_layout_shown_in "Table 4-1. Components
     of strk Chunk Layout Shown in Figure 4-4") describes the layout of the `strk`
     chunk illustrated in [Figure 4-4](ch04s02.html#a_strk_chunk_from_the_4x_movie_sample_fi
     "Figure 4-4. A strk chunk from the 4X movie sample file I downloaded. The numbers
     shown are referenced in Table 4-1.").'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: '[表4-1](ch04s02.html#components_of_strk_chunk_layout_shown_in "表4-1. 表4-1. strk数据块布局，如图4-4所示")描述了图4-4中展示的`strk`数据块的布局。[图4-4](ch04s02.html#a_strk_chunk_from_the_4x_movie_sample_fi
+    "图4-4. 从我下载的4X电影样本文件中提取的strk数据块。图中显示的数字在表4-1中有所引用。")。'
 - en: Table 4-1. Components of strk Chunk Layout Shown in [Figure 4-4](ch04s02.html#a_strk_chunk_from_the_4x_movie_sample_fi
     "Figure 4-4. A strk chunk from the 4X movie sample file I downloaded. The numbers
     shown are referenced in Table 4-1.")
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 表4-1. 表4-1. 图4-4中展示的strk数据块布局。[图4-4](ch04s02.html#a_strk_chunk_from_the_4x_movie_sample_fi
+    "图4-4. 从我下载的4X电影样本文件中提取的strk数据块。图中显示的数字在表4-1中有所引用。")
 - en: '| Reference | Header offset | Description |'
+  id: totrans-75
   prefs: []
   type: TYPE_TB
+  zh: '| 参考 | 头部偏移量 | 描述 |'
 - en: '| --- | --- | --- |'
+  id: totrans-76
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- | --- |'
 - en: '| (1) | `&header[i]` | `fourcc: ''strk''` |'
+  id: totrans-77
   prefs: []
   type: TYPE_TB
+  zh: '| (1) | `&header[i]` | `fourcc: ''strk''` |'
 - en: '| (2) | `&header[i+4]` | length of `strk` structure (`0x28` bytes) |'
+  id: totrans-78
   prefs: []
   type: TYPE_TB
+  zh: '| (2) | `&header[i+4]` | `strk`结构体的长度（`0x28`字节）|'
 - en: '| (3) | `&header[i+8]` | `track number` (this is the `current_track` variable
     from FFmpeg source code) |'
+  id: totrans-79
   prefs: []
   type: TYPE_TB
+  zh: '| (3) | `&header[i+8]` | `轨道号`（这是FFmpeg源代码中的`current_track`变量）|'
 - en: '| (4) | `&header[i+12]` | `audio type` (this is the value that gets written
     at the first dereferenced memory location) |'
+  id: totrans-80
   prefs: []
   type: TYPE_TB
+  zh: '| (4) | `&header[i+12]` | `音频类型`（这是写入第一个解引用内存位置的值）|'
 - en: To exploit this vulnerability, I knew that I would need to set the values of
     `track number` at `&header[i+8]` (that corresponds to `current_track` from FFmpeg
     source code) and `audio type` at `&header[i+12]`. If I set the values properly,
     the value of `audio type` would be written at the memory location `NULL + track
     number`, which is the same as `NULL + current_track`.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了利用这个漏洞，我知道我需要设置`&header[i+8]`（对应于FFmpeg源代码中的`current_track`）处的`轨道号`值以及`&header[i+12]`处的`音频类型`值。如果设置正确，`音频类型`的值将被写入内存位置`NULL
+    + track number`，这等同于`NULL + current_track`。
 - en: 'In summary, the (nearly) arbitrary memory write operations from the FFmpeg
     source code are as follows:'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 总结来说，来自FFmpeg源代码的（几乎）任意内存写入操作如下：
 - en: '[PRE4]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'And each corresponds to this pseudo code:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 并且每个都对应以下伪代码：
 - en: '[PRE5]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'Step 3: Manipulate the strk Chunk to Crash FFmpeg'
+  id: totrans-86
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第3步：操纵strk数据块以使FFmpeg崩溃
 - en: Note
+  id: totrans-87
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Compiling FFmpeg: linux$ ./configure; make These commands will compile two
     different binary versions of FFmpeg*:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: '*编译FFmpeg：linux$ ./configure; make 这些命令将编译FFmpeg的两个不同版本的二进制文件*：'
 - en: ffmpeg *Binary without debugging symbols*
+  id: totrans-89
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: ffmpeg *不带调试符号的二进制文件*
 - en: ffmpeg_g *Binary with debugging symbols*
+  id: totrans-90
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: ffmpeg_g *带有调试符号的二进制文件*
 - en: After compiling the vulnerable FFmpeg source code revision 16556, I tried to
     convert the 4X movie into an AVI file to verify that the compilation was successful
     and that FFmpeg worked flawlessly.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 在编译了有漏洞的FFmpeg源代码修订版16556之后，我尝试将4X电影转换为AVI文件，以验证编译是否成功以及FFmpeg是否工作正常。
 - en: '[PRE6]'
+  id: totrans-92
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: Next, I modified the values of `track number` as well as `audio type` in the
     `strk` chunk of the sample file.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，我修改了样本文件中`strk`数据块的`轨道号`以及`音频类型`的值。
 - en: As illustrated in [Figure 4-5](ch04s02.html#the_strk_chunk_of_the_sample_file_after
     "Figure 4-5. The strk chunk of the sample file after I altered it. The changes
     I made are highlighted and framed, and the numbers shown are referenced in the
@@ -410,120 +552,189 @@
     value of `audio type` to `0xbbbbbbbb` (2). I named the new file *poc1.4xm* and
     tried to convert it with FFmpeg (see Section B.4 for a description of the following
     debugger commands).
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 如[图4-5](ch04s02.html#the_strk_chunk_of_the_sample_file_after "图4-5. 我修改后的样本文件中的strk数据块。我做的更改被突出显示并框出，图中显示的数字在上文中有引用。)所示，我将`轨道号`的值更改为`0xaaaaaaaa`（1）并将`音频类型`的值更改为`0xbbbbbbbb`（2）。我将新文件命名为*poc1.4xm*并尝试使用FFmpeg进行转换（有关以下调试命令的描述，请参阅B.4节）。
 - en: '![The strk chunk of the sample file after I altered it. The changes I made
     are highlighted and framed, and the numbers shown are referenced in the text above.](httpatomoreillycomsourcenostarchimages939271.png.jpg)'
+  id: totrans-95
   prefs: []
   type: TYPE_IMG
+  zh: '![我在修改后样本文件的 `strk` 块。我做的更改被突出显示并框出，上面显示的数字在上面的文本中有所引用。](httpatomoreillycomsourcenostarchimages939271.png.jpg)'
 - en: Figure 4-5. The `strk` chunk of the sample file after I altered it. The changes
     I made are highlighted and framed, and the numbers shown are referenced in the
     text above.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 4-5. 在我修改后，样本文件的 `strk` 块。我做的更改被突出显示并框出，上面显示的数字在上面的文本中有所引用。
 - en: '[PRE7]'
+  id: totrans-97
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: As expected, FFmpeg crashed with a segmentation fault at source code line 178\.
     I further analyzed the FFmpeg process within the debugger to see what exactly
     caused the crash.
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 如预期，FFmpeg 在源代码的第 178 行处崩溃，并产生段错误。我进一步在调试器中分析了 FFmpeg 进程，以查看导致崩溃的确切原因。
 - en: '[PRE8]'
+  id: totrans-99
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'At the time of the crash, the registers `EAX` and `EBX` were filled with the
     values that I input for `audio type` (`0xbbbbbbbb`) and `track number` (`0xaaaaaaaa`).
     Next, I asked the debugger to display the last instruction executed by FFmpeg:'
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 在崩溃发生时，寄存器 `EAX` 和 `EBX` 中填充了我为 `audio type` (`0xbbbbbbbb`) 和 `track number`
+    (`0xaaaaaaaa`) 输入的值。接下来，我要求调试器显示 FFmpeg 执行的最后一个指令：
 - en: '[PRE9]'
+  id: totrans-101
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: As the debugger output shows, the instruction that caused the segmentation fault
     was attempting to write the value `0xbbbbbbbb` at an address calculated using
     my value for `track number`.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 如调试器输出所示，导致段错误的指令试图使用我为 `track number` 提供的值计算出的地址写入值 `0xbbbbbbbb`。
 - en: 'To control the memory write, I needed to know how the destination address of
     the write operation was calculated. I found the answer by looking at the following
     assembly code:'
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了控制内存写入，我需要知道写入操作的目标地址是如何计算的。我通过查看以下汇编代码找到了答案：
 - en: '[PRE10]'
+  id: totrans-104
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'These instructions correspond to the following C source line:'
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些指令对应于以下 C 源代码行：
 - en: '[PRE11]'
+  id: totrans-106
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: '[Table 4-2](ch04s02.html#list_of_the_assembler_instructions_and "Table 4-2. List
     of the Assembler Instructions and the Result of Each Instruction") explains the
     results of these instructions.'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: '[表 4-2](ch04s02.html#list_of_the_assembler_instructions_and "表 4-2. 汇编指令列表及其结果")
+    解释了这些指令的结果。'
 - en: 'Since `EBX` contains the value I supplied for `current_track` and `EDX` contains
     the NULL pointer of `fourxm->tracks`, the calculation can be expressed as this:'
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于 `EBX` 包含我为 `current_track` 提供的值，而 `EDX` 包含 `fourxm->tracks` 的空指针，因此计算可以表示为以下内容：
 - en: '[PRE12]'
+  id: totrans-109
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: Table 4-2. List of the Assembler Instructions and the Result of Each Instruction
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 表 4-2. 汇编指令列表及其结果
 - en: '| Instruction | Result |'
+  id: totrans-111
   prefs: []
   type: TYPE_TB
+  zh: '| 指令 | 结果 |'
 - en: '| --- | --- |'
+  id: totrans-112
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `lea ebp,[ebx+ebx*4]` | `ebp = ebx + ebx * 4` (The `EBX` register contains
     the user-defined value of `current_track` (`0xaaaaaaaa`).) |'
+  id: totrans-113
   prefs: []
   type: TYPE_TB
+  zh: '| `lea ebp,[ebx+ebx*4]` | `ebp = ebx + ebx * 4`（`EBX` 寄存器包含用户定义的 `current_track`
+    的值 (`0xaaaaaaaa`)。） |'
 - en: '| `mov eax,DWORD PTR [esp+0x34]` | `eax` = array index `i` |'
+  id: totrans-114
   prefs: []
   type: TYPE_TB
+  zh: '| `mov eax,DWORD PTR [esp+0x34]` | `eax` = 数组索引 `i` |'
 - en: '| `mov edx,DWORD PTR [esi+0x10]` | `edx = fourxm->tracks` |'
+  id: totrans-115
   prefs: []
   type: TYPE_TB
+  zh: '| `mov edx,DWORD PTR [esi+0x10]` | `edx = fourxm->tracks` |'
 - en: '| `shl ebp,0x2` | `ebp = ebp << 2` |'
+  id: totrans-116
   prefs: []
   type: TYPE_TB
+  zh: '| `shl ebp,0x2` | `ebp = ebp << 2` |'
 - en: '| `mov eax,DWORD PTR [ecx+eax*1+0xc]` | `eax = AV_RL32(&header[i + 12]);` or
     `eax = ecx[eax + 0xc];` |'
+  id: totrans-117
   prefs: []
   type: TYPE_TB
+  zh: '| `mov eax,DWORD PTR [ecx+eax*1+0xc]` | `eax = AV_RL32(&header[i + 12]);` 或
+    `eax = ecx[eax + 0xc];` |'
 - en: '| `mov DWORD PTR [edx+ebp*1+0x10],eax` | `fourxm->tracks[current_track].adpcm
     = eax;` or `edx[ebp + 0x10] = eax;` |'
+  id: totrans-118
   prefs: []
   type: TYPE_TB
+  zh: '| `mov DWORD PTR [edx+ebp*1+0x10],eax` | `fourxm->tracks[current_track].adpcm
+    = eax;` 或 `edx[ebp + 0x10] = eax;` |'
 - en: 'Or in a more simplified form:'
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 或者以更简化的形式：
 - en: '[PRE13]'
+  id: totrans-120
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'I supplied the value `0xaaaaaaaa` for `current_track` (`EBX` register), so
     the calculation should look like this:'
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 我为 `current_track` (`EBX` 寄存器) 提供了 `0xaaaaaaaa` 的值，所以计算应该如下所示：
 - en: '[PRE14]'
+  id: totrans-122
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'The result of `0x55555558` can be confirmed with the help of the debugger:'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以通过调试器确认 `0x55555558` 的结果：
 - en: '[PRE15]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'Step 4: Manipulate the strk Chunk to Gain Control over EIP'
+  id: totrans-125
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第 4 步：操纵 strk 块以控制 EIP
 - en: 'The vulnerability allowed me to overwrite nearly arbitrary memory addresses
     with any 4-byte value. To gain control of the execution flow of FFmpeg, I had
     to overwrite a memory location that would allow me to control the `EIP` register.
@@ -536,101 +747,163 @@
     it’s predictable, which is exactly what I needed. I could gain control of `EIP`
     by overwriting the GOT entry of a library function that is called after the vulnerability
     happens.'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 该漏洞使我能够用任何 4 字节值覆盖几乎任意的内存地址。为了控制 FFmpeg 的执行流程，我必须覆盖一个允许我控制 `EIP` 寄存器的内存位置。我必须找到一个稳定的地址，一个在
+    FFmpeg 地址空间内可预测的地址。这排除了所有进程的栈地址。但 Linux 使用的 *可执行和链接格式* (*ELF*) 提供了一个几乎完美的目标：*全局偏移表*
+    (*GOT*)。FFmpeg 中使用的每个库函数在 GOT 中都有一个引用。通过操作 GOT 条目，我可以轻松地控制执行流程（见第 A.4 节）。GOT 的好处是它是可预测的，这正是我所需要的。我可以通过覆盖在漏洞发生后调用的库函数的
+    GOT 条目来控制 `EIP`。
 - en: 'So, what library function is called after the arbitrary memory writes? To answer
     this question, I had a look at the source code again:'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 那么，在任意内存写入之后调用的是哪个库函数？为了回答这个问题，我再次查看了源代码：
 - en: '**Source code file**'
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: '**源代码文件**'
 - en: '*libavformat/4xm.c*'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: '*libavformat/4xm.c*'
 - en: '**Function**'
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: '**函数**'
 - en: '`fourxm_read_header()`'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: '`fourxm_read_header()`'
 - en: '[PRE16]'
+  id: totrans-132
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: Directly after the four memory-write operations, a new `AVStream` is allocated
     using the function `av_new_stream()`.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 在四次内存写入操作之后，使用函数 `av_new_stream()` 分配了一个新的 `AVStream`。
 - en: '**Source code file**'
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: '**源代码文件**'
 - en: '*libavformat/utils.c*'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: '*libavformat/utils.c*'
 - en: '**Function**'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: '**函数**'
 - en: '`av_new_stream()`'
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: '`av_new_stream()`'
 - en: '[PRE17]'
+  id: totrans-138
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: In line 2279 another function named `av_mallocz()` is called.
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 在第 2279 行调用了另一个名为 `av_mallocz()` 的函数。
 - en: '**Source code file**'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: '**源代码文件**'
 - en: '*libavutil/mem.c*'
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: '*libavutil/mem.c*'
 - en: '**Functions**'
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: '**函数**'
 - en: '`av_mallocz()` and `av_malloc()`'
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: '`av_mallocz()` 和 `av_malloc()`'
 - en: '[PRE18]'
+  id: totrans-144
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'In line 137 the function `av_malloc()` is called, and it calls `memalign()`
     in line 64 (the other `ifdef` cases—lines 54 and 61—are not defined when using
     the Ubuntu Linux 9.04 platform). I was excited to see `memalign()` because it
     was exactly what I was looking for: a library function that’s called directly
     after the vulnerability happens (see [Figure 4-6](ch04s02.html#a_call_graph_showing_the_path_from_the_v
     "Figure 4-6. A call graph showing the path from the vulnerable function to memalign()")).'
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 在第 137 行调用了函数 `av_malloc()`，并在第 64 行调用了 `memalign()`（在 Ubuntu Linux 9.04 平台上使用其他
+    `ifdef` 的情况——第 54 行和第 61 行——未定义）。当我看到 `memalign()` 时，我非常兴奋，因为它正是我所寻找的：一个在漏洞发生后直接调用的库函数（见
+    [图 4-6](ch04s02.html#a_call_graph_showing_the_path_from_the_v "图 4-6. 从易受攻击的函数到
+    memalign() 的调用图")）。
 - en: '![A call graph showing the path from the vulnerable function to memalign()](httpatomoreillycomsourcenostarchimages939273.png.jpg)'
+  id: totrans-146
   prefs: []
   type: TYPE_IMG
+  zh: '![从易受攻击的函数到 memalign() 的调用图](httpatomoreillycomsourcenostarchimages939273.png.jpg)'
 - en: Figure 4-6. A call graph showing the path from the vulnerable function to `memalign()`
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 4-6. 从易受攻击的函数到 `memalign()` 的调用图
 - en: 'That brought me to the next question: What is the address of the GOT entry
     of `memalign()` in FFmpeg?'
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 这让我产生了下一个问题：FFmpeg 中 `memalign()` 的 GOT 条目的地址是什么？
 - en: 'I gained this information with the help of `objdump`:'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 我通过 `objdump` 获取了以下信息：
 - en: '[PRE19]'
+  id: totrans-150
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'So the address I had to overwrite was `0x08560204`. All I had to do was calculate
     an appropriate value for `track number` (`current_track`). I could get that value
     in either of two ways: I could try to calculate it, or I could use brute force.
     I chose the easy option and wrote the following program:'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，我需要覆盖的地址是 `0x08560204`。我只需要计算 `track number` (`current_track`) 的适当值。我可以通过两种方式获得这个值：我可以尝试计算它，或者我可以使用暴力搜索。我选择了简单的方法，并编写了以下程序：
 - en: Example 4-1. Little helper program to use brute force to find the appropriate
     value for `current_track` (*addr_brute_force.c*)
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 4-1. 使用暴力搜索找到 `current_track` 的适当值的小助手程序 (*addr_brute_force.c*)
 - en: '[PRE20]'
+  id: totrans-153
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: The program illustrated in [Example 4-1](ch04s02.html#little_helper_program_to
     "Example 4-1. Little helper program to use brute force to find the appropriate
     value for current_track (addr_brute_force.c)") uses brute force to find an appropriate
@@ -640,102 +913,155 @@
     address of `memalign()` (see line 17). To trigger the vulnerability, `current_track`
     has to be interpreted as negative, so only values in the range of `0x80000000`
     to `0xffffffff` are considered (see line 15).
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例4-1](ch04s02.html#little_helper_program_to "示例4-1. 使用暴力搜索找到合适的current_track（addr_brute_force.c）值的小助手程序")中展示的程序使用暴力搜索找到一个合适的`track
+    number`（`current_track`）值，这是覆盖第4行定义的（GOT）地址所需的。这是通过尝试所有可能的`current_track`值，直到计算结果（参见第16行）与搜索的`memalign()`
+    GOT条目地址匹配（参见第17行）来完成的。为了触发漏洞，`current_track`必须解释为负值，因此只有`0x80000000`到`0xffffffff`范围内的值被考虑（参见第15行）。'
 - en: 'Example:'
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例：
 - en: '[PRE21]'
+  id: totrans-156
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: I then adjusted the sample file and renamed it *poc2.4xm*.
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 我随后调整了样本文件，并将其重命名为*poc2.4xm*。
 - en: The only thing I changed was the value of `track number` (see (1) in [Figure 4-7](ch04s02.html#the_strk_chunk_of_poc2.4xm_after_i_adjus
     "Figure 4-7. The strk chunk of poc2.4xm after I adjusted the track number (current_track)")).
     It now matched the value generated by my little helper program.
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: 我唯一更改的是`track number`的值（参见[图4-7](ch04s02.html#the_strk_chunk_of_poc2.4xm_after_i_adjus
+    "图4-7. 调整了track number（current_track）后的poc2.4xm的strk chunk")中的（1））。现在它匹配了我那个小助手程序生成的值。
 - en: '![The strk chunk of poc2.4xm after I adjusted the track number (current_track)](httpatomoreillycomsourcenostarchimages939275.png.jpg)'
+  id: totrans-159
   prefs: []
   type: TYPE_IMG
+  zh: '![调整了track number（current_track）后的poc2.4xm的strk chunk](httpatomoreillycomsourcenostarchimages939275.png.jpg)'
 - en: Figure 4-7. The `strk` chunk of *poc2.4xm* after I adjusted the `track number`
     (`current_track`)
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 图4-7. 调整了`track number`（current_track）后的*poc2.4xm*的`strk` chunk
 - en: I then tested the new proof-of-concept file in the debugger (see Section B.4
     for a description of the following debugger commands).
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 我随后在调试器中测试了新的概念验证文件（有关以下调试器命令的描述，请参阅B.4节）。
 - en: '[PRE22]'
+  id: totrans-162
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: Bingo! Full control over `EIP`. After I gained control over the instruction
     pointer, I developed an exploit for the vulnerability. I used the VLC media player
     as an injection vector, because it uses the vulnerable version of FFmpeg.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: Bingo！完全控制`EIP`。在我控制了指令指针之后，我为该漏洞开发了一个漏洞利用程序。我使用VLC媒体播放器作为注入向量，因为它使用了有漏洞的FFmpeg版本。
 - en: As I’ve said in previous chapters, the laws in Germany do not allow me to provide
     a full working exploit, but you can watch a short video I recorded that shows
     the exploit in action on the book’s website.^([[41](ch04s05.html#ftn.CHP-4-FN-5)])
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我在前面的章节中提到的，德国的法律不允许我提供完整的漏洞利用程序，但您可以在本书的网站上观看我录制的一段简短视频，展示漏洞在实际操作中的效果。[41](ch04s05.html#ftn.CHP-4-FN-5)]
 - en: '[Figure 4-8](ch04s02.html#diagram_of_my_exploitation_of_the_ffmpeg "Figure 4-8. Diagram
     of my exploitation of the FFmpeg bug") summarizes the steps I used to exploit
     the vulnerability. Here is the anatomy of the bug shown in this figure:'
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: '[图4-8](ch04s02.html#diagram_of_my_exploitation_of_the_ffmpeg "图4-8. 我利用FFmpeg漏洞的示意图")总结了用于利用漏洞的步骤。图中展示了该漏洞的解剖结构：'
 - en: The destination address for the memory write is calculated while using `current_track`
     as an index (`NULL` + `current_track` + offset). The value of `current_track`
     derives from user-controlled data of the 4xm media file.
+  id: totrans-166
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在使用`current_track`作为索引时计算内存写入的地址（`NULL` + `current_track` + 偏移量）。`current_track`的值来自4xm媒体文件的用户控制数据。
 - en: The source data of the memory write derives from user-controlled data of the
     media file.
+  id: totrans-167
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 内存写入的源数据来自媒体文件的用户控制数据。
 - en: The user-controlled data is copied at the memory location of the `memalign()`
     GOT entry.
+  id: totrans-168
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 用户控制的数据被复制到`memalign()` GOT条目的内存位置。
 - en: '![Diagram of my exploitation of the FFmpeg bug](httpatomoreillycomsourcenostarchimages939277.png.jpg)'
+  id: totrans-169
   prefs: []
   type: TYPE_IMG
+  zh: '![我的FFmpeg漏洞利用的示意图](httpatomoreillycomsourcenostarchimages939277.png.jpg)'
 - en: Figure 4-8. Diagram of my exploitation of the FFmpeg bug
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 图4-8. 我利用FFmpeg漏洞的示意图
 - en: 4.3 Vulnerability Remediation
+  id: totrans-171
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 4.3 漏洞修复
 - en: Note
+  id: totrans-172
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Tuesday, January 27, 2009*'
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: '*星期二，2009年1月27日*'
 - en: After I told the FFmpeg maintainers about the bug, they developed the following
     patch:^([[42](ch04s05.html#ftn.CHP-4-FN-6)])
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我将该漏洞告知FFmpeg维护者之后，他们开发了以下补丁。[42](ch04s05.html#ftn.CHP-4-FN-6)]
 - en: '[PRE23]'
+  id: totrans-175
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: The patch applies a new length check that restricts the maximum value for `current_track`
     to `0x09249247`.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 该补丁应用了一个新的长度检查，将`current_track`的最大值限制为`0x09249247`。
 - en: '[PRE24]'
+  id: totrans-177
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: When the patch is in place, `current_track` can’t become negative, and the vulnerability
     is indeed fixed.
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 当补丁到位时，`current_track` 不能变为负数，漏洞确实得到了修复。
 - en: This patch eliminated the vulnerability at the source code level. There’s also
     a generic exploit mitigation technique that would make it much harder to exploit
     the bug. To gain control of the execution flow, I had to overwrite a memory location
@@ -744,196 +1070,308 @@
     thus making it impossible to use the described GOT overwrite technique to gain
     control of the execution flow of FFmpeg. However, other exploitation techniques
     that are not mitigated by RELRO would still allow control over `EIP`.
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
+  zh: 此补丁消除了源代码级别的漏洞。还有一个通用的漏洞缓解技术，这将使利用该漏洞变得更加困难。为了控制执行流程，我必须覆盖一个内存位置以控制 `EIP`。在这个例子中，我使用了
+    GOT 条目。*RELRO* 缓解技术有一个名为 *Full RELRO* 的操作模式，该模式将 GOT 映射为只读，从而使得无法使用描述的 GOT 覆写技术来控制
+    FFmpeg 的执行流程。然而，其他不受 RELRO 缓解的技术仍然允许控制 `EIP`。
 - en: Note
+  id: totrans-180
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*See Section C.2 for more information on the RELRO mitigation technique*.'
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: '*有关 RELRO 缓解技术的更多信息，请参见第 C.2 节*。'
 - en: 'To make use of the Full RELRO mitigation technique, the FFmpeg binary would
     need to be recompiled with the following additional linker options: `-Wl,-z,relro,-z,now`.'
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用 Full RELRO 缓解技术，FFmpeg 二进制文件需要重新编译，并添加以下链接器选项：`-Wl,-z,relro,-z,now`。
 - en: 'Example of recompiling FFmpeg with Full RELRO support:'
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 Full RELRO 支持重新编译 FFmpeg 的示例：
 - en: '[PRE25]'
+  id: totrans-184
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: 'Get GOT entry of `memalign()`:'
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: 获取 `memalign()` 的 GOT 条目：
 - en: '[PRE26]'
+  id: totrans-186
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: 'Adjust [Example 4-1](ch04s02.html#little_helper_program_to "Example 4-1. Little
     helper program to use brute force to find the appropriate value for current_track
     (addr_brute_force.c)") and use brute force to get the value for `current_track`:'
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: 调整 [示例 4-1](ch04s02.html#little_helper_program_to "示例 4-1. 使用暴力破解找到 current_track（addr_brute_force.c）的适当值的小助手程序")
+    并使用暴力破解获取 `current_track` 的值：
 - en: '[PRE27]'
+  id: totrans-188
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: 'Make a new proof-of-concept file (*poc_relro.4xm*) and test it in the debugger
     (see Section B.4 for a description of the following debugger commands):'
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 创建一个新的概念验证文件（*poc_relro.4xm*）并在调试器中测试它（有关以下调试器命令的描述，请参见第 B.4 节）：
 - en: '[PRE28]'
+  id: totrans-190
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'FFmpeg crashed again while trying to parse the malformed media file. To see
     what exactly caused the crash, I asked the debugger to display the current register
     values as well as the last instruction executed by FFmpeg:'
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
+  zh: 在尝试解析损坏的媒体文件时，FFmpeg 再次崩溃。为了查看导致崩溃的确切原因，我要求调试器显示 FFmpeg 当前寄存器的值以及最后执行的指令：
 - en: '[PRE29]'
+  id: totrans-192
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: 'I also displayed the address where FFmpeg had attempted to store the value
     of `EAX`:'
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 我还显示了 FFmpeg 尝试存储 `EAX` 值的地址：
 - en: '[PRE30]'
+  id: totrans-194
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: As expected, FFmpeg tried to write the value of `EAX` to the supplied address
     (`0x855ffd0`) of `memalign()`’s GOT entry.
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: 如预期的那样，FFmpeg 尝试将 `EAX` 的值写入 `memalign()` 的 GOT 条目的提供地址（`0x855ffd0`）。
 - en: '[PRE31]'
+  id: totrans-196
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: This time FFmpeg crashed with a segmentation fault while trying to overwrite
     the read-only GOT entry (see the `r--p` permissions of the GOT at `0855f000-08560000`).
     It seems that Full RELRO can indeed successfully mitigate GOT overwrites.
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: 这次 FFmpeg 在尝试覆盖只读的 GOT 条目时崩溃（参见 GOT 在 `0855f000-08560000` 的 `r--p` 权限）。看来 Full
+    RELRO 确实可以成功缓解 GOT 覆写。
 - en: 4.4 Lessons Learned
+  id: totrans-198
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 4.4 经验教训
 - en: 'As a programmer:'
+  id: totrans-199
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为程序员：
 - en: Don’t mix different data types.
+  id: totrans-200
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 不要混合不同的数据类型。
 - en: Learn about the hidden transformations done automatically by the compiler. These
     implicit conversions are subtle and cause a lot of security bugs^([[43](ch04s05.html#ftn.CHP-4-FN-7)])
     (also see Section A.3).
+  id: totrans-201
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 了解编译器自动执行的隐藏转换。这些隐式转换很微妙，会导致许多安全漏洞^([[43](ch04s05.html#ftn.CHP-4-FN-7)])（也参见第
+    A.3 节）。
 - en: Get a solid grasp of C’s type conversions.
+  id: totrans-202
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 确保对 C 的类型转换有扎实的理解。
 - en: Not all NULL pointer dereferences in user space are simple denial-of-service
     conditions. Some of them are really bad vulnerabilities that can lead to arbitrary
     code execution.
+  id: totrans-203
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 用户空间中并非所有 NULL 指针解引用都是简单的拒绝服务条件。其中一些确实是严重的漏洞，可能导致任意代码执行。
 - en: Full RELRO helps to mitigate the GOT overwrite exploitation technique.
+  id: totrans-204
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 完整的 RELRO 有助于缓解 GOT 覆写利用技术。
 - en: 'As a user of media players:'
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为媒体播放器的用户：
 - en: Never trust media file extensions (see Section 2.5).
+  id: totrans-206
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 不要信任媒体文件扩展名（参见第 2.5 节）。
 - en: 4.5 Addendum
+  id: totrans-207
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 4.5 补遗
 - en: Note
+  id: totrans-208
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Wednesday, January 28, 2009*'
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: '*2009年1月28日，星期三*'
 - en: The vulnerability was fixed ([Figure 4-9](ch04s05.html#timeline_of_the_ffmpeg_bug_from_notifica
     "Figure 4-9. Timeline of the FFmpeg bug from notification to the release of a
     fixed version of FFmpeg") shows the timeline) and a new version of FFmpeg is available,
     so I released a detailed security advisory on my website.^([[44](ch04s05.html#ftn.CHP-4-FN-8)])
     The bug was assigned CVE-2009-0385.
+  id: totrans-210
   prefs: []
   type: TYPE_NORMAL
+  zh: 该漏洞已得到修复（[图4-9](ch04s05.html#timeline_of_the_ffmpeg_bug_from_notifica "图4-9.
+    从通知到发布FFmpeg修复版本的FFmpeg错误时间线"）显示了时间线），并且有新的FFmpeg版本可用，因此我在我的网站上发布了详细的安全警告。[^([[44](ch04s05.html#ftn.CHP-4-FN-8)])]
+    该漏洞被分配了CVE-2009-0385。
 - en: '![Timeline of the FFmpeg bug from notification to the release of a fixed version
     of FFmpeg](httpatomoreillycomsourcenostarchimages939279.png.jpg)'
+  id: totrans-211
   prefs: []
   type: TYPE_IMG
+  zh: '![从通知到发布FFmpeg修复版本的FFmpeg错误时间线](httpatomoreillycomsourcenostarchimages939279.png.jpg)'
 - en: Figure 4-9. Timeline of the FFmpeg bug from notification to the release of a
     fixed version of FFmpeg
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
+  zh: 图4-9. 从通知到发布FFmpeg修复版本的FFmpeg错误时间线
 - en: Notes
+  id: totrans-213
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 备注
 - en: ^([[37](#ftn.CHP-4-FN-1)])
+  id: totrans-214
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[37](#ftn.CHP-4-FN-1)])
 - en: ^([[38](#ftn.CHP-4-FN-2)])
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[38](#ftn.CHP-4-FN-2)])
 - en: ^([[39](#ftn.CHP-4-FN-3)])
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[39](#CHP-4-FN-3)])
 - en: ^([[40](#ftn.CHP-4-FN-4)])
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[40](#ftn.CHP-4-FN-4)])
 - en: ^([[41](#ftn.CHP-4-FN-5)])
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[41](#CHP-4-FN-5)])
 - en: ^([[42](#ftn.CHP-4-FN-6)])
+  id: totrans-219
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[42](#ftn.CHP-4-FN-6)])
 - en: ^([[43](#ftn.CHP-4-FN-7)])
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[43](#ftn.CHP-4-FN-7)])
 - en: ^([[44](#ftn.CHP-4-FN-8)])
+  id: totrans-221
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[44](#CHP-4-FN-8)])
 - en: '* * *'
+  id: totrans-222
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[37](#CHP-4-FN-1)]) See [http://wiki.multimedia.cx/index.php?title=YouTube](http://wiki.multimedia.cx/index.php?title=YouTube).
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[37](#CHP-4-FN-1)]) 请参阅[http://wiki.multimedia.cx/index.php?title=YouTube](http://wiki.multimedia.cx/index.php?title=YouTube)。
 - en: ^([[38](#CHP-4-FN-2)]) See [http://ffmpeg.org/download.html](http://ffmpeg.org/download.html).
+  id: totrans-224
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[38](#CHP-4-FN-2)]) 请参阅[http://ffmpeg.org/download.html](http://ffmpeg.org/download.html)。
 - en: ^([[39](#CHP-4-FN-3)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  id: totrans-225
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[39](#CHP-4-FN-3)]) 请参阅[http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/)。
 - en: ^([[40](#CHP-4-FN-4)]) A detailed description of the 4X movie file format can
     be found at [http://wiki.multimedia.cx/index.php?title=4xm_Format](http://wiki.multimedia.cx/index.php?title=4xm_Format).
+  id: totrans-226
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[40](#CHP-4-FN-4)]) 有关4X电影文件格式的详细描述可以在[http://wiki.multimedia.cx/index.php?title=4xm_Format](http://wiki.multimedia.cx/index.php?title=4xm_Format)找到。
 - en: ^([[41](#CHP-4-FN-5)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  id: totrans-227
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[41](#CHP-4-FN-5)]) 请参阅[http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/)。
 - en: ^([[42](#CHP-4-FN-6)]) The patch from the FFmpeg maintainers can be found at
     [http://git.videolan.org/?p=ffmpeg.git;a=commitdiff;h=0838cfdc8a10185604db5cd9d6bffad71279a0e8](http://git.videolan.org/?p=ffmpeg.git;a=commitdiff;h=0838cfdc8a10185604db5cd9d6bffad71279a0e8).
+  id: totrans-228
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[42](#CHP-4-FN-6)]) 可以在[http://git.videolan.org/?p=ffmpeg.git;a=commitdiff;h=0838cfdc8a10185604db5cd9d6bffad71279a0e8](http://git.videolan.org/?p=ffmpeg.git;a=commitdiff;h=0838cfdc8a10185604db5cd9d6bffad71279a0e8)找到FFmpeg维护者提供的补丁。
 - en: '^([[43](#CHP-4-FN-7)]) For more information on type conversions and associated
     security problems consult Mark Dowd, John McDonald, and Justin Schuh, *The Art
     of Software Security Assessment: Identifying and Preventing Software Vulnerabilities*
     (Indianapolis, IN: Addison-Wesley Professional, 2007). See also the sample chapter
     available at [http://ptgmedia.pearsoncmg.com/images/0321444426/samplechapter/Dowd_ch06.pdf](http://ptgmedia.pearsoncmg.com/images/0321444426/samplechapter/Dowd_ch06.pdf).'
+  id: totrans-229
   prefs: []
   type: TYPE_NORMAL
+  zh: '^([[43](#CHP-4-FN-7)]) 关于类型转换和相关安全问题的更多信息，请参考Mark Dowd, John McDonald和Justin
+    Schuh的《软件安全评估的艺术：识别和预防软件漏洞》（Indianapolis, IN: Addison-Wesley Professional, 2007）。还可以参考[http://ptgmedia.pearsoncmg.com/images/0321444426/samplechapter/Dowd_ch06.pdf](http://ptgmedia.pearsoncmg.com/images/0321444426/samplechapter/Dowd_ch06.pdf)提供的样章。'
 - en: ^([[44](#CHP-4-FN-8)]) My security advisory that describes the details of the
     FFmpeg vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2009-004.txt](http://www.trapkit.de/advisories/TKADV2009-004.txt).
+  id: totrans-230
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[44](#CHP-4-FN-8)]) 描述FFmpeg漏洞详细信息的我的安全警告可以在[http://www.trapkit.de/advisories/TKADV2009-004.txt](http://www.trapkit.de/advisories/TKADV2009-004.txt)找到。
