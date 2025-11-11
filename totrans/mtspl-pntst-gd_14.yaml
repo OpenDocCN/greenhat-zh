@@ -1,12 +1,16 @@
 - en: Chapter 14. Creating Your Own Exploits
+  id: totrans-0
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第14章 创建您自己的漏洞利用
 - en: As a penetration tester, you will frequently encounter applications for which
     no Metasploit modules are available. In such situations, you can attempt to uncover
     vulnerabilities in the application and develop your own exploits for them.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为渗透测试员，您将经常遇到没有Metasploit模块的应用程序。在这种情况下，您可以尝试发现应用程序中的漏洞，并为它们开发自己的漏洞利用。
 - en: One of the easiest ways to discover a vulnerability is to fuzz the application.
     *Fuzz testing* is the act of sending invalid, unexpected, or malformed random
     data to an application and monitoring it for exceptions such as crashes. If a
@@ -14,95 +18,138 @@
     a vast topic and entire books have been written on the subject. We will only briefly
     scratch the surface of fuzzing prior to moving on and developing a working exploit
     module.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 发现漏洞的最简单方法之一是对应用程序进行模糊测试。*模糊测试*是指向应用程序发送无效、意外或格式错误的随机数据，并监控其异常，如崩溃。如果发现漏洞，您可以努力开发针对该漏洞的漏洞利用。模糊测试是一个广泛的话题，关于这个主题已经写出了整本书。在我们继续开发一个有效的漏洞利用模块之前，我们只会简要地触及模糊测试的表面。
 - en: In this chapter we’ll walk you though the process of identifying a vulnerability
     via fuzzing and exploit development, using the known vulnerability in NetWin SurgeMail
     3.8k4-4, discovered by Matteo Memelli (ryujin) and available at [http://www.exploit-db.com/exploits/5259/](http://www.exploit-db.com/exploits/5259/).
     This application had a vulnerability that made it improperly handle overly long
     `LIST` commands, resulting in a stack overflow that let an attacker execute code
     remotely.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将向您介绍通过模糊测试和漏洞开发来识别漏洞的过程，我们将使用NetWin SurgeMail 3.8k4-4中已知的漏洞，该漏洞由Matteo
+    Memelli（ryujin）发现，可在[http://www.exploit-db.com/exploits/5259/](http://www.exploit-db.com/exploits/5259/)找到。该应用程序存在一个漏洞，导致其无法正确处理过长的`LIST`命令，从而引发堆栈溢出，使攻击者能够远程执行代码。
 - en: '* * *'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: Note
+  id: totrans-5
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: 'This chapter assumes that you are familiar with exploit development and comfortable
     with the concept of buffer overflows and the use of a debugger. If you need a
     bit of a refresher, you’ll find some excellent tutorials by *corelanc0d3r* on
     the Exploit Database site, [http://www.exploit-db.com/](http://www.exploit-db.com/).
     At a minimum, consider reading “Exploit Writing Tutorial Part 1: Stack Based Overflows”([http://www.exploit-db.com/download_pdf/13535/](http://www.exploit-db.com/download_pdf/13535/))
     and “Exploit Writing Tutorial Part 3: SEH” ([http://www.exploit-db.com/download_pdf/13537/](http://www.exploit-db.com/download_pdf/13537/)).'
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章假设您熟悉漏洞开发，并且对缓冲区溢出和调试器的使用概念感到舒适。如果您需要一点复习，您可以在Exploit Database网站上找到*corelanc0d3r*的一些优秀的教程，[http://www.exploit-db.com/](http://www.exploit-db.com/)。至少，考虑阅读“漏洞编写教程第1部分：基于堆栈的溢出”([http://www.exploit-db.com/download_pdf/13535/](http://www.exploit-db.com/download_pdf/13535/))和“漏洞编写教程第3部分：SEH”
+    ([http://www.exploit-db.com/download_pdf/13537/](http://www.exploit-db.com/download_pdf/13537/))。
 - en: '* * *'
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: The Art of Fuzzing
+  id: totrans-8
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 模糊测试的艺术
 - en: Before you develop any exploit, you need to determine whether a vulnerability
     exists in the application. This is where fuzzing comes into play.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 在开发任何漏洞利用之前，您需要确定应用程序中是否存在漏洞。这就是模糊测试发挥作用的地方。
 - en: The following listing shows the code for a simple Internet Message Access Protocol
     (IMAP) fuzzer. Save this to your */root/.msf3/modules/auxiliary/fuzzers/* directory,
     but be sure to keep your testing modules in a folder separate from the main Metasploit
     trunk.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 下面的列表显示了简单Internet消息访问协议（IMAP）模糊测试器的代码。将其保存到您的*/root/.msf3/modules/auxiliary/fuzzers/*目录中，但请确保将您的测试模块保存在与Metasploit主分支分开的文件夹中。
 - en: '[PRE0]'
+  id: totrans-11
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: The fuzzer module begins by importing the IMAP ![](../images/00002.gif) and
     denial-of-service ![](../images/00004.gif) mixins. Including IMAP gives you the
     required login functionality, and since the goal of the fuzzer is to crash the
     server, this module results in a denial of service.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 模糊测试模块首先导入IMAP ![../images/00002.gif] 和拒绝服务 ![../images/00004.gif] 混合。包括IMAP为您提供了所需的登录功能，由于模糊测试的目标是使服务器崩溃，因此该模块导致拒绝服务。
 - en: At ![](../images/00005.gif) the *fuzz string* (the malformed data we want to
     send) is set as a randomized string of alphanumeric characters with a maximum
     length of 1024 bytes. The fuzzer connects and logs into the remote service at
     ![](../images/00006.gif), and if it fails to connect and the loop breaks, you
     have something worth investigating. The lack of response by the server might mean
     that you’ve successfully caused an exception in the remote service.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 ![图 5](../images/00005.gif) 处，将 *模糊字符串*（我们想要发送的畸形数据）设置为最大长度为1024字节的随机字母数字字符字符串。模糊测试器连接并登录到远程服务，如图
+    ![图 6](../images/00006.gif) 所示，如果它无法连接并且循环中断，你就有值得调查的东西了。服务器没有响应可能意味着你已经在远程服务中成功引发了异常。
 - en: At ![](../images/00007.gif) the variable `fuzzed` is set to the random string
     generated by the Framework, and the malicious request ![](../images/00026.gif)
     is built according to the published exploit code by appending the malicious data
     to the vulnerable `LIST` command. If the fuzzer doesn’t receive a response from
     the server, it prints the message `"Server crashed, no response"` and quits.
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 ![图 7](../images/00007.gif) 处，变量 `fuzzed` 被设置为框架生成的随机字符串，并且根据已发布的漏洞代码构建恶意请求
+    ![图 26](../images/00026.gif)，通过将恶意数据追加到易受攻击的 `LIST` 命令。如果模糊测试器没有从服务器收到响应，它会打印消息
+    `"Server crashed, no response"` 并退出。
 - en: 'To test your new fuzzer, start up *msfconsole*, load the module, and set its
     options as follows:'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 要测试你的新模糊测试器，启动 *msfconsole*，加载模块，并设置其选项如下：
 - en: '[PRE1]'
+  id: totrans-16
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'The fuzzer should now be ready to go. Make sure that your debugger of choice
     (we’re using the Immunity Debugger in our examples) is attached to the *surgemail.exe*
     process, and start the fuzzer:'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 模糊测试器现在应该已经准备好了。确保你选择的调试器（在我们的示例中我们使用Immunity Debugger）附加到 *surgemail.exe* 进程，并启动模糊测试器：
 - en: '[PRE2]'
+  id: totrans-18
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: In this listing, the fuzzer connects and logs into the remote service at ![](../images/00002.gif)
     and generates a random string of text at ![](../images/00004.gif). At ![](../images/00005.gif)
     the malicious request is sent to the server, and the reply is received and displayed
     at ![](../images/00006.gif). If the server receives no reply, you receive the
     notification at ![](../images/00007.gif) that the server has crashed, which is
     your cue to check your debugger.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个列表中，模糊测试器连接并登录到远程服务，如图 ![图 2](../images/00002.gif) 所示，并在 ![图 4](../images/00004.gif)
+    生成一串随机的文本。在 ![图 5](../images/00005.gif) 将恶意请求发送到服务器，并接收并显示响应，如图 ![图 6](../images/00006.gif)
+    所示。如果服务器没有收到响应，你会在 ![图 7](../images/00007.gif) 收到通知，表明服务器已崩溃，这是你检查调试器的提示。
 - en: If you now check your debugger on the Windows target, you should see that it
     has paused at the point of the crash, as shown in [Figure 14-1](part0018.html#the_debugger_pauses_at_the_point_of_the).
     Looking at the crash, we can see that no memory addresses are overwritten and
@@ -112,96 +159,140 @@
     Handler (SEH). Controlling the SEH makes the exploit more reliable, because it
     makes it more versatile. Similarly, the use of an application DLL for a return
     address makes the exploit portable across different operating system versions.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你现在在 Windows 目标上检查你的调试器，你应该会看到它已经暂停在崩溃点，如图 [图 14-1](part0018.html#the_debugger_pauses_at_the_point_of_the)
+    所示。观察崩溃情况，我们可以看到没有内存地址被覆盖，而且不幸的是，乍一看似乎没有什么可以利用的地方。经过进一步调整缓冲区长度，你会发现通过发送一个更长的11,000字节字符串，你可以覆盖结构化异常处理程序（SEH）。控制SEH使得攻击更加可靠，因为它使它更加灵活。同样，使用应用程序DLL作为返回地址使得攻击可以在不同的操作系统版本之间移植。
 - en: '![The debugger pauses at the point of the crash.](../images/00048.jpeg)Figure 14-1. The
     debugger pauses at the point of the crash.'
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: '![调试器在崩溃点暂停。](../images/00048.jpeg) 图 14-1. 调试器在崩溃点暂停。'
 - en: 'To send the 11,000-byte string, we make a small change in the fuzzer code,
     as shown here:'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 要发送11,000字节的字符串，我们在模糊测试器代码中进行了一些小的修改，如下所示：
 - en: '[PRE3]'
+  id: totrans-23
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: Rather than using the random string of characters, this code modification sends
     a string of 11,000 *A*s as part of the malicious request.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 而不是使用随机字符字符串，这个代码修改将11,000个 *A* 字符作为恶意请求的一部分发送。
 - en: Controlling the Structured Exception Handler
+  id: totrans-25
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 控制结构化异常处理程序
 - en: If you restart the *surgemail* service, reattach the debugger to the process,
     and rerun the module, you should see the crash that fuzzing found in your debugger.
     If you’re using the Immunity Debugger, you should be able to see the contents
     of the SEH chain by selecting **View**▸**SEH chain**. Right-click the value, which
     should be *41414141*, and select **Follow address in stack** to display the stack
     contents leading to the SEH overwrite in the lower-right pane shown in [Figure 14-2](part0018.html#the_overwritten_seh_entry).
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你重新启动*surgemail*服务，将调试器附加到进程，并重新运行模块，你应该能在你的调试器中看到fuzzing发现的崩溃。如果你使用的是Immunity
+    Debugger，你应该能够通过选择**视图**▸**SEH链**来查看SEH链的内容。右键单击值，应该是*41414141*，然后选择**在堆中跟随地址**来显示导致SEH覆盖的堆内容，如图[图14-2](part0018.html#the_overwritten_seh_entry)所示。
 - en: '![The overwritten SEH entry](../images/00049.jpeg)Figure 14-2. The overwritten
     SEH entry'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: '![覆盖后的SEH条目](../images/00049.jpeg)图14-2. 覆盖后的SEH条目'
 - en: Now that you know that you can control the SEH chain on the vulnerable *surgemail*
     process with an overly long buffer, it’s time to determine the exact length required
     to overwrite it on the target. As you will recall from our discussions of stand-alone
     exploit development, before you can use a return address, you first need to find
     out where, exactly, the overwrite occurs.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你已经知道你可以通过一个过长的缓冲区来控制易受攻击的*surgemail*进程上的SEH链，现在是时候确定覆盖它在目标机上所需的精确长度。正如你从我们的独立漏洞利用开发讨论中回忆的那样，在你可以使用返回地址之前，你首先需要找出覆盖的确切位置。
 - en: 'We can modify our fuzzer code to create a nonrepeating, random string of characters
     of a specific length, as shown next:'
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们可以修改我们的fuzzer代码来创建一个特定长度的非重复、随机字符字符串，如下所示：
 - en: '[PRE4]'
+  id: totrans-30
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: In this listing, we use `Rex::Text.pattern_create` to generate the nonrepeating
     random string of characters with our fuzzer. Rerunning the fuzzer module now shows
     that SEH was overwritten on the target with *684E3368*, as shown in [Figure 14-3](part0018.html#the_seh_overwritten_with_random_characte).
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个列表中，我们使用`Rex::Text.pattern_create`来生成fuzzer的非重复随机字符字符串。重新运行fuzzer模块现在显示SEH在目标机上被*684E3368*覆盖，如图[图14-3](part0018.html#the_seh_overwritten_with_random_characte)所示。
 - en: '![The SEH overwritten with random characters](../images/00050.jpeg)Figure 14-3. The
     SEH overwritten with random characters'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: '![使用随机字符覆盖的SEH](../images/00050.jpeg)图14-3. 使用随机字符覆盖的SEH'
 - en: 'With the SEH overwritten with our random set of characters, we can use *pattern_offset.rb*
     in */opt/metasploit3/msf3/tools/* to determine exactly where the overwrite occurs
     by passing the characters of interest (*684E3368*) followed by the length of the
     string that was sent to the target (*11000*), as shown here:'
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 当SEH被我们的随机字符集覆盖后，我们可以使用位于*/opt/metasploit3/msf3/tools/*目录下的*pattern_offset.rb*来确定覆盖的确切位置，通过传递感兴趣的字符（*684E3368*）以及发送到目标机的字符串长度（*11000*），如下所示：
 - en: '[PRE5]'
+  id: totrans-34
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'The value *10360* means that the four bytes that overwrite SEH are 10361, 10362,
     10363, and 10364\. We can now change the fuzzer code one last time to verify our
     findings:'
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 值*10360*表示覆盖SEH的四个字节是10361、10362、10363和10364。现在我们可以最后一次更改fuzzer代码来验证我们的发现：
 - en: '[PRE6]'
+  id: totrans-36
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: As shown, the fuzzer will build the malicious request beginning with 10,360
     *A*s (hexadecimal *41*), followed by four *B*s (hexadecimal *42*) to overwrite
     the SEH, and then 636 *C*s (hexadecimal *43*) as filler to keep the string length
     constant at 11,000 bytes.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 如所示，fuzzer将从10,360个*A*（十六进制*41*）开始构建恶意请求，接着是四个*B*（十六进制*42*）来覆盖SEH，然后是636个*C*（十六进制*43*）作为填充，以保持字符串长度恒定为11,000字节。
 - en: Running the fuzzer against the target again shows that the entire SEH chain
     is under your complete control, as shown in [Figure 14-4](part0018.html#seh_fully_controlled).
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 再次运行fuzzer针对目标机显示，整个SEH链完全在你的控制之下，如图[图14-4](part0018.html#seh_fully_controlled)所示。
 - en: '![SEH fully controlled](../images/00051.jpeg)Figure 14-4. SEH fully controlled'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: '![完全控制的SEH](../images/00051.jpeg)图14-4. 完全控制的SEH'
 - en: Hopping Around SEH Restrictions
+  id: totrans-40
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 跳过SEH限制
 - en: Following the SEH overwrite, there’s very little space for shellcode before
     the end of the stack. Normally, a *POP-POP-RETN* set of instructions would be
     used to reach the Next SEH (NSEH), followed by a short jump forward into the shellcode.
@@ -209,8 +300,10 @@
     as much space as possible for our final payload. At this point, we are done with
     the fuzzing process and we’ll move into developing an exploit for the vulnerability
     that we found.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 在SEH覆盖之后，在栈的末尾之前几乎没有空间用于shellcode。通常，会使用 *POP-POP-RETN* 指令集来达到下一个SEH（NSEH），然后向前短跳入shellcode。我们将通过开发一个尽可能为我们的最终有效载荷使用空间的漏洞利用来克服这个有限的空间限制。在这个阶段，我们已经完成了模糊测试过程，并将进入为我们发现的漏洞开发漏洞利用。
 - en: 'This exploit would be a good candidate for an *egg hunter*, which is a small
     segment of shellcode that searches memory for the main payload; however, we’ll
     use a different tactic and overwrite SEH with the *POP-POP-RETN* instruction pointer.
@@ -221,26 +314,38 @@
     an exploit, because it gives you a little room for error should the buffer position
     change in memory. NOPs will have no adverse impact on the exploit code and will
     act as filler. Conceptually, the attack will look like this:'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个漏洞利用将是 *egg hunter* 的良好候选，这是一种搜索内存以查找主要有效载荷的小段shellcode；然而，我们将使用不同的策略，并用 *POP-POP-RETN*
+    指令指针覆盖SEH。一旦覆盖完成，我们将进行一个短距离的回跳，这需要非常少的指令（而不是向前跳转）。接下来，我们将使用短跳转中获得的空余空间来执行更大的近跳转，跳回NOP滑行和shellcode。虽然这不是必需的，但NOP滑行总是漏洞利用中的一个好补充，因为它在内存中缓冲区位置发生变化时为你提供了一些错误空间。NOPs不会对漏洞利用代码产生不利影响，并充当填充物。从概念上讲，攻击将看起来像这样：
 - en: '[PRE7]'
+  id: totrans-43
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: To ensure portability of the exploit across different versions of Windows, use
     a return address from an application DLL or executable. In this case, only the
     application executable itself is available, so you can try to accomplish a three-byte
     overwrite of SEH using a *POP-POP-RETN* sequence of instructions from the *surgemail.exe*
     file. If this can be done successfully, the exploit will be universal across versions
     of Windows.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了确保漏洞利用在不同版本的Windows上的可移植性，请使用来自应用程序DLL或可执行文件的返回地址。在这种情况下，只有应用程序的可执行文件本身可用，因此你可以尝试使用来自
+    *surgemail.exe* 文件的 *POP-POP-RETN* 指令序列来执行三个字节的SEH覆盖。如果这可以成功完成，那么漏洞利用将在Windows的不同版本中通用。
 - en: 'Let’s move on to creating the actual exploit for the SurgeMail vulnerability.
     Following is our initial skeleton exploit module to be saved in */root/.msf3/modules/exploits/windows/imap/*:'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们继续创建针对SurgeMail漏洞的实际漏洞利用。以下是我们初始的骨架漏洞利用模块，需要保存在 */root/.msf3/modules/exploits/windows/imap/*：
 - en: '[PRE8]'
+  id: totrans-46
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'The `''Space''` declaration at ![](../images/00002.gif) refers to the space
     available for shellcode. This declaration is very important in an exploit module
     because it determines which payloads Metasploit will allow you to use when running
@@ -249,24 +354,33 @@
     sizes. To see the size of an unencoded payload, you would use the `info` command
     followed by the name of the payload and look for the `Total size` value, as shown
     here:'
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 ![](../images/00002.gif) 处的 `'Space'` 声明指的是可用于shellcode的空间。在漏洞利用模块中，这个声明非常重要，因为它决定了Metasploit在运行你的漏洞利用时允许你使用哪些有效载荷。一些有效载荷需要的空间比其他的多得多，所以尽量不要高估这个值。有效载荷的大小差异很大，编码会增加它们的大小。要查看未编码有效载荷的大小，你需要使用
+    `info` 命令后跟有效载荷的名称，并查找 `Total size` 值，如下所示：
 - en: '[PRE9]'
+  id: totrans-48
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: The return address at ![](../images/00004.gif) in the `'Targets'` section is
     currently occupied by a placeholder value, which we’ll change later in the exploit
     development process.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 `'Targets'` 部分的 ![](../images/00004.gif) 处的返回地址目前被一个占位符值占用，我们将在漏洞利用开发过程中稍后更改它。
 - en: As with the fuzzer module discussed earlier, this exploit connects and logs
     into the target at ![](../images/00005.gif), uses a string of *A*s at ![](../images/00006.gif)
     as the initial buffer, and appends four *C*s at ![](../images/00007.gif) to overwrite
     the SEH. The entire exploit string is generated at ![](../images/00026.gif) and
     then sent to the target at ![](../images/00027.gif).
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
 - en: Getting a Return Address
+  id: totrans-51
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -274,11 +388,14 @@
     do so, copy the executable to a location on your Back|Track machine, and then
     use the `-p` switch with `msfpescan` to locate a suitable candidate, as in the
     following example:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE10]'
+  id: totrans-53
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: When `msfpescan` is run against the target executable, it reads through the
     machine code looking for assembly instructions that match the target (a *POP-POP-RETN*
     sequence in this case) and displays the memory address where these instructions
@@ -287,16 +404,20 @@
     Having made our selection, we edit the `'Targets'` section of the exploit module
     to include this address and edit the `exploit` section to include it as part of
     the buffer to be sent, as shown next.
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE11]'
+  id: totrans-55
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: To perform a three-byte overwrite of the SEH, we set the three bytes to be added
     to the buffer in the `'Targets'` block at ![](../images/00002.gif), in little-endian
     order, as shown in boldface type in the listing. (Endian-ness is determined by
     the target CPU’s architecture, and Intel-compatible processors use little-endian
     byte ordering.)
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
 - en: At ![](../images/00004.gif) we replace the three *C*s in the `evil` string with
@@ -307,98 +428,134 @@
     `[target.ret].pack('V')`. This scenario requires more granular control, because
     if we were to send the null (00) byte, it would represent the end of a string
     and could prevent the exploit from functioning properly.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
 - en: 'Now is a good time to run the exploit to make sure that it works properly.
     If you jump too far ahead when developing an exploit, you run the risk of making
     an error somewhere and having to do a lot of backtracking to find out what went
     wrong. Here’s the exploit:'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE12]'
+  id: totrans-59
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: The payload that we use at ![](../images/00002.gif), `generic/debug_trap`, won’t
     actually send a payload. Instead, it sends multiple `\xCC`s, or breakpoints, to
     debug the execution flow of the exploit. This is useful for confirming that your
     shellcode is inserted at the right places in your exploit.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
 - en: After running the exploit, open the Immunity Debugger, as shown in [Figure 14-5](part0018.html#landing_in_the_pop-pop-retn_instructions),
     and at the crash select **View** ▸ **SEH chain**. Set a breakpoint by pressing
     F2, and then press shift-F9 to pass the exception to the application and step
     into the *POP-POP-RETN* sequence of instructions.
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 在运行利用程序后，打开Immunity Debugger，如图[图14-5](part0018.html#landing_in_the_pop-pop-retn_instructions)，在崩溃时选择**查看**
+    ▸ **SEH链**。通过按F2设置一个断点，然后按shift-F9将异常传递给应用程序并进入*POP-POP-RETN*指令序列。
 - en: Now, still in the debugger, press F7 to single-step through the instructions
     until you land in the *41414141* contained in NSEH.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，仍然在调试器中，按F7单步执行指令，直到你到达包含在NSEH中的*41414141*。
 - en: '![Landing in the POP-POP-RETN instructions](../images/00052.jpeg)Figure 14-5. Landing
     in the *POP-POP-RETN* instructions'
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: '![在POP-POP-RETN指令中着陆](../images/00052.jpeg)图14-5. 在*POP-POP-RETN*指令中着陆'
 - en: 'Next, edit the exploit to include the instructions for the short jump backward,
     as shown here:'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，编辑利用程序以包含短跳转的指令，如下所示：
 - en: '[PRE13]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: When editing your exploit, be sure to adjust the initial buffer length at ![](../images/00002.gif)
     as you make changes, or your alignment will be off. In this case, NSEH is being
     overwritten with the instructions to make a short five-byte jump backward (`\xeb\xf9\x90\x90`)
     ![](../images/00004.gif), where `eb` is the operation code for a short jump. The
     new lead buffer length is adjusted to 10,356 bytes, because these five new bytes
     come before the SEH overwrite.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 在编辑你的利用程序时，确保在做出更改时调整初始缓冲区长度在![图片](../images/00002.gif)，否则你的对齐将出错。在这种情况下，NSEH正被覆盖以执行一个短的五字节跳转(`\xeb\xf9\x90\x90`)![图片](../images/00004.gif)，其中`eb`是短跳转的操作码。新的引导缓冲区长度调整为10,356字节，因为这些五个新字节位于SEH覆盖之前。
 - en: When you run the exploit again and step through the instructions in the debugger,
     you should land in the *41*s (hexadecimal *A*s) before the exception handler values.
     The five `INC ECX` instructions should be replaced with the code to jump farther
     back into the initial buffer.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你再次运行利用程序并通过调试器中的指令进行单步执行时，你应该在异常处理程序值之前的*41*（十六进制的*A*）中着陆。五个`INC ECX`指令应替换为跳转回初始缓冲区更远位置的代码。
 - en: Now we’ll change the exploit to include the “near jump” (*\xe9\xdd\xd7\xff\xff*)
     sequence of instructions, to jump backward to a location near the beginning of
     the buffer. Looking at the buffer ([Figure 14-6](part0018.html#lots_of_room_for_shellcode)),
     you can see that the entire string of *A*s is completely intact, leaving more
     than 10,000 bytes available for shellcode. Since the average space required for
     functional shellcode is less than 500 bytes, this leaves you ample room.
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们将修改利用程序，以包含“近跳”(*\xe9\xdd\xd7\xff\xff*)指令序列，以便跳转回缓冲区开始附近的位置。查看缓冲区([图14-6](part0018.html#lots_of_room_for_shellcode))，你可以看到整个*A*字符串完全完好无损，留下了超过10,000字节的空间用于shellcode。由于功能性的shellcode平均所需空间小于500字节，这为你留下了充足的空间。
 - en: '![Lots of room for shellcode](../images/00053.jpeg)Figure 14-6. Lots of room
     for shellcode'
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: '![大量空间用于shellcode](../images/00053.jpeg)图14-6. 大量空间用于shellcode'
 - en: Now all you have to do is replace the buffer of *41*s with NOPs (`\x90`) to
     give yourself a nice NOP slide to land in, and then you can sit back and let Metasploit
     take care of the shellcode.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你只需要将*A*字符串的缓冲区替换为NOPs(`\x90`)，以给自己提供一个漂亮的NOP滑行着陆点，然后你可以坐下来让Metasploit处理shellcode。
 - en: '[PRE14]'
+  id: totrans-71
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: As you can see in this listing, the initial string of *A*s we used earlier is
     replaced by NOPs minus the length of the shellcode that Metasploit generates at
     ![](../images/00002.gif). Notice that the buffer length, initially 10,356 bytes,
     has been decreased by five bytes to 10,351 to account for the near jump instructions
     at ![](../images/00004.gif). Finally, the malicious string is built using all
     of the exploit’s components at ![](../images/00005.gif).
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 如此列表所示，我们之前使用的*A*字符串的初始字符串被NOPs替换，减去Metasploit在![图片](../images/00002.gif)生成的shellcode的长度。注意，缓冲区长度最初为10,356字节，已减少五个字节至10,351，以考虑![图片](../images/00004.gif)中的近跳转指令。最后，使用所有利用程序组件在![图片](../images/00005.gif)构建恶意字符串。
 - en: 'Now we can select a real payload and execute the module to see what happens.
     Surprisingly, the exploit completes but no session is created. The exploit module
     connects and sends its payload, but no shell is returned to us, as shown next:'
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们可以选择一个真实的有效载荷并执行模块以查看会发生什么。令人惊讶的是，利用程序完成了，但没有创建会话。利用程序模块连接并发送其有效载荷，但没有shell返回给我们，如下所示：
 - en: '[PRE15]'
+  id: totrans-74
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: Bad Characters and Remote Code Execution
+  id: totrans-75
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 坏字符和远程代码执行
 - en: 'Well, that certainly wasn’t expected: The exploit completes but no session
     is created. If you check your debugger, you’ll see that the application didn’t
     even crash — so what happened? Welcome to the sometimes challenging and nearly
@@ -406,8 +563,11 @@
     of an exploit buffer, get mangled while being read by the application. The unfortunate
     result is that bad characters render your shellcode, and sometimes the entire
     exploit, unusable.'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 嗯，这肯定不是预期的结果：漏洞利用完成了，但没有创建会话。如果你检查你的调试器，你会看到应用程序甚至没有崩溃——那么发生了什么？欢迎来到有时具有挑战性且几乎总是令人沮丧的坏字符世界。一些字符，当作为漏洞缓冲区的一部分发送时，在应用程序读取时会被破坏。不幸的结果是，坏字符使你的
+    shellcode，有时甚至是整个漏洞利用变得不可用。
 - en: When writing a Metasploit module, you should always be sure to identify all
     the bad characters, because the shellcode that Metasploit generates differs each
     time an exploit is launched, and any rogue bad characters will greatly reduce
@@ -415,8 +575,11 @@
     the application will crash without running the shellcode. In the preceding example,
     SurgeMail didn’t even crash. The exploit appears to succeed, but we don’t get
     a session.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 在编写 Metasploit 模块时，你应该始终确保识别出所有坏字符，因为 Metasploit 生成的 shellcode 在每次启动漏洞利用时都会有所不同，任何未知的坏字符都会大大降低模块的可靠性。在许多情况下，如果你未能找到所有坏字符，应用程序在运行
+    shellcode 之前就会崩溃。在先前的例子中，SurgeMail 甚至没有崩溃。漏洞利用似乎成功了，但我们没有得到会话。
 - en: 'There are many ways to identify bad characters, including replacing the dynamically
     created shellcode with a string of sequential characters (`\x00\x01\x02`...),
     and checking the debugger to see where the first character gets mangled and marking
@@ -424,59 +587,89 @@
     characters in the source code of similar exploits. For example, a search of the
     IMAP exploits as of this writing finds `\x00\x09\x0a\x0b\x0c\x0d\x20\x2c\x3a\x40\x7b`
     listed as bad characters, as shown next:'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 有许多方法可以识别坏字符，包括用一系列连续字符（`\x00\x01\x02`...）替换动态创建的 shellcode，并检查调试器以查看第一个字符在哪里被破坏，并将该字符标记为坏字符。然而，最快的方法之一是在类似漏洞的源代码中找到坏字符。例如，对
+    IMAP 漏洞的搜索发现 `\x00\x09\x0a\x0b\x0c\x0d\x20\x2c\x3a\x40\x7b` 被列为坏字符，如下所示：
 - en: '[PRE16]'
+  id: totrans-79
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: When you declare `'BadChars'` in an exploit module, Metasploit will automatically
     exclude them from shellcode and from any automatically generated strings of text
     or NOPs.
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 当你在漏洞模块中声明 `'BadChars'` 时，Metasploit 将自动将它们从 shellcode 以及任何自动生成的文本字符串或 NOPs
+    中排除。
 - en: When we run the exploit again, as shown next, after declaring bad characters,
     we finally get a session on the third try. The exploit still isn’t reliable, but
     it works because Metasploit dynamically changes the shellcode each time the exploit
     is run. As a result, the characters that are causing the module to fail may not
     always be present.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我们再次运行漏洞利用，如以下所示，在声明坏字符之后，我们在第三次尝试时终于得到了会话。漏洞利用仍然不可靠，但它之所以能工作，是因为 Metasploit
+    在每次运行漏洞利用时都会动态更改 shellcode。因此，导致模块失败的字符可能并不总是存在。
 - en: '[PRE17]'
+  id: totrans-82
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: Determining the remaining bad characters is an exercise left for the reader.
     An excellent, albeit tedious, way to eliminate all bad characters is to follow
     the technique described at [http://en.wikibooks.org/wiki/Metasploit/WritingWindowsExploit#Dealing_with_badchars](http://en.wikibooks.org/wiki/Metasploit/WritingWindowsExploit#Dealing_with_badchars).
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 确定剩余的坏字符是留给读者的练习。一种虽然繁琐但极好的方法是遵循 [http://en.wikibooks.org/wiki/Metasploit/WritingWindowsExploit#Dealing_with_badchars](http://en.wikibooks.org/wiki/Metasploit/WritingWindowsExploit#Dealing_with_badchars)
+    中描述的技术。
 - en: 'The current exploit code, including all of the pieces we’ve added, is shown
     here:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 当前漏洞利用代码，包括我们添加的所有部分，如下所示：
 - en: '[PRE18]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: Wrapping Up
+  id: totrans-86
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 总结
 - en: Although we haven’t uncovered a new vulnerability in this chapter, we have covered
     the entire process from developing and running a fuzzer to developing a functioning
     exploit. The exploit that we built in this chapter is complicated and unusual,
     and it therefore offers an excellent opportunity to think beyond the basics and
     explore creative avenues to obtain code execution.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管我们在这章中没有发现新的漏洞，但我们已经涵盖了从开发并运行 fuzzer 到开发有效漏洞的整个过程。我们在这章中构建的漏洞复杂且不寻常，因此提供了超越基础并探索创意途径以获得代码执行的优秀机会。
 - en: One of the best ways to dig deeper into Metasploit is to read through the Metasploit
     source files and other exploit modules to get a better idea of what is possible
     within the Metasploit Framework. The techniques in this chapter have given you
     the basic tools you’ll need to begin discovering vulnerabilities and developing
     Metasploit exploit modules that will take advantage of them.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 深入了解 Metasploit 的最佳方法之一是阅读 Metasploit 源文件和其他漏洞利用模块，以更好地了解 Metasploit 框架中可能实现的内容。本章中的技术已经为你提供了开始发现漏洞和开发利用
+    Metasploit 框架漏洞的漏洞利用模块所需的基本工具。
 - en: In the next chapter we will begin to dive into porting exploits into the Framework
     that will build upon the knowledge you learned in this chapter. We’ll show you
     how to convert publicly available exploits into a working Metasploit exploit by
     rewriting the exploit and debugging it to see what it’s doing.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将开始将漏洞利用代码移植到框架中，这将基于本章所学到的知识。我们将向您展示如何通过重写漏洞利用代码并进行调试，将其转换为可工作的 Metasploit
+    漏洞利用模块，并查看其执行过程。
