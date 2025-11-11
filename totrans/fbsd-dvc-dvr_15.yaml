@@ -1,0 +1,928 @@
+- en: Chapter 15. USB Drivers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Universal Serial Bus (USB)* is a connection protocol between a host controller
+    (such as a personal computer) and a peripheral device. It was designed to replace
+    a wide range of slow buses—the parallel port, serial port, and PS/2 connector—with
+    a single bus that all devices could connect to (Corbet et al., 2005).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As described in the official USB documentation, available at [http://www.usb.org/developers/](http://www.usb.org/developers/),
+    USB devices are hideously complex. Fortunately, FreeBSD provides a *USB module*
+    to handle most of the complexity. This chapter describes the interactions between
+    the USB module and drivers. But first, some background on USB devices is needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: About USB Devices
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Communication between a USB host controller and a USB device occurs through
+    a pipe (Orwick and Smith, 2007). A *pipe* connects the host controller to an endpoint
+    on a device. USB devices can have up to 32 endpoints. Each *endpoint* performs
+    a specific communication-related operation for a device, such as receiving commands
+    or transferring data. An endpoint can be one of four types:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Control
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Interrupt
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Bulk
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Isochronous
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Control endpoints* are used to send and receive information of a control nature
+    (Oney, 2003). They are commonly used for configuring the device, issuing device
+    commands, retrieving device information, and so on. Control transactions are guaranteed
+    to succeed by the USB protocol. All USB devices have a control endpoint named
+    endpoint 0.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Interrupt endpoints* transfer small amounts of data at a fixed rate. See,
+    USB devices cannot interrupt their host in the traditional sense—they don’t have
+    an asynchronous interrupt. Instead, USB devices provide interrupt endpoints, which
+    are polled periodically. These endpoints are the main transport method for USB
+    keyboards and mice (Corbet et al., 2005). Interrupt transactions are guaranteed
+    to succeed by the USB protocol.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Bulk endpoints* transfer large amounts of data. Bulk transactions are lossless.
+    However, they are not guaranteed by the USB protocol to complete in a specific
+    amount of time. Bulk endpoints are common on printers, mass storage devices, and
+    network devices.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Isochronous endpoints* periodically transfer large amounts of data. Isochronous
+    transactions can be lossy. As such, these endpoints are used in devices that can
+    handle data loss but rely on keeping a constant stream of data flowing, such as
+    audio and video devices (Corbet et al., 2005).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: More About USB Devices
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The endpoints on a USB device are grouped into *interfaces*. For example, a
+    USB speaker might define one group of endpoints as the interface for the buttons
+    and another group of endpoints as the interface for the audio stream.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All interfaces have one or more alternate settings. An *alternate setting* defines
+    the parameters of the interface. For example, a lossy audio stream interface may
+    have several alternate settings that provide increasing levels of audio quality
+    at the cost of additional bandwidth. Naturally, only one alternate setting can
+    be active at a time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The term “alternate setting” is kind of a misnomer, as the default interface
+    setting is the first alternate setting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 15-1](ch15s02.html#an_example_usb_device_layout "Figure 15-1. An example
+    USB device layout") depicts the relationship between endpoints, interfaces, and
+    alternate settings.^([[10](#ftn.CHP-15-FN-1)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![An example USB device layout](httpatomoreillycomsourcenostarchimages1137521.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 15-1. An example USB device layout
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, an endpoint cannot be shared among interfaces, but it can be
+    used in multiple alternate settings within one interface. Also, each alternate
+    setting can have a different number of endpoints. Note that endpoint 0, the default
+    control endpoint, is not part of any interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A group of interfaces is known as a *device configuration*, or simply a *configuration*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[10](#CHP-15-FN-1)]) [Figure 15-1](ch15s02.html#an_example_usb_device_layout
+    "Figure 15-1. An example USB device layout") is adapted from *Developing Drivers
+    with the Windows Driver Foundation* by Penny Orwick and Guy Smith (Microsoft Press,
+    2007).
+  prefs: []
+  type: TYPE_NORMAL
+- en: USB Configuration Structures
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In FreeBSD, `usb_config` structures are used to find and communicate with individual
+    endpoints. `struct usb_config` is defined in the `<dev/usb/usbdi.h>` header as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Many of the fields in `struct usb_config` must be initialized by a USB driver.
+    These fields are described in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mandatory Fields
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `type` field specifies the endpoint type. Valid values for this field are
+    `UE_CONTROL`, `UE_BULK`, `UE_INTERRUPT`, and `UE_ISOCHRONOUS`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `endpoint` field specifies the endpoint number. A value of `UE_ADDR_ANY`
+    suggests that the endpoint number is unimportant—the other fields are used to
+    find the correct endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `direction` field specifies the endpoint direction. Valid values for this
+    field are shown in [Table 15-1](ch15s03.html#usb_endpoint_direction_symbolic_constant
+    "Table 15-1. USB Endpoint Direction Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 15-1. USB Endpoint Direction Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `UE_DIR_IN` | Stipulates that the endpoint be an IN endpoint; that is, the
+    endpoint transfers data to the host from the device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `UE_DIR_OUT` | Stipulates that the endpoint be an OUT endpoint; that is,
+    the endpoint transfers data to the device from the host |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `UE_DIR_ANY` | Stipulates that the endpoint support bidirectional transfers
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The direction of an endpoint is from the host’s perspective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `callback` field denotes a mandatory callback function. This function is
+    executed before and after the endpoint specified by `type`, `endpoint`, and `direction`
+    transfers data. We’ll discuss this function further in [USB Transfers (in FreeBSD)](ch15s04.html
+    "USB Transfers (in FreeBSD)") in [USB Transfers (in FreeBSD)](ch15s04.html "USB
+    Transfers (in FreeBSD)").
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bufsize` field denotes the buffer size for the endpoint specified by `type`,
+    `endpoint`, and `direction`. As you would expect, `bufsize` is used for `type`
+    transactions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As this section’s heading implies, the preceding fields must be defined in every
+    `usb_config` structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optional Fields
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `timeout` field sets the transaction timeout in milliseconds. If `timeout`
+    is `0` or undefined and `type` is `UE_ISOCHRONOUS`, then a timeout of 250 ms will
+    be used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `interval` field’s meaning is based on the value of `type`. [Table 15-2](ch15s03.html#intervalas_purpose_open_parenthesis_base
+    "Table 15-2. interval’s Purpose (Based on Endpoint Type)") details `interval`’s
+    purpose (based on `type`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 15-2. interval’s Purpose (Based on Endpoint Type)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Endpoint Type | What interval Does |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `UE_CONTROL` | `interval` sets the transaction delay in milliseconds; in
+    other words, `interval` milliseconds must pass before a control transaction can
+    occur |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `UE_INTERRUPT` | `interval` sets the polling rate in milliseconds; in other
+    words, the host controller will poll the interrupt endpoint every `interval` milliseconds;
+    if `interval` is `0` or undefined, then the endpoint’s default polling rate will
+    be used |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `UE_BULK` | `interval` does nothing for bulk endpoints |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `UE_ISOCHRONOUS` | `interval` does nothing for isochronous endpoints |'
+  prefs: []
+  type: TYPE_TB
+- en: The `frames` field denotes the maximum number of USB frames that the endpoint
+    specified by `type`, `endpoint`, and `direction` supports. In FreeBSD, *USB frames*
+    are simply “data packets” that travel to or from an endpoint. USB frames are composed
+    of one or more *USB packets*, which actually contain the data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `ep_index` field demands a non-negative integer. If multiple endpoints are
+    identified by type, endpoint, and direction—which can occur when endpoint is `UE_ADDR_ANY`—the
+    value of `ep_index` will be used to select one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `if_index` field specifies the interface number (based on the `ifaces` argument
+    passed to `usbd_transfer_setup`, which is described in [USB Configuration Structure
+    Management Routines](ch15s05.html "USB Configuration Structure Management Routines")
+    in [USB Configuration Structure Management Routines](ch15s05.html "USB Configuration
+    Structure Management Routines")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: USB Transfer Flags
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `flags` field sets the transactional properties for the endpoint specified
+    by `type`, `endpoint`, and `direction`. This field expects a `usb_xfer_flags`
+    structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`struct usb_xfer_flags` is defined in the `<dev/usb/usbdi.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: All of the fields in struct `usb_xfer_flags` are optional. These fields are
+    1-bit and function as flags. They are detailed in [Table 15-3](ch15s03.html#usb_transfer_flags-id1
+    "Table 15-3. USB Transfer Flags").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 15-3. USB Transfer Flags
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Flag | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `force_short_xfer` | Causes a short transfer; *short transfers* basically
+    dispatch a short USB packet, which tends to indicate “end of transaction;” this
+    flag can be set anytime |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `short_xfer_ok` | Indicates that it is okay to receive short transfers; this
+    flag can be set anytime |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `short_frames_ok` | Indicates that it is okay to receive gobs of short USB
+    frames; this flag can only affect `UE_INTERRUPT` and `UE_BULK` endpoints; it can
+    be set anytime |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `pipe_bof` | Causes any failed USB transactions to remain first in their
+    queue; this guarantees that all transactions complete in FIFO order; this flag
+    can be set anytime |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `proxy_buffer` | Rounds `bufsize` up to the maximum USB frame size; this
+    flag cannot be set after driver initialization |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ext_buffer` | Indicates that an external DMA buffer will be used for all
+    transactions; this flag cannot be set after driver initialization |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `manual_status` | Stops the handshake/status stage from occurring in control
+    transactions; this flag can be set anytime |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `no_pipe_ok` | Causes `USB_ERR_NO_PIPE` errors to be ignored; this flag cannot
+    be set after driver initialization |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `stall_pipe` | Causes the endpoint specified by `type`, `endpoint`, and `direction`
+    to “stall” before each transaction; this flag can be set anytime |'
+  prefs: []
+  type: TYPE_TB
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you don’t understand some of these descriptions, don’t worry; I’ll expand
+    on them later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: USB Transfers (in FreeBSD)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Recall that `callback` is executed before and after the endpoint specified
+    by `type`, `endpoint`, and `direction` transfers data. Below is its function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `struct usb_xfer
+    *` contains the transfer state:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Generally, you’d use `struct usb_xfer *` in a `switch` statement to provide
+    a code block for each transfer state. Some example code should help clarify what
+    I mean.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Just concentrate on the structure of this code and ignore what it does.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how ![](httpatomoreillycomsourcenostarchimages1137499.png) `struct usb_xfer
+    *` is used as the ![](httpatomoreillycomsourcenostarchimages1137501.png) expression
+    for the `switch` statement (as you would expect, the macro `USB_GET_STATE` returns
+    the transfer state).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The constant ![](httpatomoreillycomsourcenostarchimages1137503.png) `USB_ST_SETUP`
+    is set when `callback` is executed before a data transfer. This case handles any
+    pre-transfer operations. It always ends with ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `usbd_transfer_submit`, which starts the data transfer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The constant ![](httpatomoreillycomsourcenostarchimages1137507.png) `USB_ST_TRANSFERRED`
+    is set when `callback` is executed after a data transfer. This case performs any
+    post-transfer actions, such as ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    printing log messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: USB Configuration Structure Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following functions for working with `usb_config`
+    structures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `usbd_transfer_setup` function takes an ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    array of `usb_config` structures and sets up an ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    array of `usb_xfer` structures. The ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `n_setup` argument denotes the number of elements in the arrays.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As you’ll see, a `usb_xfer` structure is required to initiate a USB data transfer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `usbd_transfer_unsetup` function destroys an ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    array of `usb_xfer` structures. The ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `n_setup` argument denotes the number of elements in the array.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `usbd_transfer_start` function takes a ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `usb_xfer` structure and starts a USB transfer (that is, it executes `callback`
+    with `USB_ST_SETUP` set).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `usbd_transfer_stop` function stops any transfers associated with the ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `xfer` argument (that is, it executes `callback` with `USB_ST_ERROR` set).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `usbd_transfer_drain` function is like `usbd_transfer_stop`, but it waits
+    for `callback` to complete before returning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: USB Methods Structure
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A `usb_fifo_methods` structure defines a USB driver’s entry points. You can
+    think of `struct usb_fifo_methods` as `struct cdevsw`, but for USB drivers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`struct usb_fifo_methods` is defined in the `<dev/usb/usbdi.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The FreeBSD kernel provides the following functions for working with `usb_fifo_methods`
+    structures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `usb_fifo_attach` function creates a USB device node under */dev*. If successful,
+    a magic cookie is saved in ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `f_sc`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `usb_fifo_detach` function takes a ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    cookie created by `usb_fifo_attach` and destroys its associated USB device node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tying Everything Together
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that you’re familiar with the `usb_*` structures and their management routines,
+    let’s dissect a real-world USB driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Example 15-1](ch15s07.html#ulpt.c "Example 15-1. ulpt.c") provides a terse,
+    source-level overview of `ulpt(4)`, the USB printer driver.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To improve readability, some of the variables and functions presented in this
+    section have been renamed and restructured from their counterparts in the FreeBSD
+    source.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 15-1. ulpt.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that [Example 15-1](ch15s07.html#ulpt.c "Example 15-1. ulpt.c") defines
+    three `usb_config` structures. Therefore, `ulpt(4)` communicates with three endpoints:
+    a ![](httpatomoreillycomsourcenostarchimages1137507.png) bulk OUT, a ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    bulk IN, and the ![](httpatomoreillycomsourcenostarchimages1137511.png) default
+    control endpoint.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Also, note that [Example 15-1](ch15s07.html#ulpt.c "Example 15-1. ulpt.c")
+    defines two ![](httpatomoreillycomsourcenostarchimages1137499.png) ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `usb_fifo_methods` structures. So, `ulpt(4)` provides two device nodes: ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `ulpt%d` and ![](httpatomoreillycomsourcenostarchimages1137505.png) `unlpt%d`
+    (where `%d` is the unit number). As you’ll see, the `ulpt%d` device node resets
+    the printer when opened, whereas `unlpt%d` does not.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s discuss the functions found in [Example 15-1](ch15s07.html#ulpt.c
+    "Example 15-1. ulpt.c").
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_probe Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_probe` function is the `device_probe` implementation for `ulpt(4)`.
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137501.png) ensures
+    that the USB host controller is in host mode, which is needed to initiate data
+    transfers. Then `ulpt_probe` ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    determines whether `dev` is a USB printer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Incidentally, ![](httpatomoreillycomsourcenostarchimages1137499.png) `struct
+    usb_attach_arg` contains the printer’s instance variables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_attach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_attach` function is the `device_attach` implementation for `ulpt(4)`.
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can be split into three parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    sets the verbose description of `dev` by calling `device_set_usb_desc(dev)`. Then
+    it ![](httpatomoreillycomsourcenostarchimages1137501.png) initializes `ulpt(4)`’s
+    `callout` structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: All USB devices contain a textual description of themselves, which is why `device_set_usb_desc`
+    just takes a `device_t` argument.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second part essentially ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    iterates through the alternate settings for interface number ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `uaa->info.bIfaceNum`, until the alternate setting that supports ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    bidirectional mode is found. If the alternate setting that supports bi-directional
+    mode is not alternate setting 0, then ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `usbd_set_alt_interface_index` is called to instate this alternate setting. Alternate
+    setting 0 does not need to be instated, because it’s used by default.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, the third part ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    initializes the USB transfers, ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    ![](httpatomoreillycomsourcenostarchimages1137515.png) creates `ulpt(4)`’s device
+    nodes, and calls ![](httpatomoreillycomsourcenostarchimages1137517.png) `ulpt_watchdog`
+    (which we’ll walk through in [ulpt_watchdog Function](ch15s07.html#ulpt_underscore_watchdog_function
+    "ulpt_watchdog Function") in [ulpt_watchdog Function](ch15s07.html#ulpt_underscore_watchdog_function
+    "ulpt_watchdog Function")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_detach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_detach` function is the `device_detach` implementation for `ulpt(4)`.
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function starts by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) destroying its device nodes.
+    Then it ![](httpatomoreillycomsourcenostarchimages1137503.png) stops the callout
+    function, ![](httpatomoreillycomsourcenostarchimages1137505.png) tears down the
+    USB transfers, ![](httpatomoreillycomsourcenostarchimages1137507.png) drains the
+    callout function, and ![](httpatomoreillycomsourcenostarchimages1137509.png) destroys
+    its mutex.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_open Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_open` function is the `ulpt%d` device node’s open routine. Here is
+    its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first calls ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `ulpt_reset` to reset the printer. Then ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `unlpt_open` is called to (actually) open the printer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_reset Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As mentioned in the previous section, the `ulpt_reset` function resets the
+    printer. Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function starts by defining a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `usb_device_request` structure to ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    reset the printer. It then ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    transmits the reset request to the printer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that some printers typify a reset request as ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `UT_WRITE_CLASS_OTHER` and some typify it as ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `UT_WRITE_CLASS_INTERFACE`. Thus, `ulpt_reset` transmits the reset request a ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    second time if the first request ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    fails.
+  prefs: []
+  type: TYPE_NORMAL
+- en: unlpt_open Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `unlpt_open` function is the `unlpt%d` device node’s open routine. Here
+    is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You’ll recall that this function is also called at the end of `ulpt_open`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) tests
+    the value of `sc->sc_fflags`. If it does not equal 0, which implies that another
+    process has opened the printer, the error code `EBUSY` is returned. Next, `unlpt_open`
+    determines whether we’re opening the printer to ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    read from or ![](httpatomoreillycomsourcenostarchimages1137509.png) write to it—the
+    answer is ![](httpatomoreillycomsourcenostarchimages1137517.png) stored in `sc->sc_fflags`.
+    Then, a clear-stall request is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) issued to the appropriate
+    endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Any errors that a USB device detects in its own functionality, not counting
+    transmission errors, cause the device to “stall” the endpoint for its current
+    transaction (Oney, 2003). Control endpoints clear their stalls automatically,
+    but other endpoint types require a clear-stall request. Naturally, stalled endpoints
+    cannot perform any transactions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, memory for the read or write is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    ![](httpatomoreillycomsourcenostarchimages1137513.png) allocated. Afterward, the
+    `fifo` argument is ![](httpatomoreillycomsourcenostarchimages1137507.png) ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    stored in `sc->sc_fifo_open`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_close Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_close` function is the close routine for `ulpt%d` and `unlpt%d`.
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function starts by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    clearing `sc->sc_fflags`. Then it ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    releases the memory allocated in `unlpt_open`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_ioctl Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_ioctl` function is the ioctl routine for `ulpt%d` and `unlpt%d`.
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, `ulpt(4)` does ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    not support ioctl.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_watchdog Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_watchdog` function periodically checks the printer’s status. Here
+    is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You’ll recall that this function is called at the end of `ulpt_attach`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) ensures
+    that the printer is not open. Then it ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    starts a transaction with the ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    default control endpoint (to retrieve the printer’s status). Recall that ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `usbd_transfer_start` just executes a callback. In this case, that callback is
+    `ulpt_status_callback` (for confirmation, see the third `usb_config` structure
+    in [Example 15-1](ch15s07.html#ulpt.c "Example 15-1. ulpt.c")). Finally, ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `ulpt_watchdog` is ![](httpatomoreillycomsourcenostarchimages1137505.png) rescheduled
+    to execute after ![](httpatomoreillycomsourcenostarchimages1137507.png) 1 second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_start_read Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_start_read` function is executed when a process reads from `ulpt%d`
+    or `unlpt%d` (for verification, see their `usb_fifo_methods` structures). Here
+    is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function simply ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    starts a transaction with the printer’s ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    bulk IN endpoint. Note that the callback for a bulk IN endpoint is `ulpt_read_callback`
+    (for confirmation, see the second `usb_config` structure in [Example 15-1](ch15s07.html#ulpt.c
+    "Example 15-1. ulpt.c")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_stop_read Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_stop_read` function is called when a process stops reading from `ulpt%d`
+    or `unlpt%d`. Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function ![](httpatomoreillycomsourcenostarchimages1137499.png) stops any
+    transactions associated with the printer’s ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    bulk IN endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_start_write Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_start_write` function is executed when a process writes to `ulpt%d`
+    or `unlpt%d`. Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function simply ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    starts a transaction with the printer’s ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    bulk OUT endpoint. Note that the callback for a bulk OUT endpoint is `ulpt_write_callback`
+    (for confirmation, see the first `usb_config` structure in [Example 15-1](ch15s07.html#ulpt.c
+    "Example 15-1. ulpt.c")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_stop_write Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ulpt_stop_write` function is executed when a process stops writing to
+    `ulpt%d` or `unlpt%d`. Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function ![](httpatomoreillycomsourcenostarchimages1137499.png) stops any
+    transactions associated with the printer’s ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    bulk OUT endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_write_callback Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `ulpt_write_callback` function transfers data from user space to the printer
+    (to be printed). Recall that this function is the callback for a bulk OUT endpoint,
+    so it’s executed before and after a bulk OUT transfers data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is the function definition for `ulpt_write_callback`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137503.png) copies
+    *foo* bytes from ![](httpatomoreillycomsourcenostarchimages1137505.png) user space
+    to ![](httpatomoreillycomsourcenostarchimages1137507.png) kernel space. At most,
+    ![](httpatomoreillycomsourcenostarchimages1137509.png) `max` bytes of data are
+    copied. The number of bytes actually copied is returned in ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `actual`. Next, the ![](httpatomoreillycomsourcenostarchimages1137515.png) transfer
+    length is ![](httpatomoreillycomsourcenostarchimages1137513.png) set. Then, the
+    data copied from user space is ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    sent to the printer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the preceding paragraph, *foo* is a placeholder, because I don’t know how
+    many bytes are copied until `usb_fifo_get_data` returns.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the ![](httpatomoreillycomsourcenostarchimages1137499.png) `USB_ST_SETUP`
+    case and the ![](httpatomoreillycomsourcenostarchimages1137501.png) `USB_ST_TRANSFERRED`
+    case are identical. This is because you can print more data than the maximum transfer
+    length. Thus, this function “loops” until all the data is sent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_read_callback Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `ulpt_read_callback` function gets data from the printer. Recall that this
+    function is the callback for a bulk IN endpoint, so it’s executed before and after
+    a bulk IN transfers data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is the function definition for `ulpt_read_callback`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137513.png) ensures
+    that there’s room in user space for the printer’s data. Next, the maximum transfer
+    length is ![](httpatomoreillycomsourcenostarchimages1137515.png) specified. Then
+    data from the printer is ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    retrieved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After a transfer is ![](httpatomoreillycomsourcenostarchimages1137499.png) complete,
+    the printer’s data is ![](httpatomoreillycomsourcenostarchimages1137507.png) copied
+    from ![](httpatomoreillycomsourcenostarchimages1137511.png) kernel space to ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    user space. Note that if ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    nothing is returned ![](httpatomoreillycomsourcenostarchimages1137503.png) four
+    times in a row, transfer throttling is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    enabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Some USB devices cannot handle multiple rapid transfer requests, so staggering
+    or throttling of transfers is required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ulpt_status_callback Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `ulpt_status_callback` function returns the printer’s current status. Recall
+    that this function is the callback for the default control endpoint, so it’s executed
+    before and after any transactions with endpoint 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is the function definition for `ulpt_status_callback`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first constructs a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    get status request. It then ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    plunks the ![](httpatomoreillycomsourcenostarchimages1137505.png) request into
+    a ![](httpatomoreillycomsourcenostarchimages1137503.png) DMA buffer. Shortly afterward,
+    the request is ![](httpatomoreillycomsourcenostarchimages1137513.png) sent to
+    the printer. Interestingly, this transaction involves ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    two USB frames. The ![](httpatomoreillycomsourcenostarchimages1137507.png) first
+    contains the get status request. The ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    second will hold the printer’s status.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After a transaction is ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    complete, the printer’s status is ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    plucked from the DMA buffer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remainder of this function should be self-explanatory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter was basically a primer on USB devices and drivers. For more information,
+    see the official documentation, available at [http://www.usb.org/developers/](http://www.usb.org/developers/).
+  prefs: []
+  type: TYPE_NORMAL

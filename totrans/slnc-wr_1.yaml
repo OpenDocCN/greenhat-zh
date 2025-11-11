@@ -1,0 +1,2988 @@
+- en: Part I. The Source
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*On the problems that surface long before one sends any information over the
+    network*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: —
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter 1. I Can Hear You Typing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Where we investigate how your keystrokes can be monitored from far, far away*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: —
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the moment you press the first key on your keyboard, the information you
+    are sending begins a long journey through the virtual world. Microseconds before
+    packets speed through fiber-optic links and bounce off satellite transceivers,
+    a piece of information goes a long way through an amazing maze of circuits. Prior
+    to your keystrokes being received by the operating system and any applications
+    it might be running, many precise and subtle low-level mechanisms are engaged
+    in a process that is of interest to all sorts of hackers and has proven to be
+    of significance to the security crowd as well. The path to user land has many
+    surprises lurking along the way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter focuses on these early stages of moving data and on the opportunities
+    that arise for your fellow (and possibly naughty) users to find out way too much
+    about what you are doing in the comfort of your own terminal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A prominent example of a potential information disclosure scenario related
+    to the way a computer processes your input is associated with a subject that,
+    at first glance, appears to be unrelated at best: the difficult task of producing
+    random numbers on a machine that behaves in a fully predictable manner. It is
+    difficult to imagine a less obvious connection, yet the problem I mention is very
+    real, and may allow a sneaky observer to deduce much of a user’s activity, from
+    his passwords to private email that he is typing.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Need for Randomness
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Computers are completely deterministic. They process data in a way that is governed
+    by a well-defined set of laws. Engineers do their best to compensate for imperfections
+    associated with the manufacturing process and the properties of the electronic
+    components themselves (interference, heat noise, and so on), all to ensure that
+    the systems always follow the same logic and work properly; when, with time and
+    stress, components refuse to act as expected, we consider the computer to be faulty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The ability of machines to achieve this level of consistency, combined with
+    their marvelous calculation capabilities, is what makes computers such a great
+    tool for those who manage to master and control them. Naturally, one thing has
+    to be said: not all is roses, and those who complain of computers being unreliable
+    are not all that mistaken. Despite the perfect operation of the equipment, computer
+    programs themselves do misbehave on various occasions. This is because even though
+    computer hardware can be and often is consistent and reliable, you typically can’t
+    make long-term predictions about the behavior of a sufficiently complex computer
+    program, let alone a complex matrix of interdependent programs (such as a typical
+    operating system); this makes validating a computer program quite difficult, even
+    assuming we could come up with a detailed, sufficiently strict and yet flawless
+    hypothetical model of what the program should be doing. Why? Well, in 1936, Alan
+    Turing, the father of modern computing, proved by *reductio ad absurdum* (reduction
+    to the absurd) that there can be no *general* method for determining an outcome
+    of *any* computer procedure, or algorithm, in a finite time (although there may
+    be *specific* methods for *some* algorithms).^([[41](apb.html#ftn.CHP-1-BIB-1)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This in practice means that while you cannot expect your operating system or
+    text editor to ever behave precisely the way you or the author intend it to, you
+    can reasonably expect that two instances of a text editor on systems running on
+    the same hardware will exhibit consistent and identical behavior given the same
+    input (unless, of course, one of the instances gets crushed by a falling piano
+    or is otherwise influenced by other pesky external events). This is great news
+    for software companies, but nevertheless, in some cases we, the security crowd,
+    would prefer that the computer be a bit less deterministic. Not necessarily in
+    how it behaves, but in what it can come up with.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Take data encryption and especially that mysterious beast, public key cryptography.
+    This novel and brilliant form of encryption (and more), first proposed in the
+    1970s by Whitfield Diffie and Martin Hellman, and shortly thereafter turned into
+    a full-blown encryption system by Ron Rivest, Adi Shamir, and Len Adleman, is
+    based on a simple concept: some things are more difficult than others. That seems
+    obvious, of course, but just throw in several higher math concepts, and you’re
+    all set for a groundbreaking invention.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Traditional, symmetrical cryptography called for an identical shared “secret”
+    value (a key) to be distributed among all parties involved in a secret communication.
+    The key is required and sufficient to encrypt and later decrypt the information
+    transferred, so that a third-party observer who knows the encryption method still
+    cannot figure out the message. The need for a shared secret made the entire approach
+    not always practical in terms of computer communications, primarily because the
+    parties had to establish a secure exchange channel prior to communicating; transferring
+    the secret over a nonsecure stream would render the scheme vulnerable to decryption.
+    In the world of computers, you often communicate with systems or people you have
+    never seen before and with whom you have no other affordable and secure communication
+    channel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Public key cryptography, on the other hand, is not based on a shared secret.
+    Each party holds two pieces of information: one (the public key) useful for creating
+    an encrypted message, but next to useless for decryption, and the other (the private
+    key) useful for decrypting a previously encrypted message. The parties can now
+    exchange their public keys using an insecure channel even if it is being snooped.
+    They provide each other with the information (meaningless to an observer) needed
+    to encrypt messages between parties, but they keep the portion needed to access
+    the encrypted data private. All of a sudden, secure communications between complete
+    strangers—such as a customer sitting on a sofa in his apartment and an online
+    shopping server—became closer to reality.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fundamentally, the original RSA (Rivest, Shamir, and Adleman) public key cryptosystem
+    is based on the observation that the computational complexity of multiplying two
+    arbitrarily large numbers is fairly low; it is directly proportional to the number
+    of digits to be multiplied. On the other hand, the complexity of finding factors
+    (factorization) of a large number is considerably higher, unless you are a mythical
+    crypto-genius working for the National Security Agency. The RSA algorithm first
+    chooses two arbitrary, very large primes,^([[1](#ftn.CHP-1-FN-1)]) *p* and *q*,
+    and multiplies them. It then uses the product along with a coprime,^([[2](#ftn.CHP-1-FN-2)])
+    (*p-1*)(*q-1*), to construct a public key. This key can be used to encrypt information,
+    but it alone is not sufficient to decrypt that information without resorting to
+    factorization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'And the catch: Factorization of products of two large prime numbers is often
+    impractical, foiling such attacks. The fastest universal integer factorization
+    algorithm on traditional computers, general number field sieve (GNFS), would require
+    over a thousand years to find factors of such a 1,024-bit integer, at a rate of
+    one million tests per second. Finding two primes that yield a product that big
+    is, on the other hand, a matter of seconds for an average PC.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As indicated before, in RSA, in addition to your public key, you also produce
+    a private key. The private key carries an additional piece of information about
+    the primes that can be used to decrypt any information encrypted with your public
+    key. The trick is possible, thanks to the Chinese Remainder Theorem, Euler’s Theorem,
+    and other somewhat scary but fascinating mathematical concepts a particularly
+    curious reader may want to explore on his own.^([[42](apb.html#ftn.CHP-1-BIB-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some other public key cryptosystems that rely on other hard problems in mathematics
+    were also devised later on (including elliptic curve cryptosystems and so on),
+    but all share the underlying concept of public and private keys. This method has
+    proved practical for securing email, web transactions, and so forth, even if two
+    parties have never communicated and do not have a secure channel to exchange any
+    additional information prior to establishing a connection.^([[3](#ftn.CHP-1-FN-3)])
+    Almost every encryption design that we use everyday, from Secure Shell (SSH) and
+    Secure Sockets Layer (SSL) to digitally signed updates or smart cards, are here
+    thanks to the contributions of Diffie, Hellman, Rivest, Shamir, and Adleman.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Automated Random Number Generation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There is only one problem: When implementing RSA on a deterministic machine,
+    the first step is to generate two very large primes, *p* and *q*. It is simple
+    for a computer to find a large prime, but there is a tiny issue: the primes also
+    must be impossible for others to guess, and they cannot be the same on every machine.
+    (If they were, the attack on this algorithm would not require any factorization,
+    and *p* and *q* would be known to anyone who owns a similar computer.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many algorithms have been developed over the past few years to quickly find
+    prime number candidates (pseudo-primes) and to perform rapid preliminary primality
+    tests (used to verify pseudo-primes).^([[43](apb.html#ftn.CHP-1-BIB-3)]) But to
+    generate a truly unpredictable prime, we need to use a good dose of entropy or
+    randomness in order to either blindly choose one of the primes within a range,
+    or start at a random place and pick the first prime we stumble upon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although the need for some randomness at the time of key generation is essential,
+    the demand does not end there. Public key cryptography relies on fairly complex
+    calculations and is thus fairly slow, particularly when compared with the traditional
+    symmetric key cryptography that uses short shared keys and a set of operations
+    machines that are known to execute very fast.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To implement functionality such as SSH, in which reasonable performance is expected,
+    it is more sensible to establish the initial communication and basic verification
+    using public key algorithms, thus creating a secure channel. The next step is
+    to exchange a compact, perhaps 128-bit symmetric encryption key and continue communicating
+    by switching to old-style symmetric cryptography. The main problem with symmetric
+    cryptography is remedied by creating an initial (and slow) secure stream to exchange
+    a shared secret, and then switching to faster algorithms, hence enabling the user
+    to benefit from the higher performance without sacrificing security. Yet, to use
+    symmetric cryptography in a sensible way, we still need to use a certain amount
+    of entropy in order to generate an unpredictable symmetric session key for every
+    secured communication.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[1](#CHP-1-FN-1)]) A prime number is a positive integer that divides only
+    by 1 and itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[2](#CHP-1-FN-2)]) A number that is *coprime to x* (also called *relatively
+    prime to x*) shares no common factors with x, other than 1 and −1\. (Their greatest
+    common divisor is 1.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[3](#CHP-1-FN-3)]) For the sake of completeness, it should be noted that
+    adhoc public key cryptography is, among other things, vulnerable to “man in the
+    middle” attacks, where an attacker impersonates one of the endpoints and provides
+    its own, fake public key, in order to be able to intercept communications. To
+    prevent such attacks, additional means of verifying the authenticity of a key
+    must be devised, either by arranging a secure exchange or establishing a central
+    authority to issue or certify keys (public key infrastructure, PKI).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Security of Random Number Generators
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Programmers have invented many ways for computers to generate seemingly random
+    numbers; the general name for these algorithms is pseudorandom number generators
+    (PRNGs).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'PRNGs suffice for trivial applications, such as generating “random” events
+    for computer games or meaningless subject lines for particularly obtrusive unsolicited
+    bulk mailings. For instance, take the linear congruent (aka power residue) generator,^([[44](apb.html#ftn.CHP-1-BIB-4)])
+    a classic example of such an algorithm. Despite its obscure name, this random
+    number generator performs a sequence of simple operations (multiplication, addition,
+    and modulus^([[4](#ftn.CHP-1-FN-4)])) every time it generates its “random” output.
+    The generator uses its previous output r[t] to calculate the next output value,
+    *r*[*t*+1] (where *t* denotes time):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| *r[t]* + 1 = (*a* × *r[t]* + *c*) mod *M* |'
+  prefs: []
+  type: TYPE_TB
+- en: The modulo operator controls the range and prevents overflows, a situation that
+    occurs when the result at some point goes beyond the predefined range of values.
+    If *r*[*0*], *a*, *M*, and *c*—a set of control variables for the generator—are
+    all positive integers, all results of this equation fall in the range of 0 to
+    *M-1*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Yet, while the output of this algorithm may, with some fine-tuning, exhibit
+    statistical properties that make it suitable for generating random number lookalikes,
+    nothing is genuinely unpredictable about its operations. And therein lies the
+    problem: An attacker can easily develop their own copy of the generator and use
+    it to determine any number of results that our generator will produce. Even if
+    we start with an initial generator state (*r*[*0*]) that is unknown to the attacker,
+    they can often successfully deduce important properties of this value by observing
+    subsequent outputs of the victim’s generator and then use this knowledge to tweak
+    their version of it to mimick ours. In fact, a general method to reconstruct and
+    predict all polynomial congruent generators was devised over a decade ago,^([[45](apb.html#ftn.CHP-1-BIB-5)])
+    and it would be quite unwise to ignore this little, perhaps somewhat inconvenient
+    detail, as it creates a gaping hole in this algorithm when used for mission-critical
+    purposes.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Over time, we have realized that the only sane way for a computer to produce
+    practically unpredictable data, short of suffering a massive memory failure or
+    processor meltdown, is to try to gather as much practically unpredictable information
+    from its physical surroundings as possible and then use that as a value passed
+    to any application that demands good randomness. The problem is, an average computer
+    has no “senses” with which it could probe the environment for seemingly random
+    external signals. Nevertheless, we know a fairly good way to work around this
+    inconvenience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[4](#CHP-1-FN-4)]) The modulo operator returns the remainder of an integer
+    division of two numbers. For example, 7 is divided by 3 yielding an integer result
+    of 2 and a remainder of 1 (7 = 2 * 3 + 1); 7 modulo 3 is thus 1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I/O Entropy: This Is Your Mouse Speaking'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: On almost every computer system, external devices communicate relevant asynchronous
+    events, such information being made available from the network card or the keyboard,
+    using a hardware interrupt mechanism. Each device has an assigned hardware interrupt
+    (IRQ) number and reports important developments by changing the voltage on a designated
+    hardware line inside the computer, corresponding to this particular IRQ. The change
+    is then interpreted by a device called a *programmable interrupt controller* (PIC),
+    which serves as a personal butler for the main processor (or processors).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once instructed by the CPU, the PIC decides if, when, how, and with what priority
+    to deliver requests from the external devices to the main unit, which makes it
+    easier for the processor to manage events in an efficient and reliable manner.
+    Upon receipt of a signal from the PIC, the processor postpones its current task,
+    unless of course the CPU had chosen to ignore all interrupt requests at the moment
+    (if it’s really busy). Next, it invokes a code assigned by your operating system
+    to handle feedback from this device or group of devices. Once the program handles
+    the event, the CPU restores the original process and its context—the information
+    about the state of its environment at the time of the interruption—and continues
+    as if nothing has happened.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Delivering Interrupts: A Practical Example'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In practice, many additional steps are involved in detecting an external condition
+    and then generating and receiving an IRQ. For example, [Figure 1-1](ch01s03.html#keyboard-to-computer_communications
+    "Figure 1-1. Keyboard-to-computer communications") shows the sequence of events
+    triggered by pressing or releasing a key on the keyboard. Before you even touch
+    a single key, a tiny microcontroller chip inside your keyboard, serving as a keyboard
+    controller, is busy sweeping the keyboard for any changes to its state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Keyboard-to-computer communications](httpatomoreillycomsourcenostarchimages1137996.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-1. Keyboard-to-computer communications
+  prefs: []
+  type: TYPE_NORMAL
+- en: The keyboard is organized as an array of horizontal and vertical wires. Keys
+    (microswitches or pressure-sensitive membrane switches) are installed at the intersection
+    of each row and column. The controller tests every row and column separately,
+    at very high speed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If, for example, the keyboard controller detects a closed circuit when testing
+    row 3, column 5 (which is signified by low resistance when voltage is applied
+    to these lines), it concludes that the key at this particular location (J) is
+    pressed. When the keyboard controller senses a change, it converts row and column
+    coordinates into a scan code, a value that identifies a key by its unique identifier.
+    The scan code information is then queued in the internal buffer of a chip, which
+    then tells the CPU that there’s new data and goes back to minding its own business.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An input controller chip is the keyboard controller’s counterpart on the motherboard.
+    The input controller usually handles all basic input devices, such as the mouse
+    and keyboard. It receives a single scan code from the keyboard chip and signals
+    an appropriate interrupt to the CPU’s butler, the PIC. As soon as the PIC determines
+    that it can deliver this particular IRQ, the PIC passes this signal to the processor,
+    which then usually interrupts its current task and invokes the interrupt handler
+    installed by the operating system. The handler is expected to read the data and
+    to tell the chip that it has read the scan code successfully. The input controller
+    then resumes its normal operations and eventually reads another scan code from
+    the keyboard if there is any data in the buffer.^([[5](#ftn.CHP-1-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: This scheme is important to random number generation, although its significance
+    is indirect. The computer, using the asynchronous event notification scheme (interrupts),
+    receives almost instantaneous and precise feedback about user activity—perhaps
+    most interestingly, accurately measured delays between keystrokes. Although the
+    information is not always unpredictable, it is perhaps the best source of external,
+    measurable, somewhat indeterministic signal the machine can get. And so, in order
+    to work around the deterministic nature of the computer and to insert randomness
+    in their calculations, authors of secure PRNG implementations resort to gathering
+    entropy from generally unpredictable behavior of certain devices, such as the
+    mouse, keyboard, network interfaces, and sometimes disk drives. To do so, they
+    add an extra code inside an interrupt handler for the operating system that records
+    certain parameters for every acceptable event.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although it can be argued that neither of those sources provide truly random
+    feedback all the time—for example, it is likely that after the user types `aardva`,
+    the next two characters are going to be `rk`—some of the behavior, such as my
+    thinking of aardvarks to begin with, is indeed rather unpredictable, from a practical
+    standpoint (and not getting into an academic discussion of free will and deterministic
+    universes). This method of adding entropy works reasonably well because it incorporates
+    several factors that cannot be reasonably considered and monitored or predicted
+    by an attacker while still maintaining their sanity. By gathering data from all
+    those sources for an extended period of time, the laws of probability tell us
+    that we will collect a certain amount of entropy. By collecting the data in a
+    buffer, we construct an entropy pool that can be full or depleted, depending on
+    the supply and demand for unpredictable data. Unfortunately, these small bits
+    of randomness within the pool—where our typing was influenced by cosmic events—is
+    still mixed with plenty of easily predictable data and as such can’t be immediately
+    used for random number generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To ensure that the amount of actual entropy collected in the process of maintaining
+    and replenishing the entropy pool is spread evenly over all PRNG output bits (with
+    all unpredictable data expended), the pool has to be hashed; that is, it has to
+    be stirred and mixed throughly so that no section of the data is easier to predict
+    than any other. Every bit of the output must depend equally on all the input bits,
+    in a nontrivial way. Achieving this without knowing which pieces of information
+    are predictable and which are not (information that is not readily available to
+    a computer monitoring keystrokes or mouse movements) can be a difficult task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One-Way Shortcut Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Luckily enough, secure one-way hashing (“message digest”) functions, a flagship
+    product of modern cryptography, can assist us with mixing data to get the most
+    entropy into every bit of output, regardless of how nonuniform the input. These
+    are functions that generate a fixed-length shortcut: a unique identifier of an
+    arbitrary block of input data. But that is not all.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'All one-way hashing functions have two important properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is easy to calculate the shortcut, but not possible to deduce the original
+    message or any of its properties from the result. Any specific change to the message
+    is just as likely to affect all properties of the output as any other change.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The likelihood of two distinct messages having the same shortcut is determined
+    only by the size of the shortcut. With a sufficiently large shortcut (large enough
+    to make exhaustive searches impractical, nowadays set at around 128 to 160 bits,
+    or circa 3.4E+38 to 1.46E+48 combinations), it is not possible to find two messages
+    that would have the same shortcut.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'As a result, shortcut functions provide a means for distributing entropy present
+    in the input data in a uniform way over the output data. This solves the problem
+    with generally random but locally predictable entropy sources: we gather an approximate
+    amount of entropy from the environment, mixed with predictable data or not, and
+    can generate a shortcut that is guaranteed to be just as unpredictable as the
+    entropy collected in the first place, regardless of how the input entropy was
+    distributed in the input data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How do shortcut functions work? Some again rely on mathematical problems that
+    are, as far as we know, very difficult to solve. In fact, any safe symmetrical
+    or public key cryptography algorithm can be easily turned into a secure hashing
+    function. As long as humanity does not come up with a really clever solution to
+    any of these problems, relying on this approach should be fine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Yet, by rolling out heavy artillery, we end up with slow and overly complicated
+    tools to generate shortcuts, which is often impractical for compact implementations,
+    particularly when integrating such a solution with an operating system. The alternative
+    is to process the data so that the interdependency between all bits of input and
+    output is sufficiently complex so as to fully obfuscate the input message and
+    hope this is “good enough” to stop known cryptoanalysis techniques. Because “hopefully
+    good enough” is actually the motto for a good chunk of computer science, we gladly
+    accept this as a reasonable approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The advantage of the latter group of algorithms, which includes popular functions
+    such as MD2, MD4, MD5, and SHA-1, is that they are generally much faster and easier
+    to use than their counterparts based on difficult mathematical challenges and,
+    when well designed, are not susceptible to cryptoanalysis tricks of the trade.
+    Their weakness is that they are not provably secure because none of them reduces
+    to a classic, hard-to-solve problem. Indeed, some have been proved to have specific
+    weaknesses.^([[46](apb.html#ftn.CHP-1-BIB-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: As suggested earlier, a great service of shortcut functions to pseudorandom
+    number generation is that they can be run on a segment of data that contains *n*
+    random bits, and any number of predictable bits, to produce a shortcut that will
+    spread *n* bits of entropy evenly across all bits of the shortcut (thanks to the
+    two fundamental one-way shortcut function properties discussed earlier). As a
+    result, the shortcut function becomes a convenient entropy extractor. By running
+    a sufficient amount of data collected from a generally unpredictable interrupt
+    handler through a shortcut function, we can generate random numbers without disclosing
+    any valuable information about the exact shape of the information used to generate
+    the number, and without the risk of imperfect input affecting the output in any
+    meaningful way. All we need to do is to ensure that there is a sufficient amount
+    of entropy collected and feed into a shortcut function within a chunk of interrupt
+    data, else we risk compromising the entire scheme. If the attacker can predict
+    considerable portions of the data we use for random number generation, and the
+    remainder has only a handful of possible combinations, they can throw a successful
+    brute-force attack against our implementation by simply trying and verifying all
+    possible values. If, for example, we use a shortcut function that produces 128-bit
+    digests, no matter how much data we actually collected, be it 200 bytes or 2 megabytes
+    worth of keyboard tapping, we must be sure that at least 128 of these input bits
+    are unpredictable to the attacker before hashing it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Importance of Being Pedantic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As an example of when things can go wrong, consider a user who decides to write
+    a shell script when a system entropy pool is empty, perhaps due to some random
+    number-hungry operation that was performed a while ago. The attacker notices that
+    the user is writing a script because `vi delallusers.sh` is being executed; they
+    further assume that the script must have started with something along the lines
+    of `#!/bin/sh`. Although they cannot be sure what is coming next, they can reasonably
+    expect that the script will open with an invocation of a shell command and that
+    it is somewhat less likely to continue with a tacky poem about aardvarks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, an encryption utility of some kind suddenly asks the system for
+    a 128-bit random number to be used as a session key to protect communications.
+    However, the system fails to correctly estimate the amount of entropy available
+    in the buffer that recorded the process of writing the first lines of the script,
+    and the attacker now has an easy task. The computer is devoid of the information
+    whether this particular action performed by the user at the very moment is predictable
+    to others or not. It can only speculate (aided by the assumptions made by the
+    programmer) that, over the course of a couple of minutes or hours, users’ actions
+    will sum up to something that could not be precisely predicted and that, on average,
+    this much of the input indeed would depend on factors unpredictable to the attacker.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The attacker, at this point, knows most of the entropy pool contents and is
+    left with barely thousands of options to choose from when it comes to the unknown
+    part—despite the fact that the operating system is convinced that there is far
+    more entropy in the buffer. These thousands are hardly a big challenge for someone
+    assisted by a computer. Consequently, instead of getting a 128-bit random number,
+    which has a 39-digit number of combinations, an unsuspecting cryptography application
+    ends up with a number generated from input that could have been only one of a
+    couple thousand of options, easily verifiable by the attacker by trial and error,
+    and the attacker can soon decrypt the information that was supposed to remain
+    secure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[5](#CHP-1-FN-5)]) On many architectures, it is necessary to manually instruct
+    the PIC that the interrupt has been processed and that it should no longer block
+    subsequent interrupts. This is done with the End of Interrupt (EOI) code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Entropy Is a Terrible Thing to Waste
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Because it is next to impossible to accurately predict the amount of entropy
+    collected from a user in a short run, in order to prevent the predictable PRNG
+    output problem discussed previously, all implementations include the shortcut
+    or internal PRNG state in the process of generating new output. The previous output
+    becomes a part of the equation used to calculate the next PRNG value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this design, once a sufficient amount of entropy is initially gathered in
+    the system, the most recent data used to replenish the entropy pool does not need
+    to be fully random at all times in order to ensure basic security.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Yet, there is another problem. If the implementation runs for a prolonged period
+    of time on old, inherited entropy, only hashed again and again with MD5 or SHA-1,
+    it becomes fully dependent on the security of the shortcut algorithm, which cannot
+    be completely trusted due to the performance and security trade-off discussed
+    before. Moreover, the hashing functions have not necessarily undergone an appropriate
+    evaluation of suitability for this particular use from competent cryptographers.
+    The implementation no longer relies simply on the bit hashing properties of a
+    shortcut function and now fully depends on its invulnerability to cracking attacks.
+    If, with every subsequent step, a small amount of information about the internal
+    state of the generator is disclosed, and no new unpredictable data is added to
+    the pool, in the long run, the data may suffice to reconstruct or guess the internal
+    state with reasonable certainty, which makes it possible to predict the future
+    behavior of the device. On the other hand, if new random data is added at a rate
+    that, at least statistically, prevents a significant reuse of the internal state,
+    the attack becomes much less feasible even if the hashing function is fundamentally
+    broken.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many experts believe this level of trust and reliance on the hashing function
+    should not be exercised for the most demanding applications. Hence, it is important
+    for an implementation to keep track of an estimated amount of entropy collected
+    in the system, which, even if not momentarily correct, reflects a general statistical
+    trend we would expect from the sources used. Minor short-term fluctuations in
+    the availability of external entropy, such as the script editing example discussed
+    previously, may occur and will be compensated for by the output reuse algorithm.
+    Still, it is necessary to make accurate long-term predictions to ensure frequent
+    replenishing of the internal entropy pool and to minimize exposure should the
+    hashing function turn out to leak internal state over time. As such, the implementation
+    has to account for all entropy spent in data supplied to user processes and refuse
+    to supply more random numbers until a sufficient amount of entropy is available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A good example of a proper PRNG implementation that takes all the above into
+    account is the excellent system devised and implemented in 1994 by Theodore Ts’o
+    of the Massachusetts Institute of Technology. His mechanism, /dev/random, was
+    first implemented in Linux and later introduced to systems such as FreeBSD, NetBSD,
+    and HP/UX. Ts’o’s mechanism monitors a number of system I/O events, measuring
+    time intervals and other important interrupt characteristics. It also preserves
+    the entropy pool during system shutdowns by saving it to disk, which prevents
+    the system from booting up to a fully predictable state, making it even more difficult
+    to attack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Attack: The Implications of a Sudden Paradigm Shift'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What could be the problem with this seemingly fool-proof scheme for supplying
+    unpredictable random numbers to demanding applications? Nothing, at least not
+    where you would expect it. The numbers generated are indeed difficult to predict.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is, however, one slight but disastrous mistake in the reasoning of the
+    designer of this technology. Mr. Ts’o’s design assumes that the attacker is interested
+    in predicting random numbers based on knowledge of the machine and its environment.
+    But what if the attacker wants to do quite the opposite?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The attacker with an account on the machine, even though they have no direct
+    access to the information the user is typing, can deduce the exact moment input
+    activity is occurring in the system by emptying the entropy pool (which can be
+    achieved by simply requesting random data from the system and discarding it) and
+    then monitoring the availability of PRNG output. If there is no I/O activity,
+    the PRNG will not have any new data available, because the entropy estimate won’t
+    change. If a keystroke or a key release occurs, a small amount of information
+    will be available to the attacker, who may then deduce that a key was pressed
+    or released.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other events, such as disk activity, also generate some PRNG output, but the
+    amount and timing patterns of entropy gathered this way differ from the characteristics
+    of keyboard interrupt data. As such, it is possible and easy to discern events
+    by the amount of data available at any given time. The data from keystrokes will
+    look different from the data from disk activity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the end, a method for assuring the highest possible level of safety for
+    secure random number generation actually results in degrading the privacy of the
+    user: the availability of this mechanism to estimate the amount of entropy available
+    from an external source can be abused and used to monitor certain aspects of input
+    activities on the system. Although the attacker cannot detect exactly what is
+    being typed, there are strong timing patterns for writing different words on the
+    keyboard, especially if precise key press and release information is present,
+    as it is in this case. By examining those patterns, the attacker can deduce the
+    actual input, or at least guess it more easily.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Closer Look at Input Timing Patterns
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: An in-depth analysis led by a team of researchers at the University of California^([[47](apb.html#ftn.CHP-1-BIB-7)])
+    indicates that it is possible to deduce certain properties of user input, or even
+    fully reconstruct the data, by looking only at inter-keystroke timing. The research
+    concluded that, for seamless typing and a keyboard-proficient operator, there
+    might be some variation in inter-keystroke timings, but dominant timing patterns
+    for each key-to-key transition are clearly visible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The reason is that our hands lie on the keyboard a certain way and that the
+    key position on the keyboard affects how fast we can reach a key with our fingertips.
+    For example, the interval between pressing e and n is generally different from
+    the interval between m and l. In the first case, because one hand controls the
+    left side of the keyboard, and the other controls the right side (see [Figure 1-2](ch01s05.html#the_usual_territory_for_each_hand._dark
+    "Figure 1-2. The usual territory for each hand. Dark-gray keys are usually controlled
+    by the left hand, and white areas are controlled by the right hand.")), typing
+    both characters requires almost no movement, and both keys are pressed almost
+    simultaneously, with a time interval of less than 100 milliseconds. Typing m and
+    l requires a fairly awkward fingering and takes much longer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The usual territory for each hand. Dark-gray keys are usually controlled
+    by the left hand, and white areas are controlled by the right hand.](httpatomoreillycomsourcenostarchimages1137998.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-2. The usual territory for each hand. Dark-gray keys are usually controlled
+    by the left hand, and white areas are controlled by the right hand.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After analyzing a number of samples, the authors of this research estimate that
+    approximately 1.2 bits of information per key pressed can be acquired from the
+    timing data. By observing sequence delays, it is possible to determine the set
+    of keyboard inputs most likely to generate this pattern, thus making it easier
+    to guess the exact sequence of keys pressed. The idea of counting fractions of
+    bits may sound ridiculous, but what this really means is that the number of possibilities
+    for every key can be reduced by 2^(1.2), or approximately 2.40 times. For a single
+    regular keystroke, which usually carries no more than 6 bits of randomness to
+    begin with, this reduces the option set from about 64 to 26 elements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The net effect is that this reduces the level of search space; we can see that
+    there’s a way to limit the number of possibilities if we want to guess at what
+    keys are being typed. Although this reduction may not be particularly impressive
+    on its own, add to this that the data entered from the keyboard is not likely
+    to be just random garbage to start with. The entropy of English text is estimated
+    to be as low as 0.6 to 1.3 bits per character,^([[48](apb.html#ftn.CHP-1-BIB-8)])
+    meaning that it on average takes approximately 1.5 to 2.5 attempts to successfully
+    predict the next character. With a method to further reduce the search space,
+    it is possible to find nonambiguous dictionary word matches for almost all the
+    input data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To verify their estimates and demonstrate the issue in practice, the researchers
+    used the Hidden Markov Model and Viterbi algorithm to guess keystrokes. A Markov
+    Model is a method for describing a discrete system in which the next value depends
+    only on its current state, and not on the previous values (Markov chain). The
+    Hidden Markov Model is a variant that provides a method for describing a system
+    for which each internal state generates an observation, but for which the actual
+    state is not known. This model is commonly used in applications such as speech
+    recognition, in which the goal is to obtain pure data (a textual representation
+    of the spoken word) from its specific manifestation (sampled waveform).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The authors conclude that the Hidden Markov Model is applicable to keystroke
+    analysis, and they consider the internal state of the system to be the information
+    about keys pressed; the observation in the Hidden Markov Model is the inter-keystroke
+    timing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It might be argued that this is an oversimplification, because, most notably
+    in the situation pictured in [Figure 1-3](ch01s05.html#the_need_to_move_the_left_hand_to_a_diff
+    "Figure 1-3. The need to move the left hand to a different position in the previous
+    step affects the P-V timing. The Markov Model is unable to take a previous location
+    of the hand on hand-switch scenarios into account."), there might be a deeper
+    dependency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The need to move the left hand to a different position in the previous step
+    affects the P-V timing. The Markov Model is unable to take a previous location
+    of the hand on hand-switch scenarios into account.](httpatomoreillycomsourcenostarchimages1138000.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-3. The need to move the left hand to a different position in the previous
+    step affects the P-V timing. The Markov Model is unable to take a previous location
+    of the hand on hand-switch scenarios into account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Viterbi algorithm is one way to solve Hidden Markov Model problems. The
+    algorithm can be used to find the most likely sequence of internal states based
+    on a sequence of observations. In this particular case, we use it to determine
+    the most likely sequence of characters based on a sequence of timings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The final result of applying the Viterbi algorithm is a reduction of the search
+    space for nondictionary eight-character passwords by a factor of 50\. For reconstruction
+    of typed dictionary-based English text, the factor is likely to be considerably
+    higher.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now let’s look at interrupt monitoring. The research we’ve just discussed focused
+    on partial information available by snooping on Secure Shell (SSH) traffic patterns.
+    In the case of interrupt monitoring, the attacker has considerably more information
+    available. For one thing, keystroke duration information is available as well
+    as inter-keystroke timings, with the duration of a single keystroke depending
+    on the finger used. For example the index finger usually makes the shortest contact
+    with the key, the ring finger is probably the slowest, and so on. This is valuable
+    information, which makes it much easier to locate an approximate area of keys
+    on the keyboard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Second, the data also enables the attacker to monitor hand transitions, the
+    moment when the first character is typed by the left hand, and the second by the
+    right hand, or vice versa. Because each hand is controlled by a different hemisphere
+    of the brain, almost all proficient keyboard users often press the second key
+    before releasing the first when switching hands. Although key press and release
+    events are indistinguishable as such, a particularly short interval of time between
+    two keyboard events is a clear sign of this phenomenon. In some rare situations,
+    particularly when the typist is in a hurry, the second key press occurs not only
+    before the release, but even before the press of the first key. This results in
+    popular typographic errors such as “teh” instead of “the.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 1-4](ch01s05.html#key_press_and_release_timing_for_hand_tr "Figure 1-4. Key
+    press and release timing for hand transitions") shows a capture of sample keyboard
+    timings. The user types the word *evil*. The middle finger of the left hand presses
+    e for a medium period of time. Then, there is a considerable interval before the
+    typist presses v due to the need to move the entire hand in order to reach v with
+    the index finger. (The thumb cannot be used because the spacebar gets in the way.)
+    “The v is pressed for a short period of time, as is i, with both accessed by the
+    index finger. There is also a visible overlap: i is pressed before v is released
+    due to a hand transition. Finally, the ring finger presses l after a while (there
+    is no need to move the hand), and the contact is quite long.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Key press and release timing for hand transitions](httpatomoreillycomsourcenostarchimages1138002.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-4. Key press and release timing for hand transitions
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hence, it is reasonable to expect that it is possible to achieve a much higher
+    success ratio in this attack. (Most of this information was not available in the
+    scenario discussed in the aforementioned white paper.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Immediate Defense Tactics
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that we know the potential for keyboard sniffing, how do we thwart it? The
+    best way is to employ a separate keyboard entropy buffer of a reasonable size.
+    The buffer is flushed and passed down to the core PRNG implementation only after
+    it overflows or after a time interval considerably larger than the usual inter-keystroke
+    delay (that is, at least several seconds) passes, thus eliminating the attacker’s
+    ability to measure timing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this solution, only two types of information are available to the attacker.
+    The first results from the flush on overflow procedure and discloses to the attacker
+    that a number of keys (depending on the buffer size) were pressed in a measurable
+    period of time, but does not divulge exact key interval timings. The second possibility
+    is a result of a timed flush sequence, and informs the attacker that a key or
+    several keys were pressed during a fixed time frame, but does not provide any
+    information about the number of events and their precise time of occurrence. The
+    information provided in this way is of a marginal value for timing attacks and
+    can only be used for generating general statistics of keyboard activity, the latter
+    not posing a threat in most multiuser environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Hardware RNG: A Better Solution?'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A number of today’s hardware platforms implement physical random number generators,
+    often referred to as TRNGs, or true random number generators. These devices provide
+    a more reliable way of generating truly unpredictable data, as opposed to gathering
+    information that is merely expected to be difficult to predict, and are a recommended
+    way of acquiring entropy on all machines equipped with this hardware. Two popular
+    solutions, as of this writing, are integrated circuits developed by Intel and
+    VIA.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Intel RNG is integrated with chip sets such as i810 and uses a conventional
+    design of two oscillators. The high-frequency oscillator generates a base signal,
+    which is essentially a pattern of alternating logical states (010101010101...).
+    The other oscillator is a low-frequency device, working at a nominal rate of 1/100
+    the frequency of the high-speed oscillator, but its actual frequency is modulated
+    by a resistor, which serves as a primary source of entropy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Certain measurable characteristics of a resistor change as a result of thermal
+    noise and other random material effects. The low-frequency oscillator is used
+    to drive sampling of the alternating signal at now random frequencies (falling
+    edge of the oscillator output). The signal, after some necessary conditioning
+    and “whitening” using von Neumann correction, is then made available to the outside
+    world. A careful analysis of the design and actual output of the generator performed
+    by Benjamin Jun and Paul Kocher of Cryptography Research^([[49](apb.html#ftn.CHP-1-BIB-9)])
+    has shown that the quality of the output is consistently high and that the generator
+    provides an estimated 0.999 bits of entropy per output bit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: VIA C3 “Nehemiah” RNG is based on a slightly different design that uses a set
+    of oscillators, but not a separate source of noise, such as a special resistor
+    hookup. Instead, it relies on the internal jitter of the oscillators, an effect
+    that can be attributed to a number of internal and external factors and additionally
+    controlled by a configurable “bias” setting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case, a separate analysis led by Cryptography Research^([[50](apb.html#ftn.CHP-1-BIB-10)])
+    indicated the generator apparently delivers a lower-quality entropy than its counterpart,
+    ranging from 0.855 to 0.95 bits per output bit. This is a dangerous result if
+    the RNG output is taken as fully random as-is and used for key generation or other
+    critical tasks 1:1, because the amount of actual entropy is reduced accordingly.
+    To solve this problem, we can acquire more data than necessary from the generator
+    and then run the data via a secure hashing function, such as SHA-1, to eliminate
+    any eventual bias or entropy deficiency. The solution is a general good practice
+    for preventing TRNG issues, as long as these undesirable effects are within reasonable
+    limits—that is, each bit still carries some useful entropy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Several researchers have also suggested using certain nonspecialized input
+    devices, such as webcams or built-in microphones, as a source of entropy: Charge
+    Coupled Device (CCD) sensors in digital cameras tend to exhibit pixel noise, and
+    a severely overamplified microphone signal is essentially a good source of random
+    noise. However, there is no universal method for setting up such a generator due
+    to the differences in circuits of popular media devices from various manufacturers,
+    and as such the quality of “random” numbers generated this way cannot be assured.
+    In fact, some devices pick up seemingly random but fully predictable radio interference
+    or certain in-circuit signals. Additionally, some devices, in particular CCD sensors,
+    exhibit static noise patterns. While seemingly random, this noise is not changing
+    rapidly and may be dangerous to rely on.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Food for Thought
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: I have decided to omit in-depth discussion of a few interesting concepts, but
+    these may be a valuable inspiration for further explorations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remote Timing Attacks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In theory, it might be possible to deploy the PRNG timing attack over a network.
+    Certain cryptography-enabled services implement symmetrical cryptography. After
+    establishing a slower asymmetric stream using public key infrastructure and verifying
+    both parties, a symmetrical session key is generated, and both endpoints switch
+    to a faster symmetrical alternative.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It might be possible to time keystrokes by causing the application to exhaust
+    an existing entropy pool in the system to the point that there is not enough entropy
+    to seed a new session key, but only by a small fraction. The application will
+    then delay generating a symmetrical key until enough entropy to seed the remainder
+    of a key is available, and this will occur, among other possibilities, on the
+    next key press or release.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is my belief that the attack is more likely to succeed in a laboratory setup
+    than in any real-world practical application, although my technical reviewer disagrees
+    with my skepticism, and so, consider it to be merely an opinion. An interesting
+    analysis from the University of Virginia criticized the original SSH timing research
+    discussed in the paper mentioned before on the grounds that network jitter is
+    sufficient to render timing data unusable, although it is worth noting that if
+    a specific activity is repeated over time (for example, the same password is entered
+    upon every login), random network performance fluctuations may very well average
+    out.^([[51](apb.html#ftn.CHP-1-BIB-11)])
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploiting System Diagnostics
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Some systems have better ways to recover the keystroke information and other
+    timing data. After publishing my PRNG timing research, it was pointed out to me
+    that Linux provides a /proc/interrupts interface that displays interrupt summary
+    statistics, with the intention of providing some useful performance data. By examining
+    interrupt counter changes for IRQ 1, it is possible to obtain the same timing
+    information that is acquired via PRNG, already filtered of any eventual disk and
+    network activity inclusions, thus causing a privacy exposure similar to the one
+    discussed before.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reproducible Unpredictability
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Other issues worth considering are related to the PRNG implementation itself.
+    Buying identical hardware in bulk and installing the same system on each device
+    is a common practice and can be a problem for servers that do not experience heavy
+    console activity. There is also a risk of mirroring an installation using specialized
+    duplication tools and then propagating the image across a number of servers. In
+    all situations, systems can end up with low real entropy for perhaps a bit too
+    long.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter 2. Extra Efforts Never Go Unnoticed
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Where we learn how to build a wooden computer and how to obtain information
+    from watching a real computer run*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: —
+  prefs: []
+  type: TYPE_NORMAL
+- en: The data you entered is now safe in the hands of the application you chose to
+    run. The program will take its time deciding what to do with the information,
+    how to interpret it, and which actions to take next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we examine the low-level mechanics of data processing in detail
+    and explore some of the pitfalls that can lurk deep beneath the heat sink of your
+    processor. We pay particular attention to the information we can deduce simply
+    by observing how a machine executes given programs and how much time it takes
+    to complete certain tasks. As a bonus, we’ll also build a fully functional wooden
+    computer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Boole’s Heritage
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To understand the design of a processor, we must return to the days when processors
+    had not yet been dreamed of. It all started quite innocently back in the 19th
+    century, when self-taught mathematician George Boole (1815–64) devised a simple
+    binary algebra system intended to provide a framework for understanding and modeling
+    formal calculus. His approach reduced the fundamental concepts of logic to a set
+    of three, simple algebraic operations that could be applied to elements representing
+    two opposite states, true and false. These operations are:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The disjunction operator, **OR**. This is true when at least one of its operands^([[6](#ftn.CHP-2-FN-1)])
+    is true.^([[7](#ftn.CHP-2-FN-2)])
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The conjunction operator, **AND**. This is only true when all its operands are
+    true.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The complement (negation) operator, **NOT**. This is true when its only operand
+    is false.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Although simple in design, the Boolean algebraic model turned out to be a powerful
+    tool for solving logic problems and certain other mathematical challenges. Ultimately,
+    it made it possible for many brave visionaries to dream of clever analytic machines
+    that would one day change our daily lives.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Today, Boolean logic is seldom a mystery for the experienced computer user,
+    but the path from this set of trivial operations to today’s computer often is.
+    We’ll begin exploring this path by first attempting to capture the essence of
+    this model at its simplest.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[6](#CHP-2-FN-1)]) The operand is something that is operated on by the operator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[7](#CHP-2-FN-2)]) The meaning of logical OR differs from the common English
+    understanding of this term: the resulting statement remains true both when only
+    one of the OR parameters is true and when all are. In English, “or” typically
+    means that *only* one option is true.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Toward the Universal Operator
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The path to simplicity often leads through a seemingly needless level of complexity—and
+    this case is no exception. To even begin, we must consider the work of another
+    19th-century mathematician, Augustus DeMorgan (1806–71). DeMorgan’s law states
+    that “a complement of disjunction is the conjunction of complements.” This infamous
+    exercise in obfuscating trivial concepts has some profound consequences for Boolean
+    logic and, ultimately, the design of digital circuits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In plain English, DeMorgan’s law explains that when any (or both) of two conditions
+    is not satisfied, a sentence that claims that both conditions are met (or, in
+    other words, a conjunction of conditions occurs) will be false as well—oh, and
+    vice versa.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The law concludes that NOT OR (a, b) should be logically equivalent to AND
+    (NOT a, NOT b). Consider a real-world example in which a and b represent the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| a = “Bob likes milk” |'
+  prefs: []
+  type: TYPE_TB
+- en: '| b = “Bob likes apples” |'
+  prefs: []
+  type: TYPE_TB
+- en: 'The two sides of the DeMorgan’s equation can be now written as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| OR (NOT a, NOT b) ⇔ Bob does NOT like milk OR does NOT like apples |'
+  prefs: []
+  type: TYPE_TB
+- en: '| NOT AND (a, b) ⇔ It is NOT true that Bob likes both milk AND apples |'
+  prefs: []
+  type: TYPE_TB
+- en: Both expressions are functionally equivalent. If it is true that Bob dislikes
+    either milk or apples, the first expression is true; it is then also true that
+    he does not like both, which means that the second expression is also true.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Reversing the situation also results in agreement: If it is not true that Bob
+    dislikes at least one of the choices, he likes both (and the first expression
+    is false). In that case, it is also not true that he does not like both (and the
+    second expression is also false).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: DeMorgan at Work
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To evaluate logic statements beyond appeals to intuition and some hand waving,
+    it helps to construct so-called truth tables that demonstrate all the results
+    that can be calculated from all possible combinations of true and false operators.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following two tables represent each expression from the previous example.
+    Each table includes columns for both operators and the corresponding results for
+    all possible true and false combinations. And so, in the first row, you can see
+    that two first columns—both operands to NOT AND(a, b)—are false. This causes AND(a,
+    b) to be false, as well, hence causing NOT AND(a, b) to be true. The outcome is
+    denoted in the third column.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you can see, the two expressions behave identically:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| NOT AND(a, b): AND w/Result Negated |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Operand 1 (a) | Operand 2 (b) | Result |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FALSE | FALSE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FALSE | TRUE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TRUE | FALSE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TRUE | TRUE | FALSE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| OR(NOT a, NOT b): OR w/Operands Negated |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Operand 1 | Operand 2 | Result |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FALSE | FALSE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FALSE | TRUE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TRUE | FALSE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TRUE | TRUE | FALSE |'
+  prefs: []
+  type: TYPE_TB
+- en: 'But why do computer designers care about Bob’s food preferences? Because in
+    the context of Boolean operators, DeMorgan’s law means that the set of basic operations
+    proposed by Boolean algebra is actually partially redundant: a combination of
+    NOT and any of the two other operators (OR and AND) is always sufficient to synthesize
+    the remaining one. For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| OR (a, b) ⇔ NOT AND (NOT a, NOT b) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| AND (a, b) ⇔ NOT OR(NOT a, NOT b) |'
+  prefs: []
+  type: TYPE_TB
+- en: This understanding reduces the set of operators to two, but the Boolean system
+    can be simplified still further.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Convenience Is a Necessity
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Several additional operators are not crucial for implementing Boolean logic,
+    but complement the existing set of operations. These additional operators, NAND
+    and NOR, are true only when AND and OR respectively are false:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| NAND(a, b) ⇔ NOT AND(a, b) ⇔ OR(NOT a, NOT b) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| NOR(a, b) ⇔ NOT OR(a, b) ⇔ AND(NOT a, NOT b) |'
+  prefs: []
+  type: TYPE_TB
+- en: These new functions are no more complex than AND and OR. Each has a four-state
+    (four-row) truth table, and hence its value can determined with just as much effort.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: NOR and NAND are not found in the basic set of operands because neither one
+    corresponds to a commonly used, basic type of logical relation between sentences
+    and has no atomic representation in the common language.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I have just introduced a set of new operators, derived from the existing set,
+    that seem to offer nothing but a dubious convenience feature for those wanting
+    to express more bizarre logic dependencies or problems using formal notation.
+    What for?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The introduction of NAND or NOR alone makes it possible to get rid of AND, OR,
+    and NOT altogether. This furthers our goal of simplicity and affords us the ability
+    to describe the entire Boolean algebra system with fewer elements and operators.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The importance of those negated auxiliary operators is that you can use any
+    one of them to build a complete Boolean algebra system. In fact, you can construct
+    all basic operators using NAND, as shown here (*T* stands for a true statement,
+    and *F* stands for false^([[8](#ftn.CHP-2-FN-3)])). How? Well, quite obviously,
+    the following pairs of statements are equivalent:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| NOT a ⇔ NAND(*T*, a) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| AND(a, b) ⇔ NOT NAND(a, b) ⇔ NAND(*T*, NAND(a, b)) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| OR(a, b) ⇔ NAND(NOT a, NOT b) ⇔ NAND(NAND(*T*, a), NAND(*T*, b)) |'
+  prefs: []
+  type: TYPE_TB
+- en: or, if we prefer to rely exclusively on NOR, rather than NAND, we can say
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| NOT a ⇔ NOR(*F*, a) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| OR(a, b) ⇔ NOT NOR(a, b) ⇔ NOR(*F*, NOR(a, b)) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| AND(a, b) ⇔ NOR(NOT a, NOT b) ⇔ NOR(NOR(*F*, a), NOR(*F*, b)) |'
+  prefs: []
+  type: TYPE_TB
+- en: Embracing the Complexity
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'It can be hard to believe that the essence of all computing can be captured
+    within one of the universal logic operators. You can implement most complex algorithms,
+    advanced computations, cutting-edge games, and Internet browsing using an array
+    of simple circuits that involve one of the following truth tables, which convert
+    input signals to output signals:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| NAND State Table |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Operand 1 | Operand 2 | Result |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FALSE | FALSE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FALSE | TRUE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TRUE | FALSE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TRUE | TRUE | FALSE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| NOR State Table |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Operand 1 | Operand 2 | Result |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FALSE | FALSE | TRUE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FALSE | TRUE | FALSE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TRUE | FALSE | FALSE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TRUE | TRUE | FALSE |'
+  prefs: []
+  type: TYPE_TB
+- en: It would seem we are going nowhere, though. . . . How come this trivial set
+    of dependencies make it possible to build a device capable of solving complex
+    problems, such as rejecting your credit application in a tactful manner? And what
+    does a piece of theory based on the states “true” and “false” have in common with
+    digital circuits?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[8](#CHP-2-FN-3)]) Purists may want to assume that *T* is equivalent to AND(a,
+    a), for example, which is always true, and *F* is equivalent to NOT AND (a, a),
+    which is always false. In other words, we do not introduce a new concept or equation
+    element—we only simplify the notation a bit at this point.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Toward the Material World
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There is nothing complex about the mechanism devised by Boole: it calls for
+    two opposite logic states, “true” and “false,” 0 and 1, “cyan” and “purple,” 999
+    and 999 ½. The actual meaning, the physical representation, and the medium are
+    irrelevant; what matters is the arbitrarily chosen convention that assigns certain
+    states of the medium to a specific set of logic values.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Computers as we know them use two different voltage levels in an electronic
+    circuit and interpret them as values their designers refer to as 0 and 1\. These
+    values, which are carried through the electric circuit, represent two digits in
+    the binary system—but nothing is stopping a person from using just about any method
+    to convey the data, from water flow, to chemical reactions, to smoke signals,
+    to torques transmitted by a set of masterfully crafted wooden gears. The information
+    remains the same, regardless of its carrier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The key to implementing Boolean logic in the physical world is simple, once
+    we agree on the physical representation of logic values. Next, we need only find
+    a way to arrange a set of components to manipulate those values in order to accommodate
+    any task we want our computer to perform (but more about this later). First, let’s
+    try to find out how to manipulate signals and implement real-world logic devices,
+    commonly referred to as gates. Wooden gates, that is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Nonelectric Computer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Moving from a set of theoretical operations spawned by the world of pure mathematics
+    to a device that can moderate water flow, torques, or electrical signals in a
+    way that mimics one of the logic operators appears to be a difficult task—but
+    it isn’t.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 2-1](ch02s04.html#mechanical_nor_gate_design "Figure 2-1. Mechanical
+    NOR gate design") shows a trivial gear set mechanism that implements NOR functionality
+    using torque-based logic. The “output” wheel at idle represents state 0; when
+    a torque is applied to the wheel, its state is 1\. The device transmits torque
+    from an external source to the output *only* if no torque is applied to two control
+    “input” wheels. In theory, there is no need for an external source of energy,
+    and the design could be simpler; in practice, however, friction and other problems
+    would make it fairly difficult to build a more complex set of fully self-contained
+    gates.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Mechanical NOR gate design](httpatomoreillycomsourcenostarchimages1138004.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-1. Mechanical NOR gate design
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying a torque to either or both of the inputs will pull out the tiny connector
+    gear and make the “output” gear idle. When inputs go idle, a spring pulls the
+    connector gear back to its position. The truth table for this device is exactly
+    what NOR should be.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you will recall, NOR or NAND are all we need to implement any Boolean logic
+    operator. Although adding the ability to implement other operators without recombining
+    NAND and NOR gates would make our device smaller and more efficient, the device
+    does not need this ability in order to work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assuming we skip the pesky detail of making all the gates work together in a
+    way we are accustomed with, we can conclude that computers can be built with almost
+    any technology.^([[9](#ftn.CHP-2-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[9](#CHP-2-FN-4)]) And, needless to say, nonelectric computers are not a
+    tall tale. Famous examples of such devices include Charles Babbage’s Analytical
+    Engine, and technologies such as nanotechnology also hold some promise. See Ralph
+    C. Merkle, “Two Types of Mechanical Reversible Logic,” *Nanotechnology* 4 (1993).
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Marginally More Popular Computer Design
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although the computer boom of the last several decades sprang from the ingenious
+    transistor, our reliance on it is not associated with any magical value or unique
+    quality. Quite simply, it is the most affordable, usable, and efficient design
+    we have at the moment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unlike the possibly far superior wooden gear machine, the electronic computers
+    we use relay electrical signals using transistors, which are tiny devices that
+    let a current flow in one direction between two of their nodes (connection points)
+    when a voltage is applied to the third node. Transistors can be miniaturized quite
+    efficiently, require little power, and are reliable and cheap.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Logic Gates
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The transistor is simple. In fact, it alone is too simple a device to implement
+    any meaningful Boolean logic. Yet, when properly arranged in logic gates, transistors
+    make it easy to perform all basic and supplementary Boolean algebra operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The AND gate can be implemented by arranging two transistors serially, so that
+    both must have low resistance (be “on”) before the voltage can flow to the output.
+    Each transistor is controlled (activated) by a separate input line. The output
+    is nominally “pulled down” using a resistor, so that it has the ground voltage
+    0 (“false”), but will go up past 0 once both transistors switch on and allow a
+    slight current flow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The OR gate is implemented by setting up a parallel transistor so that it is
+    sufficient for any of the transistors to enable in order for the output to be
+    set to a nonzero voltage, signifying “truth.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: The last basic gate, NOT, is implemented using a single transistor and a resistor.
+    “NOT” output is 1 in the idle state (pulled up through the resistor) and gets
+    pulled down to 0 when the transistor opens.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 2-2](ch02s05.html#transistor-based_logic_gatesmconstructio "Figure 2-2. Transistor-based
+    logic gates—construction and symbols") shows the three most basic transistor gate
+    designs: AND, OR, and NOT.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Transistor-based logic gates—construction and symbols](httpatomoreillycomsourcenostarchimages1138006.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-2. Transistor-based logic gates—construction and symbols
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You might notice that both AND and OR gates can be turned into NAND and NOR
+    without introducing additional components. It is sufficient to use a design observed
+    on the schematics for a NOT gate—that is, by moving the resistor and “output point”
+    toward the supply voltage, thus reverting the output logic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have now reached a point where we can combine transistors to implement one
+    of the universal gates, but regardless of how many gates we can build, it is still
+    quite far from real computing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding discussion is all well and good, but what makes Boolean logic
+    more than a powerful tool for solving puzzles about Bob’s diet?
+  prefs: []
+  type: TYPE_NORMAL
+- en: From Logic Operators to Calculations
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Combining trivial Boolean logic operations can lead to a number of surprising
+    capabilities, such as the ability to perform arithmetic operations on binary representations
+    of numbers. This is where things get interesting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A set of XOR and AND gates, for example, can be used to increase an input number
+    by 1, and this is the first step on our way toward addition. [Figure 2-3](ch02s06.html#trivial_increase-by-one_circuit
+    "Figure 2-3. Trivial increase-by-one circuit") shows a design for a counter, based
+    on this concept.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Ah, a new term! XOR is yet another “convenient” Boolean logic operator that
+    is true only when one of its operands is true. In this regard, it is closer to
+    the usual meaning of “or” in English. XOR is often used to simplify notation,
+    but otherwise easy to implement by other means, by recombining AND, NOT, and OR.
+    It is defined this way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| XOR(a, b) ⇔ AND(OR(a, b), NOT AND(a, b)) |'
+  prefs: []
+  type: TYPE_TB
+- en: Back to the circuit of ours . . . what can it do? The device shown in [Figure 2-3](ch02s06.html#trivial_increase-by-one_circuit
+    "Figure 2-3. Trivial increase-by-one circuit") is fed with a number written in
+    binary. In this example, that num-ber is limited to three bits, although this
+    design could easily be extended to allow for a larger number of inputs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Trivial increase-by-one circuit](httpatomoreillycomsourcenostarchimages1138008.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-3. Trivial increase-by-one circuit
+  prefs: []
+  type: TYPE_NORMAL
+- en: This simple computation device works the way humans add decimal numbers on a
+    piece of paper—working from right to left, eventually carrying a value to the
+    next column. The only real difference is that it uses binary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s see how that would happen. We have a binary number written in a line.
+    We want to increase it by one; we start at the rightmost digit, the way we would
+    do with decimal addition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We have a binary digit there; when increasing a binary digit by 1, only two
+    outcomes are possible: if the input digit is 0, the output is 1 (0 + 1 = 1); otherwise,
+    the output is 0, and we need to carry 1 to the next column (1 + 1 = 10). In other
+    words, we do two things: we produce an output that is a negation of the input
+    (1 for 0, 0 for 1), and, if the input digit is 1, we must keep that in mind and
+    include it later.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The circuit does just that: for the first input, I[0.] The topmost gate processes
+    the input by negating it and supplying it on output O[0] and also feeds the input
+    value itself to the gates that are responsible for handling the next column (O[1]).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| O[0] = NOT I[0] |'
+  prefs: []
+  type: TYPE_TB
+- en: '| C[0] = I[0] |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Well, we have increased the number by one; there is nothing else for us to
+    do in the remaining columns if there is no carry from the previous one. If there
+    is no carry, O[1] should mirror I[1]. If there is a carry value, however, we need
+    to treat the case the same way we handled adding 1 to the previous column: negate
+    the output and carry a value to the next column if applicable.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From now on, every subsequent output (O[n] for n > 0) will be either copied
+    directly from I[n] if there is no bit carried over from the previous column or
+    increased by 1 (which, again, boils down to negation) due to addition of a carry
+    bit. And so, if I[n] is 1, the carry from this column, C[n], will also be 1, and
+    O[n] will be 0 (because, in binary, 1 + 1 is 10). As you might notice, the actual
+    output at position *n* is simply a result of XOR of the input value at position
+    *n*, and the carry bit from column *n*−1\. Hence, the circuit generates O[n] by
+    XORing the bit carried from C[n−1] with the value of I[n] and then ANDing the
+    carry from O[n−1] with I[n] to determine if there should be a carry to the next
+    column:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| O[n] = XOR(I[n], C[n−1]) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| C[n] = AND (I[n], C[n−1]) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Consider the following example. We want to increase an input value, 3 (011
+    in binary), by 1\. Inputs are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| I[0] = 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| I[1] = 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| I[2] = 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: The circuit produces O[0] by negating I[0]; hence O[0] = 0\. Because I[0] was
+    nonzero, there is also a carry passed to the next column. In the next column,
+    the XOR gate sets O[1] to 0, because, even though I[1] was 1, there was a carry
+    value from the previous column (1 + 1 = 10). Again, there is a carry to the next
+    column.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In yet another column, I[2] = 0, but the AND gate indicates a carry value from
+    the previous row, because two previous inputs were both set to 1\. Hence, the
+    output is 1\. There will be no carry to the last column. The output is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| O[0] = 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| O[1] = 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| O[2] = 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| O[0] = 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| . . . or 0100, which, quite incidentally, is 4 when converted to decimal
+    numbers. |'
+  prefs: []
+  type: TYPE_TB
+- en: And voilà—that’s +1, written in binary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We have just expressed the first computing problem in terms of Boolean algebra.
+    You might be tempted to extend the design to be able to sum two arbitrary numbers,
+    rather than just one number and the number 1\. Nonetheless, this basic circuitry
+    is much where computing starts and ends.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Digital arithmetic circuitry works by running certain input data through an
+    array of cleverly arranged logic gates that, in turn, add, subtract, multiply,
+    or perform other trivial modifications on an array of bits. Little magic is involved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So far, I have explained the ability of silicon chips or crafted wood to perform
+    certain fixed, basic operations such as integer arithmetics. Yet, something is
+    missing from this picture: computers do not come with text editors, games, and
+    peer-to-peer software hard-coded in a painstakingly complex array of gates inside
+    the CPU. Where is the software kept?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From Electronic Egg Timer to Computer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The true value of a computer lies in its ability to be programmed to act in
+    a specific way—to execute a sequence of software commands according to some plan.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 2-4](ch02s07.html#flip-flop_memory_with_a_practical_interf "Figure 2-4. Flip-flop
+    memory with a practical interface") illustrates the next step on our way toward
+    developing a flexible machine that can do more than just a single, hard-wired
+    task: data storage and memory. In this figure, we see a type of memory storage
+    unit known as a *flip-flop design*. This memory cell has two control lines, “set”
+    and “reset.” When both are down, the gate maintains its current state, thanks
+    to a feedback connection between its input and output to the OR gate. Previous
+    output from OR is passed through an AND gate because its other line is set to
+    1 (negated “reset”), and through OR once again, because its other input is 0 (“set”).
+    The state of the output is sustained for as long as the gates are powered.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Flip-flop memory with a practical interface](httpatomoreillycomsourcenostarchimages1138010.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-4. Flip-flop memory with a practical interface
+  prefs: []
+  type: TYPE_NORMAL
+- en: When “set” goes high, the OR gate is forced to output 1 and will retain this
+    value when “set” goes back down. When “reset” line goes high, the AND gate is
+    forced to output 0 and break the feedback loop, thus forcing the circuit to output
+    0\. Once “reset” goes down, the output remains 0\. When both control lines are
+    up, the circuit becomes unstable—something not quite pretty, especially when the
+    computer in question is mechanical.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The truth table for this design is as follows (*V* denotes an arbitrary logic
+    value):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Flip-Flop Truth Table |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Set | Reset | Q[t-1] | Q[t] |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 0 | 0 | *V* | *V* |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1 | 0 | - | 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 0 | 1 | - | 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1 | 1 | - | unstable |'
+  prefs: []
+  type: TYPE_TB
+- en: A more practical variant of a flip-flop circuit, which incorporates an “update
+    interface” (see [Figure 2-4](ch02s07.html#flip-flop_memory_with_a_practical_interf
+    "Figure 2-4. Flip-flop memory with a practical interface")), uses two AND gates
+    and one NOT gate so that the state of an input line is captured (sampled and held)
+    whenever an external “strobe” control signal occurs. This design eliminates unstable
+    combinations of inputs and makes this sort of memory easier to use for storing
+    information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Improved Flip-Flop Truth Table |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Input | Strobe | Q[t-1] | Q[t] |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| - | 0 | *V* | *V* |'
+  prefs: []
+  type: TYPE_TB
+- en: '| *S* | 1 | - | *S* |'
+  prefs: []
+  type: TYPE_TB
+- en: 'This trivial gate configuration exhibits an important property: it can store
+    data. A single cell can store only a single bit, but combining a number of flip-flops
+    can extend the storage capacity. Although today’s memory designs vary, the significance
+    of this functionality remains the same: it allows programs to execute. But how?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the basic design, the chip stores a special value, usually called the *instruction
+    pointer*, in an internal on-chip memory latch (register) consisting of several
+    flip-flops. Because popular computers work synchronously, with all processes timed
+    by a clock signal generator working at a high frequency, the pointer selects a
+    memory cell from the main memory on every clock cycle. The control data retrieved
+    this way then selects and activates the appropriate arithmetic circuit to process
+    the input data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For some control data, our hypothetical chip performs addition; for others,
+    it gets involved in an input-output operation. After fetching each piece of control
+    data (every machine instruction), the chip has to advance its internal instruction
+    pointer so that it will be prepared to read the next command in the next cycle.
+    Thanks to this functionality, we can use the chip to execute a sequence of machine
+    instructions, or a program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is now time to find out which operations the chip has to implement in order
+    for it to be usable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Turing and Instruction Set Complexity
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As it turns out, the processor does not have to be complex. In fact, the set
+    of instructions required for a chip to be able to execute just about any task
+    is surprisingly small. The Church-Turing thesis states that every real-world computation
+    can be carried out by a Turing machine, which is a primitive model of a computer.
+    The Turing machine, named after its inventor, is a trivial device that operates
+    on a potentially infinite tape consisting of single cells, a hypothetical, purely
+    abstract storage medium. Each cell can store a single character from a machine
+    “alphabet,” which is simply a name for a finite ordered set of possible values.
+    (This alphabet has absolutely nothing to do with human alphabets; it was named
+    this way to promote a healthy dose of confusion among the laity.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The device is also equipped with an internal register that can hold a finite
+    number of equally internal states. A Turing machine starts at a certain position
+    on the tape, in a given state, and then reads a character from a cell on the tape.
+    Every automaton has an associated set of transition patterns that describe how
+    to modify its internal state, what to store on the tape based on the situation
+    after the read, and how to (optionally) move the tape either way by one cell.
+    Such a set of transitions defines the rules for calculating the system’s next
+    state based on its current characteristics. These rules are often documented using
+    a *state transition table* like this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| State Transition Table |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Current State | New State/Action |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| C[t] | S[t] | C[t+1] | S[t+1] | MOVE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 0 | S0 | 1 | S1 | - |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1 | S0 | 0 | S0 | LEFT |'
+  prefs: []
+  type: TYPE_TB
+- en: The table tells us that, if the current value of a cell under which the machine
+    is currently positioned is 0, and the machine’s internal state at that moment
+    is S0, the device will alter the state of C to 1, will alter its internal state
+    to S1, and will not move the reading head.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 2-5](ch02s08.html#sample_turing_machine_execution_stages "Figure 2-5. Sample
+    Turing machine execution stages") shows an example of a Turing machine positioned
+    at cell C with internal state S.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Sample Turing machine execution stages](httpatomoreillycomsourcenostarchimages1138012.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-5. Sample Turing machine execution stages
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s walk through this. As you can see in [Figure 2-5](ch02s08.html#sample_turing_machine_execution_stages
+    "Figure 2-5. Sample Turing machine execution stages"), the machine uses an alphabet
+    of two characters, 0 and 1, and has two internal states, S0 and S1\. It starts
+    with S0\. (Starting conditions can be defined arbitrarily; I chose to start it
+    there for no particular reason.) When positioned at the end (the least significant
+    bit) of a binary number stored on the tape (C[0]), the machine follows this logic:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the character under the machine head is 0, it is changed to 1, and the state
+    of the machine is changed to S1, according to the first transition rule documented
+    in the table preceding. Because there is no transition rule from S1, the machine
+    stops in the next cycle.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the character read from beneath the head is 1, it changes to 0, and the state
+    remains the same. The machine also moves the reading head on the tape to the left,
+    per the second transition rule. The entire process then repeats, starting at the
+    new location, because the machine remains in its current state, for which further
+    transition rules are defined.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Functionality, at Last
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Although this may come as a surprise, this particular machine is actually useful
+    and implements a task that can be of more than theoretical value: it performs
+    basic arithmetic. It does precisely the same thing as our increase-by-one circuit
+    discussed earlier in this chapter. In fact, it implements the same algorithm:
+    bits on the tape, starting at the rightmost position, are inverted until after
+    0 is encountered (and also inverted).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is, naturally, just the tip of the iceberg. A proper Turing machine can
+    implement any algorithm ever conceived. The only problem is that every algorithm
+    requires the implementation of a separate set of transition rules and internal
+    states; in other words, we need to build a new Turing machine for every new task,
+    which is not quite practical in the long run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thankfully, a special type of such a machine, a Universal Turing Machine (UTM),
+    has an instruction set that is advanced enough to implement all specific Turing
+    machines and to execute any algorithm without the need to alter the transition
+    table.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This über-machine is neither particularly abstract nor complex. Its existence
+    is guaranteed because a specific Turing machine can be devised to perform any
+    finite algorithm (according to the aforementioned Church-Turing thesis). Because
+    the method for “running” a Turing machine is itself a finite algorithm, a machine
+    can be devised to execute it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As to the complexity of this machine, a one-bit, two-element alphabet machine
+    (the smallest UTM devised) requires 22 internal states and instructions describing
+    state transitions, in order to execute algorithms on a sequential infinite memory
+    tape.^([[52](apb.html#ftn.CHP-2-BIB-1)]) That’s not that big a deal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Holy Grail: The Programmable Computer'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The Turing machine is also far more than just a hypothetical abstract device
+    that mathematicians use to entertain themselves. It is a construct that begs to
+    be implemented using a specially designed, Boolean, logic-based electronic (or
+    mechanical) device and perhaps extended to make it far more useful, which brings
+    us one step closer to useful computing. The only problem is that the prerequisite
+    for an infinitely long input tape cannot be satisfied in the real world. Nevertheless,
+    we can provide plenty of it, making such a hardware Turing machine quite usable
+    for most of our everyday problems. Enter the universal computer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Real computers, of course, go far beyond the sequential access single-bit memory,
+    thus significantly reducing the set of instructions required to achieve Turing
+    completeness. A UTM with an alphabet of 18 characters requires only two internal
+    states in order to work. Real computers, on the other hand, usually operate on
+    an “alphabet” of at least 4,294,967,296 characters (32 bits), and often far more,
+    which allows for nonsequential memory access and for the use of a large number
+    of registers with an astronomical number of possible internal states.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the end, the UTM model proves and everyday practice confirms that it is possible
+    to build a flexible, programmable processing unit using only a handful of features,
+    composed of two or three internal registers (instruction pointer, data read/write
+    pointer, and perhaps an accumulator) and a small set of instructions. It is perfectly
+    feasible to assemble such a device with just hundreds of logic gates, even though
+    today’s designs may use many more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, the notion of building a computer from scratch is not so absurd—even
+    a wooden one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advancement through Simplicity
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Coming up with such an unimpressive set of instructions is, of course, not going
+    to make the device fast or easy to program. Universal Turing Machines can do just
+    about everything (in many cases, by virtue of their simplicity), but they are
+    painfully slow and difficult to program, to a degree that even implementing machine-assisted
+    translation from more human-readable languages to machine code is difficult, at
+    least without driving the programmer clinically insane.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Architectures or languages that come too close to implementing bare-bones Turing
+    completeness are often referred to as *Turing tarpits*. This means that, while
+    it is theoretically possible to carry out just about any task with their help,
+    in practice, it is barely feasible, too time-consuming, and too burdensome to
+    actually try. Even simpler tasks such as integer multiplication or moving the
+    contents of memory can take forever to set up, and twice as long to execute. The
+    less effort and time required to complete simple and repetitive tasks, and the
+    fewer the tasks that have to be accomplished by software using a number of separate
+    instructions, the better.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One popular way to improve the functionality and performance of a processing
+    unit is to implement certain common tasks in the hardware that would be quite
+    annoying to perform in software. These tasks are implemented using an array of
+    specialized circuits (and include multiplication and home-loan-rejection processing),
+    thus adding convenient extensions to the architecture and enabling the faster
+    and saner deployment of programs, while still enabling the system to execute those
+    functions in a programmed, flexible order.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Surprisingly, beyond the few initial steps, it is not always desirable when
+    designing a processor to linearly increase the complexity of the circuitry in
+    order to make processors achieve higher speeds, be more energy efficient, and
+    provide a better feature set. You can, of course, build a large number of circuits
+    to handle just about any frequently used complex operation imaginable. However,
+    this won’t be practical until the architecture is truly mature, and your budget
+    allows you to invest additional effort and resources in making a chip. Although
+    programs on such a platform indeed require less time to execute and are easier
+    to write, the device itself is far more difficult to build, requires more power,
+    and could become too bulky or expensive for routine use. Complex algorithms such
+    as division or floating-point operations require an insanely large array of usually
+    idle gates to complete such a task in a single step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Split the Task
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Rather than following this expensive and possibly naive path of building blocks
+    to carry out entire instructions at once, it is best to abandon the single-cycle
+    execution model until you have a working design and plenty of time to improve
+    it. A better way to achieve complex functionality in hardware is to hack the job
+    into tiny bits and execute advanced tasks in a number of cycles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In such a multicycle design, the processor goes through a number of internal
+    stages, much like the add-one Turing machine example. It runs the data through
+    simple circuits in the right order, thus implementing a more complex functionality
+    step by step, which relies on more basic components. Rather than use a complex
+    device to do all the math at once, it might use a circuit to multiply subsequent
+    bits of 32-bit integers and track carry values and then produce a final result
+    in the 33rd cycle. Or, it could perform certain independent, preparation tasks
+    that precede the actual operation. This would free us from having to design dozens
+    of circuits for every variant of an opcode, depending on where it should get its
+    operands or store results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The added benefit of this approach is that it enables more efficient hardware
+    resource management: for trivial operands; a variable-complexity algorithm can
+    complete sooner, taking only as many cycles as absolutely necessary. For example,
+    division by 1 is likely to require less time than division by 187,371.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A simple, cheap circuit, with maximum usage and a variable execution time could
+    quite easily be more cost efficient than a complex and power-consuming one with
+    a constant execution time. Although some of today’s processors have attempted
+    to use a fixed number of cycles to complete more and more tasks, virtually all
+    began as multicycle architectures. Even for these big boys, the model seldom remains
+    truly single cycle, as you’ll see in a moment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But first, let’s take a look at how this very advantage of simplicity through
+    multicycle execution can backfire.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Execution Stages
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One of the variations of multicycle execution is a method that splits a task
+    not into a number of repetitive steps, but rather into a number of distinct yet
+    generic preparation and execution stages. This method, called *staging*, is used
+    in today’s processors to make them perform better without necessarily becoming
+    linearly more complex. Execution staging has become one of a processor’s more
+    important features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Today’s processors can translate every instruction into a set of largely independent
+    small steps. Certain steps can be achieved using generic circuits shared by all
+    instructions, thus contributing to the overall simplicity. For example, the circuitry
+    specific to a given task (our favorite multiplication comes to mind once more)
+    can be made more universal and reusable as a part of various advanced instructions
+    by separating it from any generic I/O handling tasks, and so on. The set of execution
+    stages and transitions depends on the architecture, but it is usually similar
+    to the scheme shown in [Figure 2-6](ch02s08.html#baseline_instruction_execution_stages
+    "Figure 2-6. Baseline instruction execution stages").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Baseline instruction execution stages](httpatomoreillycomsourcenostarchimages1138014.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-6. Baseline instruction execution stages
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 2-6](ch02s08.html#baseline_instruction_execution_stages "Figure 2-6. Baseline
+    instruction execution stages") shows the following stages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Instruction fetch/decode**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The processor retrieves an instruction from memory, translates it to a low-level
+    sequence, and decides how to proceed and which data to pass to all subsequent
+    stages. The circuit is shared for all operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Operand fetch/decode**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The processor uses a generic circuit to fetch operands from sources for this
+    particular instruction (for example, from specified internal registers) so that
+    the main circuit does not have to support all possible operand combinations and
+    fetch strategies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**ALU**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An arithmetic logic unit (ALU) tailored to perform this particular operation,
+    perhaps in a number of steps, is invoked to perform a specified arithmetic task.
+    For nonarithmetic (memory transfer) instructions, generic or dedicated ALU circuits
+    are sometimes used to calculate source and destination addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Memory store**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The result is stored at its destination. For nonarithmetic operations, the memory
+    is copied between calculated locations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This, alone, may appear to be merely a variation of regular multicycle execution
+    and a circuit reuse measure—one that is prevalent in most of today’s CPU designs.
+    But as you will see, it is also of utmost importance to execution speed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Lesser Memory
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The simplicity of circuitry is not where this story ends. One additional advantage
+    to the multicycle design is that the processor speed is no longer limited by the
+    memory, the slowest component of the system. Consumer-grade external memory is
+    considerably slower than today’s processors and has a high access and write latency.
+    A single-cycle processor can be no faster than it takes to reliably access memory,
+    even though it is not accessing memory all the time. It needs to be slow simply
+    because one of the single-cycle instructions it could encounter *might* require
+    memory access; and hence, there must be enough time to accomplish this. Multicycle
+    designs, on the other hand, allow the CPU to take its time and even idle for a
+    couple of cycles as necessary (during memory I/O, for example), but run at full
+    speed when performing internal computations. Too, when using multicycle designs,
+    its easier to speed up memory-intensive operations without having to invest in
+    faster main memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The flip-flop design, commonly referred to as SRAM (static RAM), offers low-access
+    latency and consumes little power. Current designs require about 5 nanoseconds,
+    which is comparable to the cycle interval of some processors. Unfortunately, the
+    design also requires a considerable number of components per flip-flop, typically
+    about six transistors per bit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unlike SRAM, DRAM, (dynamic RAM) the other memory design popular today, uses
+    an array of capacitors to store the information. Capacitors, however, tend to
+    discharge and need to be refreshed regularly. DRAM requires more power than SRAM
+    and has a considerably higher access and modification latency, as high as 50 nanoseconds.
+    On the upside, DRAM is much cheaper to manufacture than SRAM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The use of SRAM for main memory is practically unheard of because its cost is
+    prohibitive. Besides, we would have trouble using all that increase in performance,
+    which would require us to run the memory at nearly the same speed as the CPU.
+    Alas, because main memory is sizable and designed to be extensible, it must be
+    placed outside the CPU. Although the CPU core can usually run at a speed much
+    higher than the world around it, serious reliability issues (such as track capacitance
+    on the motherboard, interference, costs of high-speed peripheral chips, and so
+    on) arise when data must be transferred over longer distances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Rather than take the cost-prohibitive routes of using faster external memory
+    or integrating all memory with the CPU, manufacturers usually adopt a more reasonable
+    approach. Advanced CPUs are equipped with fast but considerably smaller in-core
+    memory, SRAM or some derivative, that caches the most frequently accessed memory
+    regions and sometimes stores certain additional CPU-specific data. Thus, whenever
+    a chunk of memory is found in cache *(cache hit)*, it can be accessed rapidly.
+    Only when a chunk of memory has to be fetched from the main memory *(cache miss)*
+    can there be a considerable delay, at which point the processor has to postpone
+    some of its operations for some time. (Single-cycle processors cannot take full
+    advantage of internal caching.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Do More at Once: Pipelining'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As I have mentioned, staging offers a considerable performance advantage that
+    goes far beyond a traditional multicycle approach. There is one major difference
+    between them, though: because many of the stages are shared by various instructions,
+    there is no reason not to optimize execution a bit.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 2-6](ch02s08.html#baseline_instruction_execution_stages "Figure 2-6. Baseline
+    instruction execution stages") shows that, with separate stages executing separately,
+    only a specific part of the device is used in every cycle. Even though the instruction
+    currently executed has already passed the first stages, it blocks the entire CPU
+    until it completes. For systems with a high number of execution stages (the count
+    often reaches or exceeds 10 on today’s chips, with the Pentium 4 exceeding 20)
+    this proves to be a terrible waste of computing power.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One solution is to let the next instruction enter the execution pipeline as
+    soon as the previous one moves to the following stage, as shown in [Figure 2-7](ch02s08.html#pipeline_execution_model
+    "Figure 2-7. Pipeline execution model"). As soon as a particular stage of the
+    first instruction is finished, and the execution moves to the next stage, the
+    previous stage is fed with a portion of the subsequent instruction, and so forth.
+    By the time the first instruction completes, the next is only one stage from being
+    completed, and the third instruction is two stages apart. Execution time is thus
+    decreased rather dramatically, and chip usage becomes optimal, using this cascading
+    method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Pipeline execution model](httpatomoreillycomsourcenostarchimages1138016.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-7. Pipeline execution model
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pipelining works fine as long as the instructions are not interdependent and
+    neither operates on the output of its predecessor still in the pipeline. If the
+    instructions do depend on each other, serious problems are bound to ensue. As
+    such, a special circuit must be implemented to supervise the pipeline and to prevent
+    such interlocking situations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are more challenges when it comes to pipelining. For example, on some
+    processors, the set of stages may be different for distinct operations. Not all
+    stages are always applicable, and it might be more optimal to skip some. Certain
+    simple operations could conceivably be run through the pipeline much faster, because
+    there are no operands to be fetched or stored. In addition, some stages can take
+    a variable number of cycles, which contributes to the risk of collisions when
+    two instructions reach the same execution stage at the same point. To prevent
+    this, certain additional mechanisms such as pipeline “bubbles,” no-op stages designed
+    to introduce ephemeral delays when necessary, must be devised.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Big Problem with Pipelines
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Traditional pipelines are a great tool for achieving high performance with
+    simple, multistaged chip design, by reducing the latency of subsequent instructions
+    and ensuring optimal circuit usage, but they are not without concerns: it is not
+    possible to pipeline instructions past a conditional branch instruction if those
+    instructions could alter further program execution.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In fact, it often is possible, but the processor has no idea which execution
+    path to follow, and if an incorrect decision is made, the entire pipeline has
+    to be flushed down immediately after a branch instruction. (The CPU must also
+    delay committing any changes made by these instructions that, after all, were
+    not to be executed.) Dumping the pipeline introduces an additional delay.
+  prefs: []
+  type: TYPE_NORMAL
+- en: And, unfortunately for this design, many CPU-intensive tasks, including plenty
+    of video and audio algorithms, rely on small conditional-exit loops executed millions
+    of times in sequence, thus inflicting a terrible performance impact on the pipelined
+    architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The answer to this problem is *branch prediction*. Branch predictors are usually
+    fairly simple counter circuits that track the most recent code execution and maintain
+    a small history buffer to make educated guesses about the most likely outcome
+    of a conditional branch operation (although more complex designs are also often
+    deployed^([[53](apb.html#ftn.CHP-2-BIB-2)])).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'All branch predictors employ a strategy that is designed to offer the best
+    pipelining performance for a given code: if a specific branch instruction is executed
+    more often than it is skipped, it is better to fetch and pipeline instructions.
+    Of course, the prediction can fail, in which case, the entire queue must be dropped.
+    However, today’s predictors achieve up to 90 percent success rates in typical
+    code.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Implications: Subtle Differences'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The advanced set of optimizations employed in today’s processors results in
+    an interesting set of consequences. We observe that execution times depend on
+    the following characteristics, which can be divided into three groups:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Type of instruction and the complexity of the operation**. Some operations
+    execute much faster than others. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Operand values**. Certain multiple cycle algorithms prove faster for trivial
+    inputs. For example, multiplying a value by 0 is generally rather trivial and
+    can be done quickly. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **The memory location from which the data needed for the instruction must
+    be retrieved**. Cached memory is available sooner. |'
+  prefs: []
+  type: TYPE_TB
+- en: The importance, prevalence, and impact of each of these characteristics depends
+    on the exact nature of the CPU architecture in question. The first characteristic—variable
+    instruction execution times—is shared by all multi-cycle architectures, but might
+    be absent on some basic chips. The second—dependence on operands—is increasingly
+    extinct in top-of-the-line processors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In top-end devices, ALU and Floating Point Unit (FPU) components sometimes work
+    at a speed higher than the CPU itself. Hence, even if there are computation speed
+    differences, they cannot be precisely measured because much of the arithmetic
+    is done within one CPU clock tick.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The last group of timing patterns—memory location dependence—is, for a change,
+    exclusive to today’s, high-performance computers and is unheard of in low-end
+    controllers and various embedded designs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first two timing pattern groups—operation complexity and operand value dependences—can
+    also manifest themselves on a level slightly higher than the CPU itself, namely
+    software. Processors feature arithmetic units that deal well with fairly small
+    integers (usually from 8 to 128 bits) and some floating-point numbers, but today’s
+    cryptography and many other applications require the manipulation of large numbers
+    (often hundreds or thousands of digits), high-precision floats, or various mathematic
+    operations that are not implemented in hardware. Therefore, this functionality
+    is commonly implemented in software libraries. Algorithms in those libraries are
+    again likely to take variable time, depending on the specifics of the operation
+    and operands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Timing Patterns to Reconstruct Data
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: It can be argued that an attacker could deduce certain properties of the operands
+    or of an operation performed by monitoring how long it takes for a program to
+    process data. This poses a potential security risk because in several scenarios,
+    at least one of the operands can be a secret value that is not supposed to be
+    disclosed to a third party.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although the concept of recovering data by watching someone with a stopwatch
+    in your hand might sound surreal, today’s CPUs offer precise counters that allow
+    parties to determine exact time intervals. Too, some operations can be considerably
+    more time-consuming, with certain advanced opcodes on the Intel platform taking
+    as much as thousands of cycles to complete. With ever-increasing network throughput
+    and ever-improving response times, it is not entirely impossible to deduce this
+    information, even from a remote system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The nature of information leaked as computation complexity measurements may
+    not be immediately clear. If so, Paul Kocher from Cryptography Research demonstrated
+    a great example of this attack last century (that is, back in the ’90s^([[54](apb.html#ftn.CHP-2-BIB-3)])),
+    using an example of the RSA algorithm we discussed in [Chapter 1](ch01.html "Chapter 1. I
+    Can Hear You Typing").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Bit by Bit . . .
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Kocher observed that the process of decrypting data in the RSA algorithm is
+    rather simple and is based on solving the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| *T* = *c*^(*k*) mod *M* |'
+  prefs: []
+  type: TYPE_TB
+- en: in which *T* is the decrypted message, *c* is the encrypted message, *k* is
+    the secret key, and *M* is a moduli, which are a part of the key pair.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A trivial integer modulo exponentiation algorithm used in a typical implementation
+    has an important property: if a specific bit of the exponent is one, a portion
+    of the result is calculated by performing modulo multiplication on a portion of
+    the base (some bits of *c*). If the bit is 0, the step is skipped. Even when the
+    step is not actually skipped, the time needed by software to carry out multiplication
+    varies, as indicated earlier. Most trivial cases—such as multiplying by a power
+    of 2—are solved more quickly than others.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hence, on such a system, it would appear that we can determine plenty of information
+    about the key (*k*) by repeatedly checking to see how long it takes to decrypt
+    a piece of information. Even on platforms on which hardware multiplication takes
+    a fixed amount of time, a timing pattern often results from the use of software
+    multiplication algorithms (such as Karatsuba multiplication algorithm) that are
+    needed for processing large numbers such as the ones used by public key cryptography.
+    Subsequent bits of the exponent make the private key, whereas the base is a representation
+    of the message supplied or visible to the curious bystander.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The attack is rather trivial. The villain sends the attacker two similar but
+    slightly different portions of encrypted data. They differ in a section *X*, so
+    that decrypting that section would presumably take a different amount of time
+    to decrypt. One of the variants of *X*, as far as the villain’s idea of victim’s
+    modulo multiplication implementation goes, is a trivial case that would hence
+    make the task of decrypting *X* fast. The other variant is expected to take more
+    time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If it takes the same amount of time for the attacker to decode and respond to
+    both sequences, the attacker can safely assume that the part of the key that was
+    used to decode section *X* consisted of zeros. They can also assume that the multiplication
+    algorithm took the early optimization path, that of not performing any multiplication
+    at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If, on the other hand, one of the scenarios takes more time, it’s obvious that
+    in both cases, the multiplication was carried out, with one case being simpler
+    to solve. The corresponding part of the secret key bit must have been set to a
+    nonzero value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By following this procedure, treating subsequent bits of the encrypted message
+    as our “section *X*” and generating, or even (if one has more time) simply waiting
+    for encrypted messages that will happen to work with this scenario, it is possible
+    to reconstruct every bit of the key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Research suggests that this approach can be successfully extended to just about
+    any algorithm that is carried out in a variable time and discusses some practical
+    optimizations for the attack, such as the ability to deploy limited error detection
+    and correction functionality.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In Practice
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The ability to deduce tangible properties of operands for arithmetic instructions
+    based solely on timing information is the most obvious, effective, and interesting
+    vector for performing computational complexity attacks. Other techniques, such
+    as cache hit and miss timing, usually require considerably more detailed analysis
+    and reveal less information in every cycle.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is clear that this problem would, to a degree, affect many software algorithms,
+    such as large-number arithmetic libraries commonly used in cryptographic applications.
+    But software algorithms and theory aside, a couple of important questions remain:
+    how real is the execution time dependency on the hardware level, and how can it
+    be measured?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An example is well within reach. At least a portion of the Intel IA32 architecture
+    exhibits this behavior. The *80386 Programmer’s Reference Manual*^([[55](apb.html#ftn.CHP-2-BIB-4)])
+    describes an integer-signed multiplication opcode, denoted by the mnemonic IMUL.
+    The opcode, in its basic form, multiplies the value stored in the *accumulator*
+    (a multipurpose working register going by the name [E]AX on this platform), by
+    a value stored in another register. The result is then stored back in the accumulator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The documentation further explains:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The 80386 uses an early-out multiply algorithm. The actual number of clocks
+    depends on the position of the most significant bit in the optimizing multiplier
+    [...]. The optimization occurs for positive and negative values. Because of the
+    early-out algorithm, clock counts given are minimum to maximum. To calculate the
+    actual clocks, use the following formula:'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Actual clock = if m <> 0 then max(ceiling(log2(m)), 3) + 6 clocks
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Actual clock = if m = 0 then 9 clocks
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: 'Although this may look cryptic, its meaning is simple: The processor optimizes
+    multiplication based on the value of the multiplier. Instead of multiplying the
+    multiplicand until all bits of the multiplier are exhausted, it skips zeros at
+    the beginning of the operand.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Early-Out Optimization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To understand the relevance of this tactic to integer multiplication, imagine
+    a traditional iterative multiplication method taught in schools, except this time
+    in binary. A hypothetical “dumb” implementation of this algorithm performs the
+    following set of operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It should be obvious that a large number of these operations are completely
+    unnecessary and unwarranted and that continuing the operation once nothing but
+    zeros remain at subsequent bits of the multiplier is simply pointless. A more
+    reasonable approach is to skip them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: And this is, in essence, the nature of the *early-out optimization* that Intel
+    deployed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This optimization makes multiplication nonsymmetrical in time. 2*100 will compute
+    more slowly than 100*2 (!), even though the result is obviously the same.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With early-out optimization, Intel processors require a variable number of
+    cycles to perform multiplication, and the length is directly proportional to the
+    location of the oldest (most significant) bit set in the second operand. By applying
+    the clock count algorithm provided in the documentation, it is possible to determine
+    the correlation between the multiplier and IMUL time, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Multiplier Value Range | Cycles to Complete |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 0 – 7 | 9 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 8 – 15 | 10 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 16 – 31 | 11 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 32 – 63 | 12 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 64 – 127 | 13 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 128 – 255 | 14 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 256 – 1,023 | 15 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1,024 – 2,047 | 16 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 2,048 – 4,095 | 17 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 4,096 – 8,191 | 18 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 8,192 – 16,383 | 19 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 16,384 – 32,767 | 20 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 32,768 – 65,535 | 21 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 65,536 – 131,071 | 22 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 131,072 – 262,143 | 23 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 262,144 – 524,287 | 24 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 524,288 – 1,048,575 | 25 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1,048,576 – 2,097,151 | 26 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 2,097,152 – 4,194,303 | 27 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 4,194,304 – 8,388,607 | 28 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 8,388,608 – 16,777,215 | 29 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 16,777,216 – 33,554,431 | 30 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 33,554,432 – 67,108,863 | 31 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 67,108,864 – 134,217,727 | 32 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 134,217,728 – 268,435,455 | 33 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 268,435,456 – 536,870,911 | 34 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 536,870,912 – 1,073,741,823 | 35 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1,073,741,824 – 2,147,483,647 | 36 |'
+  prefs: []
+  type: TYPE_TB
+- en: A similar dependency exists for negative multiplier values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Working Code—Do It Yourself
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The following code listing shows a practical implementation in C for Unix-type
+    systems that can be used to confirm and measure differences in timing patterns.
+    The program is invoked with two parameters: *multiplicand* (which should not affect
+    performance in any way) and *multiplier* (presumably used in early-out optimizations
+    and hence impacting the speed of the entire operation). The program performs 256
+    tests of 500 subsequent multiplications with the chosen parameters and returns
+    the shortest measured time.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We run 256 tests and select the best result in order to compensate for cases
+    in which execution is interrupted by the system for some period of time, a condition
+    fairly common in multitasking environments. Although a single test can be affected
+    by such an event, at least some of the test in a rapid sequence of short tests
+    can be expected to complete without interruption.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code uses the system clock to measure execution time in micro-seconds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Several of today’s Intel chips feature a precise timing mechanism available
+    through RDTSC opcode. This method for accessing the internal clock cycle counter
+    is not available on older platforms, and so we will not rely on it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: By compiling the code with the IMUL instruction initially commented out and
+    invoking the program with arbitrary parameters, we can estimate the timing code
+    overhead (T[idle]). If the value falls outside the range of 10 to 100 microseconds—which
+    is high enough to provide a fine-grained readout, but low enough to maximize the
+    chance of not being interrupted by the operating system—readjust the loop repetition
+    counter R, which is set to 500 by default.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After restoring the IMUL instruction and recompiling and running the program
+    with a chosen multiplicand D and repetition counter R, it is possible to use the
+    returned time approximation T[D,R] to estimate the number of CPU cycles spent
+    on IMUL operation (C[D,R]), as long as the operating frequency of the processor
+    (F[MHz]) is known:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| *C*[*D, R*] = (*T*[*D, R*] − *T*[*idle*]) · *F*[*MHz*]/*R* |'
+  prefs: []
+  type: TYPE_TB
+- en: As expected, pipelining and branch predictors on newer and more advanced chips
+    will kick in and skew the result slightly, but a good estimate can be made.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: On newer Intel processors, the time needed to complete multiplication is already
+    constant.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prevention
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You can take a number of approaches to protect against computational effort
+    analysis. The most obvious is to make all operations take the same amount of time
+    to execute. However, this is difficult and often results in severe performance
+    penalties because the time taken by all computations would have to be extended
+    to match that of the slowest one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing random delays sometimes appears to be an acceptable defense tactic
+    for applications if latency is not critical, in particular many noninteractive
+    network services, and puts less stress on the processor itself. However, this
+    random noise can be effectively filtered out if the attack can be carried out
+    repeatedly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another approach, known as *blinding*, relies on introducing a certain amount
+    of noise in the system by running random or otherwise bogus and unpredictable
+    data combined with the actual input to the algorithm in order to make it impossible
+    for the attacker to deduct meaningful properties of the input even if the encryption
+    algorithm is vulnerable to timing attacks—then discarding the surplus information
+    we did not intend to send out. Although the performance penalty is considerably
+    lower in this scenario, it is difficult to perform blinding well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Food for Thought
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'I’ve taken you on a long ride, but I hope it was worth it. As usual, I will
+    leave you several possibly quite interesting problems to consider:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, although I have focused on the impact that computational complexity attacks
+    have on cryptography-related application, the problem is not strictly limited
+    to this area, and often manifests itself whenever private or confidential information
+    is processed. Certainly, various basic information about HTTP requests or SMTP
+    traffic can be deduced by carefully observing the appropriate service on a system;
+    can you think of any more practical scenarios?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Second, even if no secret data is being processed by a service, computational
+    complexity information may be of some use. Consider applications such as network
+    daemons that prevent disclosure of secrets by providing perhaps overly generic
+    error or success messages, with the goal of, for example, making it difficult
+    for an attacker to find out whether he is getting “login incorrect” because of
+    a mistyped password or a non-existent user. However, depending on the time it
+    takes to receive this message, a careful observer may determine which path in
+    the code was indeed executed, and whether the error occurred earlier (when just
+    checking for a valid username), or later on (when verifying the password). I encourage
+    you to experiment with common network services such as SSH, POP3, and Telnet to
+    see whether there is a measurable and consistent difference.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'As always, even the best defenses against information disclosure tend to fail
+    unexpectedly. Too, computational complexity is not the only way to determine what’s
+    going on inside a silicon chip. Consider this example: Biham and Shamir^([[56](apb.html#ftn.CHP-2-BIB-5)])
+    have devised a brilliant scheme for cracking “secure” chip designs used in smart
+    cards. Smart cards are designed to securely store a piece of information such
+    as personal identification data or cryptographic keys and to divulge it only to
+    certain authentication services and trusted clients. As it turns out, you can
+    deduce the properties of the guarded data or the protection mechanism by abusing
+    the device and inducing faults due to mechanical stress, high-energy radiation,
+    overheating, or similar external factors that cause the device to misbehave.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Just thought I’d share.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter 3. Ten Heads of the Hydra
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Where we explore several other tempting scenarios that occur very early on
+    in the process of communications*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: —
+  prefs: []
+  type: TYPE_NORMAL
+- en: In [Chapter 1](ch01.html "Chapter 1. I Can Hear You Typing") and [Chapter 2](ch02.html
+    "Chapter 2. Extra Efforts Never Go Unnoticed"), I discussed two distinct information
+    disclosure scenarios that occur as a result of brilliant, but in the end poorly
+    thought out, attempts to make computers either more functional or easier to maintain.
+    The passive snooping vectors these design decisions open are buried deep beneath
+    the actual implementation and provide a fascinating insight into the earliest
+    threats to processed information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, the exposure is naturally limited to the physical or logical
+    proximity of the environment monitored. Although a nearly endless number of information
+    disclosure possibilities arise early along the route of a portion of information,
+    I’ve chosen to single out these two cases for their uniqueness, beauty, and the
+    relative ease with which a potential attack can be carried out by a determined
+    attacker. The other scenarios are also worth mentioning, though, and in this chapter,
+    I touch on some of the more interesting possibilities that may not warrant a detailed
+    discussion but that you might want to explore in more detail on your own.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Revealing Emissions: TEMPEST in the TV'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the 1950s, researchers concluded that electromagnetic radiation (EMR) can
+    often be practically and easily used to recover or reconstruct information about
+    the behavior of the device emitting it. EMR is undesirable noise caused by virtually
+    all electronic, electromechanical, and electric devices, regardless of their design
+    and intended purpose, and often propagated over considerable distances via power
+    lines or by air.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prior to their findings, the problem of EMR was believed to be relevant to engineering
+    due to a risk of unexpected interference between separate devices or circuits,
+    but not confirmed to be of any value to a person monitoring the radio frequencies
+    polluted by the device. However, with the world on the brink of the era of information
+    warfare, and with the development and increasing deployment of electronic data
+    processing and telecommunications devices (some used to transfer or store classified
+    or sensitive information), the conclusion that a remote observer can reconstruct
+    some of the information processed by a system by merely listening to a specific
+    frequency became quite worrisome for governments of the free (or not so free)
+    world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The term TEMPEST (Transient Electromagnetic Pulse Emanation Standard) originated
+    from a classified EMR emissions study commissioned for the U.S. military in the
+    1960s and was originally used to denote a set of practices to prevent revealing
+    emissions in electronic circuits processing sensitive data. It later became just
+    a buzzword for describing a general class of problems and techniques related to
+    intercepting and reconstructing radio frequency (RF) emissions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although this risk initially sounded more like bad science-fiction than an actual
+    threat in the ears of skeptics, an important research paper released in 1985 by
+    Wim van Eck,^([[57](apb.html#ftn.CHP-3-BIB-1)]) demonstrated that it would be—and
+    in fact is—quite easy to reconstruct the image displayed on a CRT monitor by intercepting
+    radio frequency signals generated by high-voltage circuits inside such a device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A typical CRT (see [Figure 3-1](ch03.html#a_crt_display_image_scan_and_the_buildup
+    "Figure 3-1. A CRT display image scan and the buildup process"))builds its display
+    by illuminating every pixel of the image in sequence, line by line and then row
+    by row, at very high speed, and modulating the strength of the signal depending
+    on the location of the screen that is lit up at any moment. To achieve this, a
+    narrow beam of electrons is emitted from a cathode gun in the back of the device.
+    This electron beam hits the anode (a conductive layer of material on the display),
+    which, in turn, emits photons of visible light that we see. The electron beam
+    is modulated by a special circuit, but also positioned by a set of electro-magnets
+    that cause it to sweep the entire display area from left to right and top to bottom
+    to produce and update the image on the screen. Wim noted that the oscillators
+    controlling the electromagnets and the electron gun electronics emit several types
+    of characteristic signals at standard frequencies. It is rather trivial to spot
+    these signals in the radio spectrum,^([[10](#ftn.CHP-3-FN-1)]) and each of the
+    signals is usually clear and strong enough to make it easy to build a fairly inexpensive
+    device that can snoop on CRT displays, even from a considerable distance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A CRT display image scan and the buildup process](httpatomoreillycomsourcenostarchimages1138018.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-1. A CRT display image scan and the buildup process
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Emissions are, of course, not limited to CRT screens and are just as common
+    in LCD (TFT, or thin film transistor) displays and any computer circuitry. They
+    are also just as common on databuses, where the information between separate chips
+    is carried over a large set of usually fairly long and sharply cornered conductive
+    tracks laid out on the main board that, among other things, serve as a great antenna
+    (although the ease of extracting and interpreting a specific signal, as well as
+    the range of an emission, can vary rather significantly).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although there are no verifiable accounts of emission attacks being carried
+    out in the wild, other than for military and intelligence applications (particularly
+    during the Cold War^([[58](apb.html#ftn.CHP-3-BIB-2)])), some anecdotal accounts
+    of industrial espionage can be found in the literature.^([[59](apb.html#ftn.CHP-3-BIB-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Obviously, this kind of attack has its limitations: The attacker must be near
+    the target. Too, except when snooping on analog CRT displays, the attacker must
+    be armed with expensive and nontrivial equipment, especially when snooping on
+    today’s low-interference displays and higher CPU and bus speeds. Still, any such
+    attack is difficult and costly to prevent.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[10](#CHP-3-FN-1)]) For this reason, and because of power line interference,
+    “nature radio” enthusiasts who want to listen to earth’s ultra-low frequency signals
+    must often travel with their recording equipment to distant, secluded areas.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Privacy, Limited
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The exposure scenarios discussed so far can be classified as the undesired or
+    unexpected results of the way a specific technology was designed and deployed,
+    despite the identical goals or expectations of both the developer and the end
+    user. In some cases, however, the exposure results in small differences in the
+    goals and expectations of the two groups. Although software-level privacy problems
+    resulting from the incompetence or malice of a programmer are notorious and usually
+    pervasive, more subtle design problems that are not a flaw per se are also being
+    seen. Some of the more interesting groups of problems in this area fall into the
+    category of data disclosure in electronic documents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We naturally assume when authoring a document that all information not related
+    to the document’s contents (and in particular, any information that uniquely identifies
+    the originator) is hidden from other parties able to access the document, unless
+    specifically disclosed by the author. But the days of plain-text editors are long
+    gone. Today’s document formats support extensive meta-information storage functionality,
+    in an effort to make it easier to uniquely tag and later index, search, and track
+    documents. What is worrisome, though, is that the designers of authoring tools
+    often decide to fill in certain information automatically, frequently giving the
+    author little or no control over the process and without making them immediately
+    aware of this practice. Although the practice can be considered just another exercise
+    in making the environment more user friendly and transparent to the user, the
+    lack of widespread awareness of this process is appreciated only by a few.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Tracking the Source: “He Did It!”'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'One common problem with authoring software is that certain applications store
+    unique identification tags that make it possible to correlate a document with
+    its source. In particular, Microsoft Word long used the hardware address of a
+    computer’s network card (if the computer had one) to construct a Globally Unique
+    Identifier (GUID) field in a document—be it a cookie recipe or a terrorist’s handbook.
+    Although the problem has been fixed in the most recent versions of Microsoft’s
+    Office suite of applications, the practice has had some interesting implications:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every device has a unique hardware card address. Because hardware addresses
+    are used to locate a specific device on a local network, this uniqueness is necessary
+    in order to prevent problems that would arise were two computers with the same
+    hardware address to connect to the same network. As such, the number recorded
+    in the GUID field of a Microsoft Word document can be used to uniquely identify
+    the document’s author, whether that person wrote the document anonymously or signed
+    it. This can serve both as a valuable forensics investigation tool and as an effective
+    way to suppress the freedom of speech in certain situations (by an employer hunting
+    down whistle-blowers, for example).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Hardware addresses are assigned in batches to a specific manufacturer. Furthermore,
+    in many cases, network cards are manufactured with numbers in sequence and then
+    sold in batches to computer manufacturers. Thus, a knowledgeable person can determine
+    not only who made a specific card, but also who sold it and to whom. In many situations,
+    it can be possible to actually track a specific hardware address to an individual
+    machine and, effectively, to a private entity or a particular corporation. This
+    might then make it possible for a determined investigator to figure out the origin
+    of a specific document.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Because hardware addresses are assigned in batches, it might also be possible
+    to draw limited conclusions as to the hardware configuration of the system on
+    which a document was authored. Although this poses a mild threat, it can be an
+    interesting source of information for the easily amused or particularly curious.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Some functionality, although accessible to the user, is buried deep enough within
+    the interface that a typical user is unaware of what is being saved and how to
+    change these defaults. Productivity software such as Microsoft Word and [OpenOffice.org](http://openoffice.org)
+    are notorious for inserting “default author” information. This information is
+    usually taken from the data provided with the software license or automatically
+    stored after the first run, deep inside the metadata in the document where most
+    users do not bother to look. Although this is a mildly useful feature that comes
+    in handy when sharing documents, its privacy implications usually far outweigh
+    any eventual benefit for an end user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another example is the “user-friendly” practice of automatically filling the
+    “title” field in metaheaders of a document based on the first sentence in the
+    document. This is a nice touch, but the selection is often permanent, meaning
+    that even if the first paragraph is changed later (so that, for example, the new
+    business offer is now addressed to a competitor), the original contents can be
+    deduced by a careful observer. This “feature” once again exposes more than the
+    author expected to be revealed to the recipient of a document.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Older versions of Microsoft Word also saved documents without properly clearing
+    out all the data that had been edited out, effectively providing undo information,
+    and recording all previous revisions of the text. This information could easily
+    be recovered later by any sufficiently skilled attacker with software to parse
+    object linking and embedding (OLE) containers, the format in which the editor
+    stores all its data. The problem is particularly severe when a previous version
+    of a document is reused as a template and sent to another party, perhaps a competitor.
+    The ability to recover the previous version of an offer, a motivation letter,
+    or an official response to a customer is definitely entertaining and enlightening,
+    but not always desirable for the sender.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, with the recent push for trusted computing and increased “accountability”
+    for the purpose of reducing piracy, it is reasonable to expect that it will become
+    commonplace to tag all documents so that they can be traced to their originator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '“Oops” Exposure: *_~1q''@@ . . . and the Password Is . . .'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The last group of problems shared by a variety of text editors is that of leaking
+    random memory. This type of disclosure is the result of sheer incompetence or
+    insufficient testing, but it differs from other coding flaws in that it doesn’t
+    so much render the code vulnerable to an attack, as it divulges some useful hints
+    to a careful observer. Whether this problem is limited to the program alone or
+    is caused by systemwide leaks (the latter on systems with poor memory protection,
+    such as Windows 3.*x* or 9*x*), this leaked data can include such sensitive information
+    as other documents, browse history, email contents, or even passwords.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem occurs when an application allocates a chunk of memory (to an editing
+    buffer, for example), perhaps used previously for some other task, and forgets
+    to clear it before reusing it for a wholly different purpose. For performance
+    reasons, the memory is not always zeroed before being granted to an application.
+    The application can then operate on and overwrite only a small portion of the
+    chunk of memory, but write the entire allocated block of data when saving the
+    file, storing both the data it wanted to and some leftover contents from who knows
+    how long ago. And, not surprisingly, older versions of Microsoft Word were once
+    notorious for dumping sizable chunks of random memory within almost every document
+    produced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This problem has surfaced a number of times in Microsoft Windows, first in 1998
+    on all systems, and then on Mac OS only in 2001\. Some anecdotal evidence suggests
+    other sightings, but those are rather poorly documented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter 4. Working for the Common Good
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Where a question of how the computer may determine the intent of its user
+    is raised and left unanswered*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: —
+  prefs: []
+  type: TYPE_NORMAL
+- en: The beauty of, but also one of the biggest problems with, any sufficiently extensive
+    and diverse computer network is that you cannot blindly trust any connected party
+    to be who they claim to be, and it is impossible to determine their intentions
+    or the real driving force behind their actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I’ll discuss the issue of confirming the identity of a source in the third part
+    of this book, when I dissect the architecture of the network and explore the risks
+    that result from the way a network is built. However, the issue of the originator’s
+    intentions is a separate and fascinating aspect of computer security, with often
+    serious and far-fetched social and judicial implications that extend beyond the
+    world of computing. As we make computers better and better at predicting what
+    their users want to do (itself a means of achieving intuitiveness and ease of
+    use) and give them more autonomy, it becomes increasingly easy to trick machines
+    into becoming a tool to be used by someone else, instead of helping the user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A long river of words has been written on the subject, followed by a number
+    of heated disputes about where to put the blame and whom to sue when things go
+    wrong. I believe it is important to tackle the problem but not appropriate to
+    impose any particular viewpoint on you. As such, I will close this section of
+    the book with a short and mostly technical paper that I originally published in
+    2001 in *Phrack* magazine, vol. 57\. I’ve made some minor edits to it and will
+    refrain from further commentary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let me dig it up . . . /me searches for paper . . . Ah, here it is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: It appears nearly impossible to fully prevent the automated abuse without the
+    ability to anticipate and classify the actual intent behind a particular user
+    action, which is not likely to happen any time soon. Meanwhile, the number of
+    systems that rely on automated interaction with other entities increases every
+    year, making this issue perhaps even more interesting than when I originally wrote
+    this article, particularly with more and more sophisticated and populous worms
+    hitting the Internet in the past several years.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Is there a moral to this story or a clear conclusion we should be drawing? Not
+    really. It is, however, important to remember that machines do not always act
+    on behalf of their operators, even when they are not clearly compromised or downright
+    abused to become hostile. Determining the intent and the place where the desire
+    to carry out a malicious action originated may be a tremendous challenge, as you’ll
+    see in later chapters.
+  prefs: []
+  type: TYPE_NORMAL

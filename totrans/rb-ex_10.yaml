@@ -1,0 +1,700 @@
+- en: Chapter 10. More Complex Utilities and Tricks, Part II
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages686190.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this chapter, I’ll describe an important functional technique called the
+    *callback*, in which a general-purpose method uses a Proc to determine its specific
+    result. We’ve actually seen this plenty of times before, because it’s built right
+    into many Ruby methods. Let’s say we want to double every number in a list. That’s
+    easy. We just use `[0, 1, 2].map { |x| x * 2 }` and get `[0, 2, 4]` as the result.
+    If we want to find all numbers greater than 1, we use `[0, 1, 2].find_all { |x|
+    x > 1 }` and get [2] instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All we’re doing in either case is using a general purpose method like `map`
+    or `find_all` that takes a block, like `{ |x| x * 2 }` or `{ |x| x > 1 }`, and
+    bases its output on the results of that block. The `map` method performs the block’s
+    operation on every member of its calling object, while `find_all` returns a collection
+    that only contains members that passed the test that the block describes. In both
+    cases, the specifics are completely determined by the block. Conceptually, that’s
+    all a callback is. Let’s see a specific useful example that uses Procs instead
+    of blocks to describe callbacks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#37 Overnight DJ (radio_player1.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'One of my friends has had a very colorful employment history. He’s been a DJ
+    and general manager of a radio station, a union organizer, a journalist and translator
+    in Japan, and a professional nightclub musician.^([[28](#ftn.CHP-10-FNOTE-1)])
+    Back when he was running a jazz radio station, he had a problem: His station relied
+    heavily on volunteers and automation, as many jazz stations do, and the station
+    operators would set up an automated computer system to play sound files overnight.
+    The drawback was that the system had no logging, so if a listener heard something
+    he or she liked at 2:47 AM, the operators couldn’t find out what the specific
+    tune was. No one was at the station to take a phone call, and the next morning,
+    there was no log of what sound file was played when, so no one could track down
+    what was playing at a specific time that morning before anyone came in.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enter `radio_player1.rb` and `radio_player2.rb`. These programs demonstrate
+    a solution to this type of problem. The `radio_player1.rb` script gets us started
+    with the basics, including an explanation of how Ruby uses callbacks, and `radio_player2.rb`
+    does the real heavy lifting, including logging. Note that `radio_player1.rb` doesn’t
+    really do any playback, it just demonstrates the techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: First, we define our callbacks as Proc Constants. At ❶, we have the `PLAY_FILE_PROC`,
+    and at ❷, we have the `DONT_PLAY_FILE_PROC`. Since `radio_player1.rb` is just
+    a demonstration script, both of these Procs merely report what they would do instead
+    of actually doing anything. Think of them as “dry run” testing examples. At ❸
+    we define a new class called `RadioPlayer`. We’ll detail that class soon, but
+    for now, it’ll be easier to understand how this script works if we skip down to
+    ❿, where we see how the class is used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We define a variable called `dir`, with the value `‘extras/soundfiles’`. That’s
+    where I stored the audio files used by this example; it’s analogous to the directory
+    that contains the radio station’s songs, sound bites, station identification,
+    and so forth. We then set the value of a variable called `callback`. It stores
+    the appropriate Proc, either `PLAY_FILE_PROC` or `DONT_PLAY_FILE_PROC`. If the
+    first argument to the script (`ARGV[0]`) is `‘play’`, it uses `PLAY_FILE_PROC`.
+    Otherwise, it uses `DONT_PLAY_FILE_PROC`. Next, we define a variable called `dir_filter`,
+    which is either a defined RegExp instance or `nil`. As the name suggests, this
+    filters directories within the main `dir` soundfile directory. If `dir_filter`
+    is `nil`, it does no filtering, and it assumes the entire contents of `dir` are
+    available for playing. We then call the `walk` (❾) class method of `RadioPlayer`
+    with the arguments `dir, callback`, and `dir_filter`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `self.walk` method takes three arguments: `dir, callback_proc`, and `dir_filter`.
+    The first two are mandatory, while `dir_filter` is optional, defaulting to `nil`.
+    It prints an empty line with `puts`, and if the script is called with the `-d`
+    flag (which sets `$DEBUG` to `true`), `self.walk` also prints some boilerplate
+    indicating what it’s doing. It then executes a `call` to a Proc Constant called
+    `PICK_FROM_DIR_PROC`, using the same three arguments—`dir, callback_proc`, and
+    `dir_filter`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, to understand what that means, we’ll describe the `RadioPlayer` class
+    at ❸. It has two Constants: `DIRS_TO_IGNORE` and `PICK_FROM_DIR_PROC. DIRS_TO_IGNORE`
+    (❹) lists the directories that the script should not care about. It includes the
+    current directory (`‘.’`), the directory up a level (`‘..’`), and the directory
+    used by CVS.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Concurrent Versions System (CVS) is a program that keeps track of different
+    versions of files. It’s most often used for software development. You can read
+    more about it at* [http://www.nongnu.org/cvs](http://www.nongnu.org/cvs).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The second Constant within `RadioPlayer` is `PICK_FROM_DIR_PROC` (❺), which
+    is a Proc that picks from directories. We create it in the usual way with `lambda`
+    and define it to take three arguments: `dir, callback_proc`, and `dir_filter`.
+    These correspond to the three arguments to `walk` (❾) that we described at the
+    bottom of this script at ❿.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we get to see what these arguments end up being used for. The `PICK_FROM_DIR_PROC`
+    Constant has several debugging lines that `puts` a given message if `$DEBUG` is
+    set to `true`. I won’t detail each of them, as they should be fairly self explanatory.
+    We start by looping through `each` sorted `filename`, based on the `entries` within
+    `dir`, minus the `DIRS_TO_IGNORE` (❻). Next, we verify that either the `filename`
+    matches the `dir_filter` with a regular expression test, or there is no `dir_filter`
+    in place (❼). Assuming we should proceed, we assign the interpolated String `“#{dir}/#{filename}”`
+    into a local variable called `item`. We’ll be using `item` frequently enough that
+    it’s worthwhile to set it once and reuse it, rather than recalculate it every
+    time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we use the `File.directory?` predicate (❽) to determine whether or not
+    `item` is a directory. If it is a directory, we need to pick from that directory
+    as well, so we recursively call `PICK_FROM_DIR_PROC`, with the arguments `item,
+    callback_proc`, and `dir_filter`. The current value of `item` now becomes the
+    value of `dir` in the new recursive call, so when we get to the assignment into
+    `item` within the recursive call, that item consists of a String like the following:
+    `“#{top_dir}/{next_dir}/#{filename}”`, and so on. This keeps happening until we
+    reach a non-directory `filename`. What happens then?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this case we consult the `else` clause within the `if` block at ❽. Here,
+    we finally call the `callback_proc`, with `item` as the argument. Let’s assume
+    that we are using `PLAY_FILE_PROC` as the `callback_proc`. We’ll therefore `puts`
+    a message saying that we’re playing `filename`. This happens for every terminal
+    (non-directory) `filename` within the execution of `self.walk` (❾). Let’s see
+    it in action. First let’s see the contents of `extras/soundfiles`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Other than those CVS directories I mentioned, we have a file called `01-Neal_And_Jack_And_Me.ogg`
+    at the top level, a directory called `legal` with the files `legal1` and `legal2`,
+    and a directory called `promo` with the files `promo1` and `promo2`. Now, let’s
+    run `radio_player1.rb` with various arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: We provided no `ARGV[0]`, so it assumed `DONT_PLAY_FILE_PROC` for the callback.
+    It also had no `dir_filter`, so it “not played” every file within `extras/soundfiles`,
+    except within the directories we told it to ignore—maybe it’s silly to explicitly
+    “not play” sound files, but I just wanted a callback that could show in an obvious
+    fashion that it was being called. Let’s see some more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, `ARGV[0]` is `‘play’`, and `ARGV[1]` limits available files to those matching
+    `/legal/`. It worked.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: It worked again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The most basic hack of this script is to call it with the `-d` command-line
+    option. That tells you where the script is at any given point, and it may reveal
+    some useful information as you try different arguments, create your own files
+    and directories with `extras/soundfiles`, or do whatever other customization you
+    think is appropriate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The beauty of callbacks is that you can hack your program by simply using a
+    different one. The overall structure of the manner in which you do some particular
+    operation stays the same, while the specific operation being done can change,
+    often quite drastically. We’ll see an example of that in the next script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[28](#CHP-10-FNOTE-1)]) Now he blogs and podcasts at [http://thejasoncraneshow.com](http://thejasoncraneshow.com).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#38 Better Overnight DJ (radio_player2.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This script, `radio_player2.rb`, is an improvement on `radio_player1.rb`. Instead
+    of placeholder Procs, it will actually play sound files, as well as log playback
+    with specific times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For this section, I’ll merely detail the changes between `radio_player1.rb`
+    and `radio_player2.rb`. The first change is the definition of the `LOG_FILE` Constant
+    at ❶. As you might expect, this is the filename into which `radio_player2.rb`
+    writes logging messages. Next, we declare a Hash Constant called `PLAYERS` at
+    ❷, with keys of file extensions for particular types of soundfiles and values
+    of the names of programs that one might use to play those types of files on a
+    Unix system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we define our Procs at ❸, this time as variables rather than Constants.
+    There’s no particular reason to use variables instead of Constants, as the comment
+    notes. I just wanted to show that either approach works well for our purposes.
+    Aside from being variables rather than Constants, the playing Proc is substantively
+    different.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `play_file_proc` acts as a closure, binding the `PLAYERS` Hash inside itself.
+    It establishes the extension (and therefore, type) of its `filename` argument
+    as `ext` at ❹. It then tries to play that filename using `system` at ❺, but only
+    if the `PLAYERS` Hash has an appropriate player for that file extension. I made
+    sure that `PLAYERS` had an entry for no file extension at all, so `radio_player2.rb`
+    could still demonstrate that it was either playing or not playing the dummy files
+    like `legal1` and `promo2` that have no file extension. Since I just wanted to
+    show the dummy files, I decided that the Unix command `ls`, which just lists files,
+    was the appropriate value to use in `PLAYERS`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `radio_player2.rb` script also logs playback within the `play_file_proc`.
+    At ❻, it opens a new file for appending, using `‘a’` as the second argument to
+    `File.open`. It then refers to that log file as `log`, and uses `log`’s `puts`
+    method to append the current `Time` and the `filename` being played, separated
+    by tabs, all followed by a carriage return. Whenever we use `radio_player2.rb`,
+    we can check the contents of `LOG_FILE` to see what’s been played.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The only other differences are the removal of the debugging messages and referring
+    to the Procs by the lowercase variable names rather than the all-caps Constant
+    names. Let’s see this version in action.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let’s try a basic playback of everything.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: That command-line call played the Ogg file (again, from my favorite band King
+    Crimson) using a `system` call with `ogg123`, the appropriate value within `PLAYERS`
+    for the `.ogg` extension, and then it “played” the other files with `ls`, the
+    appropriate `PLAYERS` value for files with no extension at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now let’s filter, with fake playback.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: And again, without fake playback.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that playback merely lists the dummy files, while non-playback executes
+    the full `dont_play_file_proc`, including the immature `So there.` suffix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The value of `LOG_FILE` is Unix-specific. Windows users (or anyone else) can
+    certainly change that filename to something more appropriate for their operating
+    system. Also, if you prefer a more robust system for the dummy files, you could
+    give them their own extension, like `dummy`, and change `PLAYERS` so that the
+    key for `‘ls’` is that new extension.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#39 Numbers by Name (to_lang.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In previous scripts, notably [#16 Adding Commas to Numbers (commify.rb)](ch05s02.html
+    "#16 Adding Commas to Numbers (commify.rb)") on page 75 and [#17 Roman Numerals
+    (roman_numeral.rb)](ch05s03.html "#17 Roman Numerals (roman_numeral.rb)") on page
+    81, we talked about how numbers can be represented in a variety of ways. Both
+    of those scripts showed meaningful ways of representing Integers as Strings, other
+    than the handy but trivially different `to_s` method. This script, `to_lang.rb`,
+    extends that discussion by representing Integers as Strings consisting of how
+    those numbers are spoken in two real-world languages: English and Spanish.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This code is broken into three separate files, for reasons that I will make
+    clear in [How It Works](ch10s03.html#how_it_works-id037 "How It Works") on page
+    198.
+  prefs: []
+  type: TYPE_NORMAL
+- en: representable_in_english.rb
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next will be a very similar file, also storing a module/mixin definition. The
+    only meaningful differences pertain to the choice of language: this one details
+    Spanish, rather than English.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: representable_in_spanish.rb
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, we have the code that directly gives Integers the ability to represent
+    themselves in spoken languages. It does so through the use of the modules above,
+    as you’ll see.
+  prefs: []
+  type: TYPE_NORMAL
+- en: to_lang.rb
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let’s examine each file in turn. Since `representable_in_english.rb` and `representable_in_spanish.rb`
+    are so similar, we can deal with them simultaneously.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Two Mixins
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Both `representable_in_english.rb` and `representable_in_spanish.rb` are *mixins*,
+    the mechanism Ruby uses to give shared behavior to classes with different ancestry,
+    like giving both bats and birds the ability to fly. In our case, instead of giving
+    organisms the ability to fly, we’re giving the object we mix our mixins into the
+    ability to represent itself in some human languages: English and Spanish, in this
+    case.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We define the appropriate Module, in both `representable_in_english.rb` and
+    `representable_in_spanish.rb`, at ❶. I’ll keep the numbered callouts in the code
+    in parallel across these two files throughout this example. At ❷, we define our
+    `create_english` or `create_spanish` methods. The purpose of either method is
+    to return a Hash whose keys are Integers and whose values are the representation
+    of those Integers in the module’s language. The resulting Hash’s pairs will form
+    our base cases, and we’ll use them very similarly to the ones we used in the `roman_numeral.rb`
+    script in [Chapter 5](ch05.html "Chapter 5. Number Utilities"). Then at ❸, we
+    define a special replacements method, customized and named for the language. Every
+    language is likely to have some special treatment, even beyond what we can do
+    with the differences in the Hash returned by `create_english` or `create_spanish`.
+    So far, all we need to do is add hyphens to numbers with tens components. To accomplish
+    that task, we call the `add_hyphens_to_tens` method, which we define at ❼.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ❹ and ❺, we add some of what programmers call *syntactic sugar*, or a simplification
+    of a language’s syntax. The term *syntactic* sugar can have a negative connotation,
+    but it doesn’t have to. It generally refers to a shortcut that a programmer uses
+    to more easily accomplish a commonly needed technique, such as adding method aliases
+    with `alias`. It’s relatively easy to add syntactic sugar to Ruby, as our examples
+    show. We can add methods like `to_english` or `to_spanish` by calling `to_lang`
+    (soon to be defined in `to_lang.rb`) with the appropriate `lang` argument.^([[29](#ftn.CHP-10-FNOTE-2)])
+    We can also use `alias` to make `to_en` refer to `to_english`, and `to_es` refer
+    to `to_spanish`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Some of our methods can be private, so we declare that at ❻. We’ve already
+    discussed `add_hyphens_to_tens` ❼, so we can move on to `need_ones_in_english`
+    and `need_ones_in_spanish` ❽. This method returns a Hash whose keys are Integers
+    and whose values are the representation of those Integers in the module’s language.
+    This should sound familiar. What makes the pairs in this Hash notable is a characteristic
+    they all share: They all need the prefix *one* (in the appropriate language) when
+    there is in fact only one of those numbers. The number *100* is pronounced *one
+    hundred* in English, for example.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: “Of course!” you might think. However, contrast the Hashes returned by `need_ones_in_english`
+    ❽ and `dont_need_ones_in_english` ❾. The Integer keys of the Hash created at ❾
+    do not need the *one* prefix. You don’t say *one twenty* for *20*, for example,
+    so we need a way to differentiate between numbers that need the prefix and those
+    that don’t. The different methods at ❽ and ❾ are our way to do so. When we want
+    all of them together and when we don’t care about the prefix issue we can simply
+    `merge` the two Hashes together. This is exactly what we will do in the `to_lang.rb`
+    file, which we’re about to examine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Main Code
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The first thing we do in `to_lang.rb` is open the Integer class, since we want
+    to add new behavior to Integers. At ❶, we `require` the mixin files just discussed,
+    and at ❷, we `include` them within the Integer class, giving all Integers the
+    methods defined in the mixin files, including both aliases. We also want some
+    Constants, mainly for convenient text manipulation, so we define those at ❸. We
+    close off the pre-methods section by defining a class variable called `@@lang_of`
+    at ❹. It’s a Hash that will eventually store the merged result of the two Hashes
+    from the mixins’ markers at ❽ and ❾. Since we define it with `||=`, it is only
+    defined in the first Integer instantiated, and then it is shared among all of
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ❺, we define a predicate called `need_ones?`, which takes a `lang` argument
+    and simply makes a call to either `need_ones_in_english` (defined in `representable_in_english.rb`)
+    or `need_ones_in_spanish` (defined in `representable_in_spanish.rb`), as appropriate
+    to the `lang` argument. It doesn’t matter which of the files the called method
+    is defined in, because they are both included at ❷ in `to_lang.rb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our main workhorse method `to_lang`, appears at ❻; this method takes a single,
+    mandatory `lang` argument. It returns early with the `EMPTY_STRING` if `self`
+    is zero. This means that if we call `0.to_lang(‘english’)`, we get the empty string
+    as the result, instead of the String `‘zero’`. (See [Hacking the Script](ch10s03.html#hacking_the_script-id027
+    "Hacking the Script") on page 202 for a way to change that.) Assuming the case
+    should proceed beyond that, `to_lang` then sets the value of `@@lang_of[lang]`.
+    The `@@lang_of` class variable had already been declared as a Hash when the first
+    Integer was instantiated, but only as a Hash with no keys or values. The value
+    put into `@@lang_of[lang]` is the result of calling a method called send with
+    the argument `“create_#{lang}”`, which you should recognize as an interpolating
+    String.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `send` method takes any number of arguments, the first of which must be
+    an expression that evaluates to the name of a method. It then calls that method
+    with the rest of the arguments. This allows you to do exactly what we’re doing
+    here, which is dynamically calling a method whose name you don’t yet know. You
+    could work around this by having a test on the `lang` argument, and there are
+    many ways to do so. Instead of a traditional method like `create_english` or `create_spanish`,
+    you could use Procs as Hash values, as we’ve done many times since [Chapter 6](ch06.html
+    "Chapter 6. Functionalism with Blocks and Procs"). You could also do something
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that we take advantage of the fact that all statements in Ruby return the
+    last expression evaluated, including the `if` statement. You have many different
+    options for calling a method whose name you don’t know, but the point is that
+    it doesn’t need to be that difficult. Ruby provides us with the `send` method,
+    which is incredibly useful and appropriate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, `@@lang_of[lang]` will contain the Hash that is the `merge`d
+    result of both `need_ones_in_english` and `dont_need_ones_in_english` (for English)
+    or `need_ones_in_spanish` and `dont_need_ones_in_spanish` (for Spanish.) Let’s
+    take a cue from `send` and express those as `“need_ones_in#{lang}”` and `“dont_need_ones_in#{lang}”`.
+    We then want to create some local variables called `base, mult`, and `remaining`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `base` variable is the highest Integer key within `@@lang_of[lang]` that
+    is equal to or less than `self`. We get it from the `get_base` method, defined
+    at ❽, which finds the first key in a reverse-sorted version of `@@lang_of[lang]`
+    that is equal to or less than `self`. It does this via the `detect` method (which
+    I like to think of as “find first”). It also has a return guard, where it returns
+    `self` if `self` is actually one of the keys of `@@lang_of[lang]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `mult` variable is simply how many times `base` can go into `self`, rounded
+    down to the nearest Integer. The `remaining` variable is whatever’s left. We then
+    want to create `raw_output`, a String that holds the eventual output, before we
+    make any of the special replacements already mentioned in [The Two Mixins](ch10s03.html#the_two_mixins
+    "The Two Mixins") on page 198\. The `raw_output` String will consist of something
+    representing `(base * mult)`, a space, and then the result of making a recursive
+    call to `to_lang` on whatever is left (`remaining.to_lang(lang)`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We accomplish that by constructing an Array. The first element is the output
+    of a method called `mult_prefix`, defined at ❾; it takes the arguments `base,
+    mult`, and `lang`. If `mult` is greater than one, we know we need to have a prefix:
+    the number *200* is pronounced *two hundred*, so we need the *two*. If `base`
+    needs a one (as described already, pertaining to the `need_ones?` predicate),
+    we know that we need to have *one* as a prefix, such as for *one hundred* or *one
+    thousand*. Finally, in all other cases, we return a prefix that is the `EMPTY_STRING`,
+    so the number *20* is pronounced *twenty* rather than *one twenty*, and *5* is
+    *five* rather than *one five*. That’s the multiple prefix and the first part of
+    our eventual output.^([[30](#ftn.CHP-10-FNOTE-3)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we need whatever `base` is, as pronounced in `lang`. We get that via `@@lang_of[lang][base]`.
+    Finally, we need the rest of the number, which we get via `remaining.to_lang(lang)`.
+    This keeps happening recursively, with a smaller Integer calling `to_lang` and
+    appending its results, until `base` is `0`. Then `to_lang` returns the `EMPTY_STRING`
+    due to its return guard, and the entire output is concatenated together within
+    the first calling to `remaining.to_lang`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That’s the Array. You’ll notice that `to_lang` joins that Array on a `SPACE`,
+    so that the words in `raw_output` are separated by spaces, which is normal. Before
+    we’re done, we want to call our special replacements method (whichever one is
+    appropriate for `lang`) on `raw_output`, and `return` the result of doing that.
+    Since we again have a method name that depends on `lang`, we’ll use `send`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let’s take it out for a spin. I’ve written a simple test script called `test_lang.rb`
+    that I stored inside the `tests` directory. It uses `Test::Unit::TestCase` again,
+    in a manner similar to the way we tested the temperature converter in [Chapter 7](ch07.html
+    "Chapter 7. Using, Optimizing, and Testing Functional Techniques"). Here’s its
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And here’s its output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We could modify `to_lang` to allow the pronunciation of zero, instead of returning
+    the `EMPTY_STRING` Constant. In order to do that and still work with the recursion,
+    we’ll need to send another optional argument into `to_lang` that keeps track of
+    the recursion depth (how many levels of recursion we have performed). We only
+    care about distinguishing between the first call to `to_lang` and the rest of
+    the calls. We could then `return` the `EMPTY_STRING` if `self` is zero and it’s
+    the first call to `to_lang`; we can skip the return guard in all other cases.
+    We’d also need to change the value for `0` in both `dont_need_ones_in_english`
+    and `dont_need_ones_in_spanish`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[29](#CHP-10-FNOTE-2)]) Note that our definitions of `to_english` and `to_spanish`
+    essentially curry `to_lang`, making new curried methods that are simpler to call
+    (i.e., that take fewer arguments) by making assumptions, namely which language
+    to convert into.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[30](#CHP-10-FNOTE-3)]) All of these specific examples assume English, of
+    course. Substitute the Spanish terms when `lang` is `‘spanish’`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#40 Elegant Maps and Injects (symbol.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: I’ll close this chapter with a tiny script that I didn’t even write. I certainly
+    wish I had, because it’s remarkably useful, especially for making your use of
+    `map, inject`, and similar methods much more elegant. It’s an example of the best
+    kind of syntactic sugar, and it comes directly from the Ruby Extensions Project
+    at [http://extensions.rubyforge.org](http://extensions.rubyforge.org). This script
+    and all other scripts at that site are licensed under the same terms as Ruby itself,
+    which is what allows me to use it in this chapter.^([[31](#ftn.CHP-10-FNOTE-4)])
+    The code is extremely simple.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: What’s the point of this? It lets you use `uc_words = lc_words.map(&:upcase)`
+    to accomplish the same thing as `uc_words = lc_words.map { |word| word.upcase
+    }`. In both cases, the `uc_words` variable now contains uppercase versions of
+    all the words in `lc_words`. As I said, it’s basically just syntactic sugar, but
+    it’s very, very nice and clever.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'First of all, this script creates a Proc using `Proc.new` that takes an object
+    called `obj` and a variable number of `args`. Remember from `to_lang.rb` that
+    `obj.send(methodname)` is the same as `obj.methodname`, so these are equivalent,
+    with an Array `a`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The remaining arguments (represented by `*args`) are also passed along to `obj`,
+    which is using `each` or `map` or some other iterating method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Secondly, you may remember previous discussion about how to convert between
+    Procs and blocks using the ampersand (`&`), but we can also use the ampersand
+    to cast more than blocks into Procs. Doing so calls a method called `to_proc`,
+    which you can see we’ve overridden. We end up using a double character prefix
+    of `&:`, because a colon is already the prefix for a Symbol. When we use the expression
+    `&:some_name`, what we mean is *the expression returned by the* *`to_proc`* method
+    of the Symbol named *`some_name`*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let’s see it in action in irb.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This script is already a very elegant hack. Note that you need to use `Proc.new`
+    rather than `lambda`, because you want it to be able to handle a variable number
+    of `args`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[31](#CHP-10-FNOTE-4)]) Those terms are made explicit at [http://www.ruby-lang.org/en/about/license.txt](http://www.ruby-lang.org/en/about/license.txt)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter Recap
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What was new in this chapter?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Callbacks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: CVS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Mixins in action
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Calling methods with variable names via `send`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Syntactic sugar
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Symbol.to_proc`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: That’s it for this chapter. It tended to focus less on completely new concepts
+    and more on new applications for familiar things, but it still managed to introduce
+    more than a few novel ideas. The next chapter focuses on web programming, a venue
+    in which Ruby has become quite popular.
+  prefs: []
+  type: TYPE_NORMAL

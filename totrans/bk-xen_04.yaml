@@ -1,0 +1,930 @@
+- en: Chapter 4. STORAGE WITH XEN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Throughout this book, so far, we've talked about Xen mostly as an integrated
+    whole, a complete virtualization *solution*, to use marketing's word. The reality
+    is a bit more complex than that. Xen itself is only one component of a platform
+    that aims to free users from having to work with real hardware. The Xen hypervisor
+    virtualizes a processor (along with several other basic components, as outlined
+    in [Chapter 2](ch02.html "Chapter 2. GETTING STARTED")), but it relies on several
+    underlying technologies to provide seamless abstractions of the resources a computer
+    needs. This distinction is clearest in the realm of storage, where Xen has to
+    work closely with a virtualized storage layer to provide the capabilities we expect
+    of a virtual machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By that we mean that Xen, combined with appropriate storage mechanisms, provides
+    near total hardware independence. The user can run the Xen machine anywhere, move
+    the instance about almost at will, add storage freely, save the filesystem state
+    cleanly, and remove it easily after it's done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sounds good? Let's get started.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Storage: The Basics'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The first thing to know about storage—before we dive into configuration on
+    the dom0 side—is how to communicate its existence to the domain. DomUs find their
+    storage by examining the domU config file for a `disk=` line. Usually it''ll look
+    something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This line defines two devices, which appear to the domU as `sda` and `sdb`.
+    Both are physical,^([[26](#ftn.CHP-4-FNOTE-1)]) as indicated by the `phy:` prefix—other
+    storage backends have their own prefixes, such as `file:` and `tap:` for file-backed
+    devices. You can mix and match backing device types as you like—we used to provide
+    a pair of `phy:` volumes and a file-backed read-only "rescue" image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We call this a line, but it's really more of a stanza—you can put the strings
+    on separate lines, indent them with tabs, and put spaces after the commas if you
+    think that makes it more readable. In this case, we're using LVM, with a volume
+    group named *cleopatra* and a pair of logical volumes called *menas* and *menas_swap*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*By convention, we''ll tend to use the same name for a domain, its devices,
+    and its config file. Thus, here, the logical volumes* menas *and* menas_swap *belong
+    to the domain* menas, *which has the config file* /etc/xen/menas *and network
+    interfaces with similar names. This helps to keep everything organized*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can examine the storage attached to a domain by using the `xm block-list`
+    command—for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, armed with this knowledge, we can move on to creating backing storage in
+    the dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[26](#CHP-4-FNOTE-1)]) As you may gather, a *physical* device is one that
+    can be accessed via the block device semantics, rather than necessarily a discrete
+    piece of hardware. The prefix instructs Xen to treat the device as a basic block
+    device, rather than providing the extra translation required for a file-backed
+    image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Varying Types of Storage
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: It should come as little surprise, this being the world of open source, that
+    Xen supports many different storage options, each with its own strengths, weaknesses,
+    and design philosophy. These options broadly fall into the categories of *file
+    based* and *device based*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen can use a *file* as a block device. This has the advantage of being simple,
+    easy to move, mountable from the host OS with minimal effort, and easy to manage.
+    It also used to be very slow, but this problem has mostly vanished with the advent
+    of the blktap driver. The file-based block devices differ in the means by which
+    Xen accesses them (basic loopback versus blktap) and the internal format (AIO,
+    QCOW, etc.).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen can also perform I/O to a *physical* device. This has the obvious drawback
+    of being difficult to scale beyond your ability to add physical devices to the
+    machine. The physical device, however, can be anything the kernel has a driver
+    for, including hardware RAID, fibre channel, MD, network block devices, or LVM.
+    Because Xen accesses these devices via DMA (direct memory access) between the
+    device driver and the Xen instance, mapping I/O directly into the guest OS's memory
+    region, a domU can access physical devices at near-native speeds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: No matter what, though, all storage backends look the same from within the Xen
+    virtual domain. The hypervisor exports a Xen VBD (virtual block device) to the
+    domU, which in turn presents the device to the guest OS with an administrator-defined
+    mapping to traditional Unix device nodes. Usually this will be a device of the
+    form `hdx` or `sdx`, although many distros now use `xvdx` for *xen virtual disk*.
+    (The `hd` and `sd` devices generally work, as well.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: We recommend blktap (a specialized form of file backend) and LVM for storage
+    backends. These both work, offer good manageability, can be resized and moved
+    freely, and support some mechanism for the sort of things we expect of filesystems
+    now that we Live In The Future. blktap is easy to set up and good for testing,
+    while LVM is scalable and good for production.
+  prefs: []
+  type: TYPE_NORMAL
+- en: None of this is particularly Xen-specific. LVM is actually used (outside of
+    Xen) by default for the root device on many distros, notably Red Hat, because
+    of the management advantages that come with an abstracted storage layer. blktap
+    is simply a Xen-specific mechanism for using a file as a block device, just like
+    the traditional block loop driver. It's superior to the loop mechanism because
+    it allows for vastly improved performance and more versatile filesystem formats,
+    such as QCOW, but it's not fundamentally different from the administrator's perspective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's get to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Basic Setup: Files'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For people who don't want the hassle and overhead of LVM, Xen supports fast
+    and efficient file-backed block devices using the blktap driver and library.
+  prefs: []
+  type: TYPE_NORMAL
+- en: blktap (blk being the worn-down stub of "block" after being typed hundreds of
+    times) includes a kernel driver and a userspace daemon. The kernel driver directly
+    maps the blocks contained by the backing file, avoiding much of the indirection
+    involved in mounting a file via loopback. It works with many file formats used
+    for virtual block devices, including the basic "raw" image format obtainable by
+    `dd` ing a block device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can create a file using the `dd` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Your version of dd might require slightly different syntax—for example, it
+    might require you to specify the block size in bytes*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now `dd` will chug away for a bit, copying zeroes to a file. Eventually it''ll
+    finish:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Thus armed with a filesystem image, you can attach it using the tap driver,
+    make a filesystem on it, and mount it as usual with the `mount` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: First, we use the `xm(8)` command to attach the block device to domain 0\. In
+    this case the `xm` command is followed by the block-attach subcommand, with the
+    arguments `<domain id to attach the device to> <backend device> <frontend device>
+    <mode>` and optionally `[backend domain id]`. To decompose our example, we are
+    attaching *anthony.img* read/write using the tap:aio driver to */dev/xvda1* in
+    domain 0 using domain 0 to mediate access (because we tend to avoid using non-dom0
+    driver domains). When the file is attached as */dev/xvda1*, we can create a filesystem
+    on it and mount it as with any block device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that it''s mounted, you can put something in it. (See [Chapter 3](ch03.html
+    "Chapter 3. PROVISIONING DOMUS") for details.) In this case, we''ll just copy
+    over a filesystem tree that we happen to have lying around:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add a `disk=` line to the domU config (in our example, */etc/xen/anthony*)
+    to reflect the filesystem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now you should be able to start the domain with its new root device:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Watch the console and bask in its soothing glow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MOUNTING PARTITIONS WITHIN A FILE-BACKED VBD
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's nothing that keeps you from partitioning a virtual block device as if
+    it were a hard drive. However, if something goes wrong and you need to mount the
+    subpartitions from within dom0, it can be harder to recover. The standard mount
+    `-o loop filename /mnt` won't work, and neither will something like `mount /dev/xvda1
+    /mnt` (even if the device is attached as `/dev/xvda`, Xen will not automatically
+    scan for a partition table and create appropriate devices).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`kpartx` will solve this problem. It reads the partition table of a block device
+    and adds mappings for the device mapper, which then provides device file-style
+    interfaces to the partitions. After that, you can mount them as usual.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s say you''ve got an image with a partition table that describes two partitions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`kpartx` will then find the two partitions and create */dev/mapper/xvda1* and
+    */dev/mapper/xvda2*. Now you should be able to mount and use the newly created
+    device nodes as usual.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'LVM: Device-Independent Physical Devices'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Flat files are well and good, but they're not as robust as simply providing
+    each domain with its own physical volume (or volumes). The best way to use Xen's
+    physical device support is, in our opinion, LVM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LVM, short for *logical volume management*, is Linux's answer to VxFS's storage
+    pools or Windows Dynamic Disks. It is what the marketing people call *enterprise
+    grade*. In keeping with the software mantra that "all problems can be solved by
+    adding another layer of abstraction," LVM aims to abstract away the idea of "disks"
+    to improve manageability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead, LVM (as one might guess from the name) operates on logical volumes.
+    This higher-level view allows the administrator much more flexibility—storage
+    can be moved around and reallocated with near impunity. Even better, from Xen's
+    perspective, there's no difference between an LVM logical volume and a traditional
+    partition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sure, setting up LVM is a bit more work up front, but it'll save you some headaches
+    down the road when you have eight domUs on that box and you are trying to erase
+    the partition for the third one. Using LVM and naming the logical volume to correspond
+    to the domU name makes it quite a bit harder to embarrass yourself by erasing
+    the wrong partition.^([[27](#ftn.CHP-4-FNOTE-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: QCOW
+  prefs: []
+  type: TYPE_NORMAL
+- en: Up to this point, we've talked exclusively about the "raw" file format—but it's
+    not the only option. One possible replacement is the QCOW format used by the QEMU
+    project. It's got a lot to recommend it—a fast, robust format that supports sparse
+    allocation, encryption, compression, and copy-on-write. We like it, but support
+    isn't quite mature yet, so we're not recommending it as your primary storage option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Nonetheless, it might be fun to try. To start working with QCOW, it'll be convenient
+    to have QEMU. (While Xen includes some of the QEMU tools, the full package includes
+    more functionality.) Download it from [http://www.nongnu.org/qemu/download.html](http://www.nongnu.org/qemu/download.html).
+    As usual, we recommend the source install, especially because the QEMU folks eschew
+    standard package management for their binary distribution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install QEMU via the standard process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: QEMU includes the `qemu-img` utility, which is used to create and manipulate
+    the various sorts of image files that QEMU supports, including QCOW, vmdk, raw,
+    and others.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: This command creates an image in QCOW format (`-f qcow`) with a size of 1,024MB.
+    Of course, you'll want to replace the filename and size with appropriate values
+    for your application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can also convert a raw image to a QCOW image with the `img2qcow` utility,
+    which is included as part of the Xen distribution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can use the QCOW image directly as a domain''s root disk with the tap driver.
+    Configure the guest domain to use the QCOW image as its root filesystem. In the
+    domain''s config file under */etc/xen*, add a `disk=` line similar to:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can extend this line with another disk, thus:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Basic Setup: LVM'
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The high-level unit that LVM operates on is the *volume group*, or *VG*. Each
+    group maps *physical extents* (disk regions of configurable size) to *logical
+    extents*. The physical extents are hosted on what LVM refers to as *physical volumes*,
+    or *PVs*. Each VG can contain one or more of these, and the PVs themselves can
+    be any sort of block device supported by the kernel. The logical extents, reasonably
+    enough, are on *logical volumes*, abbreviated *LVs*. These are the devices that
+    LVM actually presents to the system as usable block devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we're fond of saying, there really is no substitute for experience. Here's
+    a five-minute illustrated tutorial in setting up logical volumes (see [Figure 4-1](ch04s03.html#this_diagram_shows_a_single_vg_with_two_
+    "Figure 4-1. This diagram shows a single VG with two PVs. From this VG, we've
+    carved out three logical volumes, lv1, lv2, and lv3\. lv1 and lv3 are being used
+    by domUs, one of which treats the entire volume as a single partition and one
+    of which breaks the LV into subpartitions for / and /var.")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![This diagram shows a single VG with two PVs. From this VG, we''ve carved
+    out three logical volumes, lv1, lv2, and lv3\. lv1 and lv3 are being used by domUs,
+    one of which treats the entire volume as a single partition and one of which breaks
+    the LV into subpartitions for / and /var.](httpatomoreillycomsourcenostarchimages333209.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-1. This diagram shows a single VG with two PVs. From this VG, we've
+    carved out three logical volumes, lv1, lv2, and lv3\. lv1 and lv3 are being used
+    by domUs, one of which treats the entire volume as a single partition and one
+    of which breaks the LV into subpartitions for / and /var.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Begin with some hard drives. In this example, we'll use two SATA disks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Given that Xen is basically a server technology, it would probably be most
+    sensible to use RAID-backed redundant storage, rather than actual hard drives.
+    They could also be partitions on drives, network block devices, UFS-formatted
+    optical media … whatever sort of block device you care to mention. We''re going
+    to give instructions using a partition on two hard drives, however. These instructions
+    will also hold if you''re just using one drive*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Warning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Note that we are going to repartition and format these drives, which will
+    destroy all data on them*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we partition the drives and set the type to *Linux LVM*. Although this
+    isn't strictly necessary—you can use the entire drive as a PV, if desired—it's
+    generally considered good Unix hygiene. Besides, you'll need to partition if you
+    want to use only a portion of the disk for LVM, which is a fairly common scenario.
+    (For example, if you want to boot from one of the physical disks that you're using
+    with LVM, you will need a separate */boot* partition.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, in this example, we have two disks, sda and sdb. We want the first 4GB of
+    each drive to be used as LVM physical volumes, so we'll partition them with `fdisk`
+    and set the type to 8e (Linux LVM).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If any partitions on the disk are in use, you will need to reboot to get the
+    kernel to reread the partition table. (We think this is ridiculous, by the way.
+    Isn't this supposed to be the future?)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, make sure that you've got LVM and that it's LVM2, because LVM1 is deprecated.^([[28](#ftn.CHP-4-FNOTE-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You might need to load the driver. If `vgscan` complains that the driver is
+    missing, run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this case, `dm` stands for *device mapper*, which is a low-level volume manager
+    that functions as the backend for LVM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having established that all three of these components are working, create physical
+    volumes as illustrated in [Figure 4-2](ch04s03.html#this_diagram_shows_a_single_block_device
+    "Figure 4-2. This diagram shows a single block device after pvcreate has been
+    run on it. It's mostly empty, except for a small identifier on the front.").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![This diagram shows a single block device after pvcreate has been run on it.
+    It''s mostly empty, except for a small identifier on the front.](httpatomoreillycomsourcenostarchimages333211.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-2. This diagram shows a single block device after pvcreate has been
+    run on it. It's mostly empty, except for a small identifier on the front.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Bring these components together into a volume group by running `vgcreate`.
+    Here we''ll create a volume group named *cleopatra* on the devices sda1 and sdb1:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, make volumes from the volume group using `lvcreate`, as shown in [Figure 4-3](ch04s03.html#lvcreate_creates_a_logical_volume_devvgl
+    "Figure 4-3. lvcreate creates a logical volume, /dev/vg/lvol, by chopping some
+    space out of the LV, which is transparently mapped to possibly discontinuous physical
+    extents on PVs."). Think of it as a more powerful and versatile form of partitioning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here we've created a mirrored logical volume that keeps its logs in core (rather
+    than on a separate physical device). Note that this step takes a group name rather
+    than a device node. Also, the mirror is purely for illustrative purposes—it's
+    not required if you're using some sort of redundant device, such as hardware RAID
+    or MD. Finally, it's an administrative convenience to give LVs human-readable
+    names using the `-n` option. It's not required but quite recommended.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![lvcreate creates a logical volume, /dev/vg/lvol, by chopping some space out
+    of the LV, which is transparently mapped to possibly discontinuous physical extents
+    on PVs.](httpatomoreillycomsourcenostarchimages333213.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-3. lvcreate creates a logical volume, /dev/vg/lvol, by chopping some
+    space out of the LV, which is transparently mapped to possibly discontinuous physical
+    extents on PVs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a filesystem using your favorite filesystem-creation tool:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: At this point, the LV is ready to mount and access, just as if it were a normal
+    disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: To make the new device a suitable root for a Xen domain, copy a filesystem into
+    it. We used one from [http://stacklet.com/](http://stacklet.com/)—we just mounted
+    their root filesystem and copied it over to our new volume.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, to use it with Xen, we can specify the logical volume to the guest
+    domain just as we would any physical device. (Note that here we're back to the
+    same example we started the chapter with.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: At this point, start the machine. Cross your fingers, wave a dead chicken, perform
+    the accustomed ritual. In this case our deity is propitiated by an `xm create`.
+    Standards have come down in the past few millennia.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[27](#CHP-4-FNOTE-2)]) This example is not purely academic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[28](#CHP-4-FNOTE-3)]) This is unlikely to be a problem unless you are using
+    Slackware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enlarge Your Disk
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Both file-backed images and LVM disks can be expanded transparently from the
+    dom0\. We're going to assume that disk space is so plentiful that you will never
+    need to shrink an image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Be sure to stop the domain before attempting to resize its underlying filesystem.
+    For one thing, all of the user-space resize tools that we know of won't attempt
+    to resize a mounted filesystem. For another, the Xen hypervisor won't pass along
+    changes to the underlying block device's size without restarting the domain. Most
+    important, even if you were able to resize the backing store with the domain running,
+    data corruption would almost certainly result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: File-Backed Images
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The principle behind augmenting file-backed images is simple: We append more
+    bits to the file, then expand the filesystem.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, make sure that nothing is using the file. Stop any domUs that have it
+    mounted. Detach it from the dom0\. Failure to do this will likely result in filesystem
+    corruption.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, use `dd` to add some bits to the end. In this case we're directing 1GB
+    from our */dev/zero* bit hose to *anthony.img*. (Note that not specifying an output
+    file causes `dd` to write to stdout.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Use `resize2fs` to extend the filesystem (or the equivalent tool for your choice
+    of filesystem).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`resize2fs` will default to making the filesystem the size of the underlying
+    device if there''s no partition table.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the image contains partitions, you'll need to rearrange those before resizing
+    the filesystem. Use `fdisk` to delete the partition that you wish to resize and
+    recreate it, making sure that the starting cylinder remains the same.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LVM
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: It's just as easy, or perhaps even easier, to use LVM to expand storage. LVM
+    was designed from the beginning to increase the flexibility of storage devices,
+    so it includes an easy mechanism to extend a volume (as well as shrink and move).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If there''s free space in the volume group, simply issue the command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If the volume group is full, you''ll need to expand it. Just add a disk to
+    the machine and extend the vg:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, just as in the previous example, handle the filesystem-level expansion—we'll
+    present this one using ReiserFS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Copy-on-Write and Snapshots
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One of the other niceties that a real storage option gives you is copy-on-write,
+    which means that, rather than the domU overwriting a file when it's changed, the
+    backend instead transparently writes a copy elsewhere.^([[29](#ftn.CHP-4-FNOTE-4)])
+    As a corollary, the original filesystem remains as a *snapshot*, with all modifications
+    directed to the copy-on-write clone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This snapshot provides the ability to save a filesystem''s state, taking a
+    snapshot of it at a given time or at set intervals. There are two useful things
+    about snapshots: for one, they allow for easy recovery from user error.^([[30](#ftn.CHP-4-FNOTE-5)])
+    For another, they give you a checkpoint that''s known to be consistent—it''s something
+    that you can conveniently back up and move elsewhere. This eliminates the need
+    to take servers offline for backups, such as we had to do in the dark ages.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: CoW likewise has a bunch of uses. Of these, the most fundamental implication
+    for Xen is that it can dramatically reduce the on-disk overhead of each virtual
+    machine—rather than using a simple file as a block device or a logical volume,
+    many machines can share a single base filesystem image, only requiring disk space
+    to write their changes to that filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CoW also comes with its own disadvantages. First, there's a speed penalty. The
+    CoW infrastructure slows disk access down quite a bit compared with writing directly
+    to the device, for both reading and writing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're using sparse allocation for CoW volumes, the speed penalty becomes
+    greater due to the overhead of allocating and remapping blocks. This leads to
+    fragmentation, which carries its own set of performance penalties. CoW can also
+    lead to the administrative problem of oversubscription; by making it possible
+    to oversubscribe disk space, it makes life much harder if you accidentally run
+    out. You can avoid all of this by simply allocating space in advance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's also a trade-off in terms of administrative complexity, as with most
+    interesting features. Ultimately, you, the Xen administrator, have to decide how
+    much complexity is worth having.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''ll discuss device mapper snapshots, as used by LVM because they''re the
+    implementation that we''re most familiar with. For shared storage, we''ll focus
+    on NFS and go into more detail on shared storage systems in [Chapter 9](ch09.html
+    "Chapter 9. XEN MIGRATION"). We also outline a CoW solution with UnionFS in [Chapter 7](ch07.html
+    "Chapter 7. HOSTING UNTRUSTED USERS UNDER XEN: LESSONS FROM THE TRENCHES"). Finally,
+    you might want to try QCOW block devices—although we haven''t had much luck with
+    them, your mileage may vary.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[29](#CHP-4-FNOTE-4)]) This is traditionally abbreviated CoW, partly because
+    it's shorter, but mostly because "cow" is an inherently funny word. Just ask Wikipedia.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[30](#CHP-4-FNOTE-5)]) It's not as hard you might suppose to `rm` your home
+    directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LVM and Snapshots
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: LVM snapshots are designed more to *back up* and *checkpoint* a filesystem than
+    as a means of long-term storage. It's important to keep LVM snapshots relatively
+    fresh—or, in other words, make sure to drop them when your backup is done.^([[31](#ftn.CHP-4-FNOTE-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Snapshot volumes can also be used as read-write backing store for domains,
+    especially in situations where you just want to generate a quick domU for testing,
+    based on some preexisting disk image. The LVM documentation notes that you can
+    create a basic image, snapshot it multiple times, and modify each snapshot slightly
+    for another domain. In this case, LVM snapshots would act like a block-level UnionFS.
+    However, note that when a snapshot fills up, it''s immediately dropped by the
+    kernel. This may lead to data loss. The basic procedure for adding an LVM snapshot
+    is simple: Make sure that you have some unused space in your volume group, and
+    create a snapshot volume for it.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'THE XEN L IVECD REVISITED: COPY-ON-WRITE IN ACTION'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Xen LiveCD actually is a pretty nifty release. One of its neatest features
+    is the ability to automatically create copy-on-write block devices when a Xen
+    domain starts, based on read-only images on the CD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The implementation uses the device mapper to set up block devices and snapshots
+    based on flat files, and is surprisingly simple.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, the basic storage is defined with a line like this in the domain config
+    file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note the use of the `cow:` prefix, which we haven't mentioned yet. This is actually
+    a custom prefix rather than part of the normal Xen package.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can add custom prefixes like cow: because */etc/xen/scripts/create_block_device*
+    falls through to a script with a name of the form *block-[type]* if it finds an
+    unknown device type—in this case, cow. The *block-cow* script expects one argument,
+    either `create or destroy`, which the domain builder provides when it calls the
+    script. *block-cow* then calls either the *create_cow or destroy_cow* script,
+    as appropriate.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The real setup takes place in a script, */usr/sbin/create_cow*. This script
+    essentially uses the device mapper to create a copy-on-write device based on an
+    LVM snapshot,^([[32](#ftn.CHP-4-FNOTE-7)]) which it presents to the domain. We
+    won't reproduce it here, but it's a good example of how standard Linux features
+    can form the basis for complex, abstracted functions. In other words, a good hack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, check to see whether you have the driver `dm_snapshot`. Most modern distros
+    ship with this driver built as a loadable module. (If it's not built, go to your
+    Linux kernel source tree and compile it.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Manually load it if necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Create the snapshot using the `lvcreate` command with the `-s` option to indicate
+    "snapshot." The other parameters specify a length and name as in an ordinary logical
+    volume. The final parameter specifies the *origin*, or volume being snapshotted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: This snapshot then appears to be a frozen image of the filesystem—writes will
+    happen as normal on the original volume, but the snapshot will retain changed
+    files as they were when the snapshot was taken, up to the maximum capacity of
+    the snapshot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When making a snapshot, the length indicates the maximum amount of changed data
+    that the snapshot will be able to store. If the snapshot fills up, it'll be dropped
+    automatically by the kernel driver and will become unusable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a sample script that uses an LVM snapshot to back up a Xen instance, see
+    [Chapter 7](ch07.html "Chapter 7. HOSTING UNTRUSTED USERS UNDER XEN: LESSONS FROM
+    THE TRENCHES").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[31](#CHP-4-FNOTE-6)]) Even if you add no data to the snapshot itself, it
+    can run out of space (and corrupt itself) just keeping up with changes in the
+    main LV.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[32](#CHP-4-FNOTE-7)]) More properly, a device mapper snapshot, which LVM
+    snapshots are based on. LVM snapshots are device mapper snapshots, but device
+    mapper snapshots can be based on any pair of block devices, LVM or not. The LVM
+    tools provide a convenient frontend to the arcane commands used by `dmsetup`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Storage and Migration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: These two storage techniques—flat files and LVM—lend themselves well to easy
+    and automated *cold migration*, in which the administrator halts the domain, copies
+    the domain's config file and backing storage to another physical machine, and
+    restarts the domain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Copying over a file-based backend is as simple as copying any file over the
+    network. Just drop it onto the new box in its corresponding place in the filesystem,
+    and start the machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Copying an LVM is a bit more involved, but it is still straightforward: Make
+    the target device, mount it, and move the files in whatever fashion you care to.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Check [Chapter 9](ch09.html "Chapter 9. XEN MIGRATION") for more details on
+    this sort of migration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network Storage
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'These two storage methods only apply to locally accessible storage. Live migration,
+    in which a domain is moved from one machine to another without being halted, requires
+    one other piece of this puzzle: The filesystem must be accessible over the network
+    to multiple machines. This is an area of active development, with several competing
+    solutions. Here we''ll discuss NFS-based storage. We will address other solutions,
+    including ATA over Ethernet and iSCSI, in [Chapter 9](ch09.html "Chapter 9. XEN
+    MIGRATION").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: NFS
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: NFS is older than we are, and it is used by organizations of all sizes. It's
+    easy to set up and relatively easy to administer. Most operating systems can interact
+    with it. For these reasons, it's probably the easiest, cheapest, and fastest way
+    to set up a live migration-capable Xen domain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The idea is to marshal Xen''s networking metaphor: The domains are connected
+    (in the default setup) to a virtual network switch. Because the dom0 is also attached
+    to this switch, it can act as an NFS server for the domUs.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this case we''re exporting a directory tree—neither a physical device nor
+    a file. NFS server setup is quite simple, and it''s cross platform, so you can
+    use any NFS device you like. (We prefer FreeBSD-based NFS servers, but NetApp
+    and several other companies produce fine NFS appliances. As we might have mentioned,
+    we''ve had poor luck using Linux as an NFS server.) Simply export your OS image.
+    In our example, on the FreeBSD NFS server at 192.0.2.7, we have a full Slackware
+    image at */usr/xen/images/slack*. Our */etc/exports* looks a bit like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: We leave further server-side setup to your doubtless extensive experience with
+    NFS. One easy refinement would be to make / read-only and shared, then export
+    read-write VM-specific */var* and */home* partitions—but in the simplest case,
+    just export a full image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Although NFS does imply a performance hit, it''s important to recall that
+    Xen''s network buffers and disk buffers are provided by the same paravirtualized
+    device infrastructure, and so the actual network hardware is not involved. There
+    is increased overhead in transversing the networking stack, but performance is
+    usually better than gigabit Ethernet, so it is not as bad as you might think*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now configure the client (`CONFIG_IP_PNP=y`). First, you''ll need to make some
+    changes to the domU''s kernel to enable root on NFS:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you want to do everything via DHCP (although you should probably still specify
+    a MAC address in your domain config file), add DHCP support under that tree: `CONFIG_IP_PNP_DHCP`:
+    or `CONFIG_IP_PNP_BOOTP` if you''re old school. If you are okay specifying the
+    IP in your domU config file, skip that step.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now you need to enable support for root on NFS. Make sure NFS support is Y
+    and not M; that is, `CONFIG_NFS_FS=Y`. Next, enable root over NFS: `CONFIG_ROOT_NFS=Y`.
+    In *menuconfig*, you can find that option under:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that *menuconfig* won't give you the option of selecting root over NFS
+    until you select kernel-level IP autoconfiguration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Build the kernel as normal and install it somewhere where Xen can load it. Most
+    likely this isn't what you want for a dom0 kernel, so make sure to avoid overwriting
+    the boot kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now configure the domain that you''re going to boot over NFS. Edit the domain''s
+    config file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that we''re just adding extra Linux kernel configuration to the domain
+    config—values not used by Xen will be passed to the kernel command line. You can
+    also explicitly put this configuration in the "extra" parameter. If you want to
+    set the IP address via DHCP, you can replace the last three lines above with:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can then use DHCP to specify the NFS server and NFS root as well in the
+    usual manner. Boot the domain and you're done. Because the storage is accessible
+    to any machine on the network, Xen's live migration should work as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Closing Suggestions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This might seem like a bewildering, or even excessive, variety of storage options,
+    but all of these have their places—be it in a hosting environment, or on the desktop,
+    or in a storage pool for utility computing. The recommendations we've made in
+    this chapter are a start, but in the end the best advice we can offer is to try
+    all of these and see what works best. Find the right trade-off between ease of
+    administration and scalability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, you can combine and extend many of these options. For example, the
+    Xen LiveCD uses flat images with LVM snapshots. Depending on your application,
+    the best solution might be simple filesystem images or a combination of software
+    RAID and LVM. Keep experimenting and see what fits best. These are all examples
+    of the flexibility of Xen's standards-based architecture, which relies on user-extensible
+    scripts to define available storage using easily understood semantics. In [Chapter 5](ch05.html
+    "Chapter 5. NETWORKING"), we'll look at how these same principles apply to Xen's
+    network setup.
+  prefs: []
+  type: TYPE_NORMAL

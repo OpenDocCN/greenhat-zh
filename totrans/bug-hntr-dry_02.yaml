@@ -1,0 +1,790 @@
+- en: Chapter 2. Back to the ’90s
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Sunday, October 12, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Dear Diary*,'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I had a look at the source code of VideoLAN’s popular VLC media player today.
+    I like VLC because it supports all different kinds of media files and runs on
+    all my favorite operating system platforms. But supporting all those different
+    media file formats has downsides. VLC does a lot of parsing, and that often means
+    a lot of bugs just waiting to be discovered.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'According to *Parsing Techniques: A Practical Guide* by Dick Grune and Ceriel
+    J.H. Jacobs,^([[6](ch02s05.html#ftn.CHP-2-FN-1)]) “Parsing is the process of structuring
+    a linear representation in accordance with a given grammar.” A parser is software
+    that breaks apart a raw string of bytes into individual words and statements.
+    Depending on the data format, parsing can be a very complex and error-prone task.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After I became familiar with the inner workings of VLC, finding the first vulnerability
+    took me only about half a day. It was a classic stack buffer overflow (see Section
+    A.1). This one occurred while parsing a media file format called TiVo, the proprietary
+    format native to TiVo digital recording devices. Before finding this bug, I had
+    never heard of this file format, but that didn’t stop me from exploiting it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.1 Vulnerability Discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Here is how I found the vulnerability:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Generate a list of the demuxers of VLC.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 2: Identify the input data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 3: Trace the input data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: I’ll explain this process in detail in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Generate a List of the Demuxers of VLC'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*I used VLC 0.9.4 on the Microsoft Windows Vista SP1 (32-bit) platform for
+    all the following steps*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After downloading and unpacking the source code of VLC,^([[7](ch02s05.html#ftn.CHP-2-FN-2)])
+    I generated a list of the available demuxers of the media player.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In digital video, *demuxing* or *demultiplexing* refers to the process of separating
+    audio and video as well as other data from a video stream or container in order
+    to play the file. A demuxer is software that extracts the components of such a
+    stream or container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating a list of demuxers wasn’t too hard, as VLC separates most of them
+    in different C files in the directory *vlc-0.9.4\modules\demux\* (see [Figure 2-1](ch02.html#vlc_demuxer_list
+    "Figure 2-1. VLC demuxer list")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![VLC demuxer list](httpatomoreillycomsourcenostarchimages939229.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-1. VLC demuxer list
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 2: Identify the Input Data'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Next, I tried to identify the input data processed by the demuxers. After reading
+    some C code, I stumbled upon the following structure, which is declared in a header
+    file included in every demuxer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*vlc-0.9.4\include\vlc_demux.h*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In line 54, the structure element `s` is declared and described as `input stream`.
+    This was exactly what I was searching for: a reference to the input data that
+    is processed by the demuxers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Trace the Input Data'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: After I discovered the `demux_t` structure and its input stream element, I searched
+    the demuxer files for references to it. The input data was usually referenced
+    by `p_demux->s`, as shown in lines 1623 and 1641 below. When I found such a reference,
+    I traced the input data while looking for coding errors. Using this approach,
+    I found the following vulnerability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*vlc-0.9.4\modules\demux\Ty.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`parse_master()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `stream_Read()` function in line 1641 reads 32 bytes of user-controlled
+    data from a TiVo media file (referenced by `p_demux->s`) and stores them in the
+    stack buffer `mst_buf`, declared in line 1626\. The `U32_AT` macro in line 1642
+    then extracts a user-controlled value from `mst_buf` and stores it in the signed
+    int variable `i_map_size`. In line 1650, the `stream_Read()` function stores user-controlled
+    data from the media file in the stack buffer `mst_buf` again. But this time, `stream_Read()`
+    uses the user-controlled value of `i_map_size` to calculate the size of the data
+    that gets copied into `mst_buf`. This leads to a straight stack buffer overflow
+    (see Section A.1) that can be easily exploited.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the anatomy of the bug, as illustrated in [Figure 2-2](ch02s02.html#overview_of_the_vulnerability_from_input
+    "Figure 2-2. Overview of the vulnerability from input to stack buffer overflow"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 32 bytes of user-controlled TiVo media file data are copied into the stack buffer
+    `mst_buf`. The destination buffer has a size of 32 bytes.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 4 bytes of user-controlled data are extracted from the buffer and stored in
+    `i_map_size`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: User-controlled TiVo media-file data is copied into `mst_buf` once again. This
+    time, the size of the copied data is calculated using `i_map_size`. If `i_map_size`
+    has a value greater than 24, a stack buffer overflow will occur (see Section A.1).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 2.2 Exploitation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To exploit the vulnerability, I performed the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Find a sample TiVo movie file.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 2: Find a code path to reach the vulnerable code.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 3: Manipulate the TiVo movie file to crash VLC.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 4: Manipulate the TiVo movie file to gain control of `EIP`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![Overview of the vulnerability from input to stack buffer overflow](httpatomoreillycomsourcenostarchimages939231.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-2. Overview of the vulnerability from input to stack buffer overflow
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more than one way to exploit a file-format bug. You can create a file
+    with the right format from scratch, or you can manipulate a valid preexisting
+    file. I chose the latter in this example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Find a Sample TiVo Movie File'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The website* [http://samples.mplayerhq.hu/](http://samples.mplayerhq.hu/)
+    *is a good starting point to search for all kinds of multimedia file-format samples*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First I downloaded the following TiVo sample file from [http://samples.mplayerhq.hu/](http://samples.mplayerhq.hu/):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 2: Find a Code Path to Reach the Vulnerable Code'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: I couldn’t find documentation on the specifications of the TiVo file format,
+    so I read the source code in order to find a path to reach the vulnerable code
+    in `parse_master()`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If a TiVo file is loaded by VLC, the following execution flow is taken (all
+    source code references are from *vlc-0.9.4\modules\demux\Ty.c* of VLC). The first
+    relevant function that’s called is `Demux()`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: After some sanity checks in lines 395 and 413, the function `get_chunk_header()`
+    is called in line 415.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: In line 1856 of `get_chunk_header()`, the user-controlled data from the TiVo
+    file is assigned to the pointer `p_peek`. Then, in line 1867, the process checks
+    whether the file data pointed to by `p_peek` equals `TIVO_PES_FILEID` (which is
+    defined as `0xf5467abd` in line 112). If so, the vulnerable function `parse_master()`
+    gets called (see line 1870).
+  prefs: []
+  type: TYPE_NORMAL
+- en: To reach the vulnerable function using this code path, the TiVo sample file
+    had to contain the value of `TIVO_PES_FILEID`. I searched the TiVo sample file
+    for the `TIVO_PES_FILEID` pattern and found it at file offset `0x00300000` (see
+    [Figure 2-3](ch02s02.html#tivo_underscore_pes_underscore_fileid_pa "Figure 2-3. TIVO_PES_FILEID
+    pattern in TiVo sample file")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![TIVO_PES_FILEID pattern in TiVo sample file](httpatomoreillycomsourcenostarchimages939233.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-3. `TIVO_PES_FILEID` pattern in TiVo sample file
+  prefs: []
+  type: TYPE_NORMAL
+- en: Based on the information from the `parse_master()` function (see the following
+    source code snippet) the value of `i_map_size` should be found at offset 20 (`0x14`)
+    relative to the `TIVO_PES_FILEID` pattern found at file offset `0x00300000`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: At this point, I had discovered that the TiVo sample file I downloaded already
+    triggers the vulnerable `parse_master()` function, so it wouldn’t be necessary
+    to adjust the sample file. Great!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Manipulate the TiVo Movie File to Crash VLC'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Get the vulnerable Windows version of VLC from* [http://download.videolan.org/pub/videolan/vlc/0.9.4/win32/](http://download.videolan.org/pub/videolan/vlc/0.9.4/win32/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, I tried to manipulate the TiVo sample file in order to crash VLC. To achieve
+    this, all I had to do was change the 4-byte value at the sample file offset of
+    `i_map_size` (which was `0x00300014` in this example).
+  prefs: []
+  type: TYPE_NORMAL
+- en: As illustrated in [Figure 2-4](ch02s02.html#new_value_for_i_underscore_map_underscor
+    "Figure 2-4. New value for i_map_size in TiVo sample file"), I changed the 32-bit
+    value at file offset `0x00300014` from `0x00000002` to `0x000000ff`. The new value
+    of 255 bytes (`0xff`) should be enough to overflow the 32-byte stack buffer and
+    to overwrite the return address stored after the buffer on the stack (see Section
+    A.1). Next, I opened the altered sample file with VLC while debugging the media
+    player with Immunity Debugger.^([[8](ch02s05.html#ftn.CHP-2-FN-3)]) The movie
+    file was played as before, but after a few seconds—as soon as the altered file
+    data was processed—the VLC player crashed, with the result shown in [Figure 2-5](ch02s02.html#vlc_access_violation_in_immunity_debugge
+    "Figure 2-5. VLC access violation in Immunity Debugger").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![New value for i_map_size in TiVo sample file](httpatomoreillycomsourcenostarchimages939235.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-4. New value for `i_map_size` in TiVo sample file
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![VLC access violation in Immunity Debugger](httpatomoreillycomsourcenostarchimages939237.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-5. VLC access violation in Immunity Debugger
+  prefs: []
+  type: TYPE_NORMAL
+- en: As expected, VLC crashed while parsing the malformed TiVo file. The crash was
+    very promising, since the instruction pointer (`EIP` register) was pointing to
+    an invalid memory location (indicated by the message `Access violation when executing
+    [20030000]` in the status bar of the debugger). This might mean that I could easily
+    gain control of the instruction pointer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 4: Manipulate the TiVo Movie File to Gain Control of EIP'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: My next step was to determine which bytes of the sample file actually overwrote
+    the return address of the current stack frame so that I could take control of
+    `EIP`. The debugger stated that `EIP` had a value of `0x20030000` at the time
+    of the crash. To determine which offset this value is found at, I could try to
+    calculate the exact file offset, or I could simply search the file for the byte
+    pattern. I chose the latter approach and started from file offset `0x00300000`.
+    I found the desired byte sequence at file offset `0x0030005c`, represented in
+    little-endian notation, and I changed the 4 bytes to the value `0x41414141` (as
+    illustrated in [Figure 2-6](ch02s02.html#new_value_for_eip_in_tivo_sample_file
+    "Figure 2-6. New value for EIP in TiVo sample file")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![New value for EIP in TiVo sample file](httpatomoreillycomsourcenostarchimages939239.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-6. New value for `EIP` in TiVo sample file
+  prefs: []
+  type: TYPE_NORMAL
+- en: I then restarted VLC in the debugger and opened the new file (see [Figure 2-7](ch02s02.html#eip_control_of_vlc_media_player
+    "Figure 2-7. EIP control of VLC media player")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![EIP control of VLC media player](httpatomoreillycomsourcenostarchimages939241.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-7. `EIP` control of VLC media player
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`EIP = 41414141` . . . Mission `EIP` control accomplished! I was able to build
+    a working exploit, intended to achieve arbitrary code execution, using the well-known
+    `jmp reg` technique, as described in “Variations in Exploit Methods Between Linux
+    and Windows” by David Litchfield.^([[9](ch02s05.html#ftn.CHP-2-FN-4)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since Germany has strict laws against it, I will not provide you with a full
+    working exploit, but if you’re interested, you can watch a short video I recorded
+    that shows the exploit in action.^([[10](ch02s05.html#ftn.CHP-2-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.3 Vulnerability Remediation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Saturday, October 18, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that I’ve discovered a security vulnerability, I could disclose it in several
+    ways. I could contact the software developer and “responsibly” tell him what I’ve
+    found and help him to create a patch. This process is referred to as *responsible
+    disclosure*. Since this term implies that other means of disclosure are irresponsible,
+    which isn’t necessarily true, it is slowly being replaced by *coordinated disclosure*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, I could sell my findings to a *vulnerability broker* and
+    let him tell the software developer. Today, the two primary players in the commercial
+    vulnerability market are Verisign’s iDefense Labs, with its Vulnerability Contribution
+    Program (VCP), and Tipping Point’s Zero Day Initiative (ZDI). Both VCP and ZDI
+    follow coordinated-disclosure practices and work with the affected vendor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another option is *full disclosure*. If I chose full disclosure, I would release
+    the vulnerability information to the public without notifying the vendor. There
+    are other disclosure options, but the motivation behind them usually doesn’t involve
+    fixing the bug (for example, selling the findings in underground markets).^([[11](ch02s05.html#ftn.CHP-2-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the case of the VLC vulnerability described in this chapter, I chose coordinated
+    disclosure. In other words, I notified the VLC maintainers, provided them with
+    the necessary information, and coordinated with them on the timing of public disclosure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After I informed the VLC maintainers about the bug, they developed the following
+    patch to address the vulnerability:^([[12](ch02s05.html#ftn.CHP-2-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The changes are quite straightforward. The formerly vulnerable call to `stream_Read()`
+    now uses a fixed size value, and the user-controlled value of `i_map_size` is
+    used only as a size value for `stream_Read()` if it is less than or equal to 8\.
+    An easy fix for an obvious bug.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But wait—is the vulnerability really gone? The variable `i_map_size` is still
+    of the type signed int. If a value greater than or equal to `0x80000000` is supplied
+    for `i_map_size`, it’s interpreted as negative, and the overflow will still occur
+    in the `stream_Read()` and `memcpy()` functions of the `else` branch of the patch
+    (see Section A.3 for a description of unsigned int and signed int ranges). I also
+    reported this problem to the VLC maintainers, resulting in another patch:^([[13](ch02s05.html#ftn.CHP-2-FN-8)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that `i_map_size` is of the type unsigned int, this bug is fixed. Perhaps
+    you’ve already noticed that the `parse_master()` function contains another buffer
+    overflow vulnerability. I also reported that bug to the VLC maintainers. If you
+    can’t spot it, then take a closer look at the second patch provided by the VLC
+    maintainers, which fixed this bug as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One thing that surprised me was the fact that none of the lauded exploit mitigation
+    techniques of Windows Vista were able to stop me from taking control of `EIP`
+    and executing arbitrary code from the stack using the `jmp reg` technique. The
+    security cookie or /GS feature should have prevented the manipulation of the return
+    address. Furthermore, ASLR or NX/DEP should have prevented arbitrary code execution.
+    (See Section C.1 for a detailed description of all of these mitigation techniques.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: To solve this mystery, I downloaded Process Explorer^([[14](ch02s05.html#ftn.CHP-2-FN-9)])
+    and configured it to show the processes’ DEP and ASLR status.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To configure Process Explorer to show the processes’ DEP and ASLR status, I
+    added the following columns to the view: **View** ▸ **Select Columns** ▸ **DEP
+    Status** and **View** ▸ **Select Columns** ▸ **ASLR Enabled**. Additionally, I
+    set the lower pane to view DLLs for a process and added the “ASLR Enabled” column.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The output of Process Explorer, illustrated in [Figure 2-8](ch02s03.html#vlc_in_process_explorer
+    "Figure 2-8. VLC in Process Explorer"), shows that VLC and its modules use neither
+    DEP nor ASLR (this is denoted by an empty value in the DEP and ASLR columns).
+    I investigated further to determine why the VLC process does not use these mitigation
+    techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![VLC in Process Explorer](httpatomoreillycomsourcenostarchimages939243.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-8. VLC in Process Explorer
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'DEP can be controlled by system policy through special APIs and compile-time
+    options (see Microsoft’s Security Research and Defense blog^([[15](ch02s05.html#ftn.CHP-2-FN-10)])
+    for more information on DEP). The default system-wide DEP policy for client operating
+    systems such as Windows Vista is called OptIn. In this mode of operation, DEP
+    is enabled only for processes that explicitly opt in to DEP. Because I used a
+    default installation of Windows Vista 32-bit, the system-wide DEP policy should
+    be set to OptIn. To verify this, I used the `bcdedit.exe` console application
+    from an elevated command prompt:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output of the command shows that the system was indeed configured to use
+    the OptIn operation mode of DEP, which explains why VLC doesn’t use this mitigation
+    technique: The process simply doesn’t opt in to DEP.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are different ways to opt a process in to DEP. For example, you could
+    use the appropriate linker switch (/NXCOMPAT) at compile time, or you could use
+    the `SetProcessDEPPolicy` API to allow an application to opt in to DEP programmatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To get an overview of the security-relevant compile-time options used by VLC,
+    I scanned the executable files of the media player with LookingGlass (see [Figure 2-9](ch02s03.html#lookingglass_scan_result_of_vlc
+    "Figure 2-9. LookingGlass scan result of VLC")).^([[16](ch02s05.html#ftn.CHP-2-FN-11)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In 2009, Microsoft released a tool called BinScope Binary Analyzer, which analyzes
+    binaries for a wide variety of security protections with a very straightforward
+    and easy-to-use interface.^([[17](ch02s05.html#ftn.CHP-2-FN-12)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: LookingGlass showed that the linker switch for neither ASLR nor DEP was used
+    to compile VLC.^([[18](ch02s05.html#ftn.CHP-2-FN-13)]) The Windows releases of
+    VLC media player are built using the Cygwin^([[19](ch02s05.html#ftn.CHP-2-FN-14)])
+    environment, a set of utilities designed to provide the look and feel of Linux
+    within the Windows operating system. Since the linker switches that I mentioned
+    are supported only by Microsoft’s Visual C++ 2005 SP1 and later (and thus are
+    not supported by Cygwin), it isn’t a big surprise that they aren’t supported by
+    VLC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Exploit mitigation techniques of Microsoft’s Visual C++ 2005 SP1 and later*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*/GS for stack cookies/canaries*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*/DYNAMICBASE for ASLR*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*/NXCOMPAT for DEP/NX*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*/SAFESEH for exception handler protection*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![LookingGlass scan result of VLC](httpatomoreillycomsourcenostarchimages939245.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-9. LookingGlass scan result of VLC
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'See the following excerpt from the VLC build instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: At the time of this writing, VLC didn’t make use of any of the exploit mitigation
+    techniques provided by Windows Vista or later releases. As a result, every bug
+    in VLC under Windows is as easily exploited today as 20 years ago, when none of
+    these security features were widely deployed or supported.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.4 Lessons Learned
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As a programmer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Never trust user input (this includes file data, network data, etc.).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Never use unvalidated length or size values.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Always make use of the exploit mitigation techniques offered by modern operating
+    systems wherever possible. Under Windows, software has to be compiled with Microsoft’s
+    Visual C++ 2005 SP1 or later, and the appropriate compiler and linker options
+    have to be used. In addition, Microsoft has released the *Enhanced Mitigation
+    Experience Toolkit*,^([[20](ch02s05.html#ftn.CHP-2-FN-15)]) which allows specific
+    mitigation techniques to be applied without recompilation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'As a user of media players:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t ever trust media file extensions (see Section 2.5 below).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 2.5 Addendum
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Monday, October 20, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the vulnerability was fixed and a new version of VLC is now available,
+    I released a detailed security advisory on my website ([Figure 2-10](ch02s05.html#timeline_of_the_vulnerability
+    "Figure 2-10. Timeline of the vulnerability") shows the timeline).^([[21](ch02s05.html#ftn.CHP-2-FN-16)])
+    The bug was assigned CVE-2008-4654.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: According to the documentation provided by MITRE,^([[22](ch02s05.html#ftn.CHP-2-FN-17)])
+    *Common Vulnerabilities and Exposures Identifiers* (also called *CVE names*, *CVE
+    numbers*, *CVE-IDs*, and *CVEs*) are “unique, common identifiers for publicly
+    known information security vulnerabilities.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Timeline of the vulnerability](httpatomoreillycomsourcenostarchimages939247.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 2-10. Timeline of the vulnerability
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Monday, January 5, 2009*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In reaction to the bug and my detailed advisory, I got a lot of mail with various
+    questions from worried VLC users. There were two questions that I saw over and
+    over:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I have never heard of the TiVo media format before. Why would I ever open such
+    an obscure media file?
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Am I secure if I don’t open TiVo media files in VLC anymore?
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: These are valid questions, so I asked myself how I would normally learn about
+    the format of a media file I downloaded via the Internet with no more information
+    than the file extension. I could fire up a hex editor and have a look at the file
+    header, but to be honest, I don’t think ordinary people would go to the trouble.
+    But are file extensions trustworthy? No, they aren’t. The regular file extension
+    for TiVo files is *.ty*. But what stops an attacker from changing the filename
+    from *fun.ty* to *fun.avi*, *fun.mov*, *fun.mkv*, or whatever she likes? The file
+    will still be opened and processed as a TiVo file by the media player, since VLC,
+    like almost all media players, does not use file extensions to recognize the media
+    format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ^([[6](#ftn.CHP-2-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[7](#ftn.CHP-2-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[8](#ftn.CHP-2-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[9](#ftn.CHP-2-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[10](#ftn.CHP-2-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[11](#ftn.CHP-2-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[12](#ftn.CHP-2-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[13](#ftn.CHP-2-FN-8)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[14](#ftn.CHP-2-FN-9)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[15](#ftn.CHP-2-FN-10)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[16](#ftn.CHP-2-FN-11)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[17](#ftn.CHP-2-FN-12)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[18](#ftn.CHP-2-FN-13)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[19](#ftn.CHP-2-FN-14)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[20](#ftn.CHP-2-FN-15)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[21](#ftn.CHP-2-FN-16)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[22](#ftn.CHP-2-FN-17)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[6](#CHP-2-FN-1)]) See Dick Grune and Ceriel J.H. Jacobs, *Parsing Techniques:
+    A Practical Guide*, 2nd ed. (New York: Springer Science+Business Media, 2008),
+    1.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[7](#CHP-2-FN-2)]) The vulnerable source code version of VLC can be downloaded
+    at [http://download.videolan.org/pub/videolan/vlc/0.9.4/vlc-0.9.4.tar.bz2](http://download.videolan.org/pub/videolan/vlc/0.9.4/vlc-0.9.4.tar.bz2).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[8](#CHP-2-FN-3)]) Immunity Debugger is a great Windows debugger based on
+    OllyDbg. It comes with a nice GUI and a lot of extra features and plug-ins to
+    support bug hunting and exploit development. It can be found at [http://www.immunityinc.com/products-immdbg.shtml](http://www.immunityinc.com/products-immdbg.shtml).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[9](#CHP-2-FN-4)]) See David Litchfield, “Variations in Exploit Methods Between
+    Linux and Windows,” 2003, [http://www.nccgroup.com/Libraries/Document_Downloads/Variations_in_Exploit_methods_between_Linux_and_Windows.sflb.ashx](http://www.nccgroup.com/Libraries/Document_Downloads/Variations_in_Exploit_methods_between_Linux_and_Windows.sflb.ashx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[10](#CHP-2-FN-5)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[11](#CHP-2-FN-6)]) For more information on responsible, coordinated, and
+    full disclosure as well as the commercial vulnerability market, consult Stefan
+    Frei, Dominik Schatzmann, Bernhard Plattner, and Brian Trammel, “Modelling the
+    Security Ecosystem—The Dynamics of (In)Security,” 2009, [http://www.techzoom.net/publications/security-ecosystem/](http://www.techzoom.net/publications/security-ecosystem/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[12](#CHP-2-FN-7)]) The Git repository of VLC can be found at [http://git.videolan.org/](http://git.videolan.org/).
+    The first fix issued for this bug can be downloaded from [http://git.videolan.org/?p=vlc.git;a=commitdiff;h=26d92b87bba99b5ea2e17b7eaa39c462d65e9133](http://git.videolan.org/?p=vlc.git;a=commitdiff;h=26d92b87bba99b5ea2e17b7eaa39c462d65e9133).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[13](#CHP-2-FN-8)]) The fix for the subsequent VLC bug that I found can be
+    downloaded from [http://git.videolan.org/?p=vlc.git;a=commitdiff;h=d859e6b9537af2d7326276f70de25a840f554dc3](http://git.videolan.org/?p=vlc.git;a=commitdiff;h=d859e6b9537af2d7326276f70de25a840f554dc3).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[14](#CHP-2-FN-9)]) To download Process Explorer, visit [http://technet.microsoft.com/en-en/sysinternals/bb896653/](http://technet.microsoft.com/en-en/sysinternals/bb896653/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[15](#CHP-2-FN-10)]) See [http://blogs.technet.com/b/srd/archive/2009/06/12/understanding-dep-as-a-mitigation-technology-part-1.aspx](http://blogs.technet.com/b/srd/archive/2009/06/12/understanding-dep-as-a-mitigation-technology-part-1.aspx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[16](#CHP-2-FN-11)]) LookingGlass is a handy tool to scan a directory structure
+    or the running processes to report which binaries do not make use of ASLR and
+    NX. It can be found at [http://www.erratasec.com/lookingglass.html](http://www.erratasec.com/lookingglass.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[17](#CHP-2-FN-12)]) To download BinScope Binary analyzer, visit [http://go.microsoft.com/?linkid=9678113](http://go.microsoft.com/?linkid=9678113).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[18](#CHP-2-FN-13)]) A good article on the exploit mitigation techniques
+    introduced by Microsoft Visual C++ 2005 SP1 and later: Michael Howard, “Protecting
+    Your Code with Visual C++ Defenses,” *MSDN Magazine*, March 2008, [http://msdn.microsoft.com/en-us/magazine/cc337897.aspx](http://msdn.microsoft.com/en-us/magazine/cc337897.aspx).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[19](#CHP-2-FN-14)]) See [http://www.cygwin.com/](http://www.cygwin.com/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[20](#CHP-2-FN-15)]) The Enhanced Mitigation Experience Toolkit is available
+    at [http://blogs.technet.com/srd/archive/2010/09/02/enhanced-mitigation-experience-toolkit-emet-v2-0-0.aspx](http://blogs.technet.com/srd/archive/2010/09/02/enhanced-mitigation-experience-toolkit-emet-v2-0-0.aspx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[21](#CHP-2-FN-16)]) My security advisory that describes the details of the
+    VLC vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2008-010.txt](http://www.trapkit.de/advisories/TKADV2008-010.txt).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[22](#CHP-2-FN-17)]) See [http://cve.mitre.org/cve/identifiers/index.html](http://cve.mitre.org/cve/identifiers/index.html).
+  prefs: []
+  type: TYPE_NORMAL

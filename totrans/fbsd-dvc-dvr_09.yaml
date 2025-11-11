@@ -1,0 +1,550 @@
+- en: 'Chapter 9. Case Study: Parallel Port Printer Driver'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This chapter is the second case study in this book. In this chapter, we’ll go
+    through `lpt(4)`, the parallel port printer driver. `lpt(4)`, by default, is configured
+    to be interrupt-driven, which gives us an opportunity to go through a nontrivial
+    interrupt handler. Aside from this, I chose to profile `lpt(4)` because it uses
+    almost every topic described in the previous chapters. It’s also relatively short.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To improve readability, some of the variables and functions presented in this
+    chapter have been renamed and restructured from their counterparts in the FreeBSD
+    source.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Code Analysis
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 9-1](ch09.html#lpt.c "Example 9-1. lpt.c") provides a terse, source-level
+    overview of `lpt(4)`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 9-1. lpt.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[Example 9-1](ch09.html#lpt.c "Example 9-1. lpt.c") is provided as a convenience;
+    as I go through the code for lpt(4) you can refer to it to see how `lpt(4)`’s
+    functions and structures are laid out.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To make things easier to follow, I’ll analyze the functions in `lpt(4)` in the
+    approximate order they would execute in (rather than in the order they appear).
+    To that end, I’ll begin with the `lpt_identify` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_identify Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `lpt_identify` function is the `device_identify` implementation for `lpt(4)`.
+    Logically, this function is required because the parallel port cannot identify
+    its children unaided.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `lpt_identify`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) determines
+    whether the parallel port has (ever) identified a child device named ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `LPT_NAME`. If it has not, then `lpt_identify` ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    adds `LPT_NAME` to the parallel port’s list of identified children.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_probe Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `lpt_probe` function is the `device_probe` implementation for `lpt(4)`.
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function simply calls ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `lpt_detect` to detect (that is, probe for) the presence of a printer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_detect Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As mentioned in the previous section, `lpt_detect` detects the presence of a
+    printer. It works by writing to the parallel port’s data register. If a printer
+    is present, it can read back the value just written.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `lpt_detect`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137501.png) acquires
+    the parallel port mutex. Next, `lpt(4)` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    assigned ownership of the parallel port. Then ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `lpt_port_test` is called to write to and read from the parallel port’s data register.
+    The values written to this 8-bit register are housed in ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `test[]` and are designed to toggle all 8 bits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once this is done, the parallel port’s ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    data and ![](httpatomoreillycomsourcenostarchimages1137509.png) control registers
+    are cleared, ownership of the parallel port is ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    relinquished, and the parallel port mutex is ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    released.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_port_test Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `lpt_port_test` function is called by `lpt_detect` to determine whether
+    a printer is present. Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function takes an ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    8-bit value and ![](httpatomoreillycomsourcenostarchimages1137501.png) writes
+    it to the parallel port’s data register. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    reads from that register and ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    returns whether the value written and read match.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_attach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `lpt_attach` function is the `device_attach` implementation for `lpt(4)`.
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can be split into five parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    sets `sc->sc_primed` to `0` to indicate that the printer needs to be primed. It
+    also ![](httpatomoreillycomsourcenostarchimages1137501.png) initializes `lpt(4)`’s
+    `callout` structure. The second part essentially ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    changes the electrical signal at pin 16, dubbed *nINIT*, from high to low causing
+    the printer to initiate an internal reset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As most signals are active high, the *n* in *nINIT* denotes that the signal
+    is active low.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The third part registers the function ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `lpt_intr` as the interrupt handler. If successful, the `variable sc->sc_irq_status`
+    is ![](httpatomoreillycomsourcenostarchimages1137507.png) assigned `LP_HAS_IRQ`,
+    `LP_USE_IRQ`, and `LP_ENABLE_IRQ` to indicate that the printer is interrupt-driven.
+    The fourth part allocates memory for two buffers: ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `sc->sc_buf` (which will maintain the data to be printed) and ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `sc->sc_buf_stat` (which will maintain the printer’s status). Finally, the fifth
+    part creates `lpt(4)`’s device nodes: `lpt%d` and `lpt%d.ctl`, where `%d` is the
+    unit number. Note that `lpt%d.ctl` contains the ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `LP_BYPASS` flag, while `lpt%d` does not. In the `d_foo` functions, `LP_BYPASS`
+    is used to tell `lpt%d.ctl` from `lpt%d`. As you’ll see, the `lpt%d` device node
+    represents the printer, while `lpt%d.ctl` is used solely to change the printer’s
+    mode of operation (via `lpt(4)`’s `d_ioctl` routine).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_detach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `lpt_detach` function is the `device_detach` implementation for `lpt(4)`.
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) destroying `lpt(4)`’s device
+    nodes. Once this is done, it ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    relinquishes ownership of the parallel port, ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    drains `lpt(4)`’s callout function, ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    tears down `lpt(4)`’s interrupt handler, ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    releases `lpt(4)`’s IRQ, and ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    ![](httpatomoreillycomsourcenostarchimages1137513.png) frees the allocated memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_open Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `lpt_open` function is defined in `lpt_cdevsw` (that is, `lpt(4)`’s character
+    device switch table) as the `d_open` operation. Recall that `d_open` operations
+    prepare the device for I/O.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `lpt_open`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can be split into six parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    checks the value of `sc->sc_state`. If it does not equal `0`, which implies that
+    another process has opened the printer, the error code `EBUSY` is returned; otherwise,
+    `sc->sc_state` is assigned `LP_INIT`. The second part ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    checks the value of `dev->si_drv2`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If it contains the `LP_BYPASS` flag, which indicates that the device node is
+    `lpt%d.ctl, sc->sc_state` is set to `LP_OPEN` and `lpt_open` exits. Recall that
+    `lpt%d.ctl` is used solely to change the printer’s mode of operation, hence the
+    minute amount of preparatory work. The third part ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    primes the printer and then ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    selects and resets the printer (a printer prepares to receive data when it’s selected,
+    which occurs when the electrical signal at pin 17, dubbed *nSELIN*, changes from
+    high to low). The fourth part ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    waits for the printer to ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    finish its internal reset. The fifth part ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    selects and resets the printer, ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    enables automatic line feed if requested,^([[8](#ftn.CHP-9-FN-1)]) and ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    enables interrupts if the printer is interrupt-driven. The fifth part also assigns
+    `LP_OPEN` to `sc->sc_state` and zeroes the variable `sc->sc_transfer_count`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Automatic line feed is enabled when the electrical signal at pin 14, dubbed
+    nAUTOF, changes from high to low. As you would expect, this causes the printer
+    to automatically insert a line feed after each line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, the sixth part causes ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    `lpt_timeout` to execute one time after `sc->sc_ticks` / `hz` seconds. The `lpt_timeout`
+    function is used alongside the interrupt handler `lpt_intr`. I’ll discuss these
+    functions shortly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_read Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `lpt_read` function retrieves the printer’s status. Users can get the printer’s
+    status by applying the `cat(1)` command to the device node `lpt%d`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `lpt_read`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This function first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    checks the value of `sc->sc_flags`. If it contains the `LP_BYPASS` flag, which
+    indicates that the device node is `lpt%d.ctl`, the error code `EPERM` (which stands
+    for *error: operation not permitted*) is returned. Next, the function ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `ppb_1284_negociate` is called to put the parallel port interface into ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    nibble mode.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Nibble mode is the most common way to retrieve data from a printer. Normally,
+    pins 10, 11, 12, 13, and 15 are used by the printer as external status indicators;
+    however, in nibble mode these pins are used to send data to the host (4 bits at
+    a time).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remainder of this function transfers data from the printer to user space.
+    The data in this case is the printer’s status. Here, ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `ppb_1284_read` transfers data from the printer to ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    kernel space. The number of bytes transferred is saved in ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `num`. If `num` ![](httpatomoreillycomsourcenostarchimages1137511.png) equals
+    `0`, `lpt_read` exits. The ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `uiomove` function then moves the data from ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    kernel space to ![](httpatomoreillycomsourcenostarchimages1137517.png) user space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_write Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `lpt_write` function acquires data from user space and stores it in `sc->sc_buf`.
+    This data is then sent to the printer to be printed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `lpt_write`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Like `lpt_read`, this function starts by checking the value of `sc->sc_flags`.
+    If it contains the `LP_BYPASS` flag, the error code `EPERM` is returned. Next,
+    the `LP_INTERRUPTED` flag is ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    removed from `sc->sc_state` (as you’ll see, `LP_INTERRUPTED` is added to `sc->sc_state`
+    whenever a write operation is interrupted). The following `while` loop contains
+    the bulk of `lpt_write`. Note that its ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    expression determines the amount of data to ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    copy from user space to kernel space. This amount is saved in ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `sc->sc_transfer_count`, which is decremented each time a byte is sent to the
+    printer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, there are three ways to transfer data from kernel space to the printer.
+    First, if extended mode is ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    enabled, `lpt_write` can ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    write directly to the printer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Extended mode refers to either Enhanced Parallel Port (EPP) or Extended Capabilities
+    Port (ECP) mode. EPP and ECP modes are designed to transmit data faster and with
+    less CPU overhead than normal parallel port communications. Most parallel ports
+    support one or both of these modes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Second, if the printer is ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    interrupt-driven and the `LP_BUSY` flag is cleared in `sc->sc_state`, `lpt_write`
+    can call ![](httpatomoreillycomsourcenostarchimages1137513.png) `lpt_intr` to
+    transfer data to the printer. Looking at the function definition for `lpt_intr`
+    in the following section, you’ll see that `LP_BUSY` is set during `lpt_intr`’s
+    execution, and that `LP_BUSY` is not cleared until `sc->sc_transfer_count` is
+    `0`. This prevents `lpt_write` from issuing another interrupt-driven transfer
+    until the current one completes, which is why `lpt_write` ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    sleeps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, if the first and second options are unavailable, `lpt_write` can issue
+    a polled transfer by calling ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    `lpt_push_bytes`, which is described in [lpt_push_bytes Function](ch09.html#lpt_underscore_push_underscore_bytes_fun
+    "lpt_push_bytes Function") in [lpt_close Function](ch09.html#lpt_underscore_close_function
+    "lpt_close Function").
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_intr Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `lpt_intr` function is `lpt(4)`’s interrupt handler. This function transfers
+    1 byte from `sc->sc_buf` to the printer and then it exits. When the printer is
+    ready for another byte, it will send an interrupt. Note that in `lpt_intr`, `sc->sc_buf`
+    is accessed via `sc->sc_cp`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `lpt_intr`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) checks
+    ad nauseam that the printer is online and ready for output. If it is, the ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `LP_BUSY` flag is added to `sc->sc_state` and the `LP_ERROR` flag, which denotes
+    a printer error, is removed. Next, `sc->sc_ticks` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    reset. Then 1 byte from `sc->sc_buf` is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    written to the parallel port’s data register and subsequently ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    sent to the printer (data on the parallel port interface is sent to the printer
+    when the electrical signal at pin 1, dubbed *nSTROBE*, changes from high to low).
+    If there is more data to send (that is, `sc->sc_transfer_count` is greater than
+    `0`), `lpt_intr` ![](httpatomoreillycomsourcenostarchimages1137509.png) exits,
+    because it is protocol to wait for an interrupt before sending another byte. If
+    there is no more data to send, `LP_BUSY` is ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    cleared from `sc->sc_state` and `lpt_write` is ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    woken up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_timeout Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `lpt_timeout` function is the callout function for `lpt(4)`. It is designed
+    to deal with missed or unhandled interrupts. Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) checks
+    whether `lpt%d` is open. If so, `lpt_timeout` ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    reschedules itself to execute. Next, `LP_ERROR` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    removed from `sc->sc_state`. Now if `lpt(4)` has ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    missed an interrupt, ![](httpatomoreillycomsourcenostarchimages1137507.png) `lpt_intr`
+    is called to restart transferring data to the printer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that without the `if` block at ![](httpatomoreillycomsourcenostarchimages1137505.png),
+    `lpt(4)` would hang waiting for an interrupt that’s been sent and lost.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_push_bytes Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `lpt_push_bytes` function uses polling to transfer data to the printer.
+    This function is called (by `lpt_write`) only if extended mode is disabled and
+    the printer is not interrupt-driven.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `lpt_push_bytes`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) verifies
+    that there is data to transfer. Then it ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    polls the printer to see if it is online and ready for output. If the printer
+    is not ready, `lpt_push_bytes` ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    sleeps for a short period of time and then repolls the printer when it wakes up.
+    This cycle of sleeping and polling is repeated until the printer is ready. If
+    the printer is ready, 1 byte from `sc->sc_buf` is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    written to the parallel port’s data register and then ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    sent to the printer. This entire process is repeated until all of the data in
+    `sc->sc_buf` is transferred.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_close Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `lpt_close` function is defined in `lpt_cdevsw` as the `d_close` operation.
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Like `lpt_read` and `lpt_write`, this function first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    checks the value of `sc->sc_flags`. If it contains the `LP_BYPASS flag`, `lpt_close
+    jumps` to ![](httpatomoreillycomsourcenostarchimages1137513.png) `end_close`.
+    Next, `lpt(4)` is assigned ownership of the parallel port. The following ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `if` block ensures that if there is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    still data to transfer and the printer is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    interrupt-driven, the transfer is completed before closing `lpt%d`. Then, `LP_OPEN`
+    is ![](httpatomoreillycomsourcenostarchimages1137507.png) removed from `sc->sc_state`,
+    `lpt_timeout is` ![](httpatomoreillycomsourcenostarchimages1137509.png) stopped,
+    the printer is ![](httpatomoreillycomsourcenostarchimages1137511.png) reset, and
+    ownership of the parallel port is relinquished. Lastly, ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    `sc->sc_state` and ![](httpatomoreillycomsourcenostarchimages1137517.png) `sc->sc_transfer_count`
+    are zeroed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_ioctl Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `lpt_ioctl` function is defined in `lpt_cdevsw` as the `d_ioctl` operation.
+    Before I describe this function, an explanation of its ioctl command, `LPT_IRQ`,
+    is needed. `LPT_IRQ` is defined in the `<dev/ppbus/lptio.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, `LPT_IRQ` requires a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `long int` value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Based on the ![](httpatomoreillycomsourcenostarchimages1137501.png) argument
+    given to ![](httpatomoreillycomsourcenostarchimages1137499.png) `LPT_IRQ`, `lpt_ioctl`
+    either ![](httpatomoreillycomsourcenostarchimages1137503.png) disables interrupt-driven
+    mode (which enables polled mode), ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    enables interrupt-driven mode, ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    enables extended mode, or ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    disables extended mode (which enables standard mode). Note that interrupt-driven
+    mode and extended mode conflict with each other, so if one is enabled, the other
+    is disabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To run this function, you’d use the `lptcontrol(8)` utility, whose source code
+    I suggest you take a quick look at.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_request_ppbus Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `lpt_request_ppbus` function sets `lpt(4)` as the owner of the parallel
+    port. Recall that owning the parallel port lets a device (such as `lpt%d`) transfer
+    data to and from it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `lpt_request_ppbus`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    checking the value of `sc->sc_state`. If it contains `LP_HAVEBUS`, which indicates
+    that `lpt(4)` currently owns the parallel port, `lpt_request_ppbus` ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    exits. Otherwise, ![](httpatomoreillycomsourcenostarchimages1137503.png) `ppb_request_bus`
+    is called to set `lpt(4)` as the owner of the parallel port and `sc->sc_state`
+    is ![](httpatomoreillycomsourcenostarchimages1137505.png) assigned `LP_HAVEBUS`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: lpt_release_ppbus Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `lpt_release_ppbus` function causes `lpt(4)` to relinquish ownership of
+    the parallel port. Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) verifies
+    that `lpt(4)` currently owns the parallel port. Next, it calls ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `ppb_release_bus` to relinquish ownership of the parallel port. Then `LP_HAVEBUS`
+    is ![](httpatomoreillycomsourcenostarchimages1137503.png) removed from `sc->sc_state`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[8](#CHP-9-FN-1)]) Curiously enough, it’s currently impossible to request
+    automatic line feed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter described the entire code base of `lpt(4)`, the parallel port printer
+    driver.
+  prefs: []
+  type: TYPE_NORMAL

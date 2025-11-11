@@ -1,0 +1,2440 @@
+- en: Part I. From Source Code to a Running Installation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Chapter 1. Installation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The simplest method of installation is for you to install the Nagios packages
+    that are supplied with the distribution you are using. Nagios 2.x is by now extremely
+    mature and is therefore a component of most distributions. The paths of individual
+    directories in those packages maintained by Linux distributors are usually different
+    from the default specified in the source package, and thus from the paths used
+    in this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Nagios 3.0 is relatively new; it is recommended here that you "get your hands
+    dirty" by compiling and installing the software yourself. The following installation
+    guide also applies to Nagios 2.x, and any differences between versions 2.x and
+    3.0 are mentioned explicitly in the text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you compile your own software, you have control over the directory structures
+    and a number of other parameters. A Nagios system compiled in this way also provides
+    an almost complete main configuration file, in which, initially, nothing has to
+    be changed. But it should be mentioned here that compiling Nagios yourself might
+    involve a laborious search for the necessary development packages, depending on
+    what is already installed on the computer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.1 Preparations
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For compiling Nagios itself you require **`gcc`**, **`make`**, **`autoconf`**,
+    and **`automake`**. Required libraries are **`libgd`**^([[9](#ftn.CHP-1-FN-1)])
+    and **`openssl`**^([[10](#ftn.CHP-1-FN-2)]). The development packages for these
+    must also be installed (depending on the distribution, with either the ending
+    **`-dev`** or **`-devel`**): **`libssl-dev`**, **`libgd-dev`**, **`libc6-dev`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With Debian and Ubuntu you prepare by using **`apt-get install`** to install
+    the packages **`apache2`**, **`build-essential`**, and **`libgd2-dev`**. In Open-SUSE
+    you install **`apache2`** via YAST2, along with all C/C++ development libraries,
+    as well as the package **`gd`**. In Fedora you run the command **`yum install`**
+    on the command line and enter the packages **`httpd`**, **`gcc`**, **`glibc`**,
+    **`glibc-common`**, **`gd`**, and **`gd-devel`** as arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the plugins it is recommended that you also install the following packages:
+    **`ntpdate`**^([[11](#ftn.CHP-1-FN-3)]) (possibly contained in the package **`ntp`**
+    or **`xntp`**), **`snmp`**,^([[12](#ftn.CHP-1-FN-4)]) **`smbclient`**^([[13](#ftn.CHP-1-FN-5)])
+    (possibly a component of the package **`samba-client`**), the **`libldap2`** library,
+    and the relevant development package **`libldap2-dev`**^([[14](#ftn.CHP-1-FN-6)])
+    (depending on the distribution, the appropriate packages are also called **`openldap2-client`**
+    and **`openldap2-devel`**). You will also need to install the client and developer
+    packages for the database used (e.g., **`postgresql-client`** and **`postgresql-dev(el)`**).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.1.1 Determining and setting up the required users
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Prior to compiling and installing, use the command **`groupadd`** to set up
+    the groups necessary for operation. Groups **`nagios`** and **`nagcmd`** are set
+    up with **`groupadd`**, and the user **`nagios`**, who is assigned to these groups
+    and with whose permissions the Nagios server runs is set up with **`useradd`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Instead of the user (9000) and group IDs (9000 or 9001) used here, any other
+    available IDs may be used. The primary group **`nagios`** of the user **`nagios`**
+    should remain reserved exclusively for this user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The CGI scripts are run by Nagios under the user ID of the user with whose
+    permissions the Apache Web server runs. In order for this user to access certain
+    protected areas of Nagios, an additional group is required, the so-called *Nagios
+    Command Group* **`nagcmd`**. Only the Web user and the user **`nagios`** should
+    belong to this group. The Web user can be determined from the Apache configuration
+    file. In Debian/Ubuntu this is located at **`/etc/apache2/apache2.conf`**; in
+    Fedora it is at **`/etc/httpd/httpd.conf`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The user determined in this way (in Debian/Ubuntu **`www-data`**, in Open-SUSE
+    **`www-run`**, and in Fedora **`httpd`**) is additionally assigned to the group
+    **`nagcmd`**, shown here using the example for Debian/Ubuntu:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the example, the Web user is called **`www-data`**. The command **`usermod`**
+    (this changes the data for an existing user account) also includes the Web user
+    in the **`nagcmd`** group thanks to the **`-G`** option, by manipulating the corresponding
+    entry in the file **`/etc/group`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In addition, the directory specified as the home directory of the user **`nagios`**,
+    **`/usr/local/nagios`**, the configuration directory **`/etc/nagios`**, and the
+    directory **`/var/nagios`**, which records variable data while Nagios is running,
+    are set up manually and are assigned to the user **`nagios`** and to the group
+    of the same name:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[9](#CHP-1-FN-1)]) [http://www.boutell.com/gd/](http://www.boutell.com/gd/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[10](#CHP-1-FN-2)]) [http://www.openssl.org/](http://www.openssl.org/) Depending
+    on the distribution, the required RPM and Debian packages are sometimes named
+    differently. Here you need to refer to the search help in the corresponding distribution.
+    For Debian, the homepage will be of help. For example, if a **`configure`** instruction
+    complains of a missing **`gd.h`** file, you can search specifically at [http://www.debian.org/distrib/packages](http://www.debian.org/distrib/packages)
+    for the contents of packages. The search will then come up with all packages that
+    contain the file **`gd.h`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[11](#CHP-1-FN-3)]) [http://ntp.isc.org/bin/view/Main/SoftwareDownloads](http://ntp.isc.org/bin/view/Main/SoftwareDownloads)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[12](#CHP-1-FN-4)]) [http://net-snmp.sourceforge.net/](http://net-snmp.sourceforge.net/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[13](#CHP-1-FN-5)]) [http://samba.org/samba/](http://samba.org/samba/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[14](#CHP-1-FN-6)]) [http://www.openldap.org/](http://www.openldap.org/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.2 Compiling Source Code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The Nagios source code is available for download on the project page.^([[15](#ftn.CHP-1-FN-7)])
+    The installation description below is for version 3.0, which is provided by the
+    developers as a tarball. A Nagios 2.x installation runs in an almost identical
+    manner:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The three commands unpack the source code into the directory created for this
+    purpose, **`/usr/local/src`**. A subdirectory called **`nagios-3.0`** is also
+    created, containing the Nagios sources. To prepare these for compilation, enter
+    the parameter deviating from the default value when running the **`configure`**
+    command. [Table 1-1](../Text/ch01s02.html#installation_parameters_for_nagios "Table 1-1. Installation
+    parameters for Nagios") lists the most important parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The values chosen here ensure that the installation routine selects the directories
+    used in the book and sets all parameters correctly when generating the main configuration
+    file. This simplifies fine tuning of the configuration considerably. If you want
+    to use the Embedded Perl Interpreter to accelerate the execution of Perl scripts,
+    then you also need the two switches **`--with-perlcache and --enable-embedded-perl`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In Nagios 3.0 you can leave out **`--with-perlcache`**, as it is enabled automatically
+    by **`--enable-embedded-perl`**. You can find more on the Embedded Perl Interpreter
+    in [Appendix G](../Text/apg.html "Appendix G. The Embedded Perl Interpreter"),
+    page 669.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 1-1. Installation parameters for Nagios
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Property | Value | configure Option |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Root directory | **`/usr/local/nagios`** | **`--prefix`** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Configuration directory | **`/etc/nagios`** | **`--sysconfdir`** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Directory for variable data | **`/var/nagios`** | **`--localstatedir`** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Nagios user (UserID) | **`nagios (9000)`** | **`--with-nagios-user`** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Nagios group (GroupID) | **`nagios (9000)`** | **`--with-nagios-group`**
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Nagios Command Group (GroupID) | **`nagcmd (9001)`** | **`--with-command-group`**
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '**`If --prefix`** is not specified, Nagios installs itself in the **`/usr/local/nagios`**
+    directory. We recommend that you stick to this directory.^([[16](#ftn.CHP-1-FN-8)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The system normally stores its configuration files in the directory **`etc`**
+    beneath its root directory. In general it is better to store these in the **`/etc`**
+    hierarchy however. Here we use **`/etc/nagios`**.^([[17](#ftn.CHP-1-FN-9)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Variable data such as the log file and the status file are by default stored
+    in the directory **`/usr/local/nagios/var`**. This is in the **`/usr`** hierarchy
+    which should only contain programs and other read-only files, not writable ones.
+    In order to ensure that this is the case, we use **`/var/nagios`**.^([[18](#ftn.CHP-1-FN-10)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Irrespective of these changes, in most cases **`configure`** does not run through
+    faultlessly the very first time, since one package or another is missing. For
+    required libraries such as **`libgd`**, Nagios almost always demands the relevant
+    developer package with the header files (here, **`libgd-dev`** or **`libgd-devel`**).
+    Depending on the distribution, their names will end in **`-devel`** or **`-dev`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After all the tests have been run through, **`configure`** presents a summary
+    of all the important configuration parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: In Nagios 2.x the lines **`Check result directory`**, **`Apache conf.d directory`**,
+    and **`Mail program`** are missing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If a **`yes`** is written after the item **`Embedded Perl`**, the Embedded Perl
+    Interpreter is enabled. The *Event Broker* provides an interface for extensions
+    that can be loaded as additional modules while the system is running.^([[19](#ftn.CHP-1-FN-11)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are satisfied with the result, **`make`** starts the actual compilation
+    and then installs the software:^([[20](#ftn.CHP-1-FN-12)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The command **`make all`** compiles all the relevant programs, which are then
+    copied to the appropriate directories, together with CGI scripts and documentation,
+    by **`make install`**. Apart from **`/etc/nagios`** and **`/var/nagios`**, further
+    directories are created under **`/usr/local/nagios`**, which are summarized in
+    [Table 1-2](../Text/ch01s02.html#nagios_directories_under_solidus_usr_sol "Table 1-2. Nagios
+    directories under /usr/local/nagios").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 1-2. Nagios directories under `/usr/local/nagios`
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Directory | Contents |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`./bin`** | Executable Nagios main program |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`./libexec`** | Plugins |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`./sbin`** | CGI scripts |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`./share`** | Documentation, HTML files for the Web interface |'
+  prefs: []
+  type: TYPE_TB
+- en: The command **`make install-commandmode`** generates the directory that is required
+    for later usage of the *command file mechanism* (see [13.1 The Interface for External
+    Commands](../Text/ch13.html#the_interface_for_external_commands "13.1 The Interface
+    for External Commands"), page 292) onwards. This step is optional, depending on
+    the intended use, but since it is easy to forget later on, it is better to take
+    precautions now. The final **`make install-config`** creates the example configuration,
+    which will be used in [Chapter 2](../Text/ch02.html "Chapter 2. Nagios Configuration"),
+    page 53.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[15](#CHP-1-FN-7)]) [http://www.nagios.org/](http://www.nagios.org/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[16](#CHP-1-FN-8)]) In accordance with the *Filesystem Hierarchy Standard*
+    FHS, version 2.3, or local programs loaded by the administrator should be installed
+    in **`/usr/local`**
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[17](#CHP-1-FN-9)]) This is not entirely compatible with FHS 2.3, which would
+    prefer to have the configuration files in **`/etc/local/nagios`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[18](#CHP-1-FN-10)]) This also does not quite match the requirements of the
+    FHS 2.3\. But since Nagios makes no differentiation between spool, cache, and
+    status information, an FHS-true reproduction is not possible to achieve in a simple
+    manner.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[19](#CHP-1-FN-11)]) At the time of going to press there were not yet any
+    external extensions, which is why the Event Broker is currently only of interest
+    to developers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[20](#CHP-1-FN-12)]) Caution is needed when updating from Nagios 2.x to
+    Nagios 3.0: Here you should first back up the existing configuration, initially
+    run only **`make all`**, and carefully read [H.13 Upgrade from Nagios 2.x to 3.0](../Text/aphs13.html
+    "H.13 Upgrade from Nagios 2.x to 3.0") in page 693\. In Nagios 3.0 a **`make install-config`**
+    command overwrites existing files!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.3 Starting Nagios Automatically
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The command **`make install-init`** installs a suitable init script for the
+    system start. Here **`make`** automatically tries to detect the correct path,
+    which for most Linux distributions is **`/etc/init.d`**. Depending on your system,
+    this may not be correct, which is why you should check it. In order for Nagios
+    to start automatically when the system is booted, symbolic links are created in
+    the **`/etc/rc?.d`** directories. With Debian and Ubuntu using System-V-Init,
+    the included system script **`update-rc.d`** performs this task:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This command creates symlinks beginning with the prefix **`S99`** to the directories
+    **`rc2.d`** to **`rc5.d`**, so that Nagios starts automatically when changing
+    to runlevels 2 to 5\. In addition it ensures that **`K99`** symlinks in the directories
+    **`rc0.d`**, **`rc1.d`**, and **`rc6.d`** are responsible for stopping Nagios
+    when the system is shut down and rebooted, as well as when it changes to maintenance
+    mode. This corresponds to the following command-line commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For OpenSUSE the required symlinks are created using the script **`insserv`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Fedora users perform this task with **`chkconfig`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 1.4 Installing and Testing Plugins
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What is now still missing are the plugins. They must be downloaded separately
+    from [http://www.nagios.org/](http://www.nagios.org/) and installed. As independent
+    programs, they are subject to a different versioning system than Nagios. The current
+    version at the time of going to press was version 1.4.11, but you can, for example,
+    also use plugins from earlier version if you don't mind doing without the most
+    recent features. Although the plugins are distributed in a common source distribution,
+    they are independent of one another, so that you can replace one version of an
+    individual plugin with another one at any time, or with one you have written yourself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.4.1 Installation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The installation of the plugin sources takes place, like the Nagios ones, in
+    the directory **`/usr/local`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: When running the **`configure`** command you should specify the same non-default
+    values as for the server, which here are the configuration directory (**`/etc/nagios`**)
+    and the directory intended for the data saved by Nagios (**`/var/nagios`**). Since
+    the Nagios plugins are not maintained by the same people as Nagios itself, you
+    should always check in advance, with **`./configure --help`**, whether the **`configure`**
+    options for Nagios and the plugins really match or deviate from one another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The switch **`--enable-perl-modules`** is only needed if you intend to install
+    the Perl module **`Nagios::Plugin`**—for example, if you are using it to program
+    your own plugins in Perl. You can read more on this in [24.2 The Perl Module Nagios::Plugin](../Text/ch24s02.html
+    "24.2 The Perl Module Nagios::Plugin"), page 560.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is possible that a series of **`WARNING`**s may appear in the output of
+    the **`configure`** command, something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you are not using Radius, you need not have qualms about ignoring the corresponding
+    error messages. Otherwise you should install the missing packages and repeat the
+    **`configure`** procedure. The quite frequently required SNMP functionality is
+    missing a Perl module in this example. This may be installed either in the form
+    of the distribution package or via the online CPAN archive:^([[21](#ftn.CHP-1-FN-13)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you are running the CPAN procedure for the first time, it will guide you
+    interactively through a self-explanatory setup, and you can answer nearly all
+    of the questions with the default option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running **`make`** in the directory **`nagios-plugins-1.4.11`** will compile
+    all plugins. Afterwards you have the opportunity to perform tests, with **`make
+    check`**. Because these tests have not been particularly carefully programmed,
+    you will often see many error messages that have more to do with the test itself
+    than with the plugin. If you still want to try it, then the **`Cache`** Perl module
+    must also be installed. Regardless of whether you use **`make check`**, you should
+    manually check the most important plugins after the installation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The command **`make install`** finally anchors the plugins in the subdirectory
+    **`libexec`** (which in our case is **`/usr/local/nagios/libexec`**). However,
+    not all of them are installed through this command. The source directory **`contrib`**
+    contains a number of plugins that **`make install`** does not install automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most plugins in this directory are shell or Perl scripts. Where needed, these
+    are simply copied to the plugin directory **`/usr/local/nagios/libexec`**. The
+    few C programs first must be compiled, which in some cases may be no laughing
+    matter, since a corresponding makefile, and often even a description of the required
+    libraries, can be missing. If a simple **`make`** is not sufficient, as in the
+    case of
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: then it is best to look for help in the mailing list **`nagiosplug-help`**.^([[23](#ftn.CHP-1-FN-15)])
+    The compiled program must also be copied to the plugin directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.4.2 Plugin test
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Because plugins are independent programs, they can already be used manually
+    for test purposes right now—before the installation of Nagios has been completed.
+    In any case you should check the **`check_icmp`** plugin, which plays an essential
+    role. It checks whether another computer can be reached via **`ping`**, and it
+    is the only plugin to be used both as a service check and a host check. If it
+    is not working correctly, Nagios will not work correctly either, since the system
+    cannot perform any service checks as long as it categorizes a host as "down."
+    [6.2 Reachability Test with Ping](../Text/ch06s02.html "6.2 Reachability Test
+    with Ping"), 108, describes **`check_icmp`** in detail, which is why there is
+    only short introduction here describing its manual use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order for the plugin to function correctly it must, like the **`/bin/ping`**
+    program, be run as the user **`root`**. This is done by providing it with the
+    *SUID bit*.With current plugin versions, **`make install`** sets this automatically.
+    One way this can be seen is in the fact that the sources contain an additional
+    directory, **`plugins-root`**. With older plugin versions you have to do this
+    manually:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Brief instructions for the plugin are given with the **`-h`** option:^([[24](#ftn.CHP-1-FN-16)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For a simple test it is sufficient to specify an IP address (it is immaterial
+    whether you prefix the **`-H`** flag or not):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output appears as a single line, which has been line-wrapped here for the
+    printed version: with zero percent package loss (**`lost 0%`**), the test has
+    been passed. Nagios uses only the first 300 bytes of the output line. If the plugin
+    provides more information, this is cut off.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you would like to test other plugins, we refer you to [Chapter 6](../Text/ch06.html
+    "Chapter 6. Plugins for Network Services") and [Chapter 7](../Text/ch07.html "Chapter 7. Testing
+    Local Resources"), which describe the most important plugins in detail. All (reasonably
+    well-programmed) plugins provide somewhat more detailed instructions with the
+    **`--help`** option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[21](#CHP-1-FN-13)]) The *Comprehensive Perl Archive Network* at [http://www.cpan.org/](http://www.cpan.org/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[22](#CHP-1-FN-14)]) With **`check_cluster`**, hosts and services of a cluster
+    can be monitored. Here you usually want to be notified if all nodes or redundant
+    services provided fail at the same time. If one specific service fails on the
+    other hand, this is not critical, as long as other hosts in the cluster provide
+    this service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[23](#CHP-1-FN-15)]) [http://lists.sourceforge.net/lists/listinfo/nagiosplug-help](http://lists.sourceforge.net/lists/listinfo/nagiosplug-help)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[24](#CHP-1-FN-16)]) The listed options are explained in detail in [6.2 Reachability
+    Test with Ping](../Text/ch06s02.html "6.2 Reachability Test with Ping") from page
+    108.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.5 Configuration of the Web Interface
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In order for the Web front end of Nagios to function, the Web server must know
+    the CGI directory and the main Web directory. The following description applies
+    to both Apache 1.3, Apache 2.0, and 2.2.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.5.1 Setting up Apache
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As long as you have not added a different address for the front end, through
+    the **`configure`** script with **`-with-cgiurl`**, Nagios expects the CGI programs
+    at the URL **`/nagios/cgi-bin`** (actual directory: **`/usr/local/na-gios/sbin`**)
+    as well as the remaining HTML files below **`/nagios`** (actual directory: **`/usr/local/nagios/share`**).
+    Nagios 3.0 includes its own **`make`** target for the Web interface, which configures
+    the directories and sets corresponding aliases for the two URLs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This command installs the file **`nagios.conf`** in the configuration directory
+    of Apache. In Debian/Ubuntu and OpenSUSE it is named **`/etc/apache2/`** **`conf.d`**,
+    or in Fedora **`/etc/httpd/conf.d`**. It looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: In Nagios 2.x you have to set up the file by hand.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The directive **`ScriptAlias`** ensures that Apache accesses the Nagios CGI
+    directory when calling a URL such as [http://nagios-server/nagios/cgi-bin](http://nagios-server/nagios/cgi-bin),
+    irrespective of where the Apache CGI directories may be located. **`Options ExcecCGI`**
+    ensures that the Web server accepts all the scripts located there as CGI. **`Order`**
+    and **`Allow`** initially allow unrestricted access here to the Web server. If
+    you want to restrict access, the sequence of the **`Order`** arguments is altered:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: This example ensures that only clients from the network **`192.0.2.0/24 (/24`**
+    stands for the subnet mask **`255.255.255.0`**) and **`localhost`** gain access
+    to the directory specified. The three **`Auth*`**- and the **`Require`** directives
+    ensure authenticated access; more on user authentication in [1.5.3 User authentication](../Text/ch01s05.html#user_authentication
+    "1.5.3 User authentication") in page 49.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The section for the Nagios documents directory **`/usr/local/nagios/share`**
+    is constructed in a similar fashion: the directive **`Alias`** allows the directory
+    beneath the URL [http://nagios-server/nagios](http://nagios-server/nagios) to
+    be addressed, independently of where the Apache-**`DocumentRoot`** is located.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The directives **`Order`** and **`Allow`** (and also **`Deny`**, if needed)
+    are set in identical manner to the CGI section. Authentication is not absolutely
+    essential in the documentation sphere, but it is certainly useful if you want
+    to install extensions such as PNP there (see [19.6 Smooth Plotting with PNP](../Text/ch19s06.html
+    "19.6 Smooth Plotting with PNP"), page 446).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The command
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: loads the new configuration. If everything has worked out correctly, the Nagios
+    main page appears in the Web browser under [http://nagios-server/nagios](http://nagios-server/nagios).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.5.2 SELinux
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Just a few distributions—in particular, Fedora—enable the *Security Enhanced
+    Linux* (SELinux) by default. When enabled and appropriately configured, this allows
+    services such as the Apache Web server access only to files and directories explicitly
+    mentioned. The directories **`/usr/local/nagios/bin`** and **`/usr/local/nagios/share`**
+    used by Nagios are not among these. The consequence: SELinux first refuses Apache
+    access until this is allowed via the configuration. The command **`getenforce`**
+    shows whether the *Enforcing Mode*, in which SELinux enforces the strict observance
+    of the configured access rights, is switched on. This can be switched off with
+    the command'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: To retain this status at the next system start, the settings in **`/etc/selinux/config`**
+    are changed. Rather than switching off the Enforcing Mode, though, it is better
+    to configure the required accesses specifically. This does require some understanding
+    of how SELinux works, and some general Linux experience -knowledge that would
+    go beyond the scope of this book. For those who want to get to grips more intensively
+    with the subject, further information can be found in the Wiki of the Nagios community,^([[25](#ftn.CHP-1-FN-17)])
+    including a link to a concrete guide.^([[26](#ftn.CHP-1-FN-18)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1.5.3 User authentication
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the state in which it is delivered, Nagios allows only authenticated users
+    access to the CGI directory. This means that users not "logged in" have no way
+    to see anything other than the homepage and the documentation. They are blocked
+    off from access to other functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There is a good reason for this: apart from status queries and other display
+    functions, Nagios has the ability to send commands via the Web interface. The
+    interface for external commands is used for this purpose ([13.1 The Interface
+    for External Commands](../Text/ch13.html#the_interface_for_external_commands "13.1
+    The Interface for External Commands"), page 292). If this is active, checks can
+    be switched on and off via the Web browser, for example, and Nagios can even be
+    restarted. Only authorized users should be in a position to do this. Besides,
+    general security considerations would indicate that the huge volume of information
+    provided by Nagios should only be made available to trustworthy persons.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First of all, the parameter **`use_authenticationin`** the CGI configuration
+    file **`cgi.cfg`** ^([[27](#ftn.CHP-1-FN-19)]) of Nagios must be set to 1:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is the default during installation. The simplest authentication form provided
+    by Apache is the file-based **`Basic`** authentication, which is already enabled
+    in the configuration file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`AuthName`** is an information field that the browser displays if the Web
+    server requests authentication. **`AuthType Basic`** stands for simple authentication,
+    in which the password is transmitted without encryption, as long as no SSL connection
+    is used. It is best to save the password file—here **`htpasswd.users`**—in the
+    Nagios configuration directory **`/etc/nagios`**. The final parameter, **`require
+    valid-user`**, means that all authenticated users have access (there are no restrictions
+    for specific groups; only the user-password pair must be valid).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The (freely selectable) name of the password file will be specified here so
+    that it displays what type of password file is involved. It is generated with
+    the **`htpasswd2`** program, included in Apache. (In Apache 1.3 and some other
+    distributions, the program is called **`htpasswd`**.) Running
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'generates a new password file with a password for the user **`nagios`**. Its
+    format is relatively simple:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Each line contains a user-password pair, separated by a colon.^([[28](#ftn.CHP-1-FN-20)])
+    If you want to add other users, you should ensure that you omit the **`-c`** (*create*)
+    option. Otherwise **`htpasswd(2)`** will recreate the file and delete the old
+    contents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The user name cannot be chosen freely but must match the name of a contact
+    person (see [2.7 Defining Addressees for Error Messages: contact](../Text/ch02s07.html
+    "2.7 Defining Addressees for Error Messages: contact"), page 70). Only the Web
+    user (depending on your distro, **`www-data`**, **`www-run`** oder **`httpd`**,
+    see [1.1.1 Determining and setting up the required users](../Text/ch01.html#determining_and_setting_up_the_required
+    "1.1.1 Determining and setting up the required users")) can access the generated
+    **`htpasswd.users`** file, and it should be protected from access by anyone else:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: In combination with its own modules and those of third parties, Apache allows
+    a series of other authentication methods. These include authentication via an
+    LDAP directory, via Pluggable Authentication Modules (PAM),^([[29](#ftn.CHP-1-FN-21)])
+    or using SMB via a Windows server. Here we refer you to the relevant literature
+    and the highly detailed documentation on the Apache homepage.^([[30](#ftn.CHP-1-FN-22)])
+    A quite advanced example, in which a user already authenticated by Kerberos does
+    not have to authenticate himself again, is described in [Appendix E](../Text/ape.html
+    "Appendix E. Single Sign-On for the Nagios Web Interface") in page 637.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Even though configuration of the Web interface is now finished, at the moment
+    only the documentation is properly displayed: Nagios itself must first be correspondingly
+    adjusted—as described in detail in the following chapter—before it can be used
+    for monitoring data made available in this way.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[25](#CHP-1-FN-17)]) Search [http://www.nagioscommunity.org/wiki/](http://www.nagioscommunity.org/wiki/)
+    for the keyword **`SELinux`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[26](#CHP-1-FN-18)]) [http://www.rickwargo.com/2006/10/29/fc6-selinux-and-nagios/](http://www.rickwargo.com/2006/10/29/fc6-selinux-and-nagios/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[27](#CHP-1-FN-19)]) More on this in [2.13 CGI Configuration in cgi.cfg](../Text/ch02s13.html
+    "2.13 CGI Configuration in cgi.cfg") from page 77.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[28](#CHP-1-FN-20)]) To be precise, the second position does not contain
+    the password itself, but rather its hash value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[29](#CHP-1-FN-21)]) The "Pluggable Authentication Modules" now control authentication
+    in all Linux distributions, so that you can also use existing user accounts here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[30](#CHP-1-FN-22)]) [http://httpd.apache.org/](http://httpd.apache.org/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter 2. Nagios Configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although the Nagios configuration can become quite large, you only need to handle
+    a small part of this to get a system up and running. Luckily many parameters in
+    Nagios are already set to sensible default settings. So this chapter will be concerned
+    primarily with the most basic and frequently used parameters, which is quite sufficient
+    for an initial configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Further details on the configuration are provided by the chapters on individual
+    Nagios features: in [Chapter 6](../Text/ch06.html "Chapter 6. Plugins for Network
+    Services") in network plugins (page 105), there are many examples on the configuration
+    of services. All parameters of the Nagios messaging system are explained in detail
+    in [Chapter 12](../Text/ch12.html "Chapter 12. The Nagios Notification System"),
+    page 265, and the parameters for controlling the Web interface are described in
+    [Chapter 16](../Text/ch16.html "Chapter 16. The Classical Web Interface"), page
+    327\. In addition to this, Nagios includes its own extensive documentation (**`/usr/local/nagios/share/docs`**),
+    which can also be reached from the Web interface. This can always be recommended
+    as a useful source for further information, which is why each of the sections
+    below refer to the corresponding location in the original documentation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The installation routine in **`make install-config`** (see [1.2 Compiling Source
+    Code](../Text/ch01s02.html "1.2 Compiling Source Code") in page 39) stores examples
+    of individual configuration files in the directory **`/etc/nagios`**. But be careful:
+    whereas the names of the example files in Nagios 2.0 ended in **`-sample`** (so
+    that a possible update does not overwrite the files required for production),
+    this is no longer the case in the current Nagios 2.x versions and in Nagios 3.0\.
+    Existing files are overwritten here. Admittedly, **`make install`** does rename
+    existing files: thus **`nagios.cfg`** is turned into **`nagios.cfg˜`**. But this
+    only happens once. After running **`make install`** one more time, the original
+    contents of the file are deleted once and for all. For this reason it is essential
+    that you back up the existing configuration *prior to* running **`make install-config`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After this command, the directory **`/etc/nagios`** of Nagios 3.0 contains
+    the three main configuration files: **`nagios.cfg`**, **`cgi.cfg`**, and **`resource.cfg`**.
+    Object definitions end up in other files in the subdirectory **`objects`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Nagios 2.10 uses fewer files; objects are defined only in the files **`localhost.cfg`**
+    and **`commands.cfg`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: All subsequent work should be carried out as the user **`nagios`**. If you are
+    editing files as the superuser, you must ensure yourself that the contents of
+    directory **`/etc/nagios`** afterwards belong to the user **`nagios`** again.
+    With the exception of the file **`resource.cfg`**—this may contain passwords,
+    which is why only the owner **`nagios`** should have the read permission set—
+    all other files may be readable for all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.1 The Main Configuration File **`nagios.cfg`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The central configuration takes place in **`nagios.cfg`**. Instead of storing
+    all configuration options there, it makes links to other configuration files (with
+    the exception of the CGI configuration).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Those who compile and install Nagios themselves have the advantage that at first
+    they do not even need to adjust **`nagios.cfg`**, since all paths are already
+    correctly set.^([[32](#ftn.CHP-2-FN-2)]) And that's as much as you need to do.
+    Nevertheless one small modification is recommended, which helps to maintain a
+    clear picture and considerably simplifies configuration where larger networks
+    are involved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The parameter concerned is **`cfg_file`**, which integrates files with object
+    definitions (see [2.2 Objects—an Overview](../Text/ch02s02.html "2.2 Objects—an
+    Overview") through [2.10 Defining a Time Period with timeperiod](../Text/ch02s10.html
+    "2.10 Defining a Time Period with timeperiod") in page 59). The file **`nagios.cfg`**,
+    included in the Nagios 3.0 package, contains the following entries:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Nagios 2.x gathers all example object files into just two configuration files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As an alternative to **`cfg_file`**, you can also use the parameter **`cfg_dir`**:
+    this requests that you specify the name of a directory from which Nagios should
+    integrate all configuration files ending in **`.cfg`** (files with other extensions
+    are simply ignored). This also works recursively; Nagios thus evaluates all **`*.cfg`**
+    files from all subdirectories. With the parameter **`cfg_dir`** you therefore
+    only need to specify a signal directory, instead of calling all configuration
+    files, with **`cfg_file`**, individually. The only restriction: these must be
+    configuration files that describe objects. The configuration files **`cgi.cfg`**
+    and **`resource.cfg`** are excluded from this, which is why, like the main configuration
+    file **`nagios.cfg`**, they remain in the main directory **`/etc/nagios`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Simple structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Simple structure
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'For the object-specific configuration, it is best to create a directory called
+    **`/etc/nagios/mysite`**, then remove all **`cfg_file`** directives in **`nagios.cfg`**
+    (or comment them out with a **`#`** at the beginning of the line) and replace
+    them with the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The contents of the directory **`/etc/nagios`** will be version-independent
+    and look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: The main directory **`/etc/nagios`** contains only three configuration files
+    and the password file for protected Web access. Whether you collect all objects
+    of the same type in one separate file, that is all host definitions in **`hosts.cfg`**,
+    all services in **`services.cfg`**, and so on, or divide these into separate files,
+    is left to the individual.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this example, only the top directory **`mysite`** needs to be integrated
+    with **`cfg_dir`** in **`nagios.cfg`**. This forms the basis for our initial configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A larger location
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'For larger installations, you should divide the object definitions into individual
+    files (creating a separate file with the host definition for each host, for instance)
+    and group these in subdirectories according to sensible criteria, as in the following
+    example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This example arranges the objects according to the operating system (**`linux`**,
+    **`windows`**, and **`router`**). Each of these system directories has two further
+    subdirectories: **`hosts`** and **`services`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each of the individual host objects are described in a separate file (for example
+    **`linux01.cfg`**). These can easily be copied if you want to create other host
+    objects with similar properties. You can copy services in a similar manner.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other object definitions are placed either directly in the directory **`my-site`**,
+    as in the simple structure in [Simple structure](../Text/ch02.html#simple_structure
+    "Simple structure"), or you can create subdirectories, as described in more detail
+    in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In **`nagios.cfg`** the object definitions are again bound with a single directive:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Large installations with several different locations
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'For large installations, it is better to split up host and service objects
+    according to location. Even for the remaining objects, we recommend that you split
+    them up into individual files and group these into subdirectories:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, the directory **`global`** gathers together all the objects
+    that that do not themselves define a check (that is, everything that is not a
+    host or service object). This is where the subdirectories **`commands`**, **`contacts`**,
+    **`templates`**, and **`timeperiods`** are located, each of which contain the
+    files for the object categories of the same name. For many command objects, individual
+    files are easier to handle than one huge text file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the contact objects are also stored in individual files, it is easy to disable
+    a contact: the file extension is simply changed from **`.cfg`** to **`.cfx`**
+    and then a reload is performed. Nagios ignores all files in object directories
+    that do not end in **`.cfg`**. The overlying directories **`global`** and **`sites`**
+    are bound into **`nagios.cfg`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: Setting the European date format
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The date specifications in Nagios appear by default in the American format
+    **``*`MM-DD -YYYY`*``**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you prefer something else, e.g., the European date format, it is recommended
+    that you change the parameter **`date_format`** in **`nagios.cfg`** right from
+    the start. The value **`iso8601`** ensures that Nagios date specifications are
+    displayed in the ISO or DIN format **``*`YYYY-MM-DD HH-.MM: SS`*``**. [Table 2-1](../Text/ch02.html#possible_date_format
+    "Table 2-1. Possible date format") lists the possible values for **`date_format`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other parameters in **`nagios.cfg`** are described in [A.1 The Main Configuration
+    File nagios.cfg](../Text/apa.html#an_overview_of_the_nagios_configuration "A.1
+    The Main Configuration File nagios.cfg"); in the original documentation these
+    can be found at [http://localhost/nagios/docs/configmain.html](http://localhost/nagios/docs/configmain.html)
+    or **`/usr/local/nagios/share/docs/config-main.html`**."
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 2-1. Possible date format
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Value | Representation |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`us`** | *MM-DD-YYYY HH:MM:SS* |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`euro`** | *DD-MM-YYYY HH:MM:SS* |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`iso8601`** | *YYYY-MM-DD HH:MM:SS* |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`strict-iso8601`** | *YYYY-MM-DDTHH:MM:SS* |'
+  prefs: []
+  type: TYPE_TB
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[31](#CHP-2-FN-1)]) [http://mama.indstate.edu/users/ice/tree/](http://mama.indstate.edu/users/ice/tree/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[32](#CHP-2-FN-2)]) If Nagios is from a distribution package, it is worth
+    checking at least the path details. In a well-maintained distribution these will
+    also be matched to the Nagios directories used there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.2 Objects—an Overview
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A Nagios object describes a specific unit: a host, a service, a contact, or
+    the groups to which each belongs. Even commands are defined as objects. This definition
+    has not come about by chance. Nagios is also able to inherit characteristics ([2.11
+    Templates](../Text/ch02s11.html "2.11 Templates") from page 75).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Object definitions follow the following pattern:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Nagios has the following values for the **``*`object-type`*``**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`host`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The host object describes one of the network nodes that are to be monitored.
+    Nagios expects the IP address as a parameter here (or the *Fully Qualified Domain
+    Name*) and the command that should define whether the host is alive (see [2.3
+    Defining the Machines to Be Monitored, with host](../Text/ch02s03.html "2.3 Defining
+    the Machines to Be Monitored, with host"), page 62). The host definition is re-referenced
+    in the service definition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`hostgroup`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Several hosts can be combined into a group (see [2.4 Grouping Computers Together
+    with hostgroup](../Text/ch02s04.html "2.4 Grouping Computers Together with hostgroup")
+    in page 65). This simplifies configuration, since entire host groups instead of
+    single hosts can be specified when defining services (the service will then exist
+    for each member of the group). In addition, Nagios represents the hosts of a host
+    group together in a table in the Web front end, which helps to increase clarity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`service`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The individual services to be monitored are defined as service objects ([2.5
+    Defining Services to Be Monitored with service](../Text/ch02s05.html "2.5 Defining
+    Services to Be Monitored with service"), page 66). A service never exists independently
+    of a host. So it is quite possible to have several services with the same name,
+    as long as they belong to different hosts. The following code,
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: describes two services that both have the same service name but belong to different
+    hosts. So in the language of Nagios, a service is always a host-service pair.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`servicegroup`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As it does with host groups, Nagios combines several services and represents
+    these in the Web front end as a unit with its own table (see [2.6 Grouping Services
+    Together with servicegroup](../Text/ch02s06.html "2.6 Grouping Services Together
+    with servicegroup"), page 69). Service groups are not absolutely essential, but
+    help to improve clarity, and are also used in reporting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`contact`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A person who is to be informed by Nagios of specific events (see [2.7 Defining
+    Addressees for Error Messages: contact](../Text/ch02s07.html "2.7 Defining Addressees
+    for Error Messages: contact"), page 70). Nagios uses contact objects to show to
+    a user via the Web front end only those things for which the user is listed as
+    a contact person. In the basic setting users do not get to see hosts and services
+    for which they are not responsible.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`contactgroup`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Notification of events in hosts and services takes place via the contact group
+    ([2.8 The Message Recipient: contactgroup](../Text/ch02s08.html "2.8 The Message
+    Recipient: contactgroup"), page 72). A direct link between the host/service and
+    a contact person is not possible.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`timeperiod`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Describes a time period within which Nagios should inform contact groups ([2.10
+    Defining a Time Period with timeperiod](../Text/ch02s10.html "2.10 Defining a
+    Time Period with timeperiod"), page 74). Outside such a time slot, the system
+    will not send any messages. The messaging chain can be fine-tuned via various
+    *time periods*, depending on the host/service and contact/contact groups. More
+    on this will be presented in [12.3 The Message Filter](../Text/ch12s03.html "12.3
+    The Message Filter"), page 267.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`command`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Nagios always calls external programs via command objects ([2.9 When Nagios
+    Needs to Do Something: The command Object](../Text/ch02s09.html "2.9 When Nagios
+    Needs to Do Something: The command Object"), page 72). Apart from plugins, messaging
+    programs also include e-mail or SMS messaging applications.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`servicedependency`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This object type describes dependences between services. If, for example, an
+    application does not function without a database, a corresponding dependency object
+    will ensure that Nagios will represent the failed database as the primary problem
+    instead of just announcing the nonfunctioning of the application (see [12.6 Accounting
+    for Dependencies between Hosts and Services](../Text/ch12s06.html "12.6 Accounting
+    for Dependencies between Hosts and Services"), page 285).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`serviceescalation`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Used to define proper escalation management: if a service is not available
+    after a specific time period, Nagios informs a further or different circle of
+    people. This can also be configured on multiple levels in any way you want (see
+    [12.5 Escalation Management](../Text/ch12s05.html "12.5 Escalation Management")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`hostdependency`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Like **`servicedependency`**, but for hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`hostescalation`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Like **`serviceescalation`**, but for hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`hostextinfo`** (Nagios 2.x)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Extended Host Information* objects are optional and define a specific graphic
+    and/or URL, which Nagios additionally integrates into its graphic output. The
+    URL can refer to a Web page that provides additional information on the host (see
+    [16.4 Additional Information on Hosts and Services](../Text/ch16s04.html "16.4
+    Additional Information on Hosts and Services"), page 362).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`hostextinfo`** This object is deprecated in Nagios 3.0, but it is still
+    available. Nagios 3.0 integrated the object parameters into the host definition.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`serviceextinfo`** (Nagios 2.x)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Extended Service Information*, like *Extended Host Information*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Not all object types are absolutely essential; especially at the beginning.
+    You easily can do without the **`*dependency`**, **`*escalation`**, and **`*extinfo`**
+    objects, as well as the **`servicegroup`**. [Chapter 12](../Text/ch12.html "Chapter 12. The
+    Nagios Notification System") looks at escalation and dependencies in detail. **`hostextinfo`**
+    and **`serviceextinfo`** are used to provide a "more colorful" graphical representation,
+    but they are not at all necessary for running Nagios. [16.4 Additional Information
+    on Hosts and Services](../Text/ch16s04.html "16.4 Additional Information on Hosts
+    and Services") from page 362 looks at this in more detail. The original documentation
+    also provides more information.^([[33](#ftn.CHP-2-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notes on the object examples below
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Notes on the object examples below
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Although the following chapters describe individual object types in detail,
+    only the mandatory parameters and those that are absolutely essential for meaningful
+    operation are described there. Mandatory parameters here are always printed in
+    **bold** type. The first (comment) line in each example lists the file in which
+    the recorded object definition is to be stored. For the parameters marked with
+    (*), there are some differences between Nagios 2.x and Nagios 3.0, each of which
+    will be explained in more depth in the text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you first start using Nagios, it is recommended that you restrict yourself
+    to a minimal configuration with only one or two objects per object type, in order
+    to keep potential sources of error to a minimum and to obtain a running system
+    as quickly as possible. Afterwards extensions can be implemented very simply and
+    quickly, especially if you incorporate the tips mentioned in [2.11 Templates](../Text/ch02s11.html
+    "2.11 Templates") in templates (page 75).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Time details in general refer to time units. A time unit consists of 60 seconds
+    by default. It can be set to a different value in the configuration file **`nagios.cfg`**,
+    using the parameter **`interval_length`**. You should really change this parameter
+    only if you know exactly what you are doing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[33](#CHP-2-FN-3)]) [http://localhost/nagios/docs/objectdefinitions.html#hostextinfo](http://localhost/nagios/docs/objectdefinitions.html#hostextinfo)
+    or **`#serviceextinfo`** (Nagios 3.0)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[http://localhost/nagios/docs/xodtemplate.html#hostextinfo](http://localhost/nagios/docs/xodtemplate.html#hostextinfo)
+    or **`#ser-viceextinfo`** (Nagios 2.x); the files can be found locally in **`/usr/local/nagios/share/docs/`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.3 Defining the Machines to Be Monitored, with **`host`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The host object is the central command post on which all host and service checks
+    are based. It defines the machine to be monitored. The parameters printed in bold
+    must be specified in all cases:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`host_name`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This parameter specifies the host name with which Nagios addresses the machine
+    in services, host groups, and other objects. Only the special characters **`-`**
+    and **`_`** are allowed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`hostgroups`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This parameter allocates the host to a host group object, which must already
+    be defined ([2.4 Grouping Computers Together with hostgroup](../Text/ch02s04.html
+    "2.4 Grouping Computers Together with hostgroup"), page 65). A host group in the
+    Web interface combines several hosts into a group (see [Figure 16-10](../Text/ch16s02.html#the_overview_output_style
+    "Figure 16-10. The overview output style") in page 334). The second possibility
+    of assigning a host to a host group, compatible with version 1.x, uses the **`members`**
+    parameter in defining the host group itself. The two methods can also be combined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`alias`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This parameter contains a short description of the host, which Nagios displays
+    at various locations as additional information. Ordinary text is allowed here.
+    The parameter is no longer obligatory from Nagios 3.0\. If it is missing, the
+    value from **`host_name`** is used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`address`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the IP address or the *Fully Qualified Domain Name* (FQDN) of
+    the computer. If it is possible (i.e., for static IP addresses), you should use
+    an IP address, since the resolution of a name to an IP address is always dependent
+    on DNS working, which is not infallible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`check_command`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the command with which Nagios checks, if necessary, to see whether
+    the host is reachable. The parameter is optional. If it is omitted, Nagios will
+    never carry out a host check! This can be useful for network components that are
+    frequently switched off (for example, print servers).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The command usually used for **`check_command`** is called **`check-host -alive`**,
+    which is already predefined in the supplied file, **`checkcom-mands.cfg`** (see
+    [2.9 When Nagios Needs to Do Something: The command Object](../Text/ch02s09.html
+    "2.9 When Nagios Needs to Do Something: The command Object"), page 72). This makes
+    use of either the plugin **`check_ping`** or the more modern **`check_icmp`**.
+    Both plugins check the reachability of the host via the ICMP packets *ICMP Echo
+    Request* and *Echo Reply*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`max_check_attempts`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This parameter determines how often Nagios should try to reach the computer
+    if the first test has gone wrong. The value **`3`** in the example means that
+    the test is repeated up to three times if it returns anything other than OK in
+    the first test. As long as there are still repeat tests to be made, Nagios refers
+    to this as a *soft state*. If the final test has been made, the system categorizes
+    the state as *hard*. Nagios notifies the system administrator exclusively of hard
+    states, and in the example, sends messages only if the third test also ends with
+    an error or warning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`check_period`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the time period in which the host should be monitored. Really,
+    only "round the clock" makes sense—that is, **`24×7`**. A **`timeperiod`** object
+    is involved here, the definition of which is described in more detail in [2.10
+    Defining a Time Period with timeperiod](../Text/ch02s10.html "2.10 Defining a
+    Time Period with timeperiod") in page 74\. It only makes sense to use a specification
+    other than **`24×7`** if you want to explicitly suppress the host check at certain
+    times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`contact_groups`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This specifies the receiver of messages which Nagios sends with respect to
+    the hosts defined here, that is **`localadmin`**. [2.8 The Message Recipient:
+    contactgroup](../Text/ch02s08.html "2.8 The Message Recipient: contactgroup")
+    explains this more fully in page 72.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`notification_interval`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies at what intervals Nagios should repeat notification of the continued
+    existence of the state. 120 time units normally mean one message every 120 minutes,
+    provided the error state continues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`notification_period`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This specifies at what time interval a message should be sent. A time period
+    different from **`24×7`** could certainly be useful here. It is important to understand
+    the difference here with **`check_period`**: if **`check_period`** excludes time
+    periods, Nagios cannot even determine whether there is an error or not. But if
+    the host is monitored round-the-clock and only the notification period is restricted
+    by the parameter **`notification_period`**, Nagios will certainly log errors and
+    also display them in the Web front end and in log evaluations. Outside the **`notification_period`**
+    the system does not send any messages. A more detailed description of the notification
+    system is given in [12.3 The Message Filter](../Text/ch12s03.html "12.3 The Message
+    Filter"), page 267.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`notification_options`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This parameter describes the states about which Nagios should provide notification
+    when they occur. Nagios knows the following states for computers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **`d`** | down |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`u`** | unreachable (host is not reachable because a network node between
+    Nagios and a host has failed and the actual state of the host cannot be determined)
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`r`** | recovery (OK state after an error) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`f`** | flapping (state changes very quickly; more on this in [Appendix B](../Text/apb.html
+    "Appendix B. Rapidly Alternating States: Flapping") from page 611). |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`s`** | scheduled downtime (Nagios 3.0 provides information here on the
+    start and end of a planned maintenance period, or in case a planned maintenance
+    period is canceled. This option is not available for Nagios 2.x.) |'
+  prefs: []
+  type: TYPE_TB
+- en: By specifying **`d`**, **`u`**, the system will send messages if the host is
+    not on the network or not reachable over the network, but not if it can be reached
+    again after an error state (recovery). If **`n`** (none) is used as the value,
+    Nagios will normally not give any notification.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The form in which Nagios sends out a message depends on how the contact is defined.
+    Irrespective of when you want to be notified, the Web interface always shows the
+    current state, even if Nagios does not send a message, because the time period
+    does not match or the system is still repeating the tests (the so-called soft
+    state).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`parents`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This allows the physical topology of the network to be taken into account. Here
+    the router or the network component is given by which the host is reachable if
+    it is not in direct contact in the same network segment. This can also be a switch
+    between the Nagios server and the host. If Nagios does not reach the host because
+    all parents (separated by commas) are down, then Nagios categorizes it as UNREACHABLE,
+    but not as DOWN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further information is provided by the Nagios 3.0 online help under [http://localhost/nagios/docs//objectdefinitions.html#host](http://localhost/nagios/docs//objectdefinitions.html#host).^([[34](#ftn.CHP-2-FN-4)])
+    In Nagios 2.x the file is called **`xodtemplate.html`** and can be found in the
+    same directory. The differences between Nagios 2.x and Nagios 3.0 are described
+    in [H.1.1 The host object](../Text/aph.html#the_host_object "H.1.1 The host object"),
+    page 678.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[34](#CHP-2-FN-4)]) Locally in **`/usr/local/nagios/share/docs/objectdefinitions.html`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.4 Grouping Computers Together with **`hostgroup`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A host group contains one or more computers so that they can be represented
+    in the Web interface together (see [Figure 16-10](../Text/ch16s02.html#the_overview_output_style
+    "Figure 16-10. The overview output style") in page 334)—in addition, certain objects
+    (e.g., services) can be applied to an entire group of computers instead of having
+    to define them individually for each host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The **`hostgroup_name`** parameter specifies a unique name for the group, alias
+    accepts a short description. The **`members`** parameter lists all hosts names
+    belonging to the group, separated by commas:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you specify to which group they belong in the host definition for individual
+    member computers, with the parameter **`hostgroups`** ([2.3 Defining the Machines
+    to Be Monitored, with host](../Text/ch02s03.html "2.3 Defining the Machines to
+    Be Monitored, with host")), the **`members`** entry may be omitted from version
+    2.0\. This means that you no longer have two search through all group definitions
+    if you just want to delete a single host. The combined use—of **`members`** in
+    the **`hostgroup`** object and at the same time, of **`hostgroups`** in the **`host`**
+    object—is equally possible. A new host group in Nagios 3.0 is **`hostgroup_members`**,
+    with which you can specify other host groups as members, and thus form hierarchies
+    of host groups. This option is not available in Nagios 2.0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.5 Defining Services to Be Monitored with **`service`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A service in Nagios always consists of the combination of a host and a service
+    name. This combination must be unique. Service names, on the other hand, may occur
+    many times, as long as they are combined with different hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The simplest service consists of a simple ping, which tests whether the relevant
+    host is reachable, and which registers the response time and any packet loss that
+    may occur:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: In contrast to a host check, which Nagios carries out only if it cannot reach
+    any other service of the host, a ping service is carried out at regular intervals.
+    Problems in the network can be detected relatively simply through response times
+    and packet loss rates. The host check is less suitable for this purpose.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`host_name`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This refers to the name defined in the host object. Nagios also obtains the
+    IP address of the computer via this. Instead of a single host name, you can also
+    enter a comma-separated list of multiple hosts. As an alternative to **`host_name`**,
+    it is also possible to use the parameter **`hostgroup_name`** to specify an entire
+    host group instead of individual hosts. The service is then considered to be defined
+    for each of the individual computers groups together in this way. Whether you
+    make use of this optimization, or allocate your own service definitions to each
+    computer individually, makes no difference to Nagios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`service_description`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This parameter defines the actual name of the service. Spaces, colons, and
+    dashes may be included in the name. Nagios always addresses a service as a combination
+    of host name (here: **`linux01`**) and service description (**`PING`**). This
+    must be unique.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`servicegroups`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: assigns the service to a service group object that must already be defined ([2.6
+    Grouping Services Together with servicegroup](../Text/ch02s06.html "2.6 Grouping
+    Services Together with servicegroup"), page 69).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`check_command`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This defines the command with which Nagios tests the service for functionality
+    Arguments are passed on to the actual command, ie. **`check_ping`**, separated
+    by exclamation marks. The definition of the **`check_ping`** command, predefined
+    in the example files, is explained in [2.9 When Nagios Needs to Do Something:
+    The command Object](../Text/ch02s09.html "2.9 When Nagios Needs to Do Something:
+    The command Object") in page 72.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the example, the values for the warning limit (**`100 ms, 20%`**) and for
+    the CRITICAL status (**`500 ms, 60%`**) are determined. You could compare this
+    to a traffic light: the state OK (green) occurs if the response time remains under
+    the warning limit of 100 milliseconds, and if none or less than 20 percent of
+    packets have been lost. The WARNING state (yellow) occurs if the packet loss or
+    response time lies above the defined warning limit, but still beneath the critical
+    limit. Above the critical limit, Nagios issues a CRITICAL state (red). The return
+    value of the plugin is described at the beginning of [Chapter 6](../Text/ch06.html
+    "Chapter 6. Plugins for Network Services") (page 6), the underlying plugin **`check_icmp`**
+    is introduced in detail in [6.2 Reachability Test with Ping](../Text/ch06s02.html
+    "6.2 Reachability Test with Ping") from page 108.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`max_check_attempts`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies how often Nagios should repeat a test in order to verify and
+    definitively accept an error state which has been discovered (or also the recovered
+    functionality), that is, to recognize it as a *hard state*. In the transitional
+    phase (for example from OK to CRITICAL) we speak of a *soft state*. Basic distinctions
+    between soft and hard are only made by the Nagios notification system, which is
+    why the two states are described in more detail in the context of this system
+    ([Chapter 12](../Text/ch12.html "Chapter 12. The Nagios Notification System"),
+    page 265). The difference has no influence in the representation in the Web interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`normal_check_interval`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies at what interval Nagios should test the service when the system
+    is in a stable condition—this can equally be an OK or an error state. In the example
+    this is five time units, which is normally five minutes. In Nagios 3.0 the parameter
+    may also be written as **`check_interval`**; as for the host definition, both
+    forms are equivalent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`retry_check_interval`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This describes the time interval between two tests when the state is in the
+    process of changing (for example, from OK to WARNING), that is, when there is
+    a soft state. In Nagios 3.0 the parameter may also be written as **`retry_interval`**;
+    both forms are equivalent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As soon as Nagios has performed the number of tests specified in **`max_check_attempts`**,
+    it checks the service again at intervals of **`normal_check_interval`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`check_period`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This describes the time period in which the service is to be monitored. The
+    entry represents a **`timeperiod`** object, the definition of which is described
+    in more detail in [2.10 Defining a Time Period with timeperiod](../Text/ch02s10.html
+    "2.10 Defining a Time Period with timeperiod") from page 74\. Here you should
+    enter **`24×7`** for "round the clock" unless you want to explicitly stop the
+    test from running at specific times (perhaps because of a scheduled maintenance
+    slot). If the notification is to be prevented only at specific times, it is better
+    to use the option **`notification_period`** or other filters of the Nagios notification
+    system (see [Chapter 12](../Text/ch12.html "Chapter 12. The Nagios Notification
+    System"), page 265).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`notification_interval`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This determines at what regular intervals Nagios repeats reports on error states.
+    In the example, the system does this every 120 time units (normally minutes),
+    as long as the error state continues. A value of **`0`** causes Nagios to announce
+    the current state only once. Beginning with Nagios 3.0, **`notification_interval`**
+    is no longer an obligatory parameter. If it is missing, the value is taken from
+    the accompanying host definition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`notification_period`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This describes the time period within which a notification should take place.
+    This again involves a **`timeperiod`** object (see [2.10 Defining a Time Period
+    with timeperiod](../Text/ch02s10.html "2.10 Defining a Time Period with timeperiod")).
+    Here in the example, **`24×7`** is used, so notification is sent round the clock.
+    A more detailed discussion of the **`notification_period`** parameter can be found
+    in [12.3 The Message Filter](../Text/ch12s03.html "12.3 The Message Filter") from
+    page 267\. Beginning with Nagios 3.0 this parameter is optional. If it is missing,
+    the value is taken from the accompanying host definition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`notification_options`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This determines which error states Nagios should report. Possible values which
+    can be used here are the same states already described for host objects, i.e.,
+    **`c`** (critical), **`w`** (warning), **`u`** (unknown), **`r`** (recovered),
+    **`f`** (flapping), and (from Nagios 3.0) **`s`** (planned maintenance interval).
+    Specifying **`c`**, **`r`** only informs the system when a service is in a CRITICAL
+    state and if it subsequently recovers (RECOVERY).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you use **`n`** (none) as the value, Nagios will normally not send any notification.
+    The Web interface nevertheless shows the current states.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`contact_groups`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, this parameter defines the recipient group whose members should receive
+    the notifications. Several groups can be entered as a comma-separated list. Beginning
+    with Nagios 3.0 this parameter can be omitted. Then the value is taken from the
+    accompanying host definition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further information can be found in the Nagios 3.0 online help at [http://localhost/nagios/docs/objectdefinitions.html#service](http://localhost/nagios/docs/objectdefinitions.html#service).^([[35](#ftn.CHP-2-FN-5)])
+    For version 2.x the file is called **`xodtemplate.html`**. The differences between
+    Nagios 2.x and Nagios 3.0 are described in [H.1.2 The service object](../Text/aph.html#the_service_object
+    "H.1.2 The service object") from page 680.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[35](#CHP-2-FN-5)]) The corresponding file is located after installation
+    in the directory **`/usr/local/nagios/share/docs/`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.6 Grouping Services Together with **`servicegroup`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Service groups, like host groups, combine several services into a group, so
+    that they can be represented together in the Web front end. This increases clarity
+    and simplifies certain evaluations, but it is optional, and is not recommended
+    at the beginning, in order to keep configuration simple.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`servicegroup_name`** and **`alias`** have the same meanings as for the host
+    group. It should be noted that the syntax is the same as for the **`members`**
+    entry. Because a service in Nagios always consists of the combination of host
+    and service names, both must always be listed in pairs. The computer comes first,
+    and then the service:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: The **`members`** details can be omitted if the **`servicegroups`** parameter
+    is used in the service definition ([2.5 Defining Services to Be Monitored with
+    service](../Text/ch02s05.html "2.5 Defining Services to Be Monitored with service")).
+    If you want, you can use the two possibilities in combination. As for the host
+    groups, hierarchies can be formed from service groups from Nagios 3.0, using the
+    parameter **`service-group_members`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '2.7 Defining Addressees for Error Messages: **`contact`**'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A contact is basically a person to whom a message addressed via a contact group
+    is sent:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The contact also plays a role during authentication: a user who logs in at
+    the Web front end only gets to see the hosts and services for which that user
+    is entered as the contact. The user for logging in to the Web interface must therefore
+    be identical with the value of **`contact_name`** specified here. The first time
+    it is used, the user **`nagios`** is sufficient.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`contact_name`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This parameter defines the user name. It must match the corresponding user name
+    in the password file **`htpasswd`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`alias`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This parameter describes the contact briefly. Spaces are allowed here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`host_notification_period`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This defines the time period during which messages on the reachability of a
+    computer can be sent. [12.3 The Message Filter](../Text/ch12s03.html "12.3 The
+    Message Filter") (page 267) shows how the time period details can be sensibly
+    combined in the different object types. At the beginning, the value **`24×7`**
+    (that is: always) is certainly not a bad option.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`service_notification_period`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This defines the time period in which Nagios sends notifications to the relevant
+    user service. The entry takes effect as a filter: the generated message is simply
+    discarded here if it is sent outside the specified time period. If no further
+    message follows, the contact remains uninformed. You must therefore think about
+    combining individual time periods in various different definitions. Dependencies
+    are described extensively in [12.3 The Message Filter](../Text/ch12s03.html "12.3
+    The Message Filter").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`host_notification_options`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This defines what types of host messages the user should receive. The same options
+    are used here as for the host parameter **`notification_options`** ([2.3 Defining
+    the Machines to Be Monitored, with host](../Text/ch02s03.html "2.3 Defining the
+    Machines to Be Monitored, with host")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`service_notification_options`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This parameter describes what types of service messages are received by the
+    contact. The same five values are involved as for the **`notification_options`**
+    parameter for service and host objects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`service_notification_commands`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This parameter defines which commands (one or more) take charge of notification.
+    They must be defined as the **`command`** object type (see [2.9 When Nagios Needs
+    to Do Something: The command Object](../Text/ch02s09.html "2.9 When Nagios Needs
+    to Do Something: The command Object")); basically any external programs can be
+    integrated.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`host_notification_commands`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Like the **`service_notification_commands`** this parameter specifies which
+    commands are to be carried out to send the notification, although here it concerns
+    the reachability of computers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`email`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies one or more e-mail addresses (separated by commas) to which a
+    message should be sent. The notification command can evaluate this value (one
+    example of this is the command **`notify-by-email`**^([[36](#ftn.CHP-2-FN-6)])).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`can_submit_commands`** (Nagios 3.0)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This controls whether the contact may execute commands via the Web interface.
+    The value **`0`** forbids him from doing this. For Nagios 2.x, in general any
+    contact may run commands via the Web interface (see [16.2.3 Interface for external
+    commands: cmd.cgi](../Text/ch16s02.html#interface_for_external_commands_colon_c
+    "16.2.3 Interface for external commands: cmd.cgi"), page 343). Beginning with
+    Nagios 3.0, this parameter now also allows the definition of contacts with read-only
+    permission.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further information can be found in the Nagios 3.0 online help at [http://localhost/nagios/docs/objectdefinitions.html#contact](http://localhost/nagios/docs/objectdefinitions.html#contact).
+    In Nagios 2.x the file is called **`xodtemplate.html`**. The differences between
+    Nagios 2.x and Nagios 3.0 are described in [H.1.4 The contact object](../Text/aph.html#the_contact_object
+    "H.1.4 The contact object"), page 681.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[36](#CHP-2-FN-6)]) see [Table 12-1](../Text/ch12s04.html#macros_used_in_notify-by-email_and_host
+    "Table 12-1. Macros used in notify-by-email and host-notify-by-email") in page
+    277
+  prefs: []
+  type: TYPE_NORMAL
+- en: '2.8 The Message Recipient: **`contactgroup`**'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The **`contactgroup`** serves as the interface between the notification system
+    and the individual contacts. Nagios never addresses individual contacts directly
+    in various object definitions, but always goes through the contact group.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here Nagios also expects a name (**`contactgroup_name`**) and a comment (**`alias`**),
+    which reveals to visitors of the Web site what the purpose of the group is. For
+    members (**`members`**) of the group, you can enter an individual contact or a
+    comma-separated list of several contacts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: The additional parameter **`contactgroup_members`** allows Nagios 3.0 to include
+    further contact groups as members. In Nagios 2.x this parameter is not available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '2.9 When Nagios Needs to Do Something: The **`command`** Object'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Everything that Nagios does is defined in **`command`** objects. In the example
+    file supplied, **`checkcommands.cfg`** defines a broad range of commands which
+    only need to be included. To do this, you just copy the file to the subdirectory
+    **`mysite`**:^([[37](#ftn.CHP-2-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The existing command **`check_ping`** illustrates the definition of this object
+    type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`check_ping`** is the name by which the command will later be called when
+    defining a service. **`commard_line`** describes the command to be executed. Not
+    only is the old plugin **`check_ping`** used here, but so is the more efficient
+    **`check_icmp`**. The differences between the two are explained in more detail
+    in [6.2 Reachability Test with Ping](../Text/ch06s02.html "6.2 Reachability Test
+    with Ping") from page 108, but they use the same parameters to a large extent.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The identifiers used here, surrounded by dollar signs, are macros. Nagios recognizes
+    three different types of macros: **`$USERx$`** macros (**``*`x`*``** may take
+    on values between 1 and 32) define the file **`resource.cfg`**. The macro **`$USER1$`**,
+    which contains the path to the plugin directory, belongs to this.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second group of macros are arguments which can be passed on when a command
+    is called. These include **`$ARG1$`** and **`$ARG2$`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third group defined by Nagios includes the macro **`$HOSTADDRESS$`**, which
+    references the IP address of the host in the host definition (that is, the parameter
+    **`address`**). This type of macro is documented in the online help at [http://localhost/nagios/docs/macros.html](http://localhost/nagios/docs/macros.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you call the service **`linux01`**, **`PING`**, defined in [2.4 Grouping
+    Computers Together with hostgroup](../Text/ch02s04.html "2.4 Grouping Computers
+    Together with hostgroup"), as a **`check_command`**
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: then **`100.0,20%`** will appear in **`$ARG1$`**, and **`500.0,60%`** in **`$ARG2$`**.
+    To separate the command and the arguments to be passed on, the exclamation mark
+    is used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In theory, any programs at all can be started via the **`command_line`**, but
+    Nagios expects a certain type of behavior here, particularly where the return
+    value is concerned. For this reason, only Nagios plugins should be used (see [Chapter 6](../Text/ch06.html
+    "Chapter 6. Plugins for Network Services") to [Chapter 9](../Text/ch09.html "Chapter 9. Executing
+    Plugins via SSH")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[37](#CHP-2-FN-7)]) In Nagios 2.0 the example file lies directly in the directory
+    **`/etc/nagios`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.10 Defining a Time Period with **`timeperiod`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**`timeperiod`** objects describe time periods in which Nagios generates and/
+    or sends notifications. The included example files (Nagios 3.0: **`objects/timeperiods.cfg`**;
+    Nagios 2.x: **`localhost.cfg`**) contain a number of definitions that can simply
+    be copied to your own **`timeperiods.cfg`** file.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this, the definition of **`24×7`** is stated as "Sundays to Saturdays, from
+    0 to 24 hours in each case:"
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The times of day on individual weekdays can also be "cobbled together" from
+    time periods, separated by a comma:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: If a day specification is omitted completely, the defined time period will not
+    include this day in its entirety.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Nagios 3.0 allows periods for individual calendar days to be defined:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first line names a fixed calendar day in the ISO format, the second line
+    describes every 1st May. The details in the third line refer to the second Monday
+    in May, and those of the fourth line, to the third Monday of each month. The details
+    can also be combined, in the form **``*`from - to`*``**. A subsequent / acts as
+    a separator: the sixth line describes every second day (**`/ 2`**) in the period
+    from 24.12\. 2007 to 8.1\. 2008.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[H.1.5 Time definitions](../Text/aph.html#time_definitions "H.1.5 Time definitions"),
+    page 682 is also devoted to the extended format of Nagios 3.0\. The complete documentation
+    can be found in the Nagios 3.0 online help at [http://localhost/nagios/docs/objectdefinitions.html#contact](http://localhost/nagios/docs/objectdefinitions.html#contact).
+    In Nagios 2.x the corresponding file is called **`xodtemplate.html`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.11 Templates
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Nagios categorizes definitions as objects for a very good reason: their features
+    can namely be inherited by other objects—a feature that can save a lot of time
+    otherwise spent typing. You can define a so-called *template* and pass this on
+    to other objects as a basis from which you only need to describe those details
+    that are different.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is best illustrated by an example (the parameters that are required for
+    the use of templates are printed in bold):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With **`name`**, the template is first given a name so that it can be referenced
+    later on. The following entry, **`register 0`**, prevents Nagios from trying to
+    treat this template as a real host. In the example, the entries for the genuine
+    host object are not sufficient; consequently Nagios would break off when reading
+    the configuration file, with the error message that parameters are missing that
+    are obligatory for such a definition, for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: All the other parameters involve settings that are to apply to all definitions
+    dependent on **`Generic-Host`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the actual host definition—in the following example for **`linux03`** and
+    **`linux04`**—the parameter **`use`** references the template and thus takes over
+    the preset values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this way you only need to complete those entries that vary in any way between
+    the two hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But parameters may also appear in host definitions that have already been defined
+    by the template. In this case the definition at the host has priority it overwrites
+    the value from the template.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Templates created in this way can generally be used for all object types. Further
+    information on their use can be found in the Nagios 3.0 online help at [http://localhost/nagios/docs//objectinheritance.html](http://localhost/nagios/docs//objectinheritance.html).^([[38](#ftn.CHP-2-FN-8)])
+    In Nagios 2.x the file is called **`templaterecursion.html`**. The extended possibilities
+    of Nagios 3.0, which only begin to play a role in more complex setups, are described
+    by [H.1.8 Inheritance](../Text/aph.html#inheritance-id1 "H.1.8 Inheritance") from
+    page 684.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[38](#CHP-2-FN-8)]) Locally in **`/usr/local/nagios/share/docs//objectinheritance.html`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.12 Configuration Aids for Those Too Lazy to Type
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 2.12.1 Defining services for several computers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'You can simplify things a lot in the service definition by defining a service
+    for several hosts, or even host groups, at the same time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: Specifying several hosts, separated by commas, ensures that Nagios defines multiple
+    services in parallel. You can go one step further by specifying the * character
+    instead of individual computer aliases. This will assign this service to all hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A third possibility is an allocation in parallel via host groups:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this case the parameter **`hostgroup_name`** is used instead of the parameter
+    **`host_name`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.12.2 One host group for all computers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The quickest way to describe a host group containing all defined computers
+    is with the wild card **`*`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: 2.12.3 Other configuration aids
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In practice, the definition of services covering multiple hosts, described in
+    [2.11 Templates](../Text/ch02s11.html "2.11 Templates"), is by far the most important.
+    But there are other configuration aids based on the escalation and dependency
+    objects, introduced in [Informing different admins at different times](../Text/ch12s03.html#informing_different_admins_at_differen
+    "Informing different admins at different times") (see [12.5 Escalation Management](../Text/ch12s05.html
+    "12.5 Escalation Management") in page 282 and [12.6 Accounting for Dependencies
+    between Hosts and Services](../Text/ch12s06.html "12.6 Accounting for Dependencies
+    between Hosts and Services")12.6 in 285). There you can also use **`hostgroup_name`**
+    instead of **`host_name`** (a list of host groups) or **`servicegroup_name`**
+    instead of **`service_description`**. In addition you may set the value * for
+    **`host_name`** and **`service_description`**, which covers all hosts or services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.13 CGI Configuration in **`cgi.cfg`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In order for the Web front end to work correctly, Nagios needs the configuration
+    file **`cgi.cfg`**. Nagios'' example file can initially be taken over one-to-one,
+    since the paths contained in it were set correctly during installation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Important: the file **`cgi.cfg`** must be located in the same directory as
+    the file **`nagios.cfg`**, because the CGI programs have been compiled in this
+    path permanently. If **`cgi.cfg`** is located in a different directory, the Web
+    server must also be given an environment variable with the correct path, called
+    **`NAGIOS_CGI_CONFIG`**. How this is set in the case of Apache is described in
+    the corresponding online documentation.^([[39](#ftn.CHP-2-FN-9)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Out of the box, several parameters are enabled in the CGI configuration file.
+    What these are is revealed by the following **`egrep`** command, which excludes
+    comments and empty lines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`main_config_file`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This parameter specifies the main configuration file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`physical_html_path`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the absolute path in the file tree to the directory in which
+    the HTML documents—including online documentation, images, and CSS stylesheets—are
+    located.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`url_html_path`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This also describes the path to the Nagios HTML documents, but from the perspective
+    of the Web server, not of the operating system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`show_context_help`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This option provides—as long as it is switched on (value **`1`**)—a context-dependent
+    help if you move the mouse in the Web interface over individual links or buttons.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`use_authentication`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This option should always be switched on (value **`1`**). Nagios will then only
+    allow access to authenticated users. The authentication itself is configured in
+    a **`.htaccess`** file in the CGI directory (see [1.5 Configuration of the Web
+    Interface](../Text/ch01s05.html "1.5 Configuration of the Web Interface") in page
+    47). If this file is missing, and if **`use_authentication=1`**, then the CGI
+    programs will refuse to work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`default_statusmap_layout`** and **`default_statuswrl_layout`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These two layout parameters describe forms of representation in the graphical
+    illustration of network dependencies. Possible values are described in [A.2 CGI
+    Configuration in cgi.cfg](../Text/apas02.html "A.2 CGI Configuration in cgi.cfg")
+    in page 608.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`refresh_rate`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the timespan in seconds after which the browser is instructed
+    to reload data from the Web server. In this way the display in the browser is
+    always up-to-date.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`authorized_for_all_services and authorized_for_all_hosts`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order for a specific user to be able to see all computers and services in
+    the Web interface right from the beginning, without taking account of the allocation
+    of hosts and services to the correct contact group, you should also activate the
+    following two parameters in the file **`cgi.cfg`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Web user (and contact) **`nagios`** is now able to see all hosts and all
+    services in the Web interface, even if he is not entered as the contact responsible
+    for all hosts or services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A complete list of all parameters can be found in [A.2 CGI Configuration in
+    cgi.cfg](../Text/apas02.html "A.2 CGI Configuration in cgi.cfg") in page 606.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[39](#CHP-2-FN-9)]) [http://httpd.apache.org/docs-2.0/env.html](http://httpd.apache.org/docs-2.0/env.html)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 2.14 The Resources File **`resource.cfg`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Nagios expects to find the definition of macros, concerning how they are used
+    to create command objects ([2.9 When Nagios Needs to Do Something: The command
+    Object](../Text/ch02s09.html "2.9 When Nagios Needs to Do Something: The command
+    Object") from page 72), in the resources file **`resource.cfg`**. This can also
+    be use as supplied.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The location where Nagios should search for this file is defined by the **`resource.cfg`**
+    parameter in the main configuration file **`nagios.cfg`**. It makes sense here
+    to use the same directory in which **`nagios.cfg`** is also located.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In its "factory settings", **`resource.cfg`** defines only the **`$USER1$`**
+    macro, which contains the path to the plugins:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In total, Nagios has provisions for 32 freely definable **`$USERx$`** macros,
+    where **``*`x`*``** can be from 1 to 32\. These can be very useful in combination
+    with passwords, for example: a password is defined via such a macro in the file
+    **`resource.cfg`**, which may be read only by the user **`nagios`**. The defined
+    macro is used in the actual service definitions, thus hiding the password from
+    view of curious onlookers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter 3. Startup
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Once Nagios and the plugins are installed, Apache is set up for the Web interface,
+    and a minimal configuration is created as previously described, operation of the
+    system can get under way. If you have not already done so, it is recommended that
+    you first spend a bit of time on the test for the **`check_icmp`** plugin, described
+    in [1.4 Installing and Testing Plugins](../Text/ch01s04.html "1.4 Installing and
+    Testing Plugins") (page 43), to check the initial configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 3.1 Checking the Configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The **`nagios`** program, which normally runs as a daemon and continually collects
+    data, can also be used to test the configuration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Although warnings displayed here can in principle be ignored, this is not always
+    what the inventor had in mind: perhaps you made a mistake in the configuration,
+    and Nagios is ignoring a specific object, which you would actually like to use.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you have not defined any service for a host, for instance, Nagios will issue
+    a warning, as in the example above for **`eli-sw01`**. It is therefore recommended
+    to define a "PING" service for every host, although this is not absolutely essential.
+    Even if the same plugin, **`check_icmp`**, is used here as with the host check,
+    this is not the same thing. The host check is satisfied with a single response
+    packet—after all, it only wants to find out if the host "is alive". As a service
+    check, **`check_icmp`** registers packet run times and loss rates, which can be
+    used to draw conclusions, if necessary, concerning existing problems with a network
+    card.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In contrast to warnings, genuine **`errors`** must be eliminated, because Nagios
+    will usually not start if the parser finds an error, as in the following example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here the configuration mistakenly contains a host called **`linux03`**, for
+    which there is no definition. If you read through the error message carefully,
+    you will quickly realize that the error can be found in the file **`/etc/nagios/mysite/services.cfg`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the definition of independencies (*host* and *service dependencies*; see
+    [12.6 Accounting for Dependencies between Hosts and Services](../Text/ch12s06.html
+    "12.6 Accounting for Dependencies between Hosts and Services"), page 285) there
+    is a fundamental risk that circular dependencies could be specified by mistake.
+    Because Nagios cannot automatically resolve such dependencies, this is also checked
+    before the start, and if necessary, an error is displayed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When using the **`parents`** parameter, it is also possible that two hosts may
+    inadvertently serve mutually as "parents;" Nagios also tests this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 3.2 Getting Monitoring Started
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: During the Nagios installation, the command
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE68]'
+  prefs: []
+  type: TYPE_PRE
+- en: saves a startup script in the directory containing the boot-up scripts, usually
+    **`/etc/init.d`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 3.2.1 Manual start
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'If the configuration test ran without error, Nagios on Debian, Ubuntu, and
+    OpenSuSE is first started manually with this script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE69]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Fedora provides its own startup mechanism:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE70]'
+  prefs: []
+  type: TYPE_PRE
+- en: If everything runs smoothly here (which can be checked by running the Web interface—see
+    [3.3 Overview of the Web Interface](../Text/ch03s03.html "3.3 Overview of the
+    Web Interface") in page 85), you only need to make sure that the script is executed
+    at system start. The required steps, depending on the distribution, are described
+    in [1.3 Starting Nagios Automatically](../Text/ch01s03.html "1.3 Starting Nagios
+    Automatically") in page 43.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 3.2.2 Making configuration changes come into effect
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'If configuration changes are made, it is not required, and not even recommended,
+    that you restart Nagios each time. Instead, you just perform a reload:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE71]'
+  prefs: []
+  type: TYPE_PRE
+- en: This causes Nagios to reread the configuration, end tests for hosts and services
+    that no longer exist, and integrate new computers and services into the test.
+    However, with each reload there is a renewed *scheduling* of checks, meaning that
+    Nagios plans to carry out all tests afresh.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To prevent all tests from being started simultaneously at bootup, Nagios performs
+    a so-called *spreading*. Here the server spreads the start times of the tests
+    over a configurable period.^([[40](#ftn.CHP-3-FN-1)]) Therefore, for a large number
+    of services, it can take a while before Nagios continues the test for a specific
+    service. For this reason you should never run reloads at short intervals: in the
+    worst case, Nagios will not manage to perform some checks in the intervening period
+    and will perform them only some time after the most recent reload.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before being reloaded, the configuration is tested to eliminate any existing
+    errors, as shown in [3.1 Checking the Configuration](../Text/ch03.html#checking_the_configuration
+    "3.1 Checking the Configuration").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[40](#CHP-3-FN-1)]) The relevant configuration parameters are called **`max_host_check_spread`**
+    and **`max_service_check_spread`**, see [A.1 The Main Configuration File nagios.cfg](../Text/apa.html#an_overview_of_the_nagios_configuration
+    "A.1 The Main Configuration File nagios.cfg"), page 599.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 3.3 Overview of the Web Interface
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If you call the URL [http://nagios-server/nagios](http://nagios-server/nagios)
+    in the browser when the Nagios daemon is running, you will be taken to the welcome
+    screen shown in [Figure 3-1](../Text/ch03s03.html#the_start_screen "Figure 3-1. The
+    start screen").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The start screen](../Images/tagoreillycom20081104nostarchimages223786.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-1. The start screen
+  prefs: []
+  type: TYPE_NORMAL
+- en: The so-called "tactical overview" (**Tactical Overview**), which can be reached
+    via the first **`monitoring`** link in the left menu bar, is shown in [Figure 3-2](../Text/ch03s03.html#quotation_mark_tactical_quotation_mark
+    "Figure 3-2. "Tactical" overview of all systems and services to be monitored").
+    It summarizes the status of all tested systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Considerably more interesting in practice, however, is the display of the menu
+    item **Service Problems** ([Figure 3-3](../Text/ch03s03.html#nagios_colon_summary_of_all_service
+    "Figure 3-3. Nagios: summary of all service problems")). It documents the services
+    that are currently causing problems, those that are not in the OK status, in the
+    very sense for which Nagios was conceived: to inform the administrator precisely
+    of any problems.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '!["Tactical" overview of all systems and services to be monitored](../Images/tagoreillycom20081104nostarchimages223788.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-2. "Tactical" overview of all systems and services to be monitored
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Nagios: summary of all service problems](../Images/tagoreillycom20081104nostarchimages223790.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 3-3. Nagios: summary of all service problems'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first column names the host involved. If this has a gray background, Nagios
+    can reach the computer in principle. If the host is "down" this can be seen by
+    the red background. For services, red stands for CRITICAL and yellow for WARNING.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second column provides the service name, the third column the status again,
+    in plain text. Column four specifies the time of the last check. Column five is
+    interesting—it shows how long the current status has been going on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The sixth column with the heading **Attempt** reveals how often Nagios has
+    already performed the test (unsuccessfully): **`3/3`** means that the error status
+    has been confirmed for the third time in succession, but that the test is only
+    performed three times if there is an error (parameter **`max_check_attempts`**,
+    see [2.3 Defining the Machines to Be Monitored, with host](../Text/ch02s03.html
+    "2.3 Defining the Machines to Be Monitored, with host")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, the last column passes on the information from the plugin to the administrator,
+    to whom it describes the current status in more detail. The above line in [Figure 3-3](../Text/ch03s03.html#nagios_colon_summary_of_all_service
+    "Figure 3-3. Nagios: summary of all service problems") warns that only 21 percent
+    of disk space is still available on drive D (service **`DISK_D`**) of the Windows
+    server ELISAN01.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![An overview of all hosts (extract)](../Images/tagoreillycom20081104nostarchimages223792.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-4. An overview of all hosts (extract)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **`Host Detail`** ([Figure 3-4](../Text/ch03s03.html#an_overview_of_all_hosts_open_parenthesi
+    "Figure 3-4. An overview of all hosts (extract)")) and **`Service Detail`** overviews
+    provide an overview of all hosts and services. In practice you will be looking
+    more precisely for information, either via a single host or on a host group or
+    service group. The name in question is entered in the **Show Host** search field.
+    [Figure 3-5](../Text/ch03s03.html#services_to_the_host_elix01_open_parent "Figure 3-5. Services
+    to the host elix01 (extract)") shows this using the example of the **`elix01`**
+    host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alternatively you can search for the names of host and service groups. An interesting
+    variation here is to have a *status grid* output shown via the link **Hostgroup
+    Grid**, which displays an overview of all hosts and their corresponding services,
+    together with the status of these ([Figure 3-6](../Text/ch03s03.html#the_host_group_elilinux_in_the_grid_rep
+    "Figure 3-6. The host group eliLINUX in the grid representation")). Through the
+    color of the service (green/yellow/red), you can quickly see at a glance whether
+    there are problems in the service group or host group that you are viewing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Services to the host elix01 (extract)](../Images/tagoreillycom20081104nostarchimages223794.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-5. Services to the host `elix01` (extract)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The host group eliLINUX in the grid representation](../Images/tagoreillycom20081104nostarchimages223796.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-6. The host group `eliLINUX` in the grid representation
+  prefs: []
+  type: TYPE_NORMAL

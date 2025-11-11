@@ -1,0 +1,1383 @@
+- en: Chapter 6. PERL, FLOWSCAN, AND CFLOW.PM
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages651574.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Welcome to the most troublesome part of a flow-tools implementation: the Perl
+    module. Perl is popular for quickly creating reporting tools and web interfaces.
+    One of the most user-friendly flow-reporting tools, FlowScan, is built on Perl,
+    but unfortunately, the Perl module for working with flow files, *Cflow.pm*, is
+    difficult to install correctly. This isn''t because of Perl but because flow collectors
+    all have different on-disk storage formats. Your *Cflow.pm* installation must
+    know how to read flow-tools flow files.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Cflow.pm* is named after the obsolete flow collector cflowd. When the cflowd
+    project shut down, cflowd''s authors recommended migrating to flow-tools. *Cflow.pm*
+    was modified to include optional support for flow-tools. Many mailing list archive
+    messages and lots of documentation refer to cflowd and *Cflow.pm* and don''t necessarily
+    differentiate between the two. You need *Cflow.pm*, not cflowd.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Cflow.pm
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Historically, correctly installing *Cflow.pm* has been the most difficult and
+    annoying part of any flow analysis implementation. Internet searches will uncover
+    all sorts of articles and mailing list archives discussing *Cflow.pm* installation
+    issues, including a series of articles by this author. The new flow-tools release
+    has a specific process for installing *Cflow.pm*. Use the recommended process,
+    and test your *Cflow.pm* immediately after installation. Do not proceed if your
+    *Cflow.pm* install does not give sensible results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing Cflow.pm
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The *Cflow.pm* kit includes a command-line tool for accessing flow files, `flowdumper`.
+    It's not as powerful or as flexible as the tools included in flow-tools, but it
+    does test *Cflow.pm*. If `flowdumper` prints the contents of your flow files correctly,
+    your *Cflow.pm* install is working. Just run **`flowdumper -s`**, and give it
+    the name of a flow file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `-s` tells `flowdumper` to print a summary of each flow on one line. Each
+    line represents a flow. You'll see the source and destination addresses and ports,
+    the protocol number, the TCP flags, the number of packets, and the number of octets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your *Cflow.pm* install is faulty, `flowdumper` returns either silently or
+    with an error. You cannot proceed with Perl modules or FlowScan until you resolve
+    any error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FAILURE LURKS HERE
+  prefs: []
+  type: TYPE_NORMAL
+- en: Correct *Cflow.pm* installation seems to be the single most common reason flow
+    management projects fail. Test *Cflow.pm* immediately upon installation. Do not
+    proceed with any software that uses *Cflow.pm* until `flowdumper` gives correct
+    answers. You have been warned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Install from Operating System Package
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Some operating system vendors include *Cflow.pm* packages that may include flow-tools
+    support. Install the package, and test `flowdumper`. If it doesn't work, uninstall
+    the package before proceeding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Install from Source
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Get the *Cflow.pm* source code, *Cflow-1.053.tar.gz*, from [http://net.doit.wisc.edu/~plonka/Cflow/](http://net.doit.wisc.edu/~plonka/Cflow/)
+    and extract it. Do not follow the building instructions included with the *Cflow.pm*
+    source, however. Flow-tools has changed since Cflow.pm was released, and to build
+    it use the instructions in flow-tools' *contrib/README* file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Go into the extracted *Cflow.pm* source and run
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Test `flowdumper` right now. If it doesn't work, proceed to the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing from Source with a Big Hammer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If your installation from default source fails, this should work. (Unix and
+    Perl purists will scream in moral outrage, and they're welcome to fix the real
+    problem.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the *Cflow-1.053* source directory, open *Makefile.PL* in a text editor.
+    Find this section of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The ❶ reference to *libft.a* is the source of all the trouble. If all else
+    fails, hard-code the path to *libft.a*. My test system has */usr/local/lib/libft.a*,
+    so I would change this source code to read as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then build and install *Cflow.pm* as shown in the earlier [Install from Source](ch06.html#install_from_source
+    "Install from Source") section. `flowdumper` will now show data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If none of these methods work for you, contact the flow-tools mailing list with
+    a full description of your problem, including output from the failed builds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: flowdumper and Full Flow Information
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although `flowdumper` is generally less useful than `flow-print`, it has some
+    unique features. You've already used the summary feature (`-s`) to test *Cflow.pm*.
+    (`flowdumper` can also accept Perl instructions on the command line, but if you're
+    sufficiently skilled in Perl to do that, you can read the `flowdumper` manual
+    page.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you don't use the summary feature, `flowdumper` prints all the information
+    the flow file includes for every flow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: You've seen most of this flow information previously, but the interesting thing
+    here is that `flowdumper` shows everything in the flow record, including data
+    fields that are irrelevant in most environments. You'll see the sensor address
+    (❶), the source and destination addresses (❷), and so on. You'll also see that
+    the sensor is exporting information such as next-hop data (❸), BGP routing data
+    (❹), and such. Although you usually wouldn't want to try to use complete `flowdumper`
+    output for day-to-day management, it lets you verify that your system is collecting
+    all the data you think it should. A more useful system for day-to-day reporting,
+    however, is FlowScan.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FlowScan and CUFlow
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although the text-based flow reports demonstrated in [Chapter 5](ch05.html "Chapter 5. REPORTING
+    AND FOLLOW-UP ANALYSIS") are clearly useful, even nontechnical people easily understand
+    visual representations of traffic. [Chapter 7](ch07.html "Chapter 7. FLOWVIEWER")
+    and [Chapter 8](ch08.html "Chapter 8. AD HOC FLOW VISUALIZATION") demonstrate
+    graphing arbitrary data, but much of the time graphing nonarbitrary data is sufficient.
+    Every network administrator already has a pretty good idea of what constitutes
+    the most common traffic on their network. For example, if you run a web farm,
+    you probably care more about HTTP and HTTPS traffic than you do that of other
+    services. If you manage an office network, you might care a lot about CIFS and
+    printer traffic. Much of the time you can get adequate results by graphing the
+    stuff you know about and lumping what you don't know about into an "other" category.
+    That's what FlowScan is for.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FlowScan is an engine for extracting and aggregating flow data. It provides
+    a web interface that displays graphs depicting network traffic that the network
+    administrator previously deemed interesting. These graphs are suitable for display
+    to users, staff, and customers who would be confused by the more detailed flow
+    reports.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FlowScan is built on *Cflow.pm* and uses the Round Robin Database (RRD), just
+    like MRTG and Cacti. RRD is a fixed-size database that retains data over the long
+    term by compressing and averaging older entries. In other words, RRD gives a pretty
+    good view of recent traffic, a decent view of traffic a few months past, and only
+    a high-level view of last year's traffic. This suffices more often than you'd
+    think, however. Most users want to know why the Internet was slow for the last
+    hour or perhaps how today's traffic compares to last year's traffic. FlowScan
+    will answer these questions, though it cannot explain exactly why the Internet
+    was slow on the afternoon of October 3 a year ago.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FlowScan's modular framework lets network administrators choose from a variety
+    of reporting methods. Of those, I'll cover the popular CUFlow module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FlowScan Prerequisites
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'FlowScan has the following requirements:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Web server, such as any recent version of Apache
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Perl
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Korn shell or pdksh ([http://www.cs.mun.ca/~michael/pdksh/](http://www.cs.mun.ca/~michael/pdksh/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: RRDtool ([http://oss.oetiker.ch/rrdtool/](http://oss.oetiker.ch/rrdtool/)) with
+    Perl shared module support
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Boulder::Stream Perl module
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The ConfigReader::DirectiveStyle Perl module
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The HTML::Table Perl module
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Net::Patricia Perl module
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Cflow.pm*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can install most of these from operating system packages. Although the FlowScan
+    documentation includes warnings about installing the RRDtool Perl module `RRDs.pm`,
+    RRDTool has included this module for some time now.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Be sure to test your *Cflow.pm* install before starting on FlowScan.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing FlowScan and CUFlow
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'FlowScan was originally written to work with the obsolete cflowd collector.
+    If you install FlowScan from an operating system package, the package will probably
+    want to install cflowd and its obsolete compiler libraries, as well as other clutter
+    as dependencies. Other times, the operating system providers have edited the FlowScan
+    software to make the most common use case easier but more unusual uses much more
+    difficult. For these reasons, I recommend installing FlowScan by hand. To do so,
+    follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Download FlowScan from its author's website at [http://net.doit.wisc.edu/~plonka/FlowScan/](http://net.doit.wisc.edu/~plonka/FlowScan/).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Download a copy of version 1.6 or newer of the FlowScan Perl module from [http://net.doit.wisc.edu/~plonka/list/flowscan/archive/att-0848/01-FlowScan.pm](http://net.doit.wisc.edu/~plonka/list/flowscan/archive/att-0848/01-FlowScan.pm)
+    or by searching Google for *flowscan.pm 1.6*. (You can also check the Links section
+    of this book's website.)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Extract the FlowScan tarball, and go into the build directory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The FlowScan author recommends installing FlowScan in the directory where you
+    keep your flow files. Use this directory as the `prefix` in the `configure` command.
+    (If you do not choose a location, FlowScan will install directories, configuration
+    files, and Perl modules in `/usr/local/bin`, which is less than desirable.)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The directory */var/db/flows/test/bin* should now contain your FlowScan software.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You'll also need FlowScan's tiny configuration file, *flowscan.cf*, which isn't
+    automatically installed. It's in the unpacked FlowScan source in the *cf* directory.
+    Copy this template to the FlowScan *bin* directory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, upgrade the existing *FlowScan.pm* file. Version 1.5, which ships with
+    FlowScan, supports cflowd only, but version 1.6 and newer can read `flow-capture`
+    files. Copy version 1.6 right over *bin/FlowScan.pm*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: FlowScan User, Group, and Data Directories
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: With FlowScan installed, create a user called *flowscan* just for FlowScan,
+    and give that user ownership of the FlowScan *bin* directory. Also give the group
+    permissions on the directory so that network administrators can edit FlowScan
+    configuration files without have to enter the root password.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'FlowScan needs two directories at the same level as the *bin* directory: one,
+    called *flowscandata*, for incoming flow data files, and the other, *flowscanrrd*,
+    for flow RRD records. Set the sticky bit on these directories so that incoming
+    files are owned by the flowscan user as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now add your network administrators to the `flowscan` group so that they can
+    configure FlowScan without the need for root access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FlowScan Startup Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Your operating system might include its own startup scripts for FlowScan. If
+    so, check the script's instructions to learn how to configure it. If not, FlowScan
+    includes startup scripts for Linux and Solaris in the *rc* directory. In this
+    section, I'll show how to configure the Linux script. (The Solaris script is very
+    similar, and these scripts should work with minor modifications on any modern
+    operating system.) The top of the file includes four variables that you'll need
+    to set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The *bindir* directory (❶) contains the FlowScan files and *flowscan.cf*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The *scandir* directory (❷) is where FlowScan checks for new data files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Put the *logfile* directory (❸) anywhere you like. I prefer to have all my logs
+    in */var/log*. You must `touch` the logfile before running FlowScan and give the
+    flowscan user permission to change the file,
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, tell FlowScan what user (❹) will run flowscan.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second section of this file contains paths to a variety of standard commands.
+    These should be correct for most Unix-like systems, but if you have trouble, verify
+    each separately.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you've made your changes, have your system startup script run the FlowScan
+    startup script as an argument to `/bin/sh`. (Depending on your system startup
+    process, you might have to add the line `#!/bin/sh` to the top of the script.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring FlowScan
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The *flowscan.cf* file has only four configuration values: `FlowFileGlob`,
+    `ReportClasses`, `WaitSeconds`, and `Verbose`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`FlowFileGlob` tells FlowScan which files to process. Use it to tell FlowScan
+    the directory to examine and the type of file to try to process. Here, I''m examining
+    any `flow-capture` files in the directory */var/db/flows/test/flowscandata*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`ReportClasses` lists all the report modules you''re using. FlowScan comes
+    with two modules, CampusIO and SubNetIO. These are not very configurable and do
+    not really represent modern traffic patterns, so you''ll use CUFlow.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now you tell FlowScan how often to check the directory for files. The CUFlow
+    module assumes that FlowScan runs every five minutes. Don't change this; just
+    use the default.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, verbose logging can help during setup. Set this to 0 once you have
+    FlowScan running. For now, set it to 1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: You've finished configuring FlowScan, but it won't do anything until you set
+    up a reporting module. Let's set up CUFlow and then return to FlowScan.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Configuring CUFlow: CUFlow.cf'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: CUFlow is more configurable than FlowScan's default modules, but it assumes
+    that all traffic it processes is either entering or leaving your network. This
+    makes FlowScan suitable for use on border routers, site MPLS routers, and so on,
+    but not as useful for monitoring traffic that begins and terminates on your network.
+    Transit carriers will have limited use for CUFlow, but even a big ISP has some
+    local networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To install CUFlow, download it from [http://www.columbia.edu/acis/networks/advanced/CUFlow/CUFlow.html](http://www.columbia.edu/acis/networks/advanced/CUFlow/CUFlow.html),
+    and then extract and copy the files *CUFlow.cf* and *CUFLow.pm* to your FlowScan
+    *bin* directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*CUFlow.cf* includes a variety of statements to tell FlowScan what data to
+    look for and how to process it. Edit these to match your network, as follows.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Subnet
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `Subnet` statement tells CUFlow the addresses on your local network. CUFlow
+    uses this to determine whether traffic is inbound or outbound. Flows with a source
+    on this network are considered outbound, while flows with a destination on this
+    network are inbound.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can have multiple `Subnet` statements, as needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '`Network` statements include hosts and ranges that you want to track separately.
+    You can have any number of `Network` statements, and one address can appear in
+    multiple `Network` statements. List either individual hosts or networks with a
+    slash to indicate netmask. Be sure to give each network a one-word name.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: OutputDir
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `OutputDir` directive tells CUFlow where to store its RRD data files. Do
+    not store your records in a web-accessible location or in your `flow-capture`
+    log directory. Instead, store them in the *flowscanrrd* directory next to the
+    *bin* directory that you created for these records.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Each FlowScan module must have its own output directory. If you choose to run
+    multiple FlowScan modules, create additional RRD directories as necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scoreboard
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'CUFlow can also compute the most active sites within a flow file and present
+    a scoreboard of the host addresses that have passed the greatest number of flows,
+    octets, and packets. The `Scoreboard` option takes three arguments: the number
+    of addresses in your "most active" list, a directory to store those lists in,
+    and the filename of the most current list, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here the scoreboard computes the top 10 hosts (❶), storing the old data in the
+    directory */var/www/flowscan/topten/* (❷), and puts the most recent data in the
+    file */var/www/flowscan/topten/topten.html* (❸). You must create the *Scoreboard*
+    directory, give your flowscan user ownership of the directory, and configure your
+    web server to permit access to the current and historical pages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Do not put your scoreboard files in the same directory as your flow files. Your
+    flow files should be nowhere near files served by a web server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: AggregateScore
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: CUFlow can also track the most active hosts over time using `AggregateScore`.
+    Configure the `AggregateScore` option much the same as the `Scoreboard` option
+    with the number of hosts to present, a file to store long-term totals, and a web
+    page for the results, as shown here. (Be sure to put the aggregated data file
+    someplace inaccessible to your web server, such as your RRD data directory.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here I'm presenting the top 10 busiest hosts (❶) in the flow history, storing
+    the long-term data in the directory */var/db/flows/test/flowscanrrd/agg.dat* (❷),
+    and presenting an HTML page of the top 10 in */var/www/flowscan/overall.html*
+    (❸).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Again, you must create the directories beforehand, and FlowScan must have permission
+    to write files in them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Router
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you have multiple flow sensors sending data to the same collector (such as
+    two routers in a BGP/HSRP cluster), identify different sensors with `Router` statements
+    as shown here. CUFlow can separate data from different sensors so that you can
+    see how much traffic each handles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here you identify each router by IP address and give it a human-friendly name.
+    The friendly name will appear in the web interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Service
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '`Service` statements define TCP/IP ports that you want to track separately.
+    CUFlow will generate a separate RRD file for each port or set of ports tracked
+    by a `Service` statement, with each appearing in a separate color in the web interface.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Increasing the number of `Service` statements increases the processing power
+    and disk I/O CUFlow consumes, so don't just copy */etc/services* here!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`CUFlow.cf` includes some examples that you can edit to fit your needs. For
+    example, users on my network are not allowed to use Gnutella or eDonkey, so I
+    comment them out of the file. Here are some example `Service` statements:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first `Service` statement, FTP, uses two TCP ports. The second is much simpler
+    and uses only a single TCP port. The third runs on both TCP and UDP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're not sure which ports to track, run some command-line reports to identify
+    the most heavily used ports on your network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Protocol
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `Protocol` statement is very similar to `Service`, except for Layer 3 instead
+    of Layer 4.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you have IPSec VPNs, you might want to track protocols 50-51 (ESP and AH).
+    PPTP users are probably interested in protocol 47 (GRE).
+  prefs: []
+  type: TYPE_NORMAL
+- en: AS
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: BGP-based sites might be interested in tracking traffic to or from particular
+    networks by AS number. Again, each AS entry here takes processing time. Don't
+    just dump the complete list of AS assignments here!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Software flow sensors such as `softflowd` do not export BGP information, so
+    don't bother with AS analysis when using a software sensor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you've configured CUFlow, let's get some data to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Rotation Programs and flow-capture
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'FlowScan checks a single directory for flow files: */var/db/flows/flowscandata*.
+    If FlowScan doesn''t find any files, it goes back to sleep for five minutes. This
+    `flow-capture` system logs data to files stored in a directory hierarchy. For
+    example, the files for February 17, 2011, are stored in the directory */var/db/flows/test/2011/2011-02/2011-02-17*.
+    How can you get these files into your */var/db/flows/flowscandata* directory?
+    You can use a `flow-capture` log rotation script.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`flow-capture`''s `-R` option runs a script when a flow file is closed and
+    a new temp file created. For example, to run the script `/usr/local/bin/flow-rotate.sh`
+    on each new logfile, you would run `flow-capture` as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`flow-capture` gives the rotation program one argument: the name of the closed
+    logfile relative to the flow directory. For example, as I write this, the `flow-capture`
+    in my test lab is writing to the file *tmp-v05.2011-02-17.152001-0500* in today''s
+    directory. At 3:25 **pm**, `flow-capture` will close this temporary file, rename
+    it *ft-v05.2011-02-17.152001-0500*, and create a new *tmp-* file. At this point,
+    `flow-capture` will run any script specified by `-R` with the path to the current
+    file. It''s as if you ran this command on every logfile as soon as it was closed.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Your script needs to take this name and perform any necessary post-processing
+    on the flow data file. First, you want to copy the flow file to your data directory.
+    Start with the following shell script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Second, once you have the filename, copying the file to the *flowscan* data
+    directory is simple.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now give this script as an argument to `flow-capture -R`, and then verify that
+    the flow file is copied to the FlowScan data directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Make your rotation scripts very simple. Remember that this script will run every
+    five minutes, and if it generates extensive logs or sends email, you'll get those
+    messages 288 times a day.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running FlowScan
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now it''s time to start FlowScan by running its startup script. The FlowScan
+    logfile should have an entry like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this output, FlowScan started (❶) processing the file your log rotation program
+    copied to the data directory. You can see at ❷ how long FlowScan searched the
+    file for data and at ❸ the file size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The most interesting thing here, though, is the flow hit ratio at ❹. This ratio
+    tells you how many flows in the file matched your `Subnet` statement. You should
+    have an overwhelming number of matches. Here, I'm matching 31,593 out of 31,599
+    flows in the file, which is acceptable. (Broadcast traffic and misconfigured hosts
+    probably account for the small number of nonmatching flows.) You can also see
+    at ❺ how long FlowScan took to write the RRD files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, at ❻ FlowScan runs out of files to process, and it goes to sleep for
+    five minutes. When it awakens, it will process any files it finds in the data
+    directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If your log messages do not look like this, you have made an error. Check your
+    permissions, and then google for the error. Someone has almost certainly made
+    the same mistake before. They always have.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FlowScan File Handling
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: FlowScan deletes flow files when it finishes processing them. This is desirable
+    behavior when you've copied the file to a FlowScan-specific data directory, because
+    although disk space is cheap these days, saving two copies of every flow file
+    is a bit much!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you don''t want FlowScan to delete processed files, create a *saved* directory
+    in the FlowScan data directory, and FlowScan will move processed files to this
+    directory. This retention is not hierarchical, however: You''ll add 288 files
+    to this directory daily, 2,016 files weekly, and 104,832 in a year. After a while,
+    a simple `ls` command will take surprisingly long to complete. I recommend that
+    you let FlowScan discard processed files and rely on your originals instead.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Displaying CUFlow Graphs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'CUFlow includes a CGI script to display graphs called *CUGrapher.pl*. This
+    script converts the RRD data into graphs. To use this script, copy it to your
+    web server''s CGI directory, and then set two variables near the top of the script
+    to generate your graphs as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Set the `$rrddir` variable to the directory where you have stored your FlowScan
+    RRD files.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Set the site or company name name with the `$organization` variable.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now point your web browser at the CGI script, and you should see something like
+    [Figure 6-1](ch06s05.html#initial_cuflow_menu "Figure 6-1. Initial CUFlow menu").
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Initial CUFlow menu](httpatomoreillycomsourcenostarchimages651586.png.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: Figure 6-1. Initial CUFlow menu
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Check the checkbox beneath All Svcs, and check the Total checkbox on the far
+    right, as shown in [Figure 6-1](ch06s05.html#initial_cuflow_menu "Figure 6-1. Initial
+    CUFlow menu"). This will display a FlowScan graph of all the TCP/IP services used
+    on this network, somewhat like [Figure 6-2](ch06s05.html#services_in_cuflow "Figure 6-2. Services
+    in CUFlow").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each protocol you defined in *CUFlow.cf* has its own color, as shown in the
+    legend at the bottom of the screen. The legend in the example in [Figure 6-2](ch06s05.html#services_in_cuflow
+    "Figure 6-2. Services in CUFlow") shows the colors assigned to RTSP, HTTP, SMTP,
+    and so on. Whitespace indicates traffic that isn't listed as a service in *CUFlow.cf*.
+    Next to each color you'll see the total amount of traffic for that protocol.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Services in CUFlow](httpatomoreillycomsourcenostarchimages651588.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6-2. Services in CUFlow
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further, positive numbers show traffic leaving your network, and negative numbers
+    show traffic entering the network. For example, at the start of this graph (at
+    the far left), you have 140Kbps leaving the network and 80Kbps entering. Most
+    of the outgoing traffic consists of known services. The large amount of whitespace
+    in the incoming traffic includes traffic that CUFlow hasn't been told to categorize.
+    To identify the traffic in this whitespace, examine the flow files themselves.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CUFlow lets you generate graphs for protocols, networks, and services over various
+    time periods, but it will report on only one protocol, network, or service at
+    a time. Also, CUFlow adds all your selections together. For example, if you select
+    TCP from the Protocol column, HTTP from the Service column, and your web server
+    from the Network column, the result will be a meaningless graph that includes
+    all TCP traffic, all HTTP traffic, and all of your web server's traffic, combined.
+    To create a more specific graph, such as all the HTTP traffic to a particular
+    server, you must use a more flexible tool such as FlowViewer ([Chapter 7](ch07.html
+    "Chapter 7. FLOWVIEWER")). Alternatively, if you will need to check this graph
+    repeatedly, split your flow records, and run multiple FlowScan and CUFlow instances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Flow Record Splitting and CUFlow
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: CUFlow is a useful tool for graphing the most common network situations, but
+    it has its limitations. For example, you cannot select from multiple columns to,
+    say, see how much HTTP traffic your web servers have sent; you can see only the
+    total amount of HTTP traffic or the total amount of web server traffic. Also,
+    you cannot perform true ad hoc reporting with CUFlow, but you can configure it
+    to represent the most common questions about your network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CUFlow's limitations hit home in certain environments. At one time I ran a data
+    center that provided services to remote sites over a private MPLS network. Each
+    plant had a T1 or E1, while the data center had a DS3\. Every site got all of
+    its services from the main data center. I had flow exports and CUFlow on the headquarters
+    DS3, which reported on traffic going to the central mail servers, file servers,
+    proxy servers, and so on, and I wanted to offer management access to graphs that
+    showed how much traffic each plant used and what that traffic was. Most of the
+    plants did not have equipment capable of exporting flow data, however.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I provided useful (but imperfect) results by splitting plant flow information
+    out of the DS3 flow records and running a separate FlowScan instance for each
+    plant. I say "imperfect" because these results wouldn't display plant-to-plant
+    traffic, for example. However, because the overwhelming majority of each plant's
+    offsite traffic went to the central data center, it provided a good guess at what
+    traffic was on the circuit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Splitting flow records is applicable to many environments. For example, web
+    farms don't have remote sites, but they probably have major customers who would
+    each like their own FlowScan pages. You can deliver those separate pages by first
+    splitting the flows into multiple data sets and then setting up a separate FlowScan
+    instance for each data set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Splitting Flows
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To split your flow data into smaller data sets, use `flow-nfilter`. You probably
+    already have a filter for each subset of data, but you''ll need to be sure that
+    the filter covers both incoming and outgoing traffic. For example, to pull only
+    flow data that includes the addresses 192.0.2.0/24, you could use this primitive
+    filter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, use `flow-print` to verify that the filter passes flows for only these
+    addresses, and use `flow-cat` and `flow-nfilter` to create a flow file that contains
+    this data only.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: The file *ft-v05.site1* (❷) is a flow file that contains only the flows permitted
+    by the `site1` filter (❶). Verify this with `flow-print`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scripting Flow Record Splitting
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'FlowScan expects a steady supply of flow files. You should not manually run
+    `flow-cat` and `flow-nfilter` for every new flow file. Instead, use a flow rotation
+    script to filter each new flow file into the smaller data set, as in this example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: The beginning of this script is the same as the flow rotation script you used
+    to copy the flow file to your existing FlowScan instance. (You don't want to break
+    what already works!) The last command splits out the flows for one particular
+    site and creates a flow file of that data in a separate directory. Use `flow-nfilter`'s
+    `-f` argument (❶) to use a nonstandard flow filter definition file, remembering
+    that if your flow filter file has an incomplete or invalid rule, `flow-nfilter`
+    will not run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you happen to be editing your filter rules when the rotation script runs,
+    the script will fail. It's best to have a separate filter definition file just
+    for splitting out these flows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each instance of FlowScan needs its own incoming data directory (❷), as discussed
+    at length in the next section. Add lines to this script for each FlowScan instance
+    on a subset of your data, and be sure to restart `flow-capture` each time you
+    change the rotation script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Filtered CUFlow and Directory Setup
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Give each FlowScan instance its own directory. The main flows are collected
+    in */var/db/flows/test*, so use a directory like */var/db/flows/site1*. This directory
+    needs three subdirectories: *flowscandata* (for incoming filtered flow files),
+    *flowscanrrd* (for RRD files created from processed flow files), and *bin* (for
+    this FlowScan instance). Be sure that the flowscan user can write to these directories.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Copy everything in your original FlowScan *bin* directory into the *bin* directory
+    for this FlowScan instance in order to get all of the updated modules. Then, to
+    set up your new instance, edit *flowscan.cf* by changing `FlowFileGlob` to give
+    the path to the data directory for your new instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, because each FlowScan instance needs a separate directory under your web
+    server in order to store its scoreboard and top hosts lists, create that directory,
+    and then edit *CUFlow.cf* to change the *OutputDir*, *Scoreboard*, and *AggregateScore*
+    directories and files to point to that directory. Finally, give each FlowScan
+    instance its own startup script by copying the existing startup script, editing
+    it to match your new instance, and assigning a new logfile to it. (Remember that
+    the logfile must exist, and the flowscan user must be able to write to it before
+    you start FlowScan.) Now start your second FlowScan instance. If there's a problem,
+    you should see it in the logfile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although it may be tempting to create separate FlowScan instances for every
+    group of servers or even every host on your network, doing so increases system
+    load and maintenance overhead. FlowScan runs every five minutes, and if your server
+    needs more than five minutes to completely process hundreds of FlowScan instances,
+    your system will become unusable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TREADING INTO PERL
+  prefs: []
+  type: TYPE_NORMAL
+- en: FlowScan and CUFlow don't cut it for everyone. For those of you who would rather
+    roll your own, the rest of this chapter discusses how to write your own Perl modules
+    to read flow records. The following code fragments assume that you have a basic,
+    working knowledge of Perl, but not many people are network engineers, systems
+    administrators, *and* Perl programmers. If you're not comfortable reading line
+    noise and couldn't care less about exporting variables or functions, skip to the
+    next chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Cflow.pm
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Perl is a popular language for systems administration and web development. The
+    *Cflow.pm* module lets you write Perl that reads flow files directly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Sample Cflow.pm Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Here's a simple *Cflow.pm* Perl script that prints out all UDP port 500 (Checkpoint
+    ISAKMP, used in IPSec VPNs) flows, stripped down from the script provided in the
+    *Cflow.pm* documentation. This script takes the name of one or more flow files
+    as arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: This script first includes *Cflow.pm* (❶), and then it exports the flow variable
+    names and the `find()` function from that module. The meat of *Cflow.pm* (❷) consists
+    of the `find()` and `wanted()` functions. When you feed a flow file to the script,
+    `find()` sends each flow in the file to the `wanted()` function. In the `wanted()`
+    function (❸), the script performs whatever functions you program in for each individual
+    flow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Cflow.pm* offers many variables to access flow data. Although the meaning
+    of many of these variables is easy to guess, such as `$srcport`, `$dstport`, `$protocol`,
+    and so on, I list them in [Table 6-1](ch06s07.html#cflow.pm_variables-id1 "Table 6-1. Cflow.pm
+    Variables").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`Find()` and `wanted()` allow you to use *Cflow.pm* as the engine to feed flow
+    data into a database, RRD, or hash file; flag interesting flows that fit patterns
+    unique to your environment (that you can''t easily filter for); and so on.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cflow.pm Variables
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[Table 6-1](ch06s07.html#cflow.pm_variables-id1 "Table 6-1. Cflow.pm Variables")
+    shows the variables for evaluating flows offered by *Cflow.pm*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 6-1. *Cflow.pm* Variables
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Variable | Meaning | Sample Output |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$unix_secs` | Epochal seconds of the flow start time | 1229490004 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$exporter` | Sensor IP address as a long (decimal) | 1430200323 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$exporterip` | Sensor IP address as a dotted quad | 192.0.2.3 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$localtime` | Epoch time converted to local time | 2011/12/16 23:59:43 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$srcaddr` | Source IP address as a long (decimal) | 1430200341 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$srcip` | Source IP address as a dotted quad | 192.0.2.27 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$dstaddr` | Destination IP address as a long (decimal) | 1166468433 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$dstip` | Destination IP address as a dotted quad | 69.134.229.81 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$input_if` | Input interface index | 2 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$output_if` | Output interface index | 9 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$srcport` | TCP or UDP source port number or equivalent | 53 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$dstport` | TCP or UDP destination port number or equivalent | 46819 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMPType` | ICMP type (high byte of $dstport, for ICMP flows only) | 3
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMPCode` | ICMP code (low byte of $dstport, for ICMP flows only) | 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMPTypeCode` | Human-friendly name for ICMP type and code | HOST_UNREACH
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$pkts` | Packets in flow | 5 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$bytes` | Octets sent in duration | 138 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$nexthop` | Next-hop router''s IP address as a long (decimal) | 1398215405
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$nexthopip` | Next-hop router''s IP address as a dotted quad | 12.61.8.12
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$starttime` | Epoch seconds in local time at start of flow | 1229489984
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$start_msecs` | Milliseconds portion of start time | 131 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$endtime` | Epoch seconds in local time at end of flow | 1229489985 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$end_msecs` | Milliseconds portion of end time | 871 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$protocol` | TCP/IP protocol number | 17 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$tos` | Type of service | 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$tcp_flags` | Bitwise OR of all TCP flags, or 0x10 for non-TCP flows | 16
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$TCPFlags` | Human-friendly representation of tcp_flags | ACK |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$raw` | The entire original raw flow format | *binary* |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$reraw` | The modified raw flow file format, for writing to a new file |
+    *binary* |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$Bps` | Minimum bytes per second for this flow | 40 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$pps` | Minimum packets per second for this flow | 5 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$src_as` | BGP source AS of the current flow | 701 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$dst_as` | BGP destination AS of the current flow | 11512 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$src_mask` | Source address prefix mask bits | /23 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$dst_mask` | Destination address prefix mask bits | /16 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$engine_type` | Type of flow switching engine (vendor-specific) | 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$engine_id` | Engine ID of the flow switching engine (vendor-specific) |
+    0 |'
+  prefs: []
+  type: TYPE_TB
+- en: To use these variables, you must first preface them with `Cflow::` or export
+    them from *Cflow.pm* as I did at the top of the sample script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other Cflow.pm Exports
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Cflow.pm* also exports the symbolic names for TCP flags and ICMP types and
+    codes. You might find these names, shown in [Table 6-2](ch06s07.html#exported_tcp_flag_symbolic_names
+    "Table 6-2. Exported TCP Flag Symbolic Names"), easier to work with than raw numbers,
+    especially in complicated scripts.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 6-2. Exported TCP Flag Symbolic Names
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Variable | Meaning | Value |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$TH_FIN` | FIN | 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$TH_SYN` | SYN | 2 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$TH_RST` | RST | 4 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$TH_PUSH` | PUSH | 8 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$TH_ACK` | ACK | 16 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$TH_URG` | URG | 32 |'
+  prefs: []
+  type: TYPE_TB
+- en: Make the TCP flags accessible by exporting `tcpflags`. Similarly, export `icmptypes`
+    and `icmpcodes` to use their symbolic names, as shown in [Table 6-3](ch06s07.html#exported_icmp_type_symbolic_names
+    "Table 6-3. Exported ICMP Type Symbolic Names").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 6-3. Exported ICMP Type Symbolic Names
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Variable | Meaning | Value |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_ECHOREPLY` | Echo reply | 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_DEST_UNREACH` | Destination unreachable | 3 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_SOURCE_QUENCH` | Source quench | 4 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_REDIRECT` | Redirect | 5 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_ECHO` | Echo request | 8 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_TIME_EXCEEDED` | Time exceeded | 11 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_PARAMETERPROB` | Error not covered by other ICMP types | 12 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_TIMESTAMP` | Timestamp request | 13 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_TIMESTAMPREPLY` | Timestamp response | 14 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_INFO_REQUEST` | Network info request (obsolete) | 15 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_INFO_REPLY` | Network info reply (obsolete) | 16 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_ADDRESS` | Netmask request | 17 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_ADDRESSREPLY` | Netmask request response | 18 |'
+  prefs: []
+  type: TYPE_TB
+- en: Symbolic names are included for ICMP codes for ICMP types 3 (unreachable, [Table 6-4](ch06s07.html#exported_icmp_type_3_code_symbolic_names
+    "Table 6-4. Exported ICMP Type 3 Code Symbolic Names")), 5 (redirects, [Table 6-5](ch06s07.html#exported_icmp_type_11_code_symbolic_name
+    "Table 6-5. Exported ICMP Type 11 Code Symbolic Names")), and 11 (time exceeded,
+    [Table 6-5](ch06s07.html#exported_icmp_type_11_code_symbolic_name "Table 6-5. Exported
+    ICMP Type 11 Code Symbolic Names")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 6-4. Exported ICMP Type 3 Code Symbolic Names
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Variable | Meaning | Value |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_NET_UNREACH` | Network unreachable | 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_HOST_UNREACH` | Host unreachable | 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_PROT_UNREACH` | Protocol unreachable | 2 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_PORT_UNREACH` | UDP port unreachable | 3 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_FRAG_NEEDED` | fragmentation needed | 4 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_SR_FAILED` | Source routing failed | 5 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_NET_UNKNOWN` | Network not known | 6 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_HOST_UNKNOWN` | Host not known | 7 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_HOST_ISOLATED` | Source host isolated | 8 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_NET_ANO` | Network administratively prohibited | 9 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_HOST_ANO` | Host administratively prohibited | 10 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_NET_UNR_TOS` | Network unreachable at this type of service | 11 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_HOST_UNR_TOS` | Host unreachable at this type of service | 12 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_PKT_FILTERED` | Communication prohibited by filtering | 13 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_PREC_VIOLATION` | Host precedence violation | 14 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_PREC_CUTOFF` | Precedence cutoff in effect | 15 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_REDIRECT_NET` | Redirect for network | 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_REDIRECT_HOST` | Redirect for host | 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_REDIRECT_NETTOS` | Redirect for network and type of service | 2 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_REDIRECT_HOSTTOS` | Redirect for host and type of service | 3 |'
+  prefs: []
+  type: TYPE_TB
+- en: Table 6-5. Exported ICMP Type 11 Code Symbolic Names
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Variable | Meaning | Value |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_EXC_TTL` | Time to live exceeded in transit | 0 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `$ICMP_EXC_FRAGTIME` | Fragment reassembly time exceeded | 1 |'
+  prefs: []
+  type: TYPE_TB
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Between the values available for every flow, TCP flags, and ICMP types and codes,
+    you can add code to perform flow analysis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Acting on Every File
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Cflow.pm* supports actions after processing a flow file, such as freeing memory,
+    reinitializing variables, or perhaps moving a file to an archive directory. If
+    you include it in your script, *Cflow.pm* will call the `perfile()` function once
+    per flow file. Include the reference to `perfile` in your `find()` function immediately
+    after your `wanted` reference.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: This code example prints the filename once per file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Return Value
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `find()` function returns the ratio of the number of flows that matched
+    the `wanted()` function. For example, here I''m returning the number of ICMP flows
+    in the flow file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Running this generates output such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Thirty-four of the 4,140 flows in the input file were ICMP flows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Verbose Mode
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Cflow.pm* generates error messages by default. To disable this, set `verbose`
+    to `0` as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: Every time I set this, I usually end up wishing that I hadn't because it generates
+    lots and lots of output, obscuring useful data. Still, it's useful for debugging.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you understand how to do simple web-based reports, you'll learn how
+    to do hard ones.
+  prefs: []
+  type: TYPE_NORMAL

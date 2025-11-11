@@ -1,0 +1,914 @@
+- en: Chapter 13. A Simple Rails Project
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages686190.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the previous chapter, you installed Rails and became acquainted with the
+    basics of the internal structure of a Rails application. In this chapter, we’ll
+    be creating a Rails app that is a bit more complex—it retrieves multiple instances
+    of a given data type from a database and iterates over those instances for presentation.
+    We’ll also look into some more sophisticated ways of organizing code within Rails.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the Application
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For our purposes, any simple application will suffice. I’ve chosen to create
+    a photo album that will display a few photos from my wedding. It will be able
+    to display all of the photos in a list as thumbnail images with accompanying descriptive
+    text, as well as display each individual image in greater detail. It will also
+    provide navigation tools to allow the user to jump around within the list. All
+    of this will be accomplished via HTML, the default presentation format for the
+    Web. In addition, the application will provide an RSS feed (the XML format we
+    used as a data source in `currency_converter2.rb`) that will describe all the
+    images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initial Creation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We’ll create our application (called `photo_album`) within an appropriate directory
+    with the command `rails photo_album`. Then type `cd photo_album` and `ruby script/server`
+    to start the app. We can verify that Rails is running by browsing to http://localhost:3000,
+    as we did in [Viewing Your Rails Application](ch12s02.html#viewing_your_rails_application
+    "Viewing Your Rails Application") on page 230.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing the Database
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For this application, I’ll be using the MySQL database. I’ll assume that you
+    can get MySQL running on your machine and are able to do simple queries. If that’s
+    not the case, you may want to brush up on MySQL with a book specifically on that
+    topic, such as *Managing and Using MySQL*, by George Reese, Randy Jay Yarger,
+    and Tim King (O’Reilly, 2002). If you are using a database other than MySQL, I’ll
+    assume you are able to work out the subtle differences in the resulting Rails
+    app on your own, with the help of the documentation available from your database
+    vendor and at [http://rubyonrails.org](http://rubyonrails.org).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One thing you may need to do is alter the config/database.yml file, especially
+    if you’re using a database program other than MySQL. I had to edit the value for
+    `socket:` to be `/var/run/mysqld/mysqld.sock`. If you get the error `No such file
+    or directory - /tmp/mysql.sock`, a mismatch in the socket description is the most
+    likely cause. Rails is looking for the MySQL socket file at `/tmp/mysql.sock`,
+    and you need to set it to the right file location. You can find the location of
+    the socket file with this command (preferably as root) on a Unix-like operating
+    system: `find / mysqld.sock | grep mysqld.sock`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding Data
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The photo album app differs from the simple structural example in [Chapter 12](ch12.html
+    "Chapter 12. RubyGems and Rails Preparation") in that it has real data in a database,
+    which we will now assume is handling that data. One of the most convenient ways
+    to manage data for Rails (especially for simple test data like ours), is by using
+    a migration. A *migration* in Rails is a description of data in Ruby that is created
+    and deleted as needed. Let’s take a look at our migration file at `db/migrate/001_create_photos.rb`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ❶ and ❷, we define Constants for both the `COLUMN_NAMES` and `SAMPLE_PHOTOS`,
+    which we use for data insertion. `COLUMN_NAMES` should be obvious, and each element
+    of `SAMPLE_PHOTOS` is a Hash representing a database record, in which each key
+    is the Symbol representation of a column name and the value is whatever data will
+    be in that database field. At ❸, we define the `self.up` method, which contains
+    all the code that will run when we perform our migration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the most important tasks within `self.up` is the creation of the table,
+    which is done at ❹. The `create_table` method takes a Symbol argument for the
+    table name and a block describing what should be done to that table. In our case,
+    `create_table` loops through the `COLUMN_NAMES`, creating a column for table `t`,
+    named with the current value of `c`, of type text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*All our database table fields are of type text. If we had more complex data
+    with different types, we would probably replace the Array *`COLUMN_NAMES`* with
+    a Hash called *`COLUMNS`*, in which each key would be the column’s name and each
+    key’s value would be the column’s data type*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ❺, we create a new Photo instance called `p`; it is based on each member
+    of `SAMPLE_PHOTOS`, which we call `sp` in turn. We then `save!` each version of
+    `p`, which stores its data into the database table. At ❻, we show that when we’re
+    done with this migration, the `:photos` table will be dropped. We execute the
+    migration with the command `rake db:migrate`. Let’s examine the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Note that *`save!`* is named with a bang, because it is destructive (since
+    it saves to the database). Also, running *`rake db:migrate`* runs whichever of
+    your defined migrations is needed to make your migrations current. We only have
+    one, so that’s the only one that runs*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The migration was successful. We can double check that by querying MySQL (or
+    whichever database you’re using).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*At the prompt, I entered the password I have already set up for my specific
+    MySQL installation. Yours is whatever you have already chosen, or it may be unset.
+    This will depend on the specific way you installed MySQL on your machine*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can now see that we have data in the database for use in our Rails app. Let’s
+    move on to creating the other portions of the app.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the Model and Controllers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As you’ve already seen in the previous chapter, Rails makes it very easy to
+    create Models, Controllers, and Views. For the photo album application, we’ll
+    be creating a Model called *Photo* and Controllers called *Album* and *Feed*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the Photo Model
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Within the `photo_album` directory, execute `ruby script/generate model photo`,
+    which creates the Model file `app/models/photo.rb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the Album and Feed Controllers
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Next, within `photo_album`, execute `ruby script/generate controller album index
+    show` and `ruby script/generate controller feed images`. These create the Album
+    Controller with the `index` and `show` Views and the Feed Controller with the
+    `images` View, implemented by multiple files within the `app/controllers` and
+    `app/views` subdirectories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Application
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have created the basic skeleton of our application, let’s examine
+    how it works. Think of this section as similar to the sections [The Code](ch11s06.html#the_code-id043
+    "The Code") or [How It Works](ch11s06.html#how_it_works-id042 "How It Works")
+    in previous chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Photo Model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Our photo album app has one basic piece of data, represented in a Model called
+    Photo. Let’s add some code to what’s already there and explore what it does. Edit
+    `app/models/photo.rb` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ❶ and ❷, we have the `next_id` and `prev_id` methods, respectively. Within
+    them, we make free use of built-in Rails methods. One of these is `minimum`, which
+    is available to all Models; it takes a Symbol argument that establishes which
+    attribute of that Model the minimum status will be based on. Another method is
+    the `find` method, which is a wrapper for SELECT statements in SQL that takes
+    specific arguments for filtering. Also available in Rails is the `@attributes`
+    instance variable, which is a Hash whose keys are the field names from the database
+    table and whose values are that column’s content for that particular instance
+    of the Model. The Photo instance representing the database record with the ID
+    `2` would have an `@attributes[‘id’]` equal to `2`, for example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ❸ and ❹, we also have two private predicates that inform us if our Photo
+    instance is the one with the `last_id?` and `first_id?`, respectively. We accomplish
+    this by performing some simple equality testing with the known maximum and minimum
+    `id` values. Note that the returned `id` values from `maximum` and `minimum` are
+    Integers, while the values stored in `@attributes` are Strings. The `photo.rb`
+    Model therefore makes liberal use of the `to_i` and `to_s` methods as needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Controllers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that we understand our Photo Model, we need to interact with it in some
+    way. That’s the job of one or more Controllers. Our photo album app has two Controllers,
+    Album and Feed, each of which have their own Views.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Album Controller
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Similar to what we did with the Photo Model, let’s add code to the Album Controller
+    and explore what it does. Edit `app/controllers/album_controller.rb` to match
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: As is customary in an MVC application, `album_controller.rb` will be responsible
+    for manipulating and processing data in ways that pertain to our photo album.
+    In this particular case, `album_controller.rb`’s methods generally redirect to
+    something defined in another file or simply provide a useful shortcut.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this demonstration Rails app, I wanted to have an HTML footer that would
+    remain consistent across multiple pages within the Album Controller. The question
+    is then how to implement that feature and where to place its code. One answer
+    would be to duplicate the necessary code in every View that has the footer, but
+    that would be bad design. A better option would be to place the footer creation
+    code in the appropriate Controller and simply call that code in every View where
+    it’s needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, there are situations in which you’d want the code outside of the base
+    Controller. What if you want to implement a common feature across multiple Controllers?
+    Each Controller in a Rails app is a child of the next file we’ll look at (`app/controllers/application.rb`),
+    so putting the code in that file is an option. Another option is to use what Rails
+    calls Helpers. *Helpers* are add-ons to the MVC framework and are similar to the
+    mixin concept we used in `to_lang.rb` in [Chapter 10](ch10.html "Chapter 10. More
+    Complex Utilities and Tricks, Part II"). At ❶ in `album_controller.rb`, we see
+    from the RDoc that our footer-related code is in a distinct file called `app/helpers/footer_helper.rb`,
+    and we can make use of that code within `album_controller.rb` by simply including
+    the line `helper :footer`. If we had a Helper at `app/helpers/credit_card_authorization_helper.rb`,
+    we could make use of its code in a Controller with the line `helper :credit_card_authorization`,
+    and so on. In true object-oriented fashion, this allows us to organize code according
+    to problem domain or topic in separate files, make use of them where needed, and
+    not have to worry about the specific implementations. Of course, we’ll discuss
+    the implementation of the footer code when we get to `app/helpers/footer_helper.rb`,
+    but it’s very convenient that `album_controller.rb` needn’t concern itself with
+    that level of detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Helpers are even defined as Modules, just as traditional mixins are. This
+    application has a lot of code in Helper files, which I’ll describe shortly, after
+    I talk about the Controllers*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Along with the Helper inclusion at ❶, we also have definitions of methods corresponding
+    to the `index` and `show` Views at ❷ and ❸. The `show` method at ❸ is merely a
+    shortcut for the built-in Rails method `find`. In this case, it takes an argument
+    of the `id` parameter passed into the web application, which is available to us
+    as `params[:id]`. This is how we show the specific requested photo. The `index`
+    method at ❷ is (as we know from [Chapter 12](ch12.html "Chapter 12. RubyGems and
+    Rails Preparation")) the default method called when none is explicitly provided.
+    It merely establishes an instance variable within the Controller called `@photos`.
+    To do so, it calls a method named `all_photos`, which is defined in our next file,
+    `app/controllers/application.rb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The *`params`* Hash in a Rails app is equivalent to *`cgi.params`*, which
+    we saw in the *`simple_cgi.rb`* script in [Chapter 11](ch11.html "Chapter 11. CGI
+    and the Web")*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Application Controller
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `application.rb` file in any Rails application describes the superclass
+    of all Controllers. If there is any behavior or characteristic that you want to
+    be truly universal across all Controllers, this is the place to put it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Note that you can modularize your code (i.e., break it down by topic into
+    Helpers) and still make it universal. Just organize your code into Helpers, and
+    then include all of those Helpers with *`helper`* lines in *`app/controllers/application.rb`*.
+    Easy*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Edit `app/controllers/application.rb` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: All we’ve done in this file is define the `all_photos` method at ❶. This is
+    arguably silly, in that it only provides a slightly shorter way to call `Photo.find(:all)`.
+    However, this is primarily a demonstration app, and it does show that `all_photos`
+    is now available to any Controller, anywhere in the application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The session information is automatic, and it helps Rails disambiguate among
+    multiple users that are using the app at the same time. For example, I can browse
+    the entire list of photos with the Album’s *`index`* View, while you simultaneously
+    look in greater detail at the second photo with Album’s *`show`* View*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Feed Controller
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The Album Controller is not our only Controller. I also want to provide an RSS
+    feed of information about these images, and the Feed Controller is our way of
+    doing so. Just like `album_controller.rb`, it descends from `app/controllers/application.rb`,
+    so it has the `all_photos` method available to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Edit `app/controllers/feed_controller.rb` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ❶, we define a constant for the `CONTENT_TYPE`, declaring something appropriate
+    for an RSS feed. Then at ❷, we declare our only method, `images`. It establishes
+    the `@photos` instance variable just as `album_controller.rb` does, and also sets
+    `@headers[‘Content-Type’]`. The `@headers` variable is, as you might expect, the
+    variable used to define the HTTP headers of the application’s output. Before moving
+    on to the Views, let’s see what’s going on in our Helper files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Helpers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Models, Controllers, and Views are not the only types of files in a Rails app.
+    I touched on the concept of Helpers in our discussion of the Photo Model, but
+    now we’ll explore them in depth.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Album Helper
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Edit `app/helpers/album_helper.rb` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ❶, we start defining some useful Constants, including one of our old friends,
+    a Hash with Symbol keys, at ❷. At ❸, we define a method called `row_class_from_index`,
+    whose RDoc explains that it merely outputs text representing the appropriate CSS
+    class. This allows us to change the CSS style of a row easily, and the modulus
+    makes it repeat. At ❹, we have a method called `show_listing_header_columns` that
+    simply returns the corresponding Constant. The `show_photo` method at ❺ uses the
+    built-in Rails method `image_tag`, which takes the location of the image (the
+    `src` attribute of the `img` tag, in other words) as the first argument. The second
+    argument is a Hash whose keys will be any additional `img` attributes and whose
+    values will be used as the values for the corresponding `img` attributes. The
+    location (i.e., `img src`) is the `photo`’s `image_path`, and since all `img`
+    tags should have an `alt` attribute, we provide that, with an appropriate identifying
+    String based on the `photo`’s `title`. At ❻, we define `show_thumbnail_for_list`,
+    which is a Helper method for presentation that is very similar to `show_photo`.
+    It only differs by including a `style` attribute for the resulting `img` tag,
+    whose value is `IMAGE_STYLE[:thumb]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*One easy way to refactor this code (meaning to change its internal structure
+    without changing its overall behavior) would be to combine *`show_photo`* and
+    *`show_thumbnail_for_list`* into a single *`show_photo`* method that takes an
+    optional third argument, which declares whether or not the photo is a thumbnail.
+    You can read more about the process of refactoring in Martin Fowler’s book* Refactoring
+    (*Addison-Wesley Professional, 1999*).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, at ❼, we define `page_title`. If there is a `@photo` present, `page_title`
+    will return that `@photo`’s `title`. If there is no `@photo`, it will fall back
+    to the `action_name` of the `controller`. What does that mean? The `@photo.title`
+    should be straightforward. The `action_name` is essentially the name of the View.
+    This means that when we browse using the `index` View (or `action_name`) and have
+    not yet selected a specific photo to view in greater detail with the `show` View,
+    the `page_title` will simply be `index`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, at ❽, we define `title_with_thumbnail`. It uses several other methods
+    and Constants. Rails has a built-in method called `h`, which formats its input
+    for HTML presentation. For example, `h(&)` returns `&amp;`. This is useful in
+    our app because we have a photo whose title is *Liam & Ducks*, but we don’t want
+    that ampersand to break the HTML validity of the output. The `title_with_thumbnail`
+    method uses our home-brewed `show_thumbnail_for_list` and `join`s it with `page_title`,
+    using whatever we’ve defined `HTML_BREAK` to be within the `ApplicationHelper`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'WHERE TO PUT CODE: CONTROLLER OR HELPER (OR ELSEWHERE)?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, the Album Helper is noticeably bigger than the Controller it
+    aids. When should you put code in the Controller, and when should you put it in
+    a Helper? That’s a good question. When there isn’t a clear division by topic,
+    such as for the `footer_helper.rb` below, it becomes more difficult to answer.
+    When something is truly fundamental to the data, such as the Photo methods that
+    directly pertain to ids, it probably belongs in the Model. When something is completely
+    presentationspecific, it can probably go in the appropriate View. However, it’s
+    considered bad style to have too much dynamic content in a View file. Anything
+    more complicated than looping over a set of items should probably be abstracted
+    into a method, rather than being in the View itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That leaves either the Controller or a Helper. As you can see, I like to have
+    a fairly sparse, minimalist Controller—critics might say that makes my Helpers
+    too busy. Other coders might put many methods directly in the Controller, making
+    little use of Helpers at all. Still others might have broken anything related
+    to thumbnail images into yet another Helper called `thumbnail_helper.rb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are many options. As long as you don’t put presentation-related methods
+    in your Model, and you keep your Views relatively free of code that actually does
+    *stuff* (instead including mostly code that *presents stuff*), you’re probably
+    doing fine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the ApplicationHelper
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We’ve already seen that `album_helper.rb` expects a definition for `HTML_BREAK`
+    within `ApplicationHelper`. Let’s see how it does it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Edit `app/helpers/application.rb` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: There isn’t much there—it’s basically just the Constant definition we expected.
+    Why is it defined here, and not in `AlbumHelper`? Because we’ll also need it in
+    `FooterHelper`. Note that while Controllers automatically descend from `ApplicationController`,
+    Helpers don’t automatically descend from `ApplicationHelper`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the FeedHelper
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Edit `app/helpers/feed_helper.rb` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ❶, we start with our usual Constant declarations. These include a declaration
+    at ❷ for `LINK_OPTIONS_DEFAULTS`, which stores information common across multiple
+    types of links, and one for `LINK_OPTIONS` at ❸, which uses these defaults and
+    also adds a pair whose key is `:action` and whose value is either `:index` or
+    `:show`, depending on how it’s called. These `:index` and `:show` values represent
+    Views within the Album Controller, of course, as the value for `:controller` in
+    `LINK_OPTIONS_DEFAULTS` indicates. `FeedHelper` also defines several other Constants
+    with values useful for an RSS feed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ❹ we have a method called `feed_description`, which simply passes the value
+    of the `DESCRIPTION` Constant through the Rails built-in method `h`, which we’ve
+    already seen and which formats for HTML presentation. Finally, `rss_url_for_image`
+    at ❺ is a wrapper we’ve built around the Rails method `url_for`, which behaves
+    as its name suggests. (It is described in greater detail at [http://api.rubyonrails.org/classes/ActionView/Helpers/UrlHelper.html#M000484](http://api.rubyonrails.org/classes/ActionView/Helpers/UrlHelper.html#M000484).)
+    If an `image` is not passed in, `rss_url_for_image` returns the `url_for` the
+    `LINK_OPTIONS` appropriate for an `:index` View. If there is an `image, rss_url_for_image`
+    returns the `url_for` the `LINK_OPTIONS` appropriate for a `:show` View and includes
+    the `:id` of the image to be shown.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The behavior of *`rss_url_for_image`*, which differs depending on whether
+    or not there is an *`image`*, is similar to the potential melding of *`AlbumHelper.show_photo`*
+    and *`AlbumHelper.show_thumbnail_for_list`* proposed earlier*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the FooterHelper
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Edit `app/helpers/footer_helper.rb` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ❶, we define two Constants, `BAR_SEPARATOR` and `RSS`. The `BAR_SEPARATOR`
+    Constant is a simple delimiter for presentation, while `RSS` is another Hash with
+    Symbol keys that details information pertinent to `:icons` and `:link_options`,
+    respectively. In these definitions, I’ve used `%q[]` instead of single quotes
+    to define `BAR_SEPARATOR`, just as a reminder that the option is available.^([[37](#ftn.CHP-13-FNOTE-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ❷, our main public method, `show_footer`, just returns the outputs of the
+    private methods `rails_link_to_top` and `rss_icon_links, join`ed on the `HTML_BREAK`
+    Constant that we’ve already seen, and all wrapped in an HTML paragraph tag with
+    the id `rails_img_wrapper`. We create our paragraph tag the old-fashioned way—by
+    outputting plaintext. You can still do that in Rails, although the availability
+    of methods like `url_for` and `image_tag` make the practice uncommon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So what do the private methods do? The `rails_link_to_top` method at ❸ just
+    creates a link with the Rails built-in `link_to`, which takes the link argument
+    and a Hash describing the `:controller` to be used: `‘album’`, in this case. The
+    Hash can also describe the `:action`, if needed. The `rss_icon_links` method at
+    ❹ `map`s an operation onto each member of `RSS[:icons]`. That operation is also
+    a call to `link_to`, where the linked image is the current element within `RSS[:icons]`
+    (called `icon`) and the Hash describing the `:controller` and `:action` is always
+    `RSS[:link_options]`. The Array resulting from the `map` is then `join`ed on the
+    `BAR_SEPARATOR`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Album Controller’s Views
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now, let’s move on to the Views. Since we’ve already defined so much of the
+    application in methods within either the Model, Controller, or various Helpers,
+    our Views should be fairly sparse. View files differ from the files we’ve seen
+    so far in that they are .rhtml files (similar to `mod_ruby_demo.rhtml`), not pure
+    Ruby .rb files. That’s one of the reasons (apart from good application design
+    principles) that having too much dynamic Ruby content in your View files is discouraged.
+    It’s relatively easy to debug Ruby within Ruby, but it isn’t so easy when you
+    have to keep shifting back and forth between Ruby and HTML.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the index View
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Edit `app/views/album/index.rhtml` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ❶, we have HTML comments explaining where to find the methods that we put
+    to use within this file. The file then continues with ordinary, unsurprising HTML.
+    You may wonder why there are no `<html>, <head>`, or `<body>` tags. For that answer,
+    you’ll have to wait until we introduce the concept of layouts and describe the
+    file `app/views/layouts/album.rhtml` later in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first appearance of Ruby at ❷ is a call to `show_listing_header_columns`,
+    which we know (and which our HTML comments remind us) was defined in `app/helpers/album_helper.rb`.
+    This allows the View to call a method whose name says what it does, without worrying
+    about the implementation. Next, at ❸, we will loop through each `photo` within
+    `@photos`, along with its index, which we’ll call `i`. You’ll notice that the
+    `each_with_index` line ends its Ruby escape with `-%>`, not just `%>`. This tells
+    Rails that there should not be an automatic carriage return in the interpreted
+    output. It’s not critical here, but you can imagine this could be very useful
+    within a `<pre>` tag, for example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What do we do with each `photo`? We’ll present it within a table, applying the
+    CSS class of `row_class_from_index(i)` to each `<td>` element at ❹. The content
+    within that `<td>` element will be the result of a multi-line Ruby call that begins
+    at ❺. Its value is the result of a `link_to` call on the `title_with_thumbnail`
+    that points to the `‘show’ :action` and displays the photo identified by `photo.id`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition to the thumbnail `<td>` cell, we also want another `<td>` cell that
+    contains the photo’s description. That begins at ❻, with another call to `row_class_from_index`.
+    Its `<td>` cell contains simply `photo.description` at ❼. We then close the `each_with_index`
+    call from ❸ with `end` at ❽. Finally, at ❾ we call `show_footer`, which we’ve
+    already discussed in `footer_helper.rb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the show View
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Now let’s look at the `show` View, which displays a particular photo in greater
+    detail. Edit `app/views/album/show.rhtml` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: We start off again with some HTML reminder comments. The first real Ruby appears
+    at ❶—it is a call to `show_photo` from AlbumHelper, passing in `@photo`, which
+    is the particular photo instance that matches the `id` parameter used to call
+    the `show` View. Then at ❷, we pass `@photo`’s `title` through the `h` formatter
+    method, and at ❸, we wrap the `@photo`’s `description` within an appropriately
+    classed paragraph tag.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Under a horizontal rule, we have an unordered list, each item of which is a
+    call to the `link_to` method. At ❹, we provide a link called `‘First’` that `show`s
+    the photo with the `minimum :id`. At ❺, the link destination `show`s the photo
+    with the previous `id` via the text `‘Previous’`, and at ❻, the destination `show`s
+    the Photo with the `next_id` via the text `‘Next’`. At ❼, it `show`s the `‘Last’`
+    photo, defined as the one with the `maximum :id`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The links so far have all been formatted in the simple `<a href>` style, but
+    there are other options available. For instance, Rails provides many built-in
+    methods to perform some common JavaScript operations. One of these is the confirm
+    box, which interrupts your browsing with a box asking you to confirm some question.
+    I’m sure you’ve seen them while browsing, but [Figure 13-1](ch13s02.html#a_confirm_box_automatically_generated_by
+    "Figure 13-1. A confirm box automatically generated by Rails") shows one in the
+    Epiphany browser on Ubuntu.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code at ❽ creates this box for us. Choosing `Cancel` makes it do nothing,
+    while choosing `OK` causes it to proceed as if it were a standard link, this time
+    to the `‘index’ :action`. The code to describe this also adds a second Hash to
+    `link_to`, with the key `:confirm` and with a value taken from the `AlbumHelper::CONFIRM_MESSAGE`
+    Constant. Notice that this link provides the otherwise-optional curly brace delimiters
+    for the Hashes, to show which pairs go with which Hash. The text for the confirm
+    box link is `‘Full List’`, since it brings us back to the `index` View. After
+    some more HTML comments, we see a call to `show_footer` at ❾.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A confirm box automatically generated by Rails](httpatomoreillycomsourcenostarchimages686182.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-1. A confirm box automatically generated by Rails
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Feed Controller’s images View
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In general, everything I’ve said about the Album Controller’s Views will also
+    apply to the Feed Controller’s View. The same basic design principles apply. However,
+    there are a few slight differences. The Feed Controller is more lightweight and
+    has fewer responsibilities. It also only has one View, which we’re about to explore.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As already noted, Album is not our only Controller. We also want to use Feed
+    to display our images within an RSS Feed. Let’s see how that’s done. Edit `app/views/feed/images.rxml`
+    to match the following. Note that the file extension is .rxml instead of .rhtml,
+    since we’re creating XML for an RSS Feed instead of regular HTML.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This file uses a project called XML::Builder ([http://rubyforge.org/projects/builder](http://rubyforge.org/projects/builder)),
+    an XML generation library that comes built in to Rails. At ❶, we call `xml.instruct!`,
+    which starts the XML document. (XML::Builder’s relationship to Rails ensures that
+    the `xml` variable is available, and we don’t have to do anything ahead of time.)
+    Then at ❷, we set up our RSS Feed by calling `xml.rss` with `FeedHelper::RSS_OPTIONS`.
+    Each RSS Feed has a `channel`, which we establish at ❸, and an associated `image`,
+    which we define at ❹.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The content (or articles) within our RSS Feed are each a single photo with associated
+    descriptive text. At ❺, we use `@photos` from the `FeedController`’s `images`
+    method, looping through `each` of them, calling them `image` in turn. Then we
+    create an `xml.item`, passing in a block defining each of the appropriate characteristics.
+    Notice how many of them are either expressible as a Constant (such as `FeedHelper::TITLE`)
+    or as the result of a method call (such as `rss_url_for_image`, with or without
+    an `image` argument).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dissecting the Album Controller’s Layout
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Remember when I first talked about `app/views/album/index.rhtml` and mentioned
+    that that file lacked certain expected HTML content, such as the `<html>` tag?
+    Think about that for a minute. You might expect such content to appear in every
+    View’s .rhtml file, but that would produce a great deal of duplicated content.
+    Duplication is precisely what programmers try to avoid, so we should find some
+    other solution to that problem. One approach would be to define methods in the
+    Controller or a Helper like `doctype_tag, html_tag, head_tag`, and so on, similar
+    to the `image_tag` method that Rails already provides for us.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That would be a reasonable approach, except that invariably what is being created
+    is content in a format that is tightly bound to a particular type of View, most
+    commonly HTML. We already have .rhtml files for that express purpose. Shouldn’t
+    we find a way to have some sort of .rhtml template?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'That’s exactly what layouts are. They wrap View output within a template. Edit
+    `app/views/layouts/album.rhtml` to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ❶, we use `page_title` from `app/helpers/album_helper.rb` for the `<title>`.
+    At ❷ and ❸, we use Rails’ built-in `stylesheet_link_tag` method to include stylesheets.
+    We always want the `master.css` stylesheet, and if the Controller has an `action_name`,
+    we want that associated stylesheet as well. Finally, at ❹, we see `yield :layout`.
+    What does this do?
+  prefs: []
+  type: TYPE_NORMAL
+- en: We already know that `yield` within a method that takes a `block_argument` functions
+    the same way as `block_argument.call` does. This is similar, except that the output
+    from the requested View takes the place of the block. It’s the equivalent of saying
+    *Always wrap whatever is requested inside me, and place whatever was requested
+    at this point*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*If you already know Rails, you know that there are other options for solving
+    this problem, such as using partials, which approach the problem from the bottom
+    up, rather than from the top down. Read more at [http://wiki.rubyonrails.org/rails/pages/Partials](http://wiki.rubyonrails.org/rails/pages/Partials)
+    if you’re interested*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using CSS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `master.css` stylesheet is used throughout the application, and each action
+    automatically includes a stylesheet with the same name (see ❷ and ❸ in `app/views/layouts/album.rhtml`
+    in [Dissecting the Album Controller’s Layout](ch13s02.html#dissecting_the_album_controllers_layout
+    "Dissecting the Album Controller’s Layout") on page 256). When we browse with
+    the `show` View, we will make use of the `show.css` stylesheet, for example. If
+    you’re curious about CSS, you can learn more at websites like [http://csszengarden.com](http://csszengarden.com).
+    The stylesheets `master.css, public.css`, and `index.css` are available for download
+    at this book’s website.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[37](#CHP-13-FNOTE-1)]) For example, you might want to use `%q[]` instead
+    of quotation marks if the String to be defined included quotation marks; some
+    programmers might simply prefer using `%q[]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the Application
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: At this point, we have a photo album application, as well as a decent understanding
+    of how its component parts are organized and how they work, both individually
+    and as part of the whole. Now let’s take a look at this app in action, starting
+    by opening it in a web browser.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 13-2](ch13s03.html#browsing_the_album_controller "Figure 13-2. Browsing
+    the Album Controller") shows how the default action of the Album Controller looks
+    when I view it with the Epiphany web browser. Its appearance should differ only
+    trivially in other graphical browsers, like Firefox or Internet Explorer. [Figure 13-3](ch13s03.html#showing_the_first_image_in_the_album_con
+    "Figure 13-3. Showing the first image in the Album Controller") shows the appearance
+    of the first image, as displayed by the `show` View of the Album Controller.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figures [Figure 13-4](ch13s03.html#browsing_the_rss_images_in_the_feed_cont
+    "Figure 13-4. Browsing the RSS images in the Feed Controller with Epiphany") and
+    [Figure 13-5](ch13s03.html#browsing_with_the_akregator_rss_reader "Figure 13-5. Browsing
+    with the Akregator RSS reader") show the appearance of the `images` View of the
+    Feed Controller. [Figure 13-4](ch13s03.html#browsing_the_rss_images_in_the_feed_cont
+    "Figure 13-4. Browsing the RSS images in the Feed Controller with Epiphany") shows
+    it (again) in Epiphany, while [Figure 13-5](ch13s03.html#browsing_with_the_akregator_rss_reader
+    "Figure 13-5. Browsing with the Akregator RSS reader") shows it in Akregator,
+    which is a program designed specifically for viewing RSS feeds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Browsing the Album Controller](httpatomoreillycomsourcenostarchimages686160.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-2. Browsing the Album Controller
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Showing the first image in the Album Controller](httpatomoreillycomsourcenostarchimages686146.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-3. Showing the first image in the Album Controller
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Browsing the RSS images in the Feed Controller with Epiphany](httpatomoreillycomsourcenostarchimages686186.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-4. Browsing the RSS images in the Feed Controller with Epiphany
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Browsing with the Akregator RSS reader](httpatomoreillycomsourcenostarchimages686174.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-5. Browsing with the Akregator RSS reader
+  prefs: []
+  type: TYPE_NORMAL
+- en: Learning More About Rails
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter has only scratched the surface of Rails. I’ve barely described
+    some of the Helper methods (like `image_tag` and `link_to`), and I haven’t even
+    touched on topics like ActiveRecord’s ability to create relationships between
+    multiple Models, Unit Testing within Rails, forms within Rails, user creation
+    and authentication, session handling, and much more. Even so, this is already
+    the longest chapter in a Ruby book that tried very hard to be about Ruby, as distinct
+    from Rails—and I even had to describe the basic anatomy of a Rails application
+    in the chapter before this one. There’s a lot to learn in Rails, and you can always
+    read more at [http://rubyonrails.org](http://rubyonrails.org). Just don’t forget
+    that Ruby has a lot to offer apart from Rails, too, as I hope the other chapters
+    in this book have shown.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter Recap
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What was new in this chapter?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Rails with MySQL
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Adding data with migration files
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating a Model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating multi-View Controllers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Adding methods to Models and Controllers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The ApplicationController superclass
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using Helpers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The ApplicationHelper module
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: MVC as it relates to Controllers and Helpers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating Views as .rhtml files
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Doing common JavaScript with Rails’ built-in Helper methods
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using layouts and incorporating the results of [view].rhtml within them
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using stylesheets modularized by View type
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'I hope this book has given you some useful information about coding in Ruby.
+    I’ve tried to play to what I see as the language’s greatest strengths: readability,
+    a high level of abstraction (and great ease in extending that abstraction even
+    higher), internal consistency, and conceptual elegance. All of these characteristics
+    of Ruby remain, whether or not you’re working within Rails. If you do find yourself
+    using Rails, don’t forget that along with `each`, you can still use `map` and
+    `inject`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanks for reading.
+  prefs: []
+  type: TYPE_NORMAL

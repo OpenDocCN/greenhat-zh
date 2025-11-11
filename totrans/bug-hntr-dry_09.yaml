@@ -1,0 +1,442 @@
+- en: Appendix A. Hints for Hunting
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This appendix describes, in more depth than in the text, some vulnerability
+    classes, exploitation techniques, and common issues that can lead to bugs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A.1 Stack Buffer Overflows
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Buffer overflows are memory corruption vulnerabilities that can be categorized
+    by *type* (also known as *generation*). Today the most relevant ones are *stack
+    buffer overflows* and *heap buffer overflows*. A buffer overflow happens if more
+    data is copied into a buffer or array than the buffer or array can handle. It’s
+    that simple. As the name implies, stack buffer overflows are happening in the
+    stack area of a process memory. The stack is a special memory area of a process
+    that holds both data and metadata associated with procedure invocation. If more
+    data is stuffed in a buffer declared on the stack than that buffer can handle,
+    adjacent stack memory may be overwritten. If the user can control the data and
+    the amount of data, it is possible to manipulate the stack data or metadata to
+    gain control of the execution flow of the process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The following descriptions of stack buffer overflows are related to the 32-bit
+    Intel platform (IA-32)*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every function of a process that is executed is represented on the stack. The
+    organization of this information is called a *stack frame*. A stack frame includes
+    the data and metadata of the function, as well as a *return address* used to find
+    the caller of the function. When a function returns to its caller, the return
+    address is popped from the stack and into the instruction pointer (program counter)
+    register. If you can overflow a stack buffer and then overwrite the return address
+    with a value of your choosing, you get control over the instruction pointer when
+    the function returns.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are a lot of other possible ways to take advantage of a stack buffer overflow
+    for example, by manipulating function pointers, function arguments, or other important
+    data and metadata on the stack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s look at an example program:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example A-1. Example program *stackoverflow.c*
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The example program in [Example A-1](apa.html#example_program_stackoverflow.c
+    "Example A-1. Example program stackoverflow.c") contains a simple stack buffer
+    overflow. The first command-line argument (line 15) is used as a parameter for
+    the function called `overflow()`. In `overflow()`, the user-derived data is copied
+    into a stack buffer with a fixed size of 12 bytes (see lines 6 and 8). If we supply
+    more data than the buffer can hold (more than 12 bytes), the stack buffer will
+    overflow, and the adjacent stack data will be overwritten with our input data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure A-1](apa.html#stack_frame_illustrating_a_buffer_overfl "Figure A-1. Stack
+    frame illustrating a buffer overflow") illustrates the stack layout right before
+    and after the buffer overflow. The stack grows downward (toward lower memory addresses),
+    and the *return address (RET)* is followed by another piece of metadata called
+    the *saved frame pointer (SFP)*. Below that is the buffer that is declared in
+    the `overflow()` function. In contrast to the stack, which grows downward, the
+    data that is filled into a stack buffer grows toward higher memory addresses.
+    If we supply a sufficient amount of data for the first command-line argument,
+    then our data will overwrite the buffer, the SFP, the RET, and adjacent stack
+    memory. If the function then returns, we control the value of RET, which gives
+    us control over the instruction pointer (`EIP` register).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Stack frame illustrating a buffer overflow](httpatomoreillycomsourcenostarchimages939337.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure A-1. Stack frame illustrating a buffer overflow
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Example: Stack Buffer Overflow Under Linux'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To test the program from [Example A-1](apa.html#example_program_stackoverflow.c
+    "Example A-1. Example program stackoverflow.c") under Linux (Ubuntu 9.04), I compiled
+    it without stack canary support (see Section C.1):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, I started the program in the debugger (see Section B.4 for more information
+    about gdb) while supplying 20 bytes of user input as a command-line argument (12
+    bytes to fill the stack buffer plus 4 bytes for the SFP plus 4 bytes for the RET):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I gained control over the instruction pointer (see the `EIP` register), as
+    the return address was successfully overwritten with the four `C`s supplied from
+    the user input (hexadecimal value of the four `C`s: `0x43434343`).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Example: Stack Buffer Overflow Under Windows'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'I compiled the vulnerable program from [Example A-1](apa.html#example_program_stackoverflow.c
+    "Example A-1. Example program stackoverflow.c") without security cookie (`/GS`)
+    support under Windows Vista SP2 (see Section C.1):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then, I started the program in the debugger (see Section B.2 for more information
+    about WinDbg) while supplying the same input data as in the Linux example above.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As [Figure A-2](apa.html#stack_buffer_overflow_under_windows_open "Figure A-2. Stack
+    buffer overflow under Windows (WinDbg output)") shows, I got the same result as
+    under Linux: control over the instruction pointer (see the `EIP` register).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Stack buffer overflow under Windows (WinDbg output)](httpatomoreillycomsourcenostarchimages939339.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure A-2. Stack buffer overflow under Windows (WinDbg output)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This was only a short introduction to the world of buffer overflows. Numerous
+    books and white papers are available on this topic. If you want to learn more,
+    I recommend Jon Erickson’s *Hacking: The Art of Exploitation*, 2nd edition (No
+    Starch Press, 2008), or you can type *buffer overflows* into Google and browse
+    the enormous amount of material available online.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A.2 NULL Pointer Dereferences
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Memory is divided into pages. Typically, a process, a thread, or the kernel
+    cannot read from or write to a memory location on the zero page. [Example A-2](apas02.html#using_unowned_memoryman_example
+    "Example A-2. Using unowned memory—an example NULL pointer dereference") shows
+    a simple example of what happens if the zero page gets referenced due to a programming
+    error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example A-2. Using unowned memory—an example NULL pointer dereference
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In line 10 of [Example A-2](apas02.html#using_unowned_memoryman_example "Example A-2. Using
+    unowned memory—an example NULL pointer dereference") the data structure `packet`
+    is initialized with `NULL`, and in line 12 a structure member gets referenced.
+    Since `packet` points to `NULL`, this reference can be represented as `NULL->value`.
+    This leads to a classic *NULL pointer dereference* when the program tries to read
+    a value from memory page zero. If you compile this program under Microsoft Windows
+    and start it in the Windows Debugger WinDbg (see Section B.2), you get the following
+    result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The access violation is caused when the value of `EAX`, which is `0x00000000`,
+    gets referenced. You can get more information on the cause of the crash by using
+    the debugger command `!analyze -v`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: NULL pointer dereferences usually lead to a crash of the vulnerable component
+    (denial of service). Depending on the particular programming error, NULL pointer
+    dereferences can also lead to arbitrary code execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A.3 Type Conversions in C
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The C programming language is quite flexible in handling different data types.
+    For example, in C it’s easy to convert a character array into a signed integer.
+    There are two types of conversion: *implicit* and *explicit*. In programming languages
+    like C, implicit type conversion occurs when the compiler automatically converts
+    a variable to a different type. This usually happens when the initial variable
+    type is incompatible with the operation you are trying to perform. Implicit type
+    conversions are also referred to as *coercion*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Explicit type conversion, also known as *casting*, occurs when the programmer
+    explicitly codes the details of the conversion. This is usually done with the
+    cast operator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is an example of an implicit type conversion (coercion):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, an implicit conversion occurs between unsigned int and signed
+    int.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'And here is an example of an explicit type conversion (casting):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, an explicit conversion occurs between char and signed int.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Type conversions can be very subtle and cause a lot of security bugs. Many
+    of the vulnerabilities related to type conversion are the result of conversions
+    between unsigned and signed integers. Below is an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example A-3. A signed/unsigned conversion that leads to a vulnerability (*implicit.c*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The source code in [Example A-3](apas03.html#a_signed_solidus_unsigned_conversion
+    "Example A-3. A signed/unsigned conversion that leads to a vulnerability (implicit.c)")
+    contains a signed/unsigned conversion vulnerability that is quite similar to the
+    one I found in FFmpeg (see [Chapter 4](ch04.html "Chapter 4. NULL Pointer FTW")).
+    Can you spot the bug?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In line 14, a length value is read in from user input and stored in the signed
+    int variable `length`. The `get_user_length()` function is a dummy that always
+    returns the “user input value” `0xffffffff`. Let’s assume this is the value that
+    was read from the network or from a data file. In line 18, the program checks
+    whether the user-supplied value is less than 12\. If it is, the string “`argument
+    length ok`” will be printed on the screen. Since `length` gets assigned the value
+    `0xffffffff` and this value is much bigger than 12, it may seem obvious that the
+    string will not be printed. However, let’s see what happens if we compile and
+    run the program under Windows Vista SP2:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see from the output, line 19 was reached and executed. How did this
+    happen?
+  prefs: []
+  type: TYPE_NORMAL
+- en: On a 32-bit machine, an unsigned int has a range of 0 to 4294967295 and a signed
+    int has a range of –2147483648 to 2147483647\. The unsigned int value `0xffffffff`
+    (4294967295) is represented in binary as `1111 1111 1111 1111 1111 1111 1111 1111`
+    (see [Figure A-3](apas03.html#the_role_of_the_most_significant_bit_ope "Figure A-3. The
+    role of the Most Significant Bit (MSB)")). If you interpret the same bit pattern
+    as a signed int, there is a change in sign that results in a signed int value
+    of −1\. The sign of a number is indicated by the *sign bit*, which is usually
+    represented by the *Most Significant Bit (MSB)*. If the MSB is 0, the number is
+    positive, and if it is set to 1, the number is negative.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The role of the Most Significant Bit (MSB)](httpatomoreillycomsourcenostarchimages939341.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure A-3. The role of the Most Significant Bit (MSB)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To summarize: If an unsigned int is converted to a signed int value, the bit
+    pattern isn’t changed, but the value is interpreted in the context of the new
+    type. If the unsigned int value is in the range `0x80000000` to `0xffffffff`,
+    the resulting signed int will become negative (see [Figure A-4](apas03.html#integer_type_conversion_colon_unsigned_i
+    "Figure A-4. Integer type conversion: unsigned int to signed int")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This was only a brief introduction to implicit and explicit type conversions
+    in C/C++. For a complete description of type conversions in C/C++ and associated
+    security problems, see Mark Dowd, John McDonald, and Justin Schuh’s *The Art of
+    Software Security Assessment: Identifying and Avoiding Software Vulnerabilities*
+    (Addison-Wesley, 2007).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Integer type conversion: unsigned int to signed int](httpatomoreillycomsourcenostarchimages939343.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure A-4. Integer type conversion: unsigned int to signed int'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*I used Debian Linux 6.0 (32-bit) as a platform for all the following steps*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A.4 GOT Overwrites
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Once you have found a memory corruption vulnerability, you can use a variety
+    of techniques to gain control over the instruction pointer register of the vulnerable
+    process. One of these techniques, called *GOT overwrite*, works by manipulating
+    an entry in the so-called *Global Offset Table (GOT)* of an *Executable and Linkable
+    Format (ELF)*^([[90](apas04.html#ftn.APP-A-FN-1)]) object to gain control over
+    the instruction pointer. Since this technique relies on the ELF file format, it
+    works only on platforms supporting this format (such as Linux, Solaris, or BSD).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The GOT is located in an ELF-internal data section called `.got`. Its purpose
+    is to redirect position-independent address calculations to an absolute location,
+    so it stores the absolute location of function-call symbols used in dynamically
+    linked code. When a program calls a library function for the first time, the *runtime
+    link editor* (`rtld`) locates the appropriate symbol and relocates it to the GOT.
+    Every new call to that function passes the control directly to that location,
+    so `rtld` isn’t called for that function anymore. [Example A-4](apas04.html#example_code_used_to_demonstrate_the
+    "Example A-4. Example code used to demonstrate the function of the Global Offset
+    Table (got.c)") illustrates this process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example A-4. Example code used to demonstrate the function of the Global Offset
+    Table (*got.c*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The program in [Example A-4](apas04.html#example_code_used_to_demonstrate_the
+    "Example A-4. Example code used to demonstrate the function of the Global Offset
+    Table (got.c)") calls the `printf()` library function two times. I compiled the
+    program with debugging symbols and started it in the debugger (see Section B.4
+    for a description of the following debugger commands):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The disassembly of the `main()` function shows the address of `printf()` in
+    the *Procedure Linkage Table (PLT)*. Much as the GOT redirects position-independent
+    address calculations to absolute locations, the PLT redirects position-independent
+    function calls to absolute locations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The PLT entry jumps immediately into the GOT:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: If the library function wasn’t called before, the GOT entry points back into
+    the PLT. In the PLT, a relocation offset gets pushed onto the stack, and execution
+    is redirected to the `_init()` function. This is where `rtld` gets called to locate
+    the referenced `printf()` symbol.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now let’s see what happens if `printf()` gets called a second time. First,
+    I defined a breakpoint just before the second call to `printf()`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I then started the program:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After the breakpoint triggered, I disassembled the `main` function again to
+    see if the same PLT address was called:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The same address in the PLT was indeed called:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The called PLT entry jumps immediately into the GOT again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'But this time, the GOT entry of `printf()` has changed: It now points directly
+    to the `printf()` library function in `libc`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now if we change the value of the GOT entry for `printf()`, it’s possible to
+    control the execution flow of the program when `printf()` is called:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: We have achieved `EIP` control. For a real-life example of this exploitation
+    technique, see [Chapter 4](ch04.html "Chapter 4. NULL Pointer FTW").
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To determine the GOT address of a library function, you can either use the
+    debugger, as in the previous example, or you can use the `objdump` or `readelf`
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ^([[90](#ftn.APP-A-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[90](#APP-A-FN-1)]) For a description of ELF, see TIS Committee, *Tool Interface
+    Standard (TIS) Executable and Linking Format (ELF) Specification*, Version 1.2,
+    1995, at [http://refspecs.freestandards.org/elf/elf.pdf](http://refspecs.freestandards.org/elf/elf.pdf).
+  prefs: []
+  type: TYPE_NORMAL

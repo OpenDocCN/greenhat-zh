@@ -1,0 +1,647 @@
+- en: Chapter 4. Post-Install Setup
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Installation first,*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*now configure the software.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Server is ready.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages1616079.png) You’ve installed OpenBSD
+    and rebooted into a bare-bones system. Of course, a minimal Unix-like system is
+    actually pretty boring. While it makes for a powerful foundation, it doesn’t actually
+    *do* much of anything.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To get you started, this chapter covers some of the basic steps you should take
+    after installing OpenBSD to establish a firm platform for later work. We’ll jump
+    right into basic tasks such as correcting the time zone, setting a default gateway,
+    and setting an email alias for the root account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But a bit of forewarning: You can change a surprising amount of OpenBSD’s configuration
+    when the system is up and running. You can reconfigure the hostname, network configuration,
+    and time and date, as well as stop, start, or reset daemons as you see fit. But
+    just because you can doesn’t mean that you should.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: While playing arbitrarily with a desktop or laptop machine might be fine, if
+    you’re running a server, you should test your configuration by rebooting. Make
+    sure that the system boots exactly as desired before adding services. If you find
+    that OpenBSD boots fine but you must poke the network card before it works, fix
+    that before proceeding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `afterboot(8)` man page has up-to-date advice for systems administrators
+    who have just installed their first OpenBSD system. Much of this advice overlaps
+    material that we’ll cover in this book (in a much more exciting fashion, I’m sure),
+    while some of it applies only to specific use cases. Read the `afterboot` documentation
+    on your system for the very latest information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All of the tasks in this chapter must be performed as root. We’ll discuss creating
+    additional users in [Chapter 6](ch06.html "Chapter 6. User Management") and ways
+    to avoid using the root account in [Chapter 7](ch07.html "Chapter 7. Root, and
+    How to Avoid It"), but you don’t need to do that on a newly installed system.
+    Configure the system properly before you start letting people log on, or you’ll
+    wish you had.^([[10](#ftn.id485404)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: First Steps
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The first two things you should do after installing a new system are check for
+    any operating system patches or errata and change the root administrative password.
+    These steps are critical, so don’t skip them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Checking the System Errata
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Believe it or not, OpenBSD isn’t perfect. Releases sometimes have bugs. Some
+    of these are serious problems; others not so much.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the OpenBSD team learns of a serious problem with a release, it issues
+    an errata list, and whenever you build a new server, you should check the errata
+    list at *[http://www.OpenBSD.org/errata.html](http://www.OpenBSD.org/errata.html)*.
+    Critical errata are also announced on *security-announce@OpenBSD.org*, so if you’re
+    on that mailing list, you’ll get notifications of new errata. You’ll also see
+    errata notices on *[http://www.undeadly.org/](http://www.undeadly.org/)*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Errata won’t always affect your use case. For example, as I write this, OpenBSD
+    5.0 has one errata notice: a problem in the BIND name server. If this server won’t
+    run BIND, don’t worry about this errata. If you’re building a name server, however,
+    you need this information before going into production.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you’re in doubt, correct your system as recommended in the errata, which
+    may require building one or more parts of OpenBSD from source. (I’ll discuss errata
+    and building OpenBSD at length in [Chapter 20](ch20.html "Chapter 20. Upgrading").)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting the Root Password
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You needed to choose a root password during installation. To change it, use
+    the `passwd(1)` command. Of course, you must be root to change root’s password.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Software Configuration
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When the OpenBSD kernel finishes its initial system setup and hands control
+    of the system over to userland, `init(8)` runs the shell script */etc/rc*. This
+    script starts all of the programs integrated with the system and performs general
+    system configuration, such as configuring network interfaces and starting server
+    software. To enable, disable, or otherwise configure integrated software, modify
+    the files */etc/rc.conf* and */etc/rc.conf.local*. (I’ll cover the OpenBSD boot
+    process in detail in [Chapter 5](ch05.html "Chapter 5. The Boot Process"), but
+    for now, this section will get you started.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The files *rc.conf* and *rc.conf.local* contain shell script variable assignments
+    that control what */etc/rc* runs and the command-line options for the various
+    programs. Keep in mind that any entries in *rc.conf.local* override *rc.conf*
+    statements. Most variable assignments have three legitimate values: an uppercase
+    `NO`, command-line flags in quotation marks (`"-D"`), or double quotes (`""`),
+    which are equivalent to empty. Each variable looks something like this entry from
+    *rc.conf*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The variable `ntpd_flags` controls the command-line flags that */etc/rc* uses
+    when starting `ntpd(8)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A `NO` disables this particular piece of functionality. In the preceding example,
+    the NTP daemon `ntpd(8)` is disabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the variable is empty, */etc/rc* starts the program without any command-line
+    arguments. For example, this `ntpd_flags` entry means that `ntpd` is to be started
+    without any arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Anything within quotes is used as a command-line argument to the program. (If
+    a program has typical default flags, they’ll usually appear in *rc.conf*.) The
+    following example assigns the variable `ntpd_flags` the value `-s`. When the system
+    boots, rather than running `ntpd`, it will run `ntpd -s`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Some variables have additional possible values. For example, the PF packet filter
+    (see [Chapter 21](ch21.html "Chapter 21. Packet Filtering")) is enabled with a
+    `YES`. To enable the NFS automounter daemon, you’ll need to use a path to the
+    master map. (If you don’t know what the automounter is, that’s fine—not many do
+    these days.) Just realize that weird values for *rc.conf* variables do exist.
+    You’ll see these values listed in *rc.conf*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: OpenBSD defaults appear in */etc/rc.conf*, but do not edit this file! This is
+    a core system file, and will be replaced during an upgrade. Put your local changes
+    in */etc/rc.conf.local*. Entries in *rc.conf.local* will override the defaults
+    in *rc.conf*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Time and Date
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Correct system time is not only a convenience, but also a security issue, because
+    many attacks rely on changing the system clock. However, if your system clock
+    is wrong to start with, you won’t notice a change. Without coherent time across
+    all your servers, you’ll never be able to correlate your logs when troubleshooting.
+    What’s the solution? Fix your time settings before you do anything else. Correcting
+    the time requires both setting a time zone and the clock.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting the Time Zone
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The installer tries really hard to guess your time zone, using geolocation tricks
+    and a script at the OpenBSD website. If these didn’t work for you, or if you weren’t
+    on the Internet when you installed OpenBSD, or if your company policy says that
+    all servers will run in time zone *X*, fix your time zone before anyone notices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The directory */usr/share/zoneinfo* contains all of the time zones, as well
+    as several subdirectories for countries or continents with various time zones.
+    For example, Western Siberia runs on Omsk time (found in the file */usr/share/zoneinfo/Asia/Omsk*).
+    Presumably, you have some idea of your local time zone and where it might be filed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To set the system time zone, create a symbolic link to it from */etc/localtime*.
+    Use `date(1)` to make sure that the time zone has been set correctly:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'OpenBSD also supports POSIX time zones found in */usr/share/zoneinfo/Etc*.
+    POSIX time zones have their own rules. Do not use them unless you are absolutely
+    sure you understand them. (Hint: You don’t.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting the Date and Time
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now that you have set a time zone, set the correct time and date. OpenBSD includes
+    OpenNTPD, a BSD-licensed simplified NTP daemon. If at all possible, use `ntpd(8)`
+    to manage the time. If you can’t access NTP servers (say, if you’re on a private
+    network without them), set up your own. And if you can’t set up time servers,
+    set the system time manually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting the Time with ntpd(8)
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Configure OpenNTPD in */etc/ntpd.conf*. The syntax should be familiar to you
+    if you’ve managed any other NTP daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For basic time, you need time servers, ideally three or more. If you don’t have
+    local time servers, use publicly accessible time servers, such as the hosts available
+    at *[http://pool.ntp.org/](http://pool.ntp.org/)*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'List your servers in */etc/ntpd.conf*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then enable `ntpd` in */etc/rc.conf.local*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'By default, `ntpd` slowly adjusts system time by skewing the system clock.
+    If the system time is a few seconds off, slow adjustment will usually suffice,
+    but if it’s off by minutes or more, have `ntpd` correct the system time on startup
+    and then adjust the time as needed. To enable time correction at startup, use
+    the `-s` flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Time skews most badly on heavily used hardware, lousy hardware, and virtual
+    machines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting the Date Manually
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'To set the date and time manually, use `date(1)`. First, make sure that you
+    know the current year, month, day of the month, and time (in 24-hour format).
+    Then set the date and time using this format:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For example, to set the date to February 3, 2013 and the time to 1:17 PM, run
+    this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: That said, `date(1)` will not correct your clock on an ongoing basis, and on
+    some hardware with poor clocks, the time will slowly skew. A virtual machine on
+    heavily loaded hardware will almost certainly lose time. Use NTP to deal with
+    that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hostname
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Set the system’s hostname in */etc/myname*. My test system is called *caddis.blackhelicopters.org*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: To change the hostname, edit */etc/myname*. The new hostname takes effect after
+    the next reboot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To change the hostname until the next boot, use `hostname -s` and the new hostname,
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can edit */etc/myname* and run `hostname -s` to make a change take effect
+    immediately and persist after the next boot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Networking
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If you installed OpenBSD over the Internet, at least one Ethernet card should
+    be configured and working. But if you installed from CD, you didn’t need to configure
+    the network to install OpenBSD. If you installed OpenBSD on one network and want
+    to move the machine to another network, you’ll need to reconfigure the network
+    on your system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I cover network principles in [Chapter 11](ch11.html "Chapter 11. Overview of
+    TCP/IP") and configuration in [Chapter 12](ch12.html "Chapter 12. Connecting to
+    the Network"), but this brief entry will attach valid network addresses to your
+    system, install a default route, and get DNS resolution working. If you’re not
+    sure what to do here, don’t do anything until you read the later chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To make network changes take effect, you can either reboot or run the network
+    startup script */etc/netstart*, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To configure only one interface, give the interface’s name as an argument:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, if your system is a server, reboot before you declare the server ready
+    for production.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring Ethernet Interfaces
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'For a complete list of network interfaces recognized by your host, run `ifconfig(8)`.
+    You should see a bunch of entries, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Every OpenBSD system comes with the default interfaces `lo0` (loopback), `enc0`
+    (encapsulating interface), and `pflog0` (PF logging, discussed in [Chapter 21](ch21.html
+    "Chapter 21. Packet Filtering")). These are virtual interfaces that don’t actually
+    attach your system to the local Ethernet. Other interfaces will be physical network
+    ports, like the Ethernet interface `em0` at **1**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every Ethernet card has its own configuration file, */etc/hostname* .interfacename.
+    The `em0` interface in the example is configured in the file */etc/hostname.em0*.
+    If the file doesn’t exist, create it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At **2**, you see the IP address. The format of static IP addresses depends
+    on the IP version in use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Static IP Addresses
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'For IP version 4 (IPv4) addresses, the common format is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This format includes these elements:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `inet` keyword indicates this is an IPv4 address.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The IP address (*`ipaddress`*) appears in standard dotted-quad notation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The *`netmask`* can appear in dotted-quad format (255.255.255.224) or in hexadecimal
+    (0xffffffe0).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The broadcast address (*`broadcastaddress`*) gives you the option to hardcode
+    the broadcast address on this network. If you leave this blank or use the word
+    `NONE`, OpenBSD computes the correct broadcast address from the IP address and
+    netmask given earlier. If you use `ifconfig(8)` options, you must use the word
+    `NONE` to provide spacing. (You can also provide the netmask in “slash” notation
+    directly after the IP address, as in `192.0.2.2/24`.)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The *`options`* space is where you should put any specific `ifconfig(8)` commands
+    needed for this interface, like hardcoded speed or duplex. (See [Chapter 11](ch11.html
+    "Chapter 11. Overview of TCP/IP") and [Chapter 12](ch12.html "Chapter 12. Connecting
+    to the Network") for examples, and the `hostname.if(5)` man page for the full
+    details.)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'When working with IP version 6 (IPv6) addresses, the format is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This format includes these elements:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `inet6` keyword tells the system that this is an IPv6 address.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The *`address`* space is for the IPv6 address, without a prefix length.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The prefix length (*`prefixlength`*) appears separately, without a slash.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As with IPv4, you can use `ifconfig(8)` *`options`* as needed.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Even a very simple configuration will get a machine on the network. The following
+    configures `em0` with the IPv4 address 192.0.2.2 and netmask 255.255.255.224\.
+    It also has the IPv6 address of 2001:DB8:7700::2/64.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Anything that doesn’t follow these IPv4 and IPv6 formats is passed directly
+    to `ifconfig`. However, if you don’t know if a particular configuration will work,
+    try it at the command line first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dynamic Configuration
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: When performing dynamic configuration, if the machine is an IPv4 DHCP client,
+    use the string `dhcp` in *hostname.if*. For IPv6 autoconfiguration, use the string
+    `rtsol`, by itself on a single line, to tell OpenBSD to use the `rtsol(8)` IPv6
+    autoconfiguration program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In order for IPv6 autoconfiguration to work, you must disable IPv6 routing
+    with these two entries in */etc/sysctl.conf*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: These values already exist in */etc/sysctl.conf*, but they’re commented out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting a Default Gateway
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To set either the IPv4 or IPv6 default gateway, place the gateway IP address
+    on a single line in */etc/mygate*, with no other entries in the file. You can
+    configure default gateways for both protocols, each on its own line. The change
+    should take place on your next reboot, or use `route(8)` to manually change the
+    default gateway. The following sets both an IPv4 and an IPv6 default gateway.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Dynamic configuration requires setting a default route. If your */etc/hostname.if*
+    file contains a dynamic configuration statement, */etc/mygate* will not be used
+    for that IP protocol.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting Name Service Servers
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you want to contact other machines by hostname, you need to set Domain Name
+    Service (DNS) servers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Chapter 12](ch12.html "Chapter 12. Connecting to the Network") covers DNS
+    resolution in detail, but */etc/resolv.conf* contains the basic client settings.
+    Its first line defines the local domain with the `domain` keyword and a domain
+    name. Name servers appear on subsequent lines, defined with the keyword `nameserver`
+    and an IP address, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Mail Aliases and Status Mail
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Every OpenBSD system runs maintenance tasks daily, weekly, and monthly, and
+    sends email messages with the results to the local root account. I discuss these
+    maintenance jobs in [Chapter 15](ch15.html "Chapter 15. System Maintenance").
+    If you have more than a couple of servers, you should probably forward these email
+    messages to a single central account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The OpenBSD system redirects email messages addressed to local users to other
+    users or remote email addresses, as configured in */etc/mail/aliases*. Here are
+    a few entries:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: The original recipient appears on the left, followed by a colon, and a list
+    of people to forward the messages to. If you have multiple recipients separate
+    them with commas. Mail addressed to MAILER-DAEMON on the local system is forwarded
+    to the postmaster account, which, in turn, is forwarded to the root account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You should create an alias for root, directing mail sent to root to your systems
+    administration team:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: After changing */etc/mail/aliases*, run `newaliases(8)` to update email forwarding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Keyboard Mapping
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: OpenBSD tries to guess your correct keyboard mapping. USB keyboards have mechanisms
+    to declare their country code. If autodetection doesn’t work, you can change the
+    keyboard layout with `kbd(8)`, and set it at boot with */etc/kbdtype*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before touching the keyboard layout, use `kbd` to find your current keyboard
+    map. `kbd -l` lists the more than 100 keyboard encodings OpenBSD supports. Browse
+    the list for your supported keyboard layout, or use `grep` to reduce the list.
+    I’m a Dvorak user, so I search for it like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: My preferred layout is `us.dvorak`. I enter **`us.dvorak`** in */etc/kbdtype*,
+    and after my next reboot, the console should use the Dvorak layout.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To set the keymap immediately to Dvorak, I could use `kbd`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Read more about changing the console in [Chapter 17](ch17.html "Chapter 17. Desktop
+    OpenBSD").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Ports and Source Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If you intend to build your own OpenBSD releases or heavily customize OpenBSD,
+    you’ll need the operating system source code (see [Chapter 18](ch18.html "Chapter 18. Kernel
+    Configuration"), [Chapter 19](ch19.html "Chapter 19. Building Custom Kernels"),
+    and [Chapter 20](ch20.html "Chapter 20. Upgrading")). If you intend to build your
+    own packages (covered in [Chapter 13](ch13.html "Chapter 13. Software Management")),
+    you’ll need the ports tree. Both the ports tree and the system source code are
+    specific to an OpenBSD release, and if you need them, install them when you install
+    the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ports tree is the compressed file *ports.tar.gz* in the release directory
+    where you stored OpenBSD—either on the mirror site or the CD. All architectures
+    share one ports tree. Download this file to your home directory and extract it
+    in */usr*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: This extracts the ports tree to */usr/ports*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The system source code is found in three files in the release directory: the
+    kernel source code *sys.tar.gz* (see [Chapter 19](ch19.html "Chapter 19. Building
+    Custom Kernels")), userland source code *src.tar.gz* (see [Chapter 20](ch20.html
+    "Chapter 20. Upgrading")), and the Xenocara *xenocara.tar.gz* (see [Chapter 20](ch20.html
+    "Chapter 20. Upgrading")). Extract Xenocara to */usr*, and the others to */usr/src*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Booting to a Graphic Console
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: OpenBSD boots into a text console by default. To boot into an X-based graphic
+    console, use the `xdm(1)` command in */etc/rc.conf.local*. The default `xdm` setting
+    is `NO`, so by changing it to empty quotes you enable it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you need a more complicated `xdm` setup, put any command-line arguments inside
+    the quotes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Onward!
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Armed with the information in this chapter, you should be able to get your system
+    on your local network and make it at least minimally comfortable to work with.
+    Next, let’s take a look at the OpenBSD boot process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[10](#id485404)]) Saying “Sorry about the timestamps errors in your vital
+    data, but I hadn’t set the system clock yet” is roughly equivalent to saying “I
+    don’t care about you or your data.” If you feel that way, I’m not going to argue,
+    but at least have the confidence to tell the user what you really think.
+  prefs: []
+  type: TYPE_NORMAL

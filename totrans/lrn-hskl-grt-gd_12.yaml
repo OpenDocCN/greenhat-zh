@@ -1,0 +1,1121 @@
+- en: Chapter 12. Monoids
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter features another useful and fun type class: `Monoid`. This type
+    class is for types whose values can be combined together with a binary operation.
+    We’ll cover exactly what monoids are and what their laws state. Then we’ll take
+    a look at some monoids in Haskell and how they can be of use.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, let’s take a look at the `newtype` keyword, because we’ll be using it
+    a lot when we delve into the wonderful world of monoids.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Wrapping an Existing Type into a New Type
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So far, you’ve learned how to make your own algebraic data types by using the
+    `data` keyword. You’ve also seen how to give existing types synonyms with the
+    `type` keyword. In this section, we’ll look at how to make new types out of existing
+    data types by using the `newtype` keyword. We’ll also talk about why we would
+    want to do that in the first place.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802658.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In [Chapter 11](ch11.html "Chapter 11. Applicative Functors"), you saw a couple
+    of ways for the list type to be an applicative functor. One way is to have `<*>`
+    take every function out of the list that is its left parameter and apply that
+    to every value in the list that is on the right, resulting in every possible combination
+    of applying a function from the left list to a value in the right list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The second way is to take the first function on the left side of `<*>` and apply
+    it to the first value on the right, then take the second function from the list
+    on the left side and apply it to the second value on the right, and so on. Ultimately,
+    it’s kind of like zipping the two lists together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But lists are already an instance of `Applicative`, so how do we also make
+    lists an instance of `Applicative` in this second way? As you learned, the `ZipList
+    a` type was introduced for this reason. This type has one value constructor, `ZipList`,
+    which has just one field. We put the list that we’re wrapping in that field. Then
+    `ZipList` is made an instance of `Applicative`, so that when we want to use lists
+    as applicatives in the zipping manner, we just wrap them with the `ZipList` constructor.
+    Once we’re finished, we unwrap them with `getZipList`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'So, what does this have to do with this `newtype` keyword? Well, think about
+    how we might write the data declaration for our `ZipList a` type. Here’s one way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is a type that has just one value constructor, and that value constructor
+    has just one field that is a list of things. We might also want to use record
+    syntax so that we automatically get a function that extracts a list from a `ZipList`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: This looks fine and would actually work pretty well. We had two ways of making
+    an existing type an instance of a type class, so we used the `data` keyword to
+    just wrap that type into another type and made the other type an instance in the
+    second way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `newtype` keyword in Haskell is made exactly for cases when we want to
+    just take one type and wrap it in something to present it as another type. In
+    the actual libraries, `ZipList a` is defined like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Instead of the `data` keyword, the `newtype` keyword is used. Now why is that?
+    Well for one, `newtype` is faster. If you use the `data` keyword to wrap a type,
+    there’s some overhead to all that wrapping and unwrapping when your program is
+    running. But if you use `newtype`, Haskell knows that you’re just using it to
+    wrap an existing type into a new type (hence the name), because you want it to
+    be the same internally but have a different type. With that in mind, Haskell can
+    get rid of the wrapping and unwrapping once it resolves which value is of which
+    type.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So why not just use `newtype` instead of `data` all the time? When you make
+    a new type from an existing type by using the `newtype` keyword, you can have
+    only one value constructor, and that value constructor can have only one field.
+    But with `data`, you can make data types that have several value constructors,
+    and each constructor can have zero or more fields:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can also use the `deriving` keyword with `newtype` just as we would with
+    `data`. We can derive instances for `Eq`, `Ord`, `Enum`, `Bounded`, `Show`, and
+    `Read`. If we derive the instance for a type class, the type that we’re wrapping
+    must already be in that type class. It makes sense, because `newtype` just wraps
+    an existing type. So now if we do the following, we can print and equate values
+    of our new type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s give that a go:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this particular `newtype`, the value constructor has the following type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It takes a `[Char]` value, such as `"my sharona"` and returns a `CharList`
+    value. From the preceding examples where we used the `CharList` value constructor,
+    we see that really is the case. Conversely, the `getCharList` function, which
+    was generated for us because we used record syntax in our `newtype`, has this
+    type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: It takes a `CharList` value and converts it to a `[Char]` value. You can think
+    of this as wrapping and unwrapping, but you can also think of it as converting
+    values from one type to the other.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using newtype to Make Type Class Instances
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Many times, we want to make our types instances of certain type classes, but
+    the type parameters just don’t match up for what we want to do. It’s easy to make
+    `Maybe` an instance of `Functor`, because the `Functor` type class is defined
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'So we just start out with this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then we implement `fmap`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'All the type parameters add up because `Maybe` takes the place of `f` in the
+    definition of the `Functor` type class. Looking at `fmap` as if it worked on only
+    `Maybe`, it ends up behaving like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Isn’t that just peachy? Now what if we wanted to make the tuple an instance
+    of `Functor` in such a way that when we `fmap` a function over a tuple, it is
+    applied to the first component of the tuple? That way, doing `fmap (+3) (1, 1)`
+    would result in `(4, 1)`. It turns out that writing the instance for that is kind
+    of hard. With `Maybe`, we just say `instance Functor Maybe where` because only
+    type constructors that take exactly one parameter can be made an instance of `Functor`.
+    But it seems like there’s no way to do something like that with `(a, b)` so that
+    the type parameter `a` ends up being the one that changes when we use `fmap`.
+    To get around this, we can `newtype` our tuple in such a way that the second type
+    parameter represents the type of the first component in the tuple:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802660.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And now we can make it an instance of `Functor` so that the function is mapped
+    over the first component:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, we can pattern match on types defined with `newtype`. We pattern
+    match to get the underlying tuple, apply the function `f` to the first component
+    in the tuple, and then use the `Pair` value constructor to convert the tuple back
+    to our `Pair b a`. If we imagine what the type `fmap` would be if it worked only
+    on our new pairs, it would look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Again, we said `instance Functor (Pair c) where`, and so `Pair c` took the
+    place of the `f` in the type class definition for `Functor`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now if we convert a tuple into a `Pair b a`, we can use `fmap` over it, and
+    the function will be mapped over the first component:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: On newtype Laziness
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The only thing that can be done with `newtype` is turning an existing type into
+    a new type, so internally, Haskell can represent the values of types defined with
+    `newtype` just like the original ones, while knowing that their types are now
+    distinct. This means that not only is `newtype` usually faster than `data`, its
+    pattern-matching mechanism is lazier. Let’s take a look at what this means.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you know, Haskell is lazy by default, which means that only when we try
+    to actually print the results of our functions will any computation take place.
+    Furthemore, only those computations that are necessary for our function to tell
+    us the result will be carried out. The `undefined` value in Haskell represents
+    an erroneous computation. If we try to evaluate it (that is, force Haskell to
+    actually compute it) by printing it to the terminal, Haskell will throw a hissy
+    fit (technically referred to as an exception):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'However, if we make a list that has some `undefined` values in it but request
+    only the head of the list, which is not `undefined`, everything will go smoothly.
+    This is because Haskell doesn’t need to evaluate any other elements in a list
+    if we want to see only the first element. Here’s an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now consider the following type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It’s your run-of-the-mill algebraic data type that was defined with the `data`
+    keyword. It has one value constructor, which has one field whose type is `Bool`.
+    Let’s make a function that pattern matches on a `CoolBool` and returns the value
+    `"hello"`, regardless of whether the `Bool` inside the `CoolBool` was `True` or
+    `False`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Instead of applying this function to a normal `CoolBool`, let’s throw it a curveball
+    and apply it to `undefined`!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Yikes! An exception! Why did this exception happen? Types defined with the `data`
+    keyword can have multiple value constructors (even though `CoolBool` has only
+    one). So in order to see if the value given to our function conforms to the `(CoolBool
+    _)` pattern, Haskell must evaluate the value just enough to see which value constructor
+    was used when we made the value. And when we try to evaluate an `undefined` value,
+    even a little, an exception is thrown.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Instead of using the `data` keyword for `CoolBool`, let’s try using `newtype`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We don’t need to change our `helloMe` function, because the pattern-matching
+    syntax is the same whether you use `newtype` or `data` to define your type. Let’s
+    do the same thing here and apply `helloMe` to an `undefined` value:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: It worked! Hmmm, why is that? Well, as you’ve learned, when you use `newtype`,
+    Haskell can internally represent the values of the new type in the same way as
+    the original values. It doesn’t need to add another box around them; it just must
+    be aware of the values being of different types. And because Haskell knows that
+    types made with the `newtype` keyword can have only one constructor, it doesn’t
+    need to evaluate the value passed to the function to make sure that the value
+    conforms to the `(CoolBool _)` pattern, because `newtype` types can have only
+    one possible value constructor and one field!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802662.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This difference in behavior may seem trivial, but it’s actually pretty important.
+    It shows that even though types defined with `data` and `newtype` behave similarly
+    from the programmer’s point of view (because they both have value constructors
+    and fields), they are actually two different mechanisms. Whereas `data` can be
+    used to make your own types from scratch, `newtype` is just for making a completely
+    new type out of an existing type. Pattern matching on `newtype` values isn’t like
+    taking something out of a box (as it is with `data`), but more about making a
+    direct conversion from one type to another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: type vs. newtype vs. data
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: At this point, you may be a bit confused about the differences between `type`,
+    `data`, and `newtype`, so let’s review their uses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `type` keyword is for making type synonyms. We just give another name to
+    an already existing type so that the type is easier to refer to. Say we did the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'All this does is allow us to refer to the `[Int]` type as `IntList`. They can
+    be used interchangeably. We don’t get an `IntList` value constructor or anything
+    like that. Because `[Int]` and `IntList` are only two ways to refer to the same
+    type, it doesn’t matter which name we use in our type annotations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: We use type synonyms when we want to make our type signatures more descriptive.
+    We give types names that tell us something about their purpose in the context
+    of the functions where they’re being used. For instance, when we used an association
+    list of type `[(String, String)]` to represent a phone book in [Chapter 7](ch07.html
+    "Chapter 7. Making Our Own Types and Type Classes"), we gave it the type synonym
+    of `PhoneBook` so that the type signatures of our functions were easier to read.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `newtype` keyword is for taking existing types and wrapping them in new
+    types, mostly so it’s easier to make them instances of certain type classes. When
+    we use `newtype` to wrap an existing type, the type that we get is separate from
+    the original type. Suppose we make the following `newtype`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can’t use `++` to put together a `CharList` and a list of type `[Char]`.
+    We can’t even use `++` to put together two `CharList` lists, because `++` works
+    only on lists, and the `CharList` type isn’t a list, even though it could be said
+    that `CharList` contains a list. We can, however, convert two `CharList`s to lists,
+    `++` them, and then convert that back to a `CharList`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we use record syntax in our `newtype` declarations, we get functions for
+    converting between the new type and the original type—namely the value constructor
+    of our `newtype` and the function for extracting the value in its field. The new
+    type also isn’t automatically made an instance of the type classes that the original
+    type belongs to, so we need to derive or manually write it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In practice, you can think of `newtype` declarations as `data` declarations
+    that can have only one constructor and one field. If you catch yourself writing
+    such a `data` declaration, consider using `newtype`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `data` keyword is for making your own data types. You can go hog wild with
+    them. They can have as many constructors and fields as you wish and can be used
+    to implement any algebraic data type—everything from lists and `Maybe`-like types
+    to trees.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In summary, use the keywords as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you just want your type signatures to look cleaner and be more descriptive,
+    you probably want type synonyms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you want to take an existing type and wrap it in a new type in order to make
+    it an instance of a type class, chances are you’re looking for a `newtype`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you want to make something completely new, odds are good that you’re looking
+    for the `data` keyword.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: About Those Monoids
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Type classes in Haskell are used to present an interface for types that have
+    some behavior in common. We started out with simple type classes like `Eq`, which
+    is for types whose values can be equated, and `Ord`, which is for things that
+    can be put in an order. Then we moved on to more interesting type classes, like
+    `Functor` and `Applicative`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802664.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: When we make a type, we think about which behaviors it supports (what it can
+    act like) and then decide which type classes to make it an instance of based on
+    the behavior we want. If it makes sense for values of our type to be equated,
+    we make our type an instance of the `Eq` type class. If we see that our type is
+    some kind of functor, we make it an instance of `Functor`, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now consider the following: `*` is a function that takes two numbers and multiplies
+    them. If we multiply some number with a `1`, the result is always equal to that
+    number. It doesn’t matter if we do `1 * x` or `x * 1`— the result is always `x`.
+    Similarly, `++` is a function that takes two things and returns a third. But instead
+    of multiplying numbers, it takes two lists and concatenates them. And much like
+    `*`, it also has a certain value that doesn’t change the other one when used with
+    `++`. That value is the empty list: `[]`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It seems that `*` together with `1` and `++` along with `[]` share some common
+    properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The function takes two parameters.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The parameters and the returned value have the same type.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There exists such a value that doesn’t change other values when used with the
+    binary function.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'There’s another thing that these two operations have in common that may not
+    be as obvious as our previous observations: When we have three or more values
+    and we want to use the binary function to reduce them to a single result, the
+    order in which we apply the binary function to the values doesn’t matter. For
+    example, whether we use `(3 * 4) * 5` or `3 * (4 * 5)`, the result is `60`. The
+    same goes for `++`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: We call this property *associativity*. `*` is associative, and so is `++`. However,
+    `-`, for example, is not associative; the expressions `(5 - 3) - 4` and `5 - (3
+    - 4)` result in different numbers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By being aware of these properties, we have chanced upon monoids!
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Monoid Type Class
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A *monoid* is made up of an associative binary function and a value that acts
+    as an identity with respect to that function. When something acts as an identity
+    with respect to a function, it means that when called with that function and some
+    other value, the result is always equal to that other value. `1` is the identity
+    with respect to `*`, and `[]` is the identity with respect to `++`. There are
+    a lot of other monoids to be found in the world of Haskell, which is why the `Monoid`
+    type class exists. It’s for types that can act like monoids. Let’s see how the
+    type class is defined:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `Monoid` type class is defined in `import Data.Monoid`. Let’s take some
+    time to get properly acquainted with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we see that only concrete types can be made instances of `Monoid`, because
+    the `m` in the type class definition doesn’t take any type parameters. This is
+    different from `Functor` and `Applicative`, which require their instances to be
+    type constructors that take one parameter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802666.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The first function is `mempty`. It’s not really a function, since it doesn’t
+    take parameters. It’s a polymorphic constant, kind of like `minBound` from `Bounded`.
+    `mempty` represents the identity value for a particular monoid.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next up, we have `mappend`, which, as you’ve probably guessed, is the binary
+    function. It takes two values of the same type and returns another value of that
+    same type. The decision to call it `mappend` was kind of unfortunate, because
+    it implies that we’re appending two things in some way. While `++` does take two
+    lists and append one to the other, `*` doesn’t really do any appending; it just
+    multiplies two numbers together. When you meet other instances of `Monoid`, you’ll
+    see that most of them don’t append values either. So avoid thinking in terms of
+    appending and just think in terms of `mappend` being a binary function that takes
+    two monoid values and returns a third.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The last function in this type class definition is `mconcat`. It takes a list
+    of monoid values and reduces them to a single value by using `mappend` between
+    the list’s elements. It has a default implementation, which just takes `mempty`
+    as a starting value and folds the list from the right with `mappend`. Because
+    the default implementation is fine for most instances, we won’t concern ourselves
+    with `mconcat` too much. When making a type an instance of `Monoid`, it suffices
+    to just implement `mempty` and `mappend`. Although for some instances, there might
+    be a more efficient way to implement `mconcat`, the default implementation is
+    just fine for most cases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Monoid Laws
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Before moving on to specific instances of `Monoid`, let’s take a brief look
+    at the monoid laws.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You’ve learned that there must be a value that acts as the identity with respect
+    to the binary function and that the binary function must be associative. It’s
+    possible to make instances of `Monoid` that don’t follow these rules, but such
+    instances are of no use to anyone because when using the `Monoid` type class,
+    we rely on its instances acting like monoids. Otherwise, what’s the point? That’s
+    why when making monoid instances, we need to make sure they follow these laws:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '``mempty `mappend` x = x``'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '``x `mappend` mempty = x``'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '``(x `mappend` y) `mappend` z = x `mappend` (y `mappend` z)``'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The first two laws state that `mempty` must act as the identity with respect
+    to `mappend`, and the third says that `mappend` must be associative (the order
+    in which we use `mappend` to reduce several monoid values into one doesn’t matter).
+    Haskell doesn’t enforce these laws, so we need to be careful that our instances
+    do indeed obey them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Meet Some Monoids
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that you know what monoids are about, let’s look at some Haskell types that
+    are monoids, what their `Monoid` instances look like, and their uses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lists Are Monoids
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Yes, lists are monoids! As you’ve seen, the `++` function and the empty list
+    `[]` form a monoid. The instance is very simple:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Lists are an instance of the `Monoid` type class, regardless of the type of
+    the elements they hold. Notice that we wrote `instance Monoid [a]` and not `instance
+    Monoid []`, because `Monoid` requires a concrete type for an instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Giving this a test run, we encounter no surprises:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802668.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Notice that in the last line, we wrote an explicit type annotation. If we just
+    wrote `mempty`, GHCi wouldn’t know which instance to use, so we needed to say
+    we want the list instance. We were able to use the general type of `[a]` (as opposed
+    to specifying `[Int]` or `[String]`) because the empty list can act as if it contains
+    any type.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because `mconcat` has a default implementation, we get it for free when we make
+    something an instance of `Monoid`. In the case of the list, `mconcat` turns out
+    to be just `concat`. It takes a list of lists and flattens it, because that’s
+    the equivalent of doing `++` between all the adjacent lists in a list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The monoid laws do indeed hold for the list instance. When we have several lists
+    and we `mappend` (or `++`) them together, it doesn’t matter which ones we do first,
+    because they’re just joined at the ends anyway. Also, the empty list acts as the
+    identity, so all is well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Notice that monoids don’t require that ``a `mappend` b`` be equal to ``b `mappend`
+    a``. In the case of the list, they clearly aren’t:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: And that’s okay. The fact that for multiplication `3 * 5` and `5 * 3` are the
+    same is just a property of multiplication, but it doesn’t hold for all (and indeed,
+    most) monoids.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Product and Sum
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We already examined one way for numbers to be considered monoids: Just let
+    the binary function be `*` and the identity value be `1`. Another way for numbers
+    to be monoids is to have the binary function be `+` and the identity value be
+    `0`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: The monoid laws hold, because if you add 0 to any number, the result is that
+    number. And addition is also associative, so we have no problems there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With two equally valid ways for numbers to be monoids, which way do we choose?
+    Well, we don’t have to pick. Remember that when there are several ways for some
+    type to be an instance of the same type class, we can wrap that type in a `newtype`
+    and then make the new type an instance of the type class in a different way. We
+    can have our cake and eat it too.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `Data.Monoid` module exports two types for this: `Product` and `Sum`. `Product`
+    is defined like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It’s simple—just a `newtype` wrapper with one type parameter along with some
+    derived instances. Its instance for `Monoid` goes something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`mempty` is just `1` wrapped in a `Product` constructor. `mappend` pattern
+    matches on the `Product` constructor, multiplies the two numbers, and then wraps
+    the resulting number. As you can see, there’s a `Num a` class constraint. This
+    means that `Product a` is an instance of `Monoid` for all `a` values that are
+    already an instance of `Num`. To use `Product a` as a monoid, we need to do some
+    `newtype` wrapping and unwrapping:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`Sum` is defined along the same lines as `Product`, and the instance is similar
+    as well. We use it in the same way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: Any and All
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Another type that can act like a monoid in two distinct but equally valid ways
+    is `Bool`. The first way is to have the function `||`, which represents a logical
+    OR, act as the binary function along with `False` as the identity value. With
+    the logical OR, if any of the two parameters is `True`, it returns `True`; otherwise,
+    it returns `False`. So if we use `False` as the identity value, OR will return
+    `False` when used with `False` and `True` when used with `True`. The `Any newtype`
+    constructor is an instance of `Monoid` in this fashion. It’s defined like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Its instance looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It’s called `Any` because ``x `mappend` y`` will be `True` if *any* one of
+    those two is `True`. Even if three or more `Any` wrapped `Bool` values are `mappend`ed
+    together, the result will hold `True` if any of them are `True`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The other way for `Bool` to be an instance of `Monoid` is to kind of do the
+    opposite: Have `&&` be the binary function and then make `True` the identity value.
+    Logical AND will return `True` only if both of its parameters are `True`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is the `newtype` declaration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And this is the instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we `mappend` values of the `All` type, the result will be `True` only
+    if *all* the values used in the `mappend` operations are `True`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: Just as with multiplication and addition, we usually explicitly state the binary
+    functions instead of wrapping them in `newtype`s and then using `mappend` and
+    `mempty`. `mconcat` seems useful for `Any` and `All`, but usually it’s easier
+    to use the `or` and `and` functions. `or` takes lists of `Bool` values and returns
+    `True` if any of them are `True`. `and` takes the same values and returns `True`
+    if all of them are `True`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Ordering Monoid
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Remember the `Ordering` type? It’s used as the result when comparing things,
+    and it can have three values: `LT`, `EQ`, and `GT`, which stand for less than,
+    equal, and greater than, respectively.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With lists, numbers, and Boolean values, finding monoids was just a matter
+    of looking at already existing commonly used functions and seeing if they exhibited
+    some sort of monoid behavior. With `Ordering`, we need to look a bit harder to
+    recognize a monoid. It turns out that the ordering `Monoid` instance is just as
+    intuitive as the ones we’ve met so far, and it’s also quite useful:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The instance is set up like this: When we `mappend` two `Ordering` values,
+    the one on the left is kept, unless the value on the left is `EQ`. If the value
+    on the left is `EQ`, the right one is the result. The identity is `EQ`. At first,
+    this may seem kind of arbitrary, but it actually resembles the way we alphabetically
+    compare words. We look at the first two letters, and if they differ, we can already
+    decide which word would go first in a dictionary. However, if the first two letters
+    are equal, then we move on to comparing the next pair of letters and repeat the
+    process.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802670.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: For instance, when we alphabetically compare the words *ox* and *on*, we see
+    that the first letter of each word is equal and then move on to comparing the
+    second letter. Since *x* is alphabetically greater than *n*, we know how the words
+    compare. To gain some understanding of `EQ` being the identity, note that if we
+    were to cram the same letter in the same position in both words, it wouldn’t change
+    their alphabetical ordering; for example, *oix* is still alphabetically greater
+    than *oin*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It’s important to note that in the `Monoid` instance for `Ordering`, ``x `mappend`
+    y`` doesn’t equal ``y `mappend` x``. Because the first parameter is kept unless
+    it’s `EQ`, ``LT `mappend` GT`` will result in `LT`, whereas ``GT `mappend` LT``
+    will result in `GT`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: Okay, so how is this monoid useful? Let’s say we are writing a function that
+    takes two strings, compares their lengths, and returns an `Ordering`. But if the
+    strings are of the same length, instead of returning `EQ` right away, we want
+    to compare them alphabetically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s one way to write this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: We name the result of comparing the lengths `a` and the result of the alphabetical
+    comparison `b`, and then if the lengths are equal, we return their alphabetical
+    ordering.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But by employing our understanding of how `Ordering` is a monoid, we can rewrite
+    this function in a much simpler manner:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s try this out:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Remember that when we use `mappend`, its left parameter is kept unless it’s
+    `EQ`; if it’s `EQ`, the right one is kept. That’s why we put the comparison that
+    we consider to be the first, more important, criterion as the first parameter.
+    Now suppose that we want to expand this function to also compare for the number
+    of vowels and set this to be the second most important criterion for comparison.
+    We modify it like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: We made a helper function, which takes a string and tells us how many vowels
+    it has by first filtering it for only letters that are in the string `"aeiou"`
+    and then applying `length` to that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the first example, the lengths are found to be different, and so `LT` is
+    returned, because the length of `"zen"` is less than the length of `"anna"`. In
+    the second example, the lengths are the same, but the second string has more vowels,
+    so `LT` is returned again. In the third example, they both have the same length
+    and the same number of vowels, so they’re compared alphabetically, and `"zen"`
+    wins.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `Ordering` monoid is very useful because it allows us to easily compare
+    things by many different criteria and put those criteria in an order themselves,
+    ranging from the most important to the least important.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Maybe the Monoid
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let’s take a look at the various ways that `Maybe a` can be made an instance
+    of `Monoid` and how those instances are useful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One way is to treat `Maybe a` as a monoid only if its type parameter `a` is
+    a monoid as well and then implement `mappend` in such a way that it uses the `mappend`
+    operation of the values that are wrapped with `Just`. We use `Nothing` as the
+    identity, and so if one of the two values that we’re `mappend`ing is `Nothing`,
+    we keep the other value. Here’s the instance declaration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice the class constraint. It says that `Maybe a` is an instance of `Monoid`
+    only if `a` is an instance of `Monoid`. If we `mappend` something with a `Nothing`,
+    the result is that something. If we `mappend` two `Just` values, the contents
+    of the `Just`s are `mappend`ed and then wrapped back in a `Just`. We can do this
+    because the class constraint ensures that the type of what’s inside the `Just`
+    is an instance of `Monoid`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is useful when we’re dealing with monoids as results of computations that
+    may have failed. Because of this instance, we don’t need to check if the computations
+    have failed by seeing if they’re a `Nothing` or `Just` value; we can just continue
+    to treat them as normal monoids.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But what if the type of the contents of the `Maybe` is not an instance of `Monoid`?
+    Notice that in the previous instance declaration, the only case where we must
+    rely on the contents being monoids is when both parameters of `mappend` are `Just`
+    values. When we don’t know if the contents are monoids, we can’t use `mappend`
+    between them, so what are we to do? Well, one thing we can do is discard the second
+    value and keep the first one. For this purpose, the `First a` type exists. Here’s
+    its definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We take a `Maybe a` and wrap it with a `newtype`. The `Monoid` instance is
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`mempty` is just a `Nothing` wrapped with the `First newtype` constructor.
+    If `mappend`’s first parameter is a `Just` value, we ignore the second one. If
+    the first one is a `Nothing`, then we present the second parameter as a result,
+    regardless of whether it’s a `Just` or a `Nothing`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`First` is useful when we have a bunch of `Maybe` values and we just want to
+    know if any of them is a `Just`. The `mconcat` function comes in handy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If we want a monoid on `Maybe a` such that the second parameter is kept if
+    both parameters of `mappend` are `Just` values, `Data.Monoid` provides the `Last
+    a` type, which works like `First a`, but the last non-`Nothing` value is kept
+    when `mappend`ing and using `mconcat`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: Folding with Monoids
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One of the more interesting ways to put monoids to work is to have them help
+    us define folds over various data structures. So far, we’ve done folds over lists,
+    but lists aren’t the only data structure that can be folded over. We can define
+    folds over almost any data structure. Trees especially lend themselves well to
+    folding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because there are so many data structures that work nicely with folds, the
+    `Foldable` type class was introduced. Much like `Functor` is for things that can
+    be mapped over, `Foldable` is for things that can be folded up! It can be found
+    in `Data.Foldable`, and because it exports functions whose names clash with the
+    ones from the `Prelude`, it’s best imported qualified (and served with basil):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: To save ourselves precious keystrokes, we’ve imported it qualified as `F`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So what are some of the functions that this type class defines? Well, among
+    them are `foldr`, `foldl`, `foldr1`, and `foldl1`. Huh? We already know these
+    functions. What’s so new about this? Let’s compare the types of `Foldable`’s `foldr`
+    and `foldr` from `Prelude` to see how they differ:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Ah! So whereas `foldr` takes a list and folds it up, the `foldr` from `Data.Foldable`
+    accepts any type that can be folded up, not just lists! As expected, both `foldr`
+    functions do the same for lists:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: Another data structures that support folds is the `Maybe` we all know and love!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: But folding over a `Maybe` value isn’t terribly interesting. It just acts like
+    a list with one element if it’s a `Just` value and like an empty list if it’s
+    `Nothing`. Let’s examine a data structure that’s a little more complex.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Remember the tree data structure from [Chapter 7](ch07.html "Chapter 7. Making
+    Our Own Types and Type Classes")? We defined it like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: You learned that a tree is either an empty tree that doesn’t hold any values
+    or it’s a node that holds one value and also two other trees. After defining it,
+    we made it an instance of `Functor`, and with that we gained the ability to `fmap`
+    functions over it. Now we’re going to make it an instance of `Foldable` so we
+    get the ability to fold it up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One way to make a type constructor an instance of `Foldable` is to just directly
+    implement `foldr` for it. But another, often much easier way, is to implement
+    the `foldMap` function, which is also a part of the `Foldable` type class. The
+    `foldMap` function has the following type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: Its first parameter is a function that takes a value of the type that our foldable
+    structure contains (denoted here with `a`) and returns a monoid value. Its second
+    parameter is a foldable structure that contains values of type `a`. It maps that
+    function over the foldable structure, thus producing a foldable structure that
+    contains monoid values. Then, by doing `mappend` between those monoid values,
+    it joins them all into a single monoid value. This function may sound kind of
+    odd at the moment, but you’ll see that it’s very easy to implement. And implementing
+    this function is all it takes for our type to be made an instance of `Foldable`!
+    So if we just implement `foldMap` for some type, we get `foldr` and `foldl` on
+    that type for free.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is how we make `Tree` an instance of `Foldable`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: If we are provided with a function that takes an element of our tree and returns
+    a monoid value, how do we reduce our whole tree down to one single monoid value?
+    When we were using `fmap` over our tree, we applied the function that we were
+    mapping to a node, and then we recursively mapped the function over the left subtree
+    as well as the right one. Here, we’re tasked with not only mapping a function,
+    but also with joining up the results into a single monoid value by using `mappend`.
+    First, we consider the case of the empty tree—a sad, sad, lonely tree that has
+    no values or subtrees. It doesn’t hold any value that we can give to our monoid-making
+    function, so we just say that if our tree is empty, the monoid value it becomes
+    is `mempty`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802672.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The case of a nonempty node is a bit more interesting. It contains two subtrees
+    as well as a value. In this case, we recursively `foldMap` the same function `f`
+    over the left and right subtrees. Remember that our `foldMap` results in a single
+    monoid value. We also apply our function `f` to the value in the node. Now we
+    have three monoid values (two from our subtrees and one from applying `f` to the
+    value in the node), and we just need to bang them together into a single value.
+    For this purpose, we use `mappend`, and naturally the left subtree comes first,
+    then the node value, followed by the right subtree.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice that we didn’t need to provide the function that takes a value and returns
+    a monoid value. We receive that function as a parameter to `foldMap`, and all
+    we need to decide is where to apply that function and how to join the resulting
+    monoids from it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that we have a `Foldable` instance for our tree type, we get `foldr` and
+    `foldl` for free! Consider this tree:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It has `5` at its root, and then its left node has `3` with `1` on the left
+    and `6` on the right. The root’s right node has a `9` and then `8` to its left
+    and `10` on the far right side. With a `Foldable` instance, we can do all of the
+    folds that we can do on lists:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE68]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`foldMap` isn’t useful only for making new instances of `Foldable`. It also
+    comes in handy for reducing our structure to a single monoid value. For instance,
+    if we want to know if any number in our tree is equal to `3`, we can do this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE69]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, `\x -> Any $ x == 3` is a function that takes a number and returns a
+    monoid value: a `Bool` wrapped in `Any`. `foldMap` applies this function to every
+    element in our tree and then reduces the resulting monoids into a single monoid
+    with `mappend`. Suppose we do this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE70]'
+  prefs: []
+  type: TYPE_PRE
+- en: All of the nodes in our tree will hold the value `Any False` after having the
+    function in the lambda applied to them. But to end up `True`, `mappend` for `Any`
+    must have at least one `True` value as a parameter. That’s why the final result
+    is `False`, which makes sense because no value in our tree is greater than `15`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also easily turn our tree into a list by doing a `foldMap` with the
+    `\x -> [x]` function. By first projecting that function onto our tree, each element
+    becomes a singleton list. The `mappend` action that takes place between all those
+    singleton lists results in a single list that holds all of the elements that are
+    in our tree:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE71]'
+  prefs: []
+  type: TYPE_PRE
+- en: What’s cool is that all of these tricks aren’t limited to trees. They work on
+    any instance of `Foldable`!
+  prefs: []
+  type: TYPE_NORMAL

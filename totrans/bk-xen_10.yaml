@@ -1,0 +1,863 @@
+- en: Chapter 10. PROFILING AND BENCHMARKING UNDER XEN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Disraeli was pretty close: actually, there are Lies, Damn lies, Statistics,
+    Benchmarks, and Delivery dates*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: —*Anonymous, attributed to Usenet*![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)
+  prefs: []
+  type: TYPE_NORMAL
+- en: We've made a great fuss over how Xen, as a virtualization technology, offers
+    better performance than competing technologies. However, when it comes to proofs
+    and signs, we have been waving our hands and citing authorities. We apologize!
+    In this chapter we will discuss how to measure Xen's performance for yourself,
+    using a variety of tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll look closely at three general classes of performance monitoring, each
+    of which you might use for a different reason. First, we have benchmarking Xen
+    domU performance. If you are running a hosting service (or buying service from
+    a hosting service), you need to see how the Xen image you are providing (or renting)
+    stacks up to the competition. In this category, we have general-purpose *synthetic
+    benchmarks*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Second, we want to be able to benchmark Xen versus other virtualization solutions
+    (or bare hardware) *for your workload* because Xen has both strengths and weaknesses
+    compared to other virtualization packages. These *application benchmarks* will
+    help to determine whether Xen is the best match for your application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Third, sometimes you have a performance problem in your Xen-related or kernel-related
+    program, and you want to pinpoint the bits of code that are moving slowly. This
+    category includes *profiling tools*, such as OProfile. (Xen developers may also
+    ask you for OProfile output when you ask about performance issues on the *xen-devel*
+    list.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although some of these techniques might come in handy while troubleshooting,
+    we haven't really aimed our discussion here at solving problems—rather, we try
+    to present an overview of the tools for various forms of speed measurement. See
+    [Chapter 15](ch15.html "Chapter 15. TROUBLESHOOTING") for more specific troubleshooting
+    suggestions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Benchmarking Overview
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We've seen that the performance of a paravirtualized Xen domain running most
+    workloads approximates that of the native machine. However, there are cases where
+    this isn't true or where this fuzzy simulacrum of the truth isn't precise enough.
+    In these cases, we move from prescientific assertion to direct experimentation—that
+    is, using benchmarking tools and simulators to find actual, rather than theoretical,
+    performance numbers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we're sure you know, generalized benchmarking is, if not a "hard problem,"^([[56](#ftn.CHP-10-FNOTE-1)])
+    at least quite difficult. If your load is I/O bound, testing the CPU will tell
+    you nothing you need to know. If your load is IPC-bound or blocking on certain
+    threads, testing the disk and the CPU will tell you little. Ultimately, the best
+    results come from benchmarks that use as close to real-world load as possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The very best way to test, for example, the performance of a server that serves
+    an HTTP web application would be to sniff live traffic hitting your current HTTP
+    server, and then replay that data against the new server, speeding up or slowing
+    down the replay to see if you have more or less capacity than before.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This, of course, is rather difficult both to do and to generalize. Most people
+    go at least one step into "easier" and "more general." In the previous example,
+    you might pick a particularly heavy page (or a random sampling of pages) and test
+    the server with a generalized HTTP tester, such as Siege. This usually still gives
+    you pretty good results, is a lot easier, and has fewer privacy concerns than
+    running the aforementioned live data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are times, however, when a general benchmark, for all its inadequacies,
+    is the best tool. For example, if you are trying to compare two virtual private
+    server providers, a standard, generalized test might be more readily available
+    than a real-world, specific test. Let's start by examining a few of the synthetic
+    benchmarks that we've used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: UnixBench
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One classic benchmarking tool is the public domain UnixBench released by *BYTE*
+    magazine in 1990, available from [http://www.tux.org/pub/tux/niemi/unixbench/](http://www.tux.org/pub/tux/niemi/unixbench/).
+    The tool was last updated in 1999, so it is rather old. However, it seems to be
+    quite popular for benchmarking VPS providers—by comparing one provider's UnixBench
+    number to another, you can get a rough idea of the capacity of VM they're providing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: UnixBench is easy to install—download the source, untar it, build it, and run
+    it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: (That last command is a literal "Run"—it's a script that cycles through the
+    various tests, in order, and outputs results.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: You may get some warnings, or even errors, about the `-fforce-mem` option that
+    UnixBench uses, depending on your compiler version. If you edit the Makefile to
+    remove all instances of `-fforce-mem`, UnixBench should build successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We recommend benchmarking the Xen instance in single-user mode if possible.
+    Here''s some example output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Armed with a UnixBench number, you at least have some basis for comparison between
+    different VPS providers. It's not going to tell you much about the specific performance
+    you're going to get, but it has the advantage that it is a widely published, readily
+    available benchmark.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other tools, such as netperf and Bonnie++, can give you more detailed performance
+    information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analyzing Network Performance
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'One popular tool for measuring low-level network performance is netperf. This
+    tool supports a variety of performance measurements, with a focus on measuring
+    the efficiency of the network implementation. It''s also been used in Xen-related
+    papers. For one example, see "The Price of Safety: Evaluating IOMMU Performance"
+    by Muli Ben-Yehuda et al.^([[57](#ftn.CHP-10-FNOTE-2)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, download netperf from [http://netperf.org/netperf/DownloadNetperf.html](http://netperf.org/netperf/DownloadNetperf.html).
+    We picked up version 2.4.4.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Untar it and enter the netperf directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Configure, build, and install netperf. (Note that these directions are a bit
+    at variance with the documentation; the documentation claims that */opt/netperf*
+    is the hard-coded install prefix, whereas it seems to install in */usr/local*
+    for me. Also, the manual seems to predate netperf's use of Autoconf.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: netperf works by running the client, `netperf`, on the machine being benchmarked.
+    `netperf` connects to a `netserver` daemon and tests the rate at which it can
+    send and receive data. So, to use `netperf`, we first need to set up `netserver`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the standard service configuration, `netserver` would run under `inetd`;
+    however, `inetd` is obsolete. Many distros don''t even include it by default.
+    Besides, you probably don''t want to leave the benchmark server running all the
+    time. Instead of configuring `inetd`, therefore, run `netserver` in standalone
+    mode:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now we can run the `netperf` client with no arguments to perform a 10-second
+    test with the local daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Okay, looks good. Now we''ll test from the dom0 to this domU. To do that, we
+    install the netperf binaries as described previously and run `netperf` with the
+    `-H` option to specify a target host (in this case, .74 is the domU we''re testing
+    against):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Cool. Not as fast, obviously, but we expected that. Now from another physical
+    machine to our test domU:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Ouch. Well, so how much of that is Xen, and how much is the network we''re
+    going through? To find out, we''ll run the `netserver` daemon on the dom0 hosting
+    the test domU and connect to that:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: It could be worse, I guess. The moral of the story? `xennet` introduces a noticeable
+    but reasonable overhead. Also, netperf can be a useful tool for discovering the
+    actual bandwidth you've got available. In this case the machines are connected
+    via a 100Mbit connection, and netperf lists an actual throughput of 93.66Mbits/second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Measuring Disk Performance with Bonnie++
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One of the major factors in a machine's overall performance is its disk subsystem.
+    By exercising its hard drives, we can get a useful metric to compare Xen providers
+    or Xen instances with, say, VMware guests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We, like virtually everyone else on the planet, use Bonnie++ to measure disk
+    performance. Bonnie++ attempts to measure both random and sequential disk performance
+    and does a good job simulating real-world loads. This is especially important
+    in the Xen context because of the degree to which domains are partitioned—although
+    domains share resources, there's no way for them to coordinate resource use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One illustration of this point is that if multiple domains are trying to access
+    a platter simultaneously, what looks like sequential access from the viewpoint
+    of one VM becomes random accesses to the disk. This makes things like seek time
+    and the robustness of your tagged queuing system much more important. To test
+    the effect of these optimizations on domU performance, you'll probably want a
+    tool like Bonnie++.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Bonnie++ author maintains a home page at [http://www.coker.com.au/bonnie++/](http://www.coker.com.au/bonnie++/).
+    Download the source package, build it, and install it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At this point you can simply invoke Bonnie++ with a command such as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This command will run some tests, printing status information as it goes along,
+    and eventually generate output like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that some tests may simply output a row of pluses. This indicates that
+    the machine finished them in less than 500 ms. Make the workload more difficult.
+    For example, you might specify something like:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This specifies writing 2512MB files for I/O performance tests. (This is the
+    default file size, which is twice the RAM size on this particular machine. This
+    is important to ensure that we're not just exercising RAM rather than disk.) It
+    also tells Bonnie++ to create 256*1024 files in its file creation tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also recommend reading Bonnie++'s online manual, which includes a fair amount
+    of pithy benchmarking wisdom, detailing why the author chose to include the tests
+    that he did, and what meanings the different numbers have.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[56](#CHP-10-FNOTE-1)]) The phrase "hard problem" is usually used as dry
+    and bleak humor. Classic "hard problems" include natural language and strong AI.
+    See also: "interesting."'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[57](#CHP-10-FNOTE-2)]) See [http://ols.108.redhat.com/2007/Reprints/ben-yehuda-Reprint.pdf](http://ols.108.redhat.com/2007/Reprints/ben-yehuda-Reprint.pdf).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Application Benchmarks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Of course, the purpose of a server is to run applications—we're not really interested
+    in how many times per second the VM can do absolutely nothing. For testing application
+    performance, we use the applications that we're planning to put on the machine,
+    and then throw load at them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since this is necessarily application-specific, we can't give you too many pointers
+    on specifics. There are good test suites available for many popular libraries.
+    For example, we've had customers benchmark their Xen instances with the popular
+    web framework Django.^([[58](#ftn.CHP-10-FNOTE-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'httperf: A Load Generator for HTTP Servers'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Having tested the effectiveness of your domain's network interface, you may
+    want to discover how well the domain performs when serving applications through
+    that interface. Because of Xen's server-oriented heritage, one popular means of
+    testing its performance in HTTP-based real-world applications is `httperf`. The
+    tool generates HTTP requests and summarizes performance statistics. It supports
+    HTTP/1.1 and SSL protocols and offers a variety of workload generators. You may
+    find `httperf` useful if, for example, you're trying to figure out how many users
+    your web server can handle before it goes casters-up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, install `httperf` on a machine other than the one you're testing—it can
+    be another domU, but we usually prefer to install it on something completely separate.
+    This "load" machine should also be as close to the target machine as possible—preferably
+    connected to the same Ethernet switch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can get `httperf` through your distro's package-management mechanism or
+    from [http://www.hpl.hp.com/research/linux/httperf/](http://www.hpl.hp.com/research/linux/httperf/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you''ve downloaded the source code, build it using the standard method.
+    `httperf` ''s documentation recommends using a separate build directory rather
+    than building directly in the source tree. Thus, from the `httperf` source directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, run appropriate tests. What we usually do is run `httperf` with a command
+    similar to this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this case we're just demanding a static HTML page, so the request rate is
+    obscenely high; usually we would use a much smaller number in tests of real-world
+    database-backed websites.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`httperf` will then give you some statistics. The important numbers, in our
+    experience, are the connection rate, the request rate, and the reply rate. All
+    of these should be close to the rate specified on the command line. If they start
+    to decline from that number, that indicates that the server has reached its capacity.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, `httperf` isn''t limited to repeated requests for a single file. We
+    prefer to use `httperf` in session mode by specifying the `--wsesslog` workload
+    generator. This gives a closer approximation to the actual load on the web server.
+    You can create a session file from your web server logs with a bit of Perl, winding
+    up with a simple formatted list of URLs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This session file lists files for `httperf` to request, with indentations to
+    define bursts; a group of lines that begin with whitespace is a burst. When run,
+    `httperf` will request the first burst, wait a certain amount of time, then move
+    to the next burst. Equipped with this session file, we can use `httperf` to simulate
+    a user:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will start 40 sessions at the rate of one per second. The new parameter,
+    `--wsesslog`, takes the input of *urls.txt* and runs through it in bursts, pausing
+    10 seconds between bursts to simulate the user thinking.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Again, throw this at your server, increasing the rate until the server can't
+    meet demand. When the server fails, congratulations! You've got a benchmark.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another Application Benchmark: POV-Ray'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Of course, depending on your application, `httperf` may not be a suitable workload.
+    Let's say that you've decided to use Xen to render scenes with popular open source
+    raytracer POV-Ray. (If nothing else, it's a good way to soak up spare CPU cycles.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The POV-Ray benchmark is easy to run. Just give the `-benchmark` option on
+    the command line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This renders a standard scene and gives a large number of statistics, ending
+    with an overall summary and rendering time. A domU with a 2.8 GHz Pentium 4 and
+    256MB of memory gave us the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now you've got a single number that you can easily compare between various setups
+    running POV-Ray, be they Xen instances, VMware boxes, or physical servers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tuning Xen for Optimum Benchmarking
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Most system administration work involves comparing results at the machine level—analyzing
+    the performance of a Xen VM relative to another machine, virtual or not. However,
+    with virtualization, there are some performance knobs that aren't obvious but
+    can make a huge difference in the final benchmark results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, Xen allocates CPU dynamically and attempts to keep the CPU busy as much
+    as possible. That is, if dom2 isn''t using all of its allocated CPU, dom3 can
+    pick up the extra. Although this is usually a good thing, it can make CPU benchmark
+    data misleading. While testing, you can avoid this problem by specifying the `cap`
+    parameter to the scheduler. For example, to ensure that domain ID 1 can get no
+    more than 50 percent of one CPU:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Second, guests in HVM mode absolutely must use paravirtualized drivers for acceptable
+    performance. This point is driven home in a XenSource analysis of benchmark results
+    published by VMware, in which XenSource points out that, in VMware's benchmarks,
+    "XenSource's Xen Tools for Windows, which optimize the I/O path, were not installed.
+    The VMware benchmarks should thus be disregarded in their entirety."
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, shared resources (like disk I/O) are difficult to account, can interact
+    with dom0 CPU demand, and can be affected by other domUs. For example, although
+    paravirtualized Xen can deliver excellent network performance, it requires more
+    CPU cycles to do so than a nonvirtualized machine. This may affect the capacity
+    of your machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is a difficult issue to address, and we can't really offer a magic bullet.
+    One point to note is that the dom0 will likely use more CPU than an intuitive
+    estimate would suggest; it's very important to weight the dom0's CPU allocation
+    heavily, or perhaps even devote a core exclusively to the dom0 on boxes with four
+    or more cores.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For benchmarking, we also recommend minimizing error by benchmarking with a
+    reasonably loaded machine. If you're expecting to run a dozen domUs, then they
+    should all be performing some reasonable synthetic task while benchmarking to
+    get an appreciation for the real-world performance of the VM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[58](#CHP-10-FNOTE-3)]) [http://journal.uggedal.com/vps-comparison-between-slicehost-and-prgmr](http://journal.uggedal.com/vps-comparison-between-slicehost-and-prgmr)
+    uses Django among other tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Profiling with Xen
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Of course, there is one way of seeing shared resource use more precisely. We
+    can *profile* the VM as it runs our application workload to get a clear idea of
+    what it's doing and—with a Xen-aware profiler—how other domains are interfering
+    with us.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Profiling refers to the practice of examining a specific application to see
+    what it spends time doing. In particular, it can tell you whether an app is CPU
+    or I/O limited, whether particular functions are inefficient, or whether performance
+    problems are occurring outside of the app entirely, perhaps in the kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, we'll discuss a sample setup with Xen and OProfile, using the kernel compile
+    as a standard workload (and one that most Xen admins are likely to be familiar
+    with).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xenoprof
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: OProfile is probably the most popular profiling package for Linux.^([[59](#ftn.CHP-10-FNOTE-4)])
+    The kernel includes OProfile support, and the user-space tools come with virtually
+    every distro we know. If you have a performance problem with a particular program
+    and want to see precisely what's causing it, OProfile is the tool for the job.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OProfile works by incrementing a counter whenever the program being profiled
+    performs a particular action. For example, it can keep count of the number of
+    cache misses or the number of instructions executed. When the counter reaches
+    a certain value, it instructs the OProfile daemon to sample the counter, using
+    a non-maskable interrupt to ensure prompt handling of the sampling request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xenoprofile, or Xenoprof, is a version of OProfile that has been extended to
+    work as a system-wide profiling tool under Xen, using hypercalls to enable domains
+    to access hardware performance counters. It supports analysis of complete Xen
+    instances and accounts for time spent in the hypervisor or within another domU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting OProfile
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As of recent versions, Xen includes support for OProfile versions up to 0.9.2
+    (0.9.3 will require you to apply a patch to the Xen kernel). For now, it would
+    probably be best to use the packaged version to minimize the tedious effort of
+    recompilation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're using a recent version of Debian, Ubuntu, CentOS, or Red Hat, you're
+    in luck; the version of OProfile that they ship is already set up to work with
+    Xen. Other distro kernels, if they ship with Xen, will likely also incorporate
+    OProfile's Xen support.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building OProfile
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you're not so lucky as to have Xen profiling support already, you'll have
+    to download and build OProfile, for which we'll give very brief directions just
+    for completeness.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first thing to do is to download the OProfile source from [http://oprofile.sourceforge.net/](http://oprofile.sourceforge.net/).
+    We used version 0.9.4.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, untar OProfile, like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then configure and build OProfile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, do a bit of Linux kernel configuration if your kernel isn''t correctly
+    configured already. (You can check by issuing `gzip -d -i /proc/config.gz | grep
+    PROFILE`.) In our case that returns:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '/proc/config.gz *is an optional feature that may not exist. If it doesn''t,
+    you''ll have to find your configuration some other way. On Fedora 8, for example,
+    you can check for profiling support by looking at the kernel config file shipped
+    with the distro*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: If your kernel isn't set up for profiling, rebuild it with profiling support.
+    Then install and boot from the new kernel (a step that we won't detail at length
+    here).
+  prefs: []
+  type: TYPE_NORMAL
+- en: OProfile Quickstart
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To make sure OProfile works, you can profile a standard workload in domain 0\.
+    (We chose the kernel compile because it's a familiar task to most sysadmins, although
+    we're compiling it out of the Xen source tree.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Begin by telling OProfile to clear its sample buffers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now configure OProfile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first three arguments are the command (setup for profiling), kernel image,
+    and an option to create separate output files for libraries used. The final switch,
+    `event`, describes the event that we're instructing OProfile to monitor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The precise event that you'll want to sample varies depending on your processor
+    type (and on what you're trying to measure). For this run, to get an overall approximation
+    of CPU usage, we used `CPU_CLK_UNHALTED` on an Intel Core 2 machine. On a Pentium
+    4, the equivalent measure would be `GLOBAL_POWER_EVENTS`. The remaining arguments
+    indicate the size of the counter, the unit mask (in this case, 0x1), and that
+    we want both the kernel and userspace code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: INSTALLING AN UNCOMPRESSED KERNEL ON RED HAT–DERIVED DISTROS
+  prefs: []
+  type: TYPE_NORMAL
+- en: One issue that you may run into with OProfile and kdump, as with any tool that
+    digs into the kernel's innards, is that these tools expect to find an uncompressed
+    kernel with debugging symbols for maximum benefit. This is simple to provide if
+    you've built the kernel yourself, but with a distro kernel it can be more difficult.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Under Red Hat and others, these kernels (and other software built for debugging)
+    are in special `-debuginfo` RPM packages. These packages aren't in the standard
+    `yum` repositories, but you can get them from Red Hat's FTP site. For Red Hat
+    Enterprise Linux 5, for example, that'd be [ftp://ftp.redhat.com/pub/redhat/linux/enterprise/5Server/en/os/i386/Debuginfo](ftp://ftp.redhat.com/pub/redhat/linux/enterprise/5Server/en/os/i386/Debuginfo).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the default kernel, you''ll want the packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Download these and install them using RPM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To start collecting samples, run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then run the experiment that you want to profile, in this case a kernel compile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then stop the profiler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we have samples, we can extract meaningful and useful information
+    from the mass of raw data via the standard postprofiling tools. The main analysis
+    command is `opreport`. To get a basic overview of the processes that consumed
+    CPU, we could run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: This tells us which processes accounted for CPU usage during the compile, with
+    a threshold of 2 percent (indicated by the `-t 2` option.) This isn't terribly
+    interesting, however. We can get more granularity using the `--symbols` option
+    with `opreport`, which gives a best guess as to what functions accounted for the
+    CPU usage. Try it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You might be interested in other events, such as cache misses. To get a list
+    of possible counters customized for your hardware, issue:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Profiling Multiple Domains in Concert
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: So far, all this has covered standard use of OProfile, without touching on the
+    Xen-specific features. But one of the most useful features of OProfile, in the
+    Xen context, is the ability to profile entire domains against each other, analyzing
+    how different scheduling parameters, disk allocations, drivers, and code paths
+    interact to affect performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When profiling multiple domains, dom0 still coordinates the session. It's not
+    currently possible to simply profile in a domU without dom0's involvement—domUs
+    don't have direct access to the CPU performance counters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Active vs. Passive Profiling
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Xenoprofile supports both active and passive modes for domain profiling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When profiling in passive mode, the results indicate which domain is running
+    at sample time but don't delve more deeply into what's being executed. It's useful
+    to get a quick look at which domains are using the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In active mode, each domU runs its own instance of OProfile, which samples events
+    within its virtual machine. Active mode allows better granularity than passive
+    mode, but is more inconvenient. Only paravirtualized domains can run in active
+    mode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Active Profiling
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Active profiling is substantially more interesting. For this example, we''ll
+    use three domains: dom0, to control the profiler, and domUs 1 and 3 as active
+    domains.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'First, set up the daemon in dom0 with some initial parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: This introduces the `--xen` option, which gives the path to the uncompressed
+    Xen kernel image, and the `--active-domains` option, which lists the domains to
+    profile in active mode. The `:1 s` at the end of the event option tells OProfile
+    to count events in both userspace and kernel space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Specify domains by numeric ID. OProfile won''t interpret names*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, start OProfile in the active domUs. The daemon must already be running
+    in dom0, otherwise the domU won't have permission to access the performance counters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Run the same commands in domain 3\. Finally, begin sampling in domain 0:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now we can run commands in the domains of interest. Let's continue to use the
+    kernel compile as our test workload, but this time complicate matters by running
+    a disk-intensive benchmark in another domain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When the kernel compile and Bonnie++ have finished, we stop OProfile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now each domU will have its own set of samples, which we can view with `opreport`.
+    Taken together, these reports form a complete picture of the various domains'
+    activity. We might suggest playing with the CPU allocations and seeing how that
+    influences OProfile's results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An OProfile Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now let''s try applying OProfile to an actual problem. Here''s the scenario:
+    We''ve moved to a setup that uses LVM mirroring on a pair of 1 TB SATA disks.
+    The hardware is a quad-core Intel QX6600, with 8GB memory and an ICH7 SATA controller,
+    using the AHCI driver. We''ve devoted 512MB of memory to the dom0.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We noted that the performance of mirrored logical volumes accessed through `xenblk`
+    was about one-tenth that of nonmirrored LVs, or of LVs mirrored with the `--corelog`
+    option. Mirrored LVs with and without `–corelog` performed fine when accessed
+    normally within the dom0, but performance dropped when accessed via `xm block-attach`.
+    This was, to our minds, ridiculous.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we created two logical volumes in the volume group *test*: one with
+    mirroring and a mirror log, and one with the `--corelog` option.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then we made filesystems and mounted them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next we started OProfile, using the `--xen` option to give the path to our
+    uncompessed Xen kernel image. After a few test runs profiling various events,
+    it became clear that our problem related to excessive amounts of time spent waiting
+    for I/O. Thus, we instruct the profiler to count `BUS_IO_WAIT` events, which indicate
+    when the processor is stuck waiting for input:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then we ran Bonnie++ on each device in sequence, stopping OProfile and saving
+    the output each time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The LV with the corelog displayed negligible iowait, as expected. However,
+    the other experienced quite a bit, as you can see in this output from our test
+    of the LV in question:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here we see that the Xen kernel is experiencing a large number of `BUS_IO_WAIT`
+    events in the `pit_read_counter` function, suggesting that this function is probably
+    our culprit. A bit of searching for that function name reveals that it's been
+    taken out of recent versions of Xen, so we decide to take the easy way out and
+    upgrade. Problem solved—but now we have some idea why.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Used properly, profiling can be an excellent way to track down performance bottlenecks.
+    However, it's not any sort of magic bullet. The sheer amount of data that profiling
+    generates can be seductive, and sorting through the profiler's output may take
+    far more time than it's worth.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[59](#CHP-10-FNOTE-4)]) Excluding top(1), of course.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So that's a sysadmin's primer on performance measurement with Xen. In this chapter,
+    we've described tools to measure performance, ranging from the general to the
+    specific, from the hardware focused to the application oriented. We've also briefly
+    discussed the Xen-oriented features of OProfile, which aim to extend the profiler
+    to multiple domUs and the hypervisor itself.
+  prefs: []
+  type: TYPE_NORMAL

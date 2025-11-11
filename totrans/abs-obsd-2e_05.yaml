@@ -1,0 +1,1016 @@
+- en: Chapter 5. The Boot Process
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Single-user mode*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*unscheduled in the nighttime?*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Something just went “boom”!*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages1616079.png) In order to properly
+    manage any computing platform, you must understand the boot process. Many systems
+    administration tasks cannot be done while the system is running. OpenBSD specifically
+    requires that certain tasks be done before the boot process has completed. And,
+    of course, on any operating system, sometimes a process starting up prevents the
+    system from completing its boot. The only way to fix these problems is to interrupt
+    the boot partway through.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we’ll look at the key to OpenBSD’s booting process: the boot loader.
+    Then we’ll move on to single-user mode, and finally multiuser startup. You can
+    perform useful work at any of these stages.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I recommend playing with the OpenBSD boot process on a test machine *before*
+    one of your machines won’t boot. That way, when something breaks in the wee hours
+    of the morning, you can spend your time fixing the problem instead of fumbling
+    around with unfamiliar commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Power-On and the Boot Loader
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In general, when a PC-style computer first boots, it starts the BIOS. The BIOS
+    is a small piece of software that figures out things like which drives are attached
+    and what they’re attached to, what sort of CPU is installed, and how much memory
+    is available. After getting that information, the BIOS loads a minimal boot loader
+    from some kind of storage device.^([[11](#ftn.id369126)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: The *boot loader* is a small program that handles initial system configuration
+    and boots the kernel. It finds and starts the kernel, which in turn detects hardware,
+    attaches device drivers, and performs other core setup. Finally, the kernel calls
+    `init(8)`, which starts processes and enables user programs, network interfaces,
+    server software, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While most of this process cannot be managed—no one actually configures `init`!—there’s
+    plenty you can do before the system finishes booting and dumps you at the login
+    screen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The OpenBSD boot loader lets you interrupt the boot process, configure the system
+    before it boots, adjust kernel settings, and even boot an alternate kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When the hardware hands control of the boot process over to the OpenBSD partition,
+    you’ll see the boot loader prompt, which looks something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The boot loader’s main purpose is to find the kernel, load it into memory, and
+    start it. Because it runs before the kernel starts, the boot loader can pass instructions
+    to the kernel itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are some of the things you can do before booting is complete:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use built-in help
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Use the `help` function to print a brief list of commands that the boot loader
+    supports.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_BQ
+  type: TYPE_PRE
+- en: Delay the boot process
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: By default, the loader waits five seconds for instructions, and then boots the
+    kernel. To pause the boot at the prompt, press the spacebar.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Set the boot timeout
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: To set a new boot idle timeout, specify a number of seconds with the `set timeout`
+    command.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_BQ
+  type: TYPE_PRE
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: After the boot prompt is idle for 10 seconds, the system should boot.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Boot the system
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: 'If you’ve paused the boot process, the system won’t boot until you tell it
+    to. When you’re ready to boot, use the `boot` command:'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_BQ
+  type: TYPE_PRE
+- en: We’ll use various permutations of `boot` to configure the kernel, boot single-user
+    mode, and so on. I’ll cover other boot commands in the appropriate sections. For
+    full details on what you can do at the boot loader prompt, read the `boot(8)`
+    man page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Booting in Single-User Mode
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Single-user mode is the earliest point when OpenBSD can give you a Unix-style
+    shell prompt. At this point, the kernel has probed all the hardware, attached
+    drivers to all the hardware that it’s going to acknowledge, and started `init`.
+    The system hasn’t mounted any filesystems except for the root partition, which
+    is mounted in read-only mode. The network isn’t started, no services are running,
+    security is not implemented, and filesystem permissions are ignored.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To boot OpenBSD in single-user mode, enter **`boot -s`** at the loader prompt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Why would you want to boot into single-user mode? If your computer has a problem
+    that is preventing it from booting, you should be able to access single-user mode
+    and fix the problem. Suppose a failed disk is preventing the system from booting
+    during a multiuser boot, or you changed your terminal settings in */etc/ttys*
+    and now you can’t log on to the system. Or maybe you put a daft setting in *rc.conf.local*,
+    and the boot process hangs because it’s trying to do something impossible. At
+    times like these, single-user mode is your best friend.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, some system administration tasks, such as clearing filesystem flags (see
+    [Chapter 8](ch08.html "Chapter 8. Disks and Filesystems")), can be done only in
+    single-user mode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mounting Disks in Single-User Mode
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Usually, you should have a fully functional filesystem before doing anything
+    in single-user mode. If your system crashed, be sure to check the integrity of
+    your filesystems before mounting them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`fsck` and `mount` have many more options. We’ll cover them in more detail
+    in [Chapter 8](ch08.html "Chapter 8. Disks and Filesystems").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you’ve mounted all of your filesystems, all usual command-line software
+    should be available. You should be able to edit configuration files, start and
+    stop programs, and generally do whatever you like to the system (including destroy
+    it).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Starting the Network in Single-User Mode
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Use the shell script */etc/netstart* to configure the network while in singleuser
+    mode. (You could run all the appropriate commands by hand, but */etc/netstart*
+    will read your system’s configuration files and do the grunt work for you.) You
+    must explicitly run this script through `sh`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you’re booting into single-user mode because of network problems, this script
+    will conveniently reproduce the issue for you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Booting an Alternate Kernel
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As we’ll cover in tedious detail in [Chapter 18](ch18.html "Chapter 18. Kernel
+    Configuration"), you *can* configure the OpenBSD kernel, but before you do so,
+    be sure that you can boot alternate kernels. You’ll need to be able to boot a
+    different kernel if, say, you hose your filesystem so badly that it won’t even
+    boot to single-user mode, and you need to recover using the installation kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Booting a Different Kernel File
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'An OpenBSD installation includes three kernels out of the box: the single-processor
+    kernel */bsd*, the multiprocessor kernel */bsd.mp*, and the upgrade and install
+    kernel */bsd.rd*. (If your machine has multiple processors, the installer renames
+    */bsd* to */bsd.sp* and */bsd.mp* to */bsd*.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To boot a nonstandard kernel, first reboot and interrupt the boot process at
+    the boot loader prompt. Run `boot`, and give the full path to the kernel you want
+    to boot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will start the system using your chosen kernel. You can use other boot
+    options as well, such as booting the alternate kernel in single-user mode:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will let you recover from a bad kernel, try a new kernel, or anything in
+    between.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Booting from an Alternate Hard Disk
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Suppose you’ve really fouled everything up beyond all recognition, and you
+    don’t have a usable kernel on your root partition. Fortunately, if you have a
+    usable kernel on a different hard drive, you can boot from that. (Usually, this
+    kernel lives on an alternate root partition, */altroot*, as discussed in [Chapter 8](ch08.html
+    "Chapter 8. Disks and Filesystems").) In this section, I’ll break the task of
+    booting from that alternate kernel into a few steps: finding the hard disk with
+    the partition, finding the partition with the file, and booting the right file
+    on that partition.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding the Disk
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Once you’re familiar with OpenBSD, you may begin to think of the hard drives
+    in your system by their device names, such as */dev/sd0*, */dev/wd1*, and so on.
+    Unfortunately, those are the kernel’s names for the disks; the boot loader recognizes
+    only the BIOS’s disk names.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To ask the boot loader about disks, use the `machine diskinfo` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the boot loader has found four disk devices. The first, `fd0`, is a floppy
+    disk drive. This drive might or might not have a disk in it, but whatever it has,
+    it’s almost certainly not your alternate kernel. (It might be an installation
+    disk, though, so don’t automatically rule out using it for disaster recovery.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other three devices—`hd0`, `hd1`, and `hd2`—are hard disks. The first, `hd0`,
+    is the default system boot disk. If you can’t boot from that disk, you need to
+    find the hard disk that contains your kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding the Partition
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Vague stirrings of memory in this output lead me to think that `hd2` might
+    be the disk that holds my backup root partition. To try it, tell the loader that
+    disk partition `hd2a` is the new root partition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Before trying to boot from this partition, look at its contents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Apparently, disk `hd2` has no partition `a`. After service is restored, I’ll
+    take this disk out behind my garage and beat its weakness out of it. For now,
+    let’s try the only remaining disk, `hd1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This looks like an actual root partition (`altroot` offers a hint).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Booting the Kernel
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: At this point, we could boot a different kernel, but we’ll just boot the */bsd*
+    kernel on this partition in single-user mode, because the filesystem table would
+    have the incorrect entry for the root filesystem, which would mess up all sorts
+    of stuff.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Alternatively, you could give the device name at the boot prompt:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: As a general rule, you should mount the actual root partition on */mnt*, make
+    the necessary changes for normal operation, and reboot into the proper root partition.
+    You could also boot the */bsd.rd* kernel, giving you a cleaner boot at the cost
+    of having fewer tools available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Making Boot Loader Settings Permanent
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To make boot loader options permanent, edit */etc/boot.conf*. The boot loader
+    reads and runs entries from this file before giving you the `boot>` prompt, which
+    means you can use it to automatically run boot loader commands every time your
+    computer boots. (Although if you would rather sit at your computer and enter your
+    settings every time you reboot, don’t let me stop you.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Any command you might give at the loader prompt is a valid *boot.conf* entry.
+    For example, if the default boot speed is too slow for your liking, you can set
+    your boot timeout to two seconds by adding this line to *boot.conf*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can also tell the system to boot a different kernel with the correct *boot.conf*
+    command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: By far, *boot.conf* is most often used to configure a serial console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Serial Consoles
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: All of these nifty boot functions let you do useful stuff when your system is
+    in trouble, but how can you use them when your computer isn’t right in front of
+    you? If your computer is in a data center on the other side of the country, or
+    sitting in the basement behind the last decade of payroll records, a serial console
+    will make your life far more pleasant.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A hardware serial console allows you to run a serial cable between a computer
+    and a terminal server (on another computer) to access BIOS messages and operating
+    system boot and startup messages which simplifies managing remote systems. Serial
+    consoles are invaluable when debugging system crashes, too; error messages come
+    over the serial port, where you can easily capture them.^([[12](#ftn.id418996)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: True UNIX hardware has serial console capabilities, as does most server-grade
+    i386 and amd64 hardware. Most desktop-grade hardware, however, does not. But fortunately,
+    even if you don’t have a hardware serial console, you can access all of OpenBSD’s
+    startup messages with a serial port and a software serial console. While OpenBSD’s
+    software serial console won’t give you access to the hardware BIOS, it will let
+    you interface with the boot loader and remotely access the system console, even
+    when the network is down.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other Platform Serial Consoles
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Every hardware platform has its own standards for serial consoles. If you’re
+    running a less common platform, check your hardware’s documentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your hardware supports a real serial console, you should usually configure
+    it in the BIOS. OpenBSD supports whatever the hardware supports, so your Sparc64
+    hardware will support OpenBSD’s serial console just as well as it supports any
+    other operating system’s serial console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Serial Console Physical Setup
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A serial console requires a null modem cable, which you should be able to get
+    from any computer store or an online vendor. While gold-plated cables aren’t worth
+    the money, don’t buy the cheapest cable you can find either. If you have an emergency
+    and need the serial console right *now*, you won’t be in the mood to deal with
+    a defective cable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Plug one end of the null modem cable into your OpenBSD machine’s first serial
+    port. (The serial console is supported on only the first serial port, or `com0`
+    on i386 and amd64 hardware.) Plug the null modem cable’s other end into an open
+    serial port on another system. (For simplicity’s sake, use either another OpenBSD
+    or Unix-like system.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you have two OpenBSD machines at a remote location and you want to use serial
+    consoles on both, you can have each machine act as the console client for the
+    other. Attach the first serial port on each server to the second serial port on
+    the other. If you have three machines, you can daisy-chain them in a loop. If
+    you have four or more machines, pick up a used terminal server from your favorite
+    auction site.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also use two DB9-to-RJ45 converters, one standard and one crossover,
+    which will allow you to run your console connections over a standard CAT5 cable.
+    If you have a lights-out data center where human beings are forbidden unless they
+    are installing or removing equipment, you can stretch your serial console cables
+    about 12 meters, which should reach into your warm room. (Most modern data facilities
+    are better equipped to handle CAT5 cables than serial cables.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Serial Console Configuration
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now that you have the console physically ready, the next step is to configure
+    your client to access the serial console. Then you can set up the serial console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring the Serial Console Client
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'The following are the default settings for an OpenBSD i386 or amd64 system:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 9600 baud
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 8 bits
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: No parity
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 1 stop bit
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enter these values into any terminal emulator on the client computer, and the
+    serial console should Just Work. You can find terminal emulators for Microsoft
+    platforms (I recommend PuTTY), OS X, and just about any other operating system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'OpenBSD includes the terminal emulator `tip(1)`, which reads its configuration
+    from */etc/remote*. The configuration `tty00` in */etc/remote* matches the default
+    OpenBSD serial console configuration for i386 and amd64 systems (as well as several
+    other platforms). If you’ve attached your null modem cable to the first serial
+    port on the client, connect with this command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: If it doesn’t say `connected`, your serial client is misconfigured. Fix your
+    client before enabling your serial console on the server. You want your serial
+    client ready before configuring the console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting Up the Serial Console
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: OpenBSD normally uses the local physical keyboard, video, and mouse as the console,
+    but it can also use the first serial port as a serial console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To set the console, use the boot loader. You must know the loader’s device
+    name for your preferred console: `com0` for the first serial port or `pc0` for
+    the physically attached video and keyboard.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first time you try to use a serial console, use a local test machine. Set
+    up your client beforehand and start your terminal emulator, and then boot your
+    test machine. At the boot loader prompt, enter this command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Your server’s monitor and keyboard should stop responding, and if you’ve set
+    up everything correctly, you should see the boot loader prompt in your terminal
+    emulator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To switch back to the physical console, tell the boot loader to use the `pc0`
+    device:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Poof! The server’s keyboard and monitor should work again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To have your machine use the serial console at every boot, add this statement
+    in */etc/boot.conf*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Be sure to test your serial console after the machine is installed in its permanent
+    location, and always screw the serial cables to the server. A loose serial cable
+    provides only a comforting illusion that betrays you when it will hurt the most.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing the Serial Configuration
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'After configuring your serial console, return to your serial client and press
+    ENTER. You should see something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Changing the Serial Console Speed
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Newer serial ports (meaning anything made within the past 10 years) can run
+    at speeds far above 9600 baud. I have servers with serial consoles that run only
+    at 115,200 baud. The BIOS messages display at 115,200 baud, but then the OpenBSD
+    console runs at 9600 baud. My client displays one or the other as gibberish. (A
+    lot of OpenBSD folks think that anything that won’t do serial at 9600 baud is
+    broken, but you won’t always have control over the hardware you work with.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: To use these ports, I can either change my connection speed in my serial console
+    client when switching between the BIOS messages and the OpenBSD messages, or change
+    the speed of my OpenBSD console to match the hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At the boot loader, tell the serial console to run at 115,200 baud:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: If these settings work, copy them to */etc/boot.conf*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now configure your serial client. Modify `tip` to use the higher speed. First,
+    find the entry for `tty00` in */etc/remote*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: But don’t modify this entry! We’ll use it to illustrate the style of */etc/remote*
+    entries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*/etc/remote* is designed much like a `termcap(5)` database. If you ever need
+    to write your own *`termcap`* entries from scratch, you’re living your life wrong.
+    But you can recognize the contents and modify existing entries without much pain.
+    If you really want to learn everything about these entries, read the *`remote(5)`*
+    man page.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Backslashes (`\`) in this entry mean “continued on the next line.” Colons separate
+    fields. Each line after the first must start with a colon, and each field is a
+    key/value pair.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, to create a console entry that runs at 115,200 baud, use the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first field in an */etc/remote* entry is the name, and every entry must
+    have a unique name. I named this entry `console`. The second field is the `br`
+    value. According to `remote(5)`, `br` stands for bit rate. I’ve set the bit rate
+    to 115,200 baud. The third field is `tc`, for “table continues,” which is equal
+    to `tty00`. This means that the description of this entry continues in entry `tty00`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Taken as a whole, this entry means “copy the `tty00` entry, and add a bit rate
+    of 115,200.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changing the Client Serial Port
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'If you have two OpenBSD machines, each sending its serial console out its first
+    serial port to the other machine’s second serial port, you must tell `tip` to
+    connect to the second serial port. The command `tip tty00` doesn’t actually connect
+    to the serial port named `tty00`—it connects to a port defined by the */etc/remote*
+    entry named `tty00`. That means that you can’t run, say, `tip tty03` and connect
+    to serial port tty03 unless you have an */etc/remote* entry named `tty03`. By
+    default, there isn’t one, but you can define one easily, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: This entry is named `tty01`. The `dv` setting tells */etc/remote* the physical
+    device to use. Other than this, all settings are copied from the entry called
+    `tty00`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With these examples, you should be able to use OpenBSD’s `tip` to connect to
+    almost any serial console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Serial Logins
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The serial console lets you interact with the boot process. Once your machine
+    is fully multiuser, however, a default serial console will not let you actually
+    log in to OpenBSD. In multiuser mode, OpenBSD uses `getty(8)` to initialize terminals
+    and handle logins, and in order to log in to your machine over a serial port,
+    you will need to tell `getty` to take charge of the serial line by configuring
+    */etc/ttys*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll discuss */etc/ttys* further in [Chapter 14](ch14.html "Chapter 14. Everything
+    /etc"), but for now, here’s how to allow logins over the first serial port. Find
+    the entry for `tty00`, which should look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Remove the last two words, and replace them to match the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now run `kill -1 1`, and you should get a login prompt over your serial line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multiuser Startup
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When the kernel finishes its core setup and hands control over to userland,
+    `init(8)` runs the shell script */etc/rc*. This script handles all system setup,
+    including mounting filesystems, configuring device nodes, identifying shared libraries,
+    and any other task required to make the system usable. Some tasks are delegated
+    to separate scripts; for example, */etc/netstart* is used to configure the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we’ll cover how */etc/rc* and other startup scripts function,
+    and the flow of the startup process. Armed with this understanding, you should
+    be able to easily configure your OpenBSD machine to start exactly what you need—no
+    more, no less.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Startup System Scripts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The startup system includes the scripts */etc/rc*, */etc/rc.conf*, */etc/rc.conf.local*,
+    */etc/netstart*, */etc/rc.securelevel*, */etc/rc.local*, */etc/rc.shutdown*, */etc/rc.firsttime*,
+    */etc/fastboot*, and the contents of the */etc/rc.d* directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/rc Script
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: On OpenBSD, everything outside the kernel is configured with a shell command,
+    from setting the hostname to starting server daemons. The master script is */etc/rc*,
+    and it runs all of these commands in the correct order, ensuring that the system
+    is configured exactly the same way at every boot. As a final step, */etc/rc* runs
+    `getty(8)` to present login prompts on all the appropriate terminals.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Never edit */etc/rc* unless you’re a very experienced systems administrator
+    with truly unique needs. This is one of the several files in */etc* that is technically
+    editable, but mere mortals are well advised to *treat as binary*. Instead, whenever
+    you need to disable functions, deactivate them in */etc/rc.conf.local*. To add
+    new functionality to the startup process, use the shell scripts */etc/rc.securelevel*
+    and */etc/rc.local,* or write a shell script for */etc/rc.d*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/rc.conf Script
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'The */etc/rc.conf* file contains nothing but the default values for all other
+    startup scripts. Read this file to see the configuration options for different
+    system services. Here’s a small snippet of what you’ll find in *rc.conf*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: If a variable is set to `NO`, the associated service is disabled by default.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you can see, OpenBSD turns off almost everything by default, with one exception:
+    the SSH daemon. Setting the variable to a pair of quotes, as shown after each
+    entry in the preceding snippet, is enough to enable most daemons, and most daemons
+    will run just fine without any command-line flags. However, if a daemon requires
+    a command-line argument in order to run, that argument will be shown as it is
+    in the `-a` attached to `rarpd_flags`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: At the risk of beating my dead server senseless, never edit */etc/rc.conf* (treat
+    as binary—remember?). It will be replaced wholesale during a system upgrade. Instead,
+    place your local values in */etc/rc.conf.local*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/rc.conf.local Script
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'I’ve mentioned this before, but I’m going to beat you over the head with it:
+    Place your changes to *rc.conf* in *rc.conf.local*. Entries in *rc.conf.local*
+    override the defaults in *rc.conf*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, say that on a particular machine, you want to run `sshd(8)` with
+    extra debugging, and you also want to run `named(8)`. Additionally, you want to
+    run the time server `ntpd(8)`, and have it correct the time at boot by using the
+    `-s` flag. After consulting the documentation for those programs, you add the
+    following lines to *rc.conf.local*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: OpenBSD will start the programs with the flags specified here. If you specify
+    invalid, incorrect, or incompatible flags, the daemon will print error messages
+    to the console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/netstart Script
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: While its name differs from the other scripts, */etc/netstart* is definitely
+    a system startup script. It reads */etc/mygate*, */etc/myname*, and all the */etc/hostname.if*
+    files, and uses the information in them to configure all network interfaces, bridges,
+    routing, and so forth. The file */etc/rc* runs this script before starting any
+    server daemons, network filesystems, and so on. In single-user mode, you’ll run
+    this script by hand to bring up the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/rc.securelevel Script
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: The */etc/rc.securelevel* shell script runs early in the boot process, before
+    */etc/rc* raises the system securelevel, but after starting the network. Many
+    programs, particularly those that touch the kernel or intimately affect the filesystem,
+    will not run once the securelevel is raised. If you run such a program, you can
+    add the command to start it to this script. If your local program doesn’t need
+    to run before the system securelevel is raised, you’re better off starting it
+    from *rc.local* or writing a proper *rc.d* script for it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One important entry in *rc.securelevel* is the definition of the system securelevel.
+    We’ll discuss securelevels in [Chapter 10](ch10.html "Chapter 10. Securing Your
+    System"). For now, don’t touch the line that sets the securelevel unless you’re
+    already familiar with BSD-based systems and know exactly which toe you’re shooting
+    off.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/rc.local Script
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: After */etc/rc* does just about everything else, it runs */etc/rc.local*. You
+    can put commands to start local daemons in *rc.local*, but you’re better off writing
+    an *rc.d* script to start local daemons so you can easily and consistently restart
+    them later. Of course, if you’re lazy, you can get by with *rc.local*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/rc.shutdown Script
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Whenever you use `reboot(8)` or `halt(8)`, OpenBSD runs the */etc/rc.shutdown*
+    script, which you can count on to run extra commands needed to safely shut down
+    your server. Most server software shuts down cleanly without any special intervention,
+    but software that requires data integrity (like databases) may need help shutting
+    down without losing data. Again, if at all possible, write an *rc.d* script to
+    manage your software.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/rc.firsttime Script
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: '*/etc/rc* runs the script */etc/rc.firsttime* once, mails the output to root,
+    and deletes *rc.firsttime*. The installer uses *rc.firsttime* for tasks such as
+    fetching firmware that can’t be legally redistributed. While you won’t normally
+    use *rc.firsttime*, you should know that it exists and that you can use it to
+    perform one-time tasks when a machine boots.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/fastboot Script
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: If the */etc/fastboot* file exists, OpenBSD assumes that all filesystems are
+    clean (see [Chapter 8](ch08.html "Chapter 8. Disks and Filesystems")), and the
+    boot process skips checking filesystem integrity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/rc.d Directory
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: The */etc/rc.d* directory contains shell scripts for managing software, as discussed
+    in the next section. While the system comes with scripts for software included
+    in OpenBSD, add-on packages can provide their own scripts (see [Chapter 13](ch13.html
+    "Chapter 13. Software Management")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Software Startup Scripts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: OpenBSD uses shell scripts to start, stop, restart, check, and reconfigure server
+    software. These scripts are found in the directory */etc/rc.d*. Every piece of
+    server software that comes with OpenBSD has a script in this directory, as do
+    most ports and packages that need scripts for proper startup and shutdown. Use
+    these scripts to manage integrated software without rebooting the server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The *rc.d* scripts read their configuration from *rc.conf* and *rc.conf.local*.
+    Most servers run the SSH daemon `sshd`, which can be enabled by adding the line
+    `sshd_enable=""` to *rc.conf.local*. Look in */etc/rc.d*, and you’ll find the
+    shell script *sshd*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you change your `sshd` configuration, you must restart the daemon. Use the
+    shell script to do this consistently.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Of course, you could do the same thing without the shell script simply by identifying
+    the currently running `sshd(8)` process, reading the man page to see how to shut
+    it down properly, and then restarting it with the same command-line flags. In
+    the case of `sshd`, that’s easy: Running `pkill -1 sshd` would tell the daemon
+    to reread its configuration file. But restarting a daemon that requires all sorts
+    of flags *is* a big deal. Automating these system administration tasks ensures
+    that your daemons run consistently.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To see if a daemon is running, use the `check` command to check your shell
+    for the return value. The script will return a `0` if the daemon is running and
+    a `1` if it isn’t, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see by the `1`, `nfsd` is not running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The most common use for `check` is in shell scripts. You can start the daemon
+    with the argument `start` and terminate it with `stop`. Use the `restart` argument
+    to tell the daemon to reload its configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In OpenBSD, *rc.d* scripts run when the system boots and again when it shuts
+    down. (Something needs to unmount all those hard drives, shut down daemons, and
+    clean up.) At shutdown, every script in the */etc/rc.d* folder is called with
+    the `stop` argument.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Third-Party rc.d Scripts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'OpenBSD packages for third-party software include *rc.d* scripts as necessary.
+    For example, the popular database server MySQL `mysql-server` package installs
+    the script */etc/rc.d/mysqld*. To use the package, you must enable it in *rc.conf.local*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the package is enabled, you can manage your MySQL server just like any
+    other OpenBSD daemon. However, packaged software will still not start automatically
+    at boot, so you must tell OpenBSD to run this particular *rc.d* script at boot
+    and shut down with the `pkg_scripts` variable in *rc.conf.local*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: The startup process runs the scripts in this variable, in the order given, at
+    boot. The order is important for certain daemons. For example, if you have a database-driven
+    website, you should start the database before the web server. At shutdown, it
+    runs these scripts in reverse order.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Force-Starting Software
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Sometimes you don’t want to enable software globally; you just want to run a
+    certain daemon for a short time or to address a specific situation. You can use
+    *rc.d* scripts to manage this software using the `-f` flag to force the software
+    to run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now for a real-life example. I previously ran PostgreSQL on my server, but
+    someone kidnapped my pet rats and blackmailed me into using MySQL in exchange
+    for their safe return. I needed to check some data in the old database, however,
+    so I force-started the disabled PostgreSQL server:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you package or install your own software, I strongly recommend writing your
+    own *rc.d* script. A few minutes spent reading the existing scripts will tell
+    you most of what you need to know. For the rest, read the `rc.d(8)` and `rc.subr(8)`
+    man pages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you can start OpenBSD, let’s set up some user accounts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[11](#id369126)]) On i386 and amd64 systems, this is where the MBR comes
+    in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[12](#id418996)]) Granted, a remote keyboard-video-mouse (KVM) system can
+    give you all of this, but very few KVM applications let you copy and paste text
+    from the remote console. That means you’ll need to copy error messages by hand.
+  prefs: []
+  type: TYPE_NORMAL

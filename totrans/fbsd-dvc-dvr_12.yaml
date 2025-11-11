@@ -1,0 +1,656 @@
+- en: Chapter 12. Direct Memory Access
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Direct Memory Access (DMA)* is a feature of modern processors that lets a
+    device transfer data to and from main memory independently of the CPU. With DMA,
+    the CPU merely initiates the data transfer (that is to say, it does not complete
+    it), and then the device (or a separate DMA controller) actually moves the data.
+    Because of this, DMA tends to provide higher system performance as the CPU is
+    free to perform other tasks during the data transfer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: There is some overhead in performing DMA. Accordingly, only devices that move
+    large amounts of data (for example, storage devices) use DMA. You wouldn’t use
+    DMA just to transfer one or two bytes of data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing DMA
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Unlike with previous topics, I’m going to take a holistic approach here. Namely,
+    I’m going to show an example first, and then I’ll describe the DMA family of functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following pseudocode is a `device_attach` routine for a fictitious device
+    that uses DMA.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This pseudocode begins by calling ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `bus_dma_tag_create` to create a DMA tag named ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `foo_parent_dma_tag`. At heart, *DMA tags* describe the characteristics and restrictions
+    of DMA transactions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, `bus_dma_tag_create` is called again. Notice that `foo_parent_dma_tag`
+    is this call’s ![](httpatomoreillycomsourcenostarchimages1137503.png) first argument.
+    See, DMA tags can inherit the characteristics and restrictions of other tags.
+    Of course, child tags cannot loosen the restrictions set up by their parents.
+    Consequently, the DMA tag ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `foo_baz_dma_tag` is a “draconian” version of `foo_parent_dma_tag`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next statement, `bus_dmamap_create`, creates a DMA map named ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `foo_baz_dma_map`. Loosely speaking, *DMA maps* represent memory areas that have
+    been allocated according to the properties of a DMA tag and are within device
+    visible address space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, ![](httpatomoreillycomsourcenostarchimages1137509.png) `bus_dmamap_load`
+    loads the buffer ![](httpatomoreillycomsourcenostarchimages1137513.png) `foo_baz_buf`
+    into the device visible address associated with the DMA map ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `foo_baz_dma_map`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Any arbitrary buffer can be used for DMA. However, buffers are inaccessible
+    to devices until they’ve been loaded (or mapped) into a device visible address
+    (that is, a DMA map).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that `bus_dmamap_load` requires a ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    callback function, which typically looks something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137501.png) arg dereferences
+    to the sixth argument passed to `bus_dmamap_load`, which was `foo_baz_busaddr`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This callback function executes after the buffer-load operation completes. If
+    successful, the ![](httpatomoreillycomsourcenostarchimages1137507.png) address
+    where the buffer was loaded is returned in ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `arg`. If unsuccessful, ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `foo_callback` does ![](httpatomoreillycomsourcenostarchimages1137503.png) nothing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initiating a DMA Data Transfer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Assuming the buffer-load operation completed successfully, one can initiate
+    a DMA data transfer with something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Most devices just require the device visible address of a buffer to be written
+    to a specific register to start a DMA data transfer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the ![](httpatomoreillycomsourcenostarchimages1137503.png) device visible
+    address of a buffer is ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    written to a ![](httpatomoreillycomsourcenostarchimages1137501.png) device register.
+    Recall that the `foo_callback` function described in the previous section returns
+    in ![](httpatomoreillycomsourcenostarchimages1137503.png) `foo_baz_busaddr` the
+    device visible address of `foo_baz_buf`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dismantling DMA
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that you know how to implement DMA, I’ll demonstrate how to dismantle it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, this pseudocode simply tears down everything in the opposite
+    order that it was built up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s discuss in detail the different functions encountered here and in
+    the previous two sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating DMA Tags
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As mentioned earlier, DMA tags describe the characteristics and restrictions
+    of DMA transactions and are created by using the `bus_dma_tag_create` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the `parent` argument identifies the parent DMA tag. To create a top-level
+    DMA tag, pass `bus_get_dma_tag(device_t dev)` as `parent`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `alignment` argument denotes the physical alignment, in bytes, of each DMA
+    segment. Recall that DMA maps represent memory areas that have been allocated
+    according to the properties of a DMA tag. These memory areas are known as *DMA
+    segments*. If you return to the `foo_callback` function described in [Implementing
+    DMA](ch12.html#implementing_dma "Implementing DMA") in [Implementing DMA](ch12.html#implementing_dma
+    "Implementing DMA"), you’ll see that `arg` is actually assigned the address of
+    a DMA segment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `alignment` argument must be `1`, which denotes no specific alignment, or
+    a power of two. As an example, drivers that require DMA buffers to begin on a
+    multiple of 4KB would pass `4096` as `alignment`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `boundary` argument specifies the physical address boundaries that cannot
+    be crossed by each DMA segment; that is, they cannot cross any multiple of `boundary`.
+    This argument must be `0`, which indicates no boundary restrictions, or a power
+    of two.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `lowaddr` and `highaddr` arguments outline the address range that cannot
+    be employed for DMA. For example, devices incapable of DMA above 4GB would have
+    `0xFFFFFFFF` as `lowaddr` and `BUS_SPACE_MAXADDR` as `highaddr`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '`0xFFFFFFFF` equals 4GB, and the constant `BUS_SPACE_MAXADDR` signifies the
+    maximum addressable memory for your architecture.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `filtfunc` and `filtfuncarg` arguments denote an optional callback function
+    and its first argument, respectively. This function is executed for every attempt
+    to load (or map) a DMA buffer between `lowaddr` and `highaddr`. If there’s a device-accessible
+    region between lowaddr and highaddr, filtfunc is supposed to tell the system.
+    Here is the function prototype for `filtfunc`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function must return `0` if the address ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `addr` is device-accessible or a nonzero value if it’s inaccessible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If `filtfunc` and `filtfuncarg` are `NULL`, the entire address range from `lowaddr`
+    to `highaddr` is considered inaccessible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The maxsize argument denotes the maximum amount of memory, in bytes, that may
+    be allocated for a single DMA map.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `nsegments` argument specifies the number of scatter/gather segments allowed
+    in a single DMA map. A *scatter/gather segment* is simply a memory page. The name
+    comes from the fact that when you take a set of physically discontinuous pages
+    and virtually assemble them into a single contiguous buffer, you must “scatter”
+    your writes and “gather” your reads. Some devices require blocks of contiguous
+    memory; however sometimes a large enough block is not available. So the kernel
+    “tricks” the device by using a buffer composed of scatter/gather segments. Every
+    DMA segment is a scatter/gather segment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `nsegments` argument may be `BUS_SPACE_UNRESTRICTED`, which indicates no
+    number restriction. DMA tags made with `BUS_SPACE_UNRESTRICTED` cannot create
+    DMA maps; they can only be parent tags, because the system cannot support DMA
+    maps composed of an unlimited number of scatter/gather segments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `maxsegsz` argument denotes the maximum size, in bytes, of an individual
+    DMA segment within a single DMA map.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `flags` argument modifies `bus_dma_tag_create`’s behavior. [Table 12-1](ch12s02.html#bus_underscore_dma_underscore_tag_unders
+    "Table 12-1. bus_dma_tag_create Symbolic Constants") displays its only valid value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 12-1. bus_dma_tag_create Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMA_ALLOCNOW` | Preallocates enough resources to handle at least one
+    buffer-load operation; if sufficient resources are unavailable, `ENOMEM` is returned.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: 'The `lockfunc` and `lockfuncarg` arguments denote an optional callback function
+    and its first argument, respectively. Remember how `bus_dmamap_load` requires
+    a callback function? Well, `lockfunc` executes right before and after that function
+    to acquire and release any necessary synchronization primitives. Here is `lockfunc`’s
+    function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: When lockfunc executes, ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    op contains either `BUS_DMA_LOCK` or `BUS_DMA_UNLOCK`. That is, `op` dictates
+    what lock operation to perform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `dmat` argument expects a pointer to `bus_dma_tag_t;` assuming `bus_dma_tag_create`
+    is successful, this pointer will store the resulting DMA tag.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tearing Down DMA Tags
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: DMA tags are torn down by the `bus_dma_tag_destroy` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function returns `EBUSY` if there are any DMA maps still associated with
+    `dmat`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DMA Map Management Routines, Part 1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As mentioned earlier, DMA maps represent memory areas (that is to say, DMA segments)
+    that have been allocated according to the properties of a DMA tag and are within
+    device visible address space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'DMA maps can be managed with the following functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `bus_dmamap_create` function creates a DMA map based on the DMA tag `dmat`
+    and stores the result in `mapp`. The `flags` argument modifies `bus_dmamap_create`’s
+    behavior. [Table 12-2](ch12s04.html#bus_underscore_dmamap_underscore_create "Table 12-2. bus_dmamap_create
+    Symbolic Constants") displays its only valid value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 12-2. bus_dmamap_create Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMA_COHERENT` | Causes cache synchronization operations to be as cheap
+    as possible for your DMA buffers; this flag is implemented only on *sparc64*.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: The `bus_dmamap_destroy` function tears down the DMA map `map`. The `dmat` argument
+    is the DMA tag that `map` was based on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loading (DMA) Buffers into DMA Maps
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides four functions for loading a buffer into the device
+    visible address associated with a DMA map:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`bus_dmamap_load`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`bus_dmamap_load_mbuf`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`bus_dmamap_load_mbuf_sg`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`bus_dmamap_load_uio`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Before I describe these functions, an explanation of `bus_dma_segment` structures
+    is needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: bus_dma_segment Structures
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A `bus_dma_segment` structure describes a single DMA segment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The ![](httpatomoreillycomsourcenostarchimages1137499.png) `ds_addr` field contains
+    its device visible address and ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `ds_len` contains its length.
+  prefs: []
+  type: TYPE_NORMAL
+- en: bus_dmamap_load Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We first discussed the `bus_dmamap_load` function in [Implementing DMA](ch12.html#implementing_dma
+    "Implementing DMA") in [Implementing DMA](ch12.html#implementing_dma "Implementing
+    DMA").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function loads the buffer buf into the device visible address associated
+    with the DMA map map. The dmat argument is the DMA tag that map is based on. The
+    buflen argument is the number of bytes from buf to load. `bus_dmamap_load` returns
+    immediately and never blocks for any reason.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `callback` and `callbackarg` arguments denote a callback function and its
+    first argument, respectively. `callback` executes after the buffer-load operation
+    completes. If resources are lacking, the buffer-load operation and `callback`
+    will be deferred. If `bus_dmamap_load` returns `EINPROGRESS`, this has occurred.
+    Here is `callback`’s function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When callback executes, ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    error discloses the success (0) or failure (`EFBIG`) of the buffer-load operation
+    (the error code `EFBIG` stands for *error: file too large*). The ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `segs` argument is the array of DMA segments that `buf` has been loaded into;
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) `nseg` is this array’s
+    size.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following pseudocode is an example `callback` function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function ![](httpatomoreillycomsourcenostarchimages1137499.png) iterates
+    through `segs` to return the ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    device visible address of each DMA segment that `buf` has been loaded into.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If `buf` can fit into one DMA segment, the `foo_callback` function described
+    in [Implementing DMA](ch12.html#implementing_dma "Implementing DMA") in [Implementing
+    DMA](ch12.html#implementing_dma "Implementing DMA") may be used as `callback`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `flags` argument modifies `bus_dmamap_load`’s behavior. Valid values for
+    this argument are shown in [Table 12-3](ch12s05.html#bus_underscore_dmamap_underscore_load_sy
+    "Table 12-3. bus_dmamap_load Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 12-3. bus_dmamap_load Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMA_NOWAIT` | If memory resources are lacking, the buffer-load operation
+    and `callback` will *not* be deferred. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMA_NOCACHE` | Prevents caching the DMA buffer, thereby causing all
+    DMA transactions to be executed without reordering; this flag is implemented only
+    on *sparc64*. |'
+  prefs: []
+  type: TYPE_TB
+- en: bus_dmamap_load_mbuf Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `bus_dmamap_load_mbuf` function is a variant of `bus_dmamap_load` that
+    loads mbuf chains (you’ll learn about mbuf chains in [Chapter 16](ch16.html "Chapter 16. Network
+    Drivers, Part 1: Data Structures")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Most of these arguments are identical to their `bus_dmamap_load` counterparts
+    except for:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `mbuf` argument, which expects an mbuf chain
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `callback2` argument, which requires a different callback function
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `flags` argument, which implicitly sets `BUS_DMA_NOWAIT`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Here is `callback2`’s function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`callback2` is like `callback`, but it returns the ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    amount of data loaded.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: bus_dmamap_load_mbuf_sg Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `bus_dmamap_load_mbuf_sg` function is an alternative to `bus_dmamap_load_mbuf`
+    that does not use `callback2`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, this function directly and immediately returns ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `segs` and ![](httpatomoreillycomsourcenostarchimages1137501.png) `nseg`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: bus_dmamap_load_uio Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `bus_dmamap_load_uio` function is identical to `bus_dmamap_load_mbuf` except
+    that it loads the buffers from within a `uio` structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: bus_dmamap_unload Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `bus_dmamap_unload` function unloads the buffers from a DMA map.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: DMA Map Management Routines, Part 2
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This section describes an alternative set of functions used to manage DMA maps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `bus_dmamem_alloc` function creates a DMA map based on the DMA tag `dmat`
+    and stores the result in `mapp`. This function also allocates `maxsize` bytes
+    of contiguous memory (where `maxsize` is defined by `dmat`). The address of this
+    memory is returned in `vaddr`. As you’ll soon see, this contiguous memory will
+    eventually become your DMA buffer. The `flags` argument modifies `bus_dmamem_alloc`’s
+    behavior. Valid values for this argument are shown in [Table 12-4](ch12s06.html#bus_underscore_dmamem_underscore_alloc_s
+    "Table 12-4. bus_dmamem_alloc Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 12-4. bus_dmamem_alloc Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMA_ZERO` | Causes the allocated memory to be set to zero |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMA_NOWAIT` | Causes `bus_dmamem_alloc` to return `ENOMEM` if the allocation
+    cannot be immediately fulfilled due to resource shortage |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMA_WAITOK` | Indicates that it is okay to wait for resources; if the
+    allocation cannot be immediately fulfilled, the current process is put to sleep
+    to wait for resources to become available. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMA_COHERENT` | Causes cache synchronization operations to be as cheap
+    as possible for your DMA buffer; this flag is implemented only on arm and sparc64.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMA_NOCACHE` | Prevents caching the DMA buffer, thereby causing all
+    DMA transactions to be executed without reordering; this flag is implemented only
+    on *amd64* and *i386*. |'
+  prefs: []
+  type: TYPE_TB
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '`bus_dmamem_alloc` is used when you require a physically contiguous DMA buffer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_dmamem_free` function releases the memory at `vaddr` that was previously
+    allocated by `bus_dmamem_alloc`. Then it tears down the DMA map `map`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Straightforward Example
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The following pseudocode is a `device_attach` routine for a fictitious device
+    that requires DMA. This pseudocode should demonstrate how to use `bus_dmamem_alloc`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Although ![](httpatomoreillycomsourcenostarchimages1137505.png) `bus_dmamem_alloc`
+    allocates ![](httpatomoreillycomsourcenostarchimages1137507.png) memory and creates
+    a ![](httpatomoreillycomsourcenostarchimages1137509.png) DMA map, ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    loading that ![](httpatomoreillycomsourcenostarchimages1137515.png) memory into
+    the ![](httpatomoreillycomsourcenostarchimages1137513.png) DMA map still needs
+    to occur.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, since `bus_dmamem_alloc` allocates contiguous memory, the `nsegments`
+    argument must be ![](httpatomoreillycomsourcenostarchimages1137501.png) `1`. Likewise,
+    the ![](httpatomoreillycomsourcenostarchimages1137499.png) `maxsize` and ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `maxsegsz` arguments must be identical.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lastly, since `nsegments` is `1`, ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    `callback` can be the `foo_callback` function shown in [Implementing DMA](ch12.html#implementing_dma
+    "Implementing DMA") in [Implementing DMA](ch12.html#implementing_dma "Implementing
+    DMA").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Synchronizing DMA Buffers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: DMA buffers must be synchronized after each write completed by the CPU/driver
+    or a device. The exact reason why is beyond the scope of this book. But it’s basically
+    done to ensure that the CPU/driver and device have a consistent view of the DMA
+    buffer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DMA buffers are synchronized with the `bus_dmamap_sync` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function synchronizes the DMA buffer currently loaded in the DMA map `map`.
+    The `dmat` argument is the DMA tag that `map` is based on. The `op` argument identifies
+    the type of synchronization operation to perform. Valid values for this argument
+    are shown in [Table 12-5](ch12s08.html#bus_underscore_dmamap_underscore_sync_sy
+    "Table 12-5. bus_dmamap_sync Symbolic Constant").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 12-5. bus_dmamap_sync Symbolic Constant
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMASYNC_PREWRITE` | Used to synchronize after the CPU/driver writes
+    to the DMA buffer |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_DMASYNC_POSTREAD` | Used to synchronize after a device writes to the
+    DMA buffer |'
+  prefs: []
+  type: TYPE_TB
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter detailed FreeBSD’s DMA management routines. These routines are
+    primarily used by storage and network drivers, which are discussed in [Chapter 13](ch13.html
+    "Chapter 13. Storage Drivers"), [Chapter 16](ch16.html "Chapter 16. Network Drivers,
+    Part 1: Data Structures"), and [Chapter 17](ch17.html "Chapter 17. Network Drivers,
+    Part 2: Packet Reception and Transmission").'
+  prefs: []
+  type: TYPE_NORMAL

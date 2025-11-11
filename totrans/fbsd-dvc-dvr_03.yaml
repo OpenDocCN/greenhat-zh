@@ -1,0 +1,883 @@
+- en: Chapter 3. Device Communication and Control
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In [Chapter 1](ch01.html "Chapter 1. Building and Running Modules") we constructed
+    a driver that could read from and write to a device. In addition to reading and
+    writing, most drivers need to perform other I/O operations, such as reporting
+    error information, ejecting removable media, or activating self-destruct sequences.
+    This chapter details how to make drivers do those things.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll start by describing the *ioctl interface*, also known as the *input/output
+    control interface*. This interface is commonly used for device communication and
+    control. Then we’ll describe the *sysctl interface*, also known as the *system
+    control interface*. This interface is used to dynamically change or examine the
+    kernel’s parameters, which includes device drivers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ioctl
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The ioctl interface is the catchall of I/O operations (Stevens, 1992). Any operation
+    that cannot be expressed using `d_read` or `d_write` (that is, any operation that’s
+    *not* a data transfer) is supported by `d_ioctl`.^([[3](#ftn.CHP-3-FN-1)]) For
+    example, the CD-ROM driver’s `d_ioctl` function performs 29 distinct operations,
+    such as ejecting the CD, starting audio playback, stopping audio playback, muting
+    the audio, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The function prototype for `d_ioctl` is defined in the `<sys/conf.h>` header
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `cmd` is an ioctl
+    command passed from user space. *ioctl commands* are driver-defined numeric constants
+    that identify the different I/O operations that a `d_ioctl` function can perform.
+    Generally, you’d use the `cmd` argument in a `switch` statement to set up a code
+    block for each I/O operation. Any arguments required for an I/O operation are
+    passed through ![](httpatomoreillycomsourcenostarchimages1137501.png) `data`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is an example `d_ioctl` function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Just concentrate on the structure of this code and ignore what it does.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how the ![](httpatomoreillycomsourcenostarchimages1137499.png) `cmd`
+    argument is the ![](httpatomoreillycomsourcenostarchimages1137503.png) expression
+    for the `switch` statement. The constants ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `ECHO_CLEAR_BUFFER` and ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `ECHO_SET_BUFFER_SIZE` are (obviously) the ioctl commands. All ioctl commands
+    are defined using one of four macros. I’ll discuss these macros in the following
+    section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Additionally, notice how the ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `data` argument is ![](httpatomoreillycomsourcenostarchimages1137509.png) cast—as
+    an integer pointer—before it is dereferenced. This is because `data` is fundamentally
+    a “pointer to `void`.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Pointers to `void` can hold any pointer type, so they must be cast before they’re
+    dereferenced. In fact, you can’t directly dereference a pointer to `void`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, according to the POSIX standard, when an inappropriate ioctl command
+    is received, the error code `ENOTTY` should be returned (Corbet et al., 2005).
+    Hence, the ![](httpatomoreillycomsourcenostarchimages1137511.png) `default` block
+    sets ![](httpatomoreillycomsourcenostarchimages1137513.png) `error` to `ENOTTY`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'At one point in time, only TTY drivers had an ioctl function, which is why
+    `ENOTTY` means “error: inappropriate ioctl for device” (Corbet et al., 2005).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you’ve examined the structure of a `d_ioctl` function, I’ll explain
+    how to define an ioctl command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[3](#CHP-3-FN-1)]) The `d_ioctl` function was first introduced in [d_foo
+    Functions](ch01s05.html#d_underscore_foo_functions "d_foo Functions") in [Character
+    Drivers](ch01s05.html "Character Drivers").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining ioctl Commands
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To define an ioctl command, you’d call one of the following macros: `_IO`,
+    `_IOR`, `_IOW`, or `_IOWR`. An explanation of each macro is provided in [Table 3-1](ch03s02.html#ioctl_command_macros
+    "Table 3-1. ioctl Command Macros").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 3-1. ioctl Command Macros
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Macro | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `_IO` | Creates an ioctl command for an I/O operation that transfers no data—in
+    other words, the `data` argument in `d_ioctl` will be unused—for example, ejecting
+    removable media |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `_IOR` | Creates an ioctl command for a read operation; *read operations*
+    transfer data from the device to user space; for example, retrieving error information
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `_IOW` | Creates an ioctl command for a write operation; *write operations*
+    transfer data to the device from user space; for example, setting a device parameter
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `_IOWR` | Creates an ioctl command for an I/O operation with bidirectional
+    data transfers |'
+  prefs: []
+  type: TYPE_TB
+- en: '`_IO`, `_IOR`, `_IOW`, and `_IOWR` are defined in the `<sys/ioccom.h>` header
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `g` argument, which stands for *group*, expects an 8-bit magic number. You
+    can choose any number—just use it throughout your driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `n` argument is the ordinal number. This number is used to differentiate
+    your driver’s ioctl commands from one another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, the `t` argument is the type of data transferred during the I/O operation.
+    Obviously, the `_IO` macro does not have a `t` argument, because no data transfer
+    occurs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Generally, ioctl command definitions look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, `'F'` is the magic number for these ioctl commands. Customarily, the first
+    letter of your driver’s name—in uppercase—is selected as the magic number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Naturally, all of the ordinal numbers are unique. But they don’t have to be
+    consecutive. You can leave gaps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lastly, note that you can pass ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    structures as the `t` argument. Using a structure is how you’ll pass multiple
+    arguments to an ioctl-based operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing ioctl
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 3-1](ch03s03.html#echo-3.0.c "Example 3-1. echo-3.0.c") is a revision
+    of [Example 2-1](ch02s03.html#echo-2.0.c "Example 2-1. echo-2.0.c") that adds
+    in a `d_ioctl` function. As you’ll see, this `d_ioctl` function handles two ioctl
+    commands.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take a quick look at this code and try to discern some of its structure. If
+    you don’t understand all of it, don’t worry; an explanation follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 3-1. echo-3.0.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This driver starts by defining two ioctl commands: ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `ECHO_CLEAR_BUFFER` (which clears the memory buffer) and ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `ECHO_SET_BUFFER_SIZE` (which takes an ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    integer to resize the memory buffer).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Usually, ioctl commands are defined in a header file—they were defined in [Example 3-1](ch03s03.html#echo-3.0.c
+    "Example 3-1. echo-3.0.c") solely to simplify this discussion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Obviously, to accommodate adding in a `d_ioctl` function, the character device
+    switch table was ![](httpatomoreillycomsourcenostarchimages1137505.png) adapted.
+    Moreover, `struct echo` was adjusted to include a variable (![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `buffer_size`) to maintain the buffer size (because it can be changed now). Naturally,
+    [Example 3-1](ch03s03.html#echo-3.0.c "Example 3-1. echo-3.0.c") was ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) altered to use this new
+    variable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Interestingly, only `echo_write` had to be altered. The `echo_open`, `echo_close`,
+    and `echo_read` functions remain the same.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `echo_write`, `echo_set_buffer_size`, `echo_ioctl`, and `echo_modevent`
+    functions call for a more in-depth explanation and are therefore described in
+    their own sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: echo_write Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As mentioned above, the `echo_write` function was altered from its [Example 2-1](ch02s03.html#echo-2.0.c
+    "Example 2-1. echo-2.0.c") (and [Example 1-2](ch01s06.html#echo.c "Example 1-2. echo.c"))
+    form. Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This version of `echo_write` uses ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `uiomove` (as described in [Chapter 1](ch01.html "Chapter 1. Building and Running
+    Modules")) instead of `copyin`. Note that `uiomove` decrements `uio->uio_resid`
+    (by one) and increments `uio->uio_offset` (by one) for each byte copied. This
+    lets multiple calls to `uiomove` effortlessly copy a chunk of data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You’ll recall that `uio->uio_resid` and `uio->uio_offset` denote the number
+    of bytes remaining to be transferred and an offset into the data (that is, the
+    character string), respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This function starts by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    determining the number of bytes to copy—either the ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    amount the user sent or ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    whatever the buffer can accommodate. Then it ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    transfers that ![](httpatomoreillycomsourcenostarchimages1137509.png) amount from
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) user space to ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    kernel space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remainder of this function should be self-explanatory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: echo_set_buffer_size Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As its name implies, the `echo_set_buffer_size` function takes an integer to
+    resize the memory buffer `echo_message->buffer`. Here is its function definition
+    (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can be split into three parts. The first part ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    confirms that the ![](httpatomoreillycomsourcenostarchimages1137501.png) current
+    and ![](httpatomoreillycomsourcenostarchimages1137503.png) proposed buffer sizes
+    are distinct (or else ![](httpatomoreillycomsourcenostarchimages1137505.png) nothing
+    needs to occur).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second part ![](httpatomoreillycomsourcenostarchimages1137507.png) changes
+    the size of the memory buffer. Then it ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    records the new buffer size. Note that if the data stored in the buffer is longer
+    than the proposed buffer size, the resize operation (that is, `realloc`) will
+    truncate that data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third part comes about only ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    if the data stored in the buffer was truncated. It begins by ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    correcting the stored data’s length. Then it ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    null-terminates the data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: echo_ioctl Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `echo_ioctl` function is the `d_ioctl` function for [Example 3-1](ch03s03.html#echo-3.0.c
+    "Example 3-1. echo-3.0.c"). Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can perform one of two ioctl-based operations. The first ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    clears the memory buffer. It begins by ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    zeroing the buffer. Then it ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    sets the data length to `0`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The second ![](httpatomoreillycomsourcenostarchimages1137507.png) resizes the
+    memory buffer by calling ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `echo_set_buffer_size`. Note that this operation requires an ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    argument: the proposed buffer size. This argument is obtained from user space
+    through ![](httpatomoreillycomsourcenostarchimages1137499.png) `data`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Remember that you must cast `data` before it can be dereferenced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: echo_modevent Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As you know, the `echo_modevent` function is the module event handler. Like
+    `echo_write`, this function had to be altered to accommodate adding in `echo_ioctl`.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: This version of `echo_modevent` allocates memory for the ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `echo` structure and ![](httpatomoreillycomsourcenostarchimages1137501.png) memory
+    buffer individually—that’s the only change. Previously, the memory buffer couldn’t
+    be resized. So, individual memory allocations were unnecessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t Panic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now that we’ve walked through [Example 3-1](ch03s03.html#echo-3.0.c "Example 3-1. echo-3.0.c"),
+    let’s give it a try:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Apparently it works. But how do we invoke `echo_ioctl`?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Invoking ioctl
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To invoke a `d_ioctl` function, you’d use the `ioctl(2)` system call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `d` argument, which stands for *descriptor*, expects a file descriptor for
+    a device node. The `request` argument is the ioctl command to be issued (for example,
+    `ECHO_CLEAR_BUFFER`). The remaining argument (`...`) is a pointer to the data
+    that’ll be passed to the `d_ioctl` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Example 3-2](ch03s04.html#echo_underscore_config.c "Example 3-2. echo_config.c")
+    presents a command-line utility designed to invoke the `echo_ioctl` function in
+    [Example 3-1](ch03s03.html#echo-3.0.c "Example 3-1. echo-3.0.c"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 3-2. echo_config.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[Example 3-2](ch03s04.html#echo_underscore_config.c "Example 3-2. echo_config.c")
+    is a fairly standard command-line utility. As such, I won’t cover its program
+    structure. Instead, I’ll concentrate on how it invokes `echo_ioctl`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This program begins by redefining ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `ECHO_CLEAR_BUFFER` and ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `ECHO_SET_BUFFER_SIZE`.^([[4](#ftn.CHP-3-FN-2)]) To issue an ioctl command, [Example 3-2](ch03s04.html#echo_underscore_config.c
+    "Example 3-2. echo_config.c") starts by ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    ![](httpatomoreillycomsourcenostarchimages1137509.png) opening `/dev/echo`. Then
+    it ![](httpatomoreillycomsourcenostarchimages1137505.png) ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    calls `ioctl(2)` with the appropriate arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that since `ECHO_CLEAR_BUFFER` doesn’t transmit any data, ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `NULL` is passed as the third argument to `ioctl(2)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following shows the results from executing [Example 3-2](ch03s04.html#echo_underscore_config.c
+    "Example 3-2. echo_config.c") to clear the memory buffer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following shows the results from executing [Example 3-2](ch03s04.html#echo_underscore_config.c
+    "Example 3-2. echo_config.c") to resize the memory buffer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[4](#CHP-3-FN-2)]) This step could have been avoided by defining those `ioctl`
+    commands in a header file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sysctl
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As mentioned earlier, the sysctl interface is used to dynamically change or
+    examine the kernel’s parameters, which includes device drivers. For example, some
+    drivers let you enable (or disable) debug options using sysctls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This book was written under the assumption that you know how to work with sysctls;
+    if you don’t, see the `sysctl(8)` manual page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unlike with previous topics, I’m going to take a holistic approach to explain
+    sysctl. That is, I’m going to show an example first, and then I’ll describe the
+    sysctl functions. I found this to be the easiest way to grok implementing sysctls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing sysctls, Part 1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 3-3](ch03s06.html#pointless.c "Example 3-3. pointless.c") is a complete
+    KLD (based on code written by Andrzej Bialecki) that creates multiple sysctls.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 3-3. pointless.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: On module load, [Example 3-3](ch03s06.html#pointless.c "Example 3-3. pointless.c")
+    starts by ![](httpatomoreillycomsourcenostarchimages1137501.png) initializing
+    a sysctl context named `clist`. Generally speaking, *sysctl contexts* are responsible
+    for keeping track of dynamically created sysctls—this is why `clist` gets passed
+    to every `SYSCTL_ADD_*` call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first ![](httpatomoreillycomsourcenostarchimages1137503.png) `SYSCTL_ADD_NODE`
+    call creates a new top-level category named `example`. The ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `SYSCTL_ADD_LONG` call creates a new sysctl named `long` that handles a long variable.
+    Notice that `SYSCTL_ADD_LONG`’s second argument is `SYSCTL_CHILDREN(poid)`^([[5](#ftn.CHP-3-FN-3)])
+    and that `poid` contains the return value from `SYSCTL_ADD_NODE`. Thus, `long`
+    is placed under `example`, like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The ![](httpatomoreillycomsourcenostarchimages1137507.png) `SYSCTL_ADD_INT`
+    call creates a new sysctl named `int` that handles an integer variable. For reasons
+    identical to those for `SYSCTL_ADD_LONG`, `int` is placed under `example`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The second ![](httpatomoreillycomsourcenostarchimages1137509.png) `SYSCTL_ADD_NODE`
+    call creates a new subcategory named `node`, which is placed under `example`,
+    like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The ![](httpatomoreillycomsourcenostarchimages1137511.png) `SYSCTL_ADD_PROC`
+    call creates a new sysctl named `proc` that employs a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    function to handle its read and write requests; in this case, the function simply
+    prints some flavor text. You’ll note that `SYSCTL_ADD_PROC`’s second argument
+    is also `SYSCTL_CHILDREN(poid)`. But `poid` now contains the return value from
+    the second `SYSCTL_ADD_NODE` call. So, `proc` is placed under `node`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: The third ![](httpatomoreillycomsourcenostarchimages1137513.png) `SYSCTL_ADD_NODE`
+    call creates a new subcategory named `example`. As you can see, its second argument
+    is `SYSCTL_STATIC_CHILDREN(_debug)`,^([[6](#ftn.CHP-3-FN-4)]) which puts `example`
+    under `debug` (which is a static top-level category).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The ![](httpatomoreillycomsourcenostarchimages1137515.png) `SYSCTL_ADD_STRING`
+    call creates a new sysctl named `string` that handles a character string. For
+    obvious reasons, `string` is placed under `debug.example`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: On module unload, [Example 3-3](ch03s06.html#pointless.c "Example 3-3. pointless.c")
+    simply passes `clist` to ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    `sysctl_ctx_free` to destroy every sysctl created during module load.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following shows the results from loading [Example 3-3](ch03s06.html#pointless.c
+    "Example 3-3. pointless.c"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, let’s discuss in detail the different functions and macros used in [Example 3-3](ch03s06.html#pointless.c
+    "Example 3-3. pointless.c").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[5](#CHP-3-FN-3)]) The `SYSCTL_CHILDREN` macro is described in [SYSCTL_STATIC_CHILDREN
+    Macro](ch03s08.html#sysctl_underscore_static_underscore_chil "SYSCTL_STATIC_CHILDREN
+    Macro").
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[6](#CHP-3-FN-4)]) The `SYSCTL_STATIC_CHILDREN` macro is described in [SYSCTL_STATIC_CHILDREN
+    Macro](ch03s08.html#sysctl_underscore_static_underscore_chil "SYSCTL_STATIC_CHILDREN
+    Macro").
+  prefs: []
+  type: TYPE_NORMAL
+- en: sysctl Context Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As mentioned previously, sysctl contexts manage dynamically created sysctls.
+    A sysctl context is initialized via the `sysctl_ctx_init` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: After a sysctl context is initialized, it can be passed to the various `SYSCTL_ADD_*`
+    macros. These macros will update the sysctl context with pointers to the newly
+    created sysctls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conversely, the `sysctl_ctx_free` function takes a sysctl context and destroys
+    every sysctl that it has a pointer to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: If a sysctl cannot be destroyed, all the sysctls that were associated with the
+    sysctl context are reinstated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating Dynamic sysctls
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following 10 macros for creating sysctls during
+    runtime:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `SYSCTL_ADD_OID` macro creates a new sysctl that can handle any data type.
+    If successful, a pointer to the sysctl is returned; otherwise, `NULL` is returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other `SYSCTL_ADD_*` macros are alternatives to `SYSCTL_ADD_OID` that create
+    a sysctl that can handle a specific data type. These macros are explained in [Table 3-2](ch03s08.html#sysctl_underscore_add_underscore_asteris
+    "Table 3-2. SYSCTL_ADD_* Macros").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 3-2. SYSCTL_ADD_* Macros
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Macro | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYSCTL_ADD_NODE` | Creates a new node (or category) to which child nodes
+    may be added |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYSCTL_ADD_STRING` | Creates a new sysctl that handles a null-terminated
+    character string |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYSCTL_ADD_INT` | Creates a new sysctl that handles an integer variable
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYSCTL_ADD_UINT` | Creates a new sysctl that handles an unsigned integer
+    variable |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYSCTL_ADD_LONG` | Creates a new sysctl that handles a long variable |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYSCTL_ADD_ULONG` | Creates a new sysctl that handles an unsigned long variable
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYSCTL_ADD_OPAQUE` | Creates a new sysctl that handles a chunk of opaque
+    data; the size of this data is specified by the `len` argument |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYSCTL_ADD_STRUCT` | Creates a new sysctl that handles a structure |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYSCTL_ADD_PROC` | Creates a new sysctl that uses a function to handle its
+    read and write requests; this “handler function” is normally used to process the
+    data before importing or exporting it |'
+  prefs: []
+  type: TYPE_TB
+- en: In most cases, you should use a `SYSCTL_ADD_*` macro instead of the generic
+    `SYSCTL_ADD_OID` macro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The arguments for the `SYSCTL_ADD_*` macros are described in [Table 3-3](ch03s08.html#sysctl_underscore_add_underscore_ast
+    "Table 3-3. SYSCTL_ADD_* Arguments").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 3-3. SYSCTL_ADD_* Arguments
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Argument | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ctx` | Expects a pointer to a sysctl context |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `parent` | Expects a pointer to the parent sysctl’s list of children; more
+    on this later |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `number` | Expects the sysctl’s number; this should always be set to `OID_AUTO`
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `name` | Expects the sysctl’s name |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `access` | Expects an access flag; *access flags* specify whether the sysctl
+    is read-only (`CTLFLAG_RD`) or read-write (`CTLFLAG_RW`) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `arg` | Expects a pointer to the data that the sysctl will manage (or `NULL`)
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `len` | Set this to `0` unless you’re calling `SYSCTL_ADD_OPAQUE` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `handler` | Expects a pointer to the function that will handle the sysctl’s
+    read and write requests (or `0`) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `format` | Expects a format name; *format names* identify the type of data
+    that the sysctl will manage; the complete list of format names is: `"N"` for node,
+    `"A"` for `char *`, `"I"` for `int`, `"IU"` for `unsigned int`, `"L"` for `long`,
+    `"LU"` for `unsigned long`, and `"S,foo"` for `struct foo` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `descr` | Expects a textual description of the sysctl; this description is
+    printed by `sysctl -d` |'
+  prefs: []
+  type: TYPE_TB
+- en: A sysctl created by a `SYSCTL_ADD_*` macro must be connected to a parent sysctl.
+    This is done by passing `SYSCTL_STATIC_CHILDREN` or `SYSCTL_CHILDREN` as the `parent`
+    argument.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SYSCTL_STATIC_CHILDREN Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `SYSCTL_STATIC_CHILDREN` macro is passed as `parent` when connecting to
+    a static node. A *static node* is part of the base system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: This macro takes the name of the parent sysctl preceded by an underscore. And
+    all dots must be replaced by an underscore. So to connect to `hw.usb`, you would
+    use `_hw_usb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If `SYSCTL_STATIC_CHILDREN(/* no argument */)` is passed as `parent` to `SYSCTL_ADD_NODE`,
+    a new top-level category will be created.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SYSCTL_CHILDREN Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `SYSCTL_CHILDREN` macro is passed as `parent` when connecting to a dynamic
+    node. A *dynamic node* is created by a `SYSCTL_ADD_NODE` call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: This macro takes as its sole argument the pointer returned by a `SYSCTL_ADD_NODE`
+    call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing sysctls, Part 2
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that you know how to create sysctls during runtime, let’s do some actual
+    device control (as opposed to quoting Monty Python).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Example 3-4](ch03s09.html#echo-4.0.c "Example 3-4. echo-4.0.c") is a revision
+    of [Example 3-1](ch03s03.html#echo-3.0.c "Example 3-1. echo-3.0.c") that employs
+    a sysctl to resize the memory buffer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To save space, the functions `echo_open`, `echo_close`, `echo_write`, and `echo_read`
+    aren’t listed here, as they haven’t been changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 3-4. echo-4.0.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: On module load, [Example 3-4](ch03s09.html#echo-4.0.c "Example 3-4. echo-4.0.c")
+    creates a sysctl named `echo.buffer_size` that manages the ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    size of the memory buffer. Moreover, this sysctl uses a ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    handler function named `sysctl_set_buffer_size` to resize the memory buffer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sysctl_set_buffer_size Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As stated above, the `sysctl_set_buffer_size` function resizes the memory buffer.
+    Before I describe this function, let’s identify its arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The constant ![](httpatomoreillycomsourcenostarchimages1137499.png) `SYSCTL_HANDLER_ARGS`
+    is defined in `<sys/sysctl.h>` like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `oidp` points to
+    the sysctl, ![](httpatomoreillycomsourcenostarchimages1137501.png) `arg1` points
+    to the data that the sysctl manages, ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `arg2` is the length of the data, and ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `req` depicts the sysctl request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, keeping these arguments in mind, let’s examine the function `sysctl_set_buffer_size`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first sets ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `size` to the current buffer size. Afterward, ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `sysctl_handle_int` is called to obtain the new sysctl value (that is, the proposed
+    buffer size) from user space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the ![](httpatomoreillycomsourcenostarchimages1137503.png) second
+    argument to `sysctl_handle_int` is `&size`. See, this function takes a pointer
+    to the original sysctl value and overwrites it with the new sysctl value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This ![](httpatomoreillycomsourcenostarchimages1137505.png) `if` statement ensures
+    that the new sysctl value was obtained successfully. It works by verifying that
+    `sysctl_handle_int` returned ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    error free and that ![](httpatomoreillycomsourcenostarchimages1137509.png) `req->newptr`
+    is valid.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remainder of `sysctl_set_buffer_size` is identical to `echo_set_buffer_size`,
+    which was described in [echo_set_buffer_size Function](ch03s03.html#echo_underscore_set_underscore_buffer_un
+    "echo_set_buffer_size Function").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t Panic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now, let’s give [Example 3-4](ch03s09.html#echo-4.0.c "Example 3-4. echo-4.0.c")
+    a try:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Success!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter has described the traditional methods for device communication
+    and control: sysctl and ioctl. Generally, sysctls are employed to adjust parameters,
+    and ioctls are used for everything else—that’s why ioctls are the catchall of
+    I/O operations. Note that if you find yourself creating a device node just for
+    ioctl requests, you should probably use sysctls instead.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Incidentally, be aware that it’s fairly trivial to write user-mode programs
+    that interact with drivers. Thus, your drivers—*not* your user-mode programs (for
+    example, [Example 3-2](ch03s04.html#echo_underscore_config.c "Example 3-2. echo_config.c"))—should
+    always validate user input.
+  prefs: []
+  type: TYPE_NORMAL

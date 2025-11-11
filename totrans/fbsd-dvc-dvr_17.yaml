@@ -1,0 +1,345 @@
+- en: 'Chapter 17. Network Drivers, Part 2: Packet Reception and Transmission'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This chapter examines the packet reception and transmission components of `em(4)`.
+    Predictably, `em(4)` uses both mbufs and MSI for packet reception and transmission.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Packet Reception
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When an interface receives a packet, it sends an interrupt. Naturally, this
+    causes its interrupt handler to execute. For example, here is what executes in
+    `em(4)`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function takes a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    pointer to a ring buffer that contains one or more received packets, and calls
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) `em_rxeof` to process those
+    packets. If there are more than ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `rx_process_limit` packets, a `task` structure is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    queued; otherwise, this interrupt is ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    reenabled. I’ll discuss the `task` structure and its associated function in [em_handle_rx
+    Function](ch17.html#em_underscore_handle_underscore_rx_funct "em_handle_rx Function")
+    in [em_handle_rx Function](ch17.html#em_underscore_handle_underscore_rx_funct
+    "em_handle_rx Function").
+  prefs: []
+  type: TYPE_NORMAL
+- en: em_rxeof Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As mentioned previously, `em_rxeof` processes received packets. Its function
+    definition is listed below, but because this function is fairly long and involved,
+    I’ll introduce it in parts. Here is the first part:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function’s execution is contained primarily within a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `for` loop. This loop begins by ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    verifying that the ![](httpatomoreillycomsourcenostarchimages1137503.png) interface
+    is up and running. Then it ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    synchronizes the DMA buffer currently loaded in ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `rxr->rxdma.dma_map`, which is ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `rxr->rx_base`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The buffer ![](httpatomoreillycomsourcenostarchimages1137509.png) `rxr->rx_base[i]`
+    contains a descriptor that describes a received packet. When a packet spans multiple
+    mbufs, `rxr->rx_base[i]` describes one mbuf in the chain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If `rxr->rx_base[i]` lacks the ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `E1000_RXD_STAT_DD` flag, the `for` loop exits. (The `E1000_RXD_STAT_DD` flag
+    stands for *receive descriptor status: descriptor done*. We’ll see its effects
+    shortly.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If `rxr->rx_base[i]` describes the ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    last mbuf in the chain, the Boolean variable `eop`, which stands for *end of packet*,
+    is set to `TRUE`. (Needless to say, when a packet requires only one mbuf, that
+    mbuf is still the last mbuf in the chain.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the packet described by `rxr->rx_base[i]` contains any ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    errors, it is ![](httpatomoreillycomsourcenostarchimages1137517.png) discarded.
+    Note that I use the word *packet*, not *mbuf*, here, because every mbuf in the
+    packet is discarded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now let’s look at the next part of `em_rxeof`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137505.png) `rxr->fmp` and
+    ![](httpatomoreillycomsourcenostarchimages1137507.png) `rxr->lmp` point to the
+    first and last mbuf in the chain, ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `mp` is the mbuf described by `rxr->rx_base[i]`, and ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `len` is `mp`’s length.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, this part simply ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    identifies whether `mp` is the first mbuf in the chain. If it is not, then `mp`
+    is ![](httpatomoreillycomsourcenostarchimages1137509.png) ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    linked into the chain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the next part of `em_rxeof`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: If `mp` is the ![](httpatomoreillycomsourcenostarchimages1137499.png) last mbuf
+    in the chain, ![](httpatomoreillycomsourcenostarchimages1137501.png) `sendmp`
+    is set to the ![](httpatomoreillycomsourcenostarchimages1137503.png) first mbuf
+    in the chain, and the header checksum is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    verified.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If our architecture requires ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    strict alignment and ![](httpatomoreillycomsourcenostarchimages1137509.png) jumbo
+    frames are enabled, `em_rxeof` ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    aligns the mbuf chain. (Jumbo frames are Ethernet packets with more than 1500
+    bytes of data.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This part concludes by setting ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `rxr->fmp` and ![](httpatomoreillycomsourcenostarchimages1137515.png) `rxr->lmp`
+    to ![](httpatomoreillycomsourcenostarchimages1137517.png) `NULL`. Here is the
+    next part of `em_rxeof`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, `i` is ![](httpatomoreillycomsourcenostarchimages1137499.png) incremented
+    so that `em_rxeof` can get to the next mbuf in the ring. Then, ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    if `sendmp` points to an mbuf chain, `em(4)`’s input routine is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    executed to send that ![](httpatomoreillycomsourcenostarchimages1137505.png) chain
+    to the upper layers. Afterward, new mbufs are ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    allocated for `em(4)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When an mbuf chain is sent to the upper layers, drivers must not access those
+    mbufs anymore. For all intents and purposes, those mbufs have been freed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To sum up, this `for` loop simply links together every mbuf in a received packet
+    and then sends that to the upper layers. This continues until every packet in
+    the ring has been processed or `rx_process_limit` is hit (`rx_process_limit` was
+    described in [Packet Reception](ch17.html#packet_reception "Packet Reception")
+    in [Packet Reception](ch17.html#packet_reception "Packet Reception")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the final part of `em_rxeof`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: If there are more packets to process, `em_rxeof` ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    returns `TRUE`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: em_handle_rx Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Recall that when `em_rxeof` returns TRUE, `em_msix_rx` queues a task structure
+    (`em_msix_rx` was discussed in [Packet Reception](ch17.html#packet_reception "Packet
+    Reception") in [Packet Reception](ch17.html#packet_reception "Packet Reception")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is that `task` structure’s function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function is nearly identical to `em_msix_rx`. When there are more packets
+    to process, ![](httpatomoreillycomsourcenostarchimages1137499.png) `em_rxeof`
+    just gets called again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Packet Transmission
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To transmit a packet, the network stack calls a driver’s output routine. All
+    output routines end by calling their interface’s transmit or start routine. Here
+    is `em(4)`’s start routine:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This start routine ![](httpatomoreillycomsourcenostarchimages1137499.png) acquires
+    a lock and then calls ![](httpatomoreillycomsourcenostarchimages1137501.png) `em_start_locked`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: em_start_locked Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `em_start_locked` function is defined as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This function ![](httpatomoreillycomsourcenostarchimages1137509.png) removes
+    one ![](httpatomoreillycomsourcenostarchimages1137513.png) mbuf from `em(4)`’s
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) send queue and ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    transmits it to the interface. This repeats until the send queue is ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    empty. (Send queues, as mentioned in [Chapter 16](ch16.html "Chapter 16. Network
+    Drivers, Part 1: Data Structures"), are populated by output routines.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `em_xmit` function, which actually transmits the mbufs to the interface,
+    is not detailed in this book, because of its length. It is fairly straightforward,
+    though, so you shouldn’t have any trouble with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the number of available transmit descriptors is ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    less than or equal to `EM_TX_CLEANUP_THRESHOLD`, ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `em_txeof` is called to reclaim the used descriptors. (A transmit descriptor describes
+    an outgoing packet. If a packet spans multiple mbufs, a transmit descriptor describes
+    one mbuf in the chain.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the number of available transmit descriptors is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    less than `EM_MAX_SCATTER`, transfers are ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    stopped.
+  prefs: []
+  type: TYPE_NORMAL
+- en: em_txeof Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `em_txeof` function goes through the transmit descriptors and frees the
+    mbufs for packets that have been transmitted. Its function definition is listed
+    below, but because this function is fairly long and involved, I’ll introduce it
+    in parts. Here is the first part:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `first` is the
+    first mbuf in a chain that housed an outgoing packet, ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `last` is the last mbuf in that chain, and ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `done` is the mbuf after `last`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Recall that transmit descriptors, and subsequently mbufs, are held in a ring
+    buffer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The variables ![](httpatomoreillycomsourcenostarchimages1137501.png) `tx_desc`
+    and ![](httpatomoreillycomsourcenostarchimages1137503.png) `tx_buffer` are temporary
+    variables for a transmit descriptor and its associated mbuf.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now let’s look at the next part of `em_txeof`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: This ![](httpatomoreillycomsourcenostarchimages1137501.png) `while` loop iterates
+    through `first` to `last`, ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    freeing their mbufs and ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    zeroing their transmit descriptors. (`em(4)` has a finite number of transmit descriptors.
+    Zeroing a descriptor makes it available again.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: This ![](httpatomoreillycomsourcenostarchimages1137499.png) `while` loop ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    determines whether another mbuf chain can be freed by this ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `while` loop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the final part of `em_txeof`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: If there are more transmit descriptors to reclaim, `em_txeof` returns ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `TRUE`; otherwise, it returns ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `FALSE`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the number of available transmit descriptors is ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    greater than `EM_MAX_SCATTER`, packets ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    can be transmitted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Post Packet Transmission
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Whenever an interface transmits a packet, it sends an interrupt. Naturally,
+    this causes its interrupt handler to execute. Here is what executes in `em(4)`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Because of MSI, `em(4)` can use a different interrupt handler for post packet
+    transmission and packet reception.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This function simply ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    reclaims the used transmit descriptors. If there are more descriptors to reclaim,
+    a `task` structure is ![](httpatomoreillycomsourcenostarchimages1137501.png) queued.
+    Here is that `task` structure’s function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) reclaims
+    any used transmit descriptors, after which any packets that may have been halted
+    due to a lack of descriptors are ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    transmitted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter and [Chapter 16](ch16.html "Chapter 16. Network Drivers, Part
+    1: Data Structures") gave a primer on network devices and drivers. If you’re serious
+    about writing network drivers, you should review `em(4)` in its entirety. I recommend
+    beginning with its `device_attach` implementation: `em_attach`.'
+  prefs: []
+  type: TYPE_NORMAL

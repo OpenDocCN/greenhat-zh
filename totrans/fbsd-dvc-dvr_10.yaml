@@ -1,0 +1,359 @@
+- en: Chapter 10. Managing and Using Resources
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In [Chapter 7](ch07.html "Chapter 7. Newbus and Resource Allocation") we discussed
+    how to allocate IRQs, I/O ports, and I/O memory. [Chapter 8](ch08.html "Chapter 8. Interrupt
+    Handling") focused on using IRQs for interrupt handling. This chapter details
+    how to use I/O ports for port-mapped I/O (PMIO) and I/O memory for memory-mapped
+    I/O (MMIO). Before I describe PMIO and MMIO, some background on I/O ports and
+    I/O memory is needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I/O Ports and I/O Memory
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Every peripheral device is controlled by reading from and writing to its registers
+    (Corbet et al., 2005), which are mapped to either I/O ports or I/O memory. The
+    use of I/O ports or I/O memory is device and architecture dependent. For example,
+    on the *i386*, most ISA devices will map their registers to I/O ports; however,
+    PCI devices tend to map their registers to I/O memory. As you may have guessed,
+    reading and writing to a device’s registers, which are mapped to either I/O ports
+    or I/O memory, is called PMIO or MMIO.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reading from I/O Ports and I/O Memory
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'After a driver has called `bus_alloc_resource` to allocate the range of I/O
+    ports or I/O memory it needs, it can read from those I/O regions using one of
+    the following functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `bus_read_N` functions (where `N` is `1`, `2`, `4`, or `8`) read *`N`* bytes
+    from an `offset` in `r` (where `r` is the return value from a successful `bus_alloc_resource`
+    call that allocated an I/O region).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_read_multi_`*`N`* functions read *`N`* bytes from an `offset` in `r`,
+    `count` times, and store the reads into `datap`. In short, `bus_read_multi_`*`N`*
+    reads from the same location multiple times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_read_region_`*`N`* functions read `count` *`N`*-byte values starting
+    from an `offset` in `r`, and store the reads into `datap`. In other words, `bus_read_region_`*`N`*
+    reads consecutive *`N`*-byte values from an I/O region (that is, an array).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writing to I/O Ports and I/O Memory
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A driver writes to an I/O region using one of the following functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `bus_write_`*`N`* functions (where *`N`* is `1`, `2`, `4`, or `8`) write
+    an *`N`*-byte `value` to an `offset` in `r` (where `r` is the return value from
+    a `bus_alloc_resource` call that allocated an I/O region).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_write_multi_`*`N`* functions take `count` *`N`*-byte values from `datap`
+    and write them to an `offset` in `r`. In short, `bus_write_multi_`*`N`* writes
+    multiple values to the same location.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_write_region_`*`N`* functions take `count` *`N`*-byte values from `datap`
+    and write them to a region in `r`, starting at `offset`. Each successive value
+    is written at an offset of *`N`* bytes after the previous value. In short, `bus_write_region_`*`N`*
+    writes consecutive *`N`*-byte values to an I/O region (that is, an array).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_set_multi_`*`N`* functions write an *`N`*-byte `value` to an `offset`
+    in `r`, `count` times. That is, `bus_set_multi_`*`N`* writes the same value to
+    the same location multiple times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_set_region_`*`N`* functions write an *`N`*-byte `value`, `count` times,
+    throughout a region in `r`, starting at `offset`. In other words, `bus_set_region_`*`N`*
+    writes the same value consecutively to an I/O region (that is, an array).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stream Operations
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'All of the preceding functions handle converting to and from host byte order
+    and bus byte order. In some cases, however, you may need to avoid this conversion.
+    Fortunately, FreeBSD provides the following functions for such an occasion:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: These functions are identical to their nonstream counterparts, except that they
+    don’t perform any byte order conversions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Memory Barriers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Sequences of read and write instructions can often be executed more quickly
+    if run in an order that’s different from the program text (Corbet et al., 2005).
+    As a result, modern processors customarily reorder read and write instructions.
+    However, this optimization can foul up drivers performing PMIO and MMIO. To prevent
+    instruction reordering, memory barriers are employed. *Memory barriers* ensure
+    that all instructions before the barrier conclude before any instruction after
+    the barrier. For PMIO and MMIO operations, the `bus_barrier` function provides
+    this ability:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `bus_barrier` function inserts a memory barrier that enforces the ordering
+    of read or write operations on a region in `r`, which is described by the `offset`
+    and `length` arguments. The `flags` argument specifies the type of operation to
+    be ordered. Valid values for this argument are shown in [Table 10-1](ch10s02.html#bus_underscore_barrier_symbolic_constant
+    "Table 10-1. bus_barrier Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 10-1. bus_barrier Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_SPACE_BARRIER_READ` | Synchronizes read operations |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `BUS_SPACE_BARRIER_WRITE` | Synchronizes write operations |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Note that these flags can be ORed to enforce ordering on both read and write
+    operations. An exemplary use of `bus_barrier` looks something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the calls to `bus_barrier` guarantee that the writes and reads conclude
+    in the order written.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tying Everything Together
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 10-1](ch10s03.html#led.c "Example 10-1. led.c") is a simple driver
+    for an i-Opener’s LEDs (based on code written by Warner Losh). An i-Opener includes
+    two LEDs that are controlled by bits 0 and 1 of the register located at 0x404c.
+    Hopefully, this example will clarify any misunderstandings you may have about
+    PMIO (and MMIO).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take a quick look at this code and try to discern some of its structure. If
+    you don’t understand all of it, don’t worry; an explanation follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 10-1. led.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Before I describe the functions defined in [Example 10-1](ch10s03.html#led.c
+    "Example 10-1. led.c"), note that the constant ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `LED_IO_ADDR` is defined as `0x404c` and that the constant ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `LED_NUM` is defined as `2`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following sections describe the functions defined in [Example 10-1](ch10s03.html#led.c
+    "Example 10-1. led.c") in the order they would roughly execute.
+  prefs: []
+  type: TYPE_NORMAL
+- en: led_identify Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `led_identify` function is the `device_identify` implementation for this
+    driver. This function is required because the ISA bus cannot identify its children
+    unaided. Here is the function definition for `led_identify` (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) determines
+    if the ISA bus has identified a child device named ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `"led"`. If it has not, then `"led"` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    appended to the ISA bus’s catalog of identified children. Afterward, ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `bus_set_resource` is called to specify that I/O port access for `"led"` starts
+    at `LED_IO_ADDR`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: led_probe Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `led_probe` function is the `device_probe` implementation for this driver.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) checks
+    if `"led"` can acquire I/O port access. Afterward, the verbose description of
+    `"led"` is ![](httpatomoreillycomsourcenostarchimages1137501.png) set and the
+    success code ![](httpatomoreillycomsourcenostarchimages1137503.png) `BUS_PROBE_SPECIFIC`
+    is returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: led_attach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `led_attach` function is the `device_attach` implementation for this driver.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    acquiring an I/O port. If unsuccessful, the error code ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `ENXIO` is returned. Then the member variables ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `sc_open_mask` and ![](httpatomoreillycomsourcenostarchimages1137505.png) `sc_read_mask`
+    are zeroed; in the `d_foo` functions, these variables will be protected by ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `sc_mutex`. Finally, `led_attach` creates a ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) character device node for
+    each LED.
+  prefs: []
+  type: TYPE_NORMAL
+- en: led_detach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `led_detach` function is the `device_detach` implementation for this driver.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) destroying its device nodes.
+    Once this is done, it ![](httpatomoreillycomsourcenostarchimages1137503.png) destroys
+    its mutex and ![](httpatomoreillycomsourcenostarchimages1137505.png) releases
+    its I/O port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: led_open Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `led_open` function is defined in `led_cdevsw` (that is, the character
+    device switch table) as the `d_open` operation. Here is its function definition
+    (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) stores
+    in `led` the unit number of the device node being opened. If `led` is ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    greater than or equal to `LED_NUM`, then `ENXIO` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    returned. Next, the value of `sc_open_mask` is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    examined. If its `led` bit does not equal `0`, which indicates that another process
+    has opened the device, then `EBUSY` is ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    returned. Otherwise, `sc_open_mask` and `sc_read_mask` are ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) set to include `1 << led`.
+    That is, their `led` bit will be changed to `1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: led_close Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `led_close` function is defined in `led_cdevsw` as the `d_close` operation.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, this function simply ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    clears `sc_open_mask`’s `led` bit (which allows another process to open this device).
+  prefs: []
+  type: TYPE_NORMAL
+- en: led_read Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `led_read` function is defined in `led_cdevsw` as the `d_read` operation.
+    This function returns one character indicating whether the LED is on (`1`) or
+    off (`0`). Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) checks
+    that `sc_read_mask`’s `led` bit is set; otherwise, it ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    exits. Next, 1 byte from the LED’s control register is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    read into `ch`. Then `ch`’s `led` bit is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    isolated and its value is ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    returned to user space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: led_write Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `led_write` function is defined in `led_cdevsw` as the `d_write` operation.
+    This function takes in one character to turn on (`1`) or off (`0`) the LED. Here
+    is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) copies
+    one character from user space to `ch`. Next, 1 byte from the LED’s control register
+    is ![](httpatomoreillycomsourcenostarchimages1137501.png) read into `old`. Then,
+    based on the ![](httpatomoreillycomsourcenostarchimages1137503.png) value from
+    user space, `old`’s `led` bit is turned ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    on or ![](httpatomoreillycomsourcenostarchimages1137507.png) off. Afterward, `old`
+    is ![](httpatomoreillycomsourcenostarchimages1137509.png) written back to the
+    LED’s control register.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter described all of the functions provided by FreeBSD for performing
+    PMIO and MMIO (that is, for accessing a device’s registers). The next chapter
+    discusses using PMIO and MMIO with PCI devices, which are more involved than what’s
+    been shown here.
+  prefs: []
+  type: TYPE_NORMAL

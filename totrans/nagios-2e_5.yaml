@@ -1,0 +1,1275 @@
+- en: Part V. Part V Development
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Chapter 24. Writing Your Own Plugins
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Plugins* are independent programs—called by Nagios—that perform a check and
+    return the result in standardized form. If there is neither a standard plugin
+    for the task you want to perform, nor something appropriate in **Categories |
+    Check Plugins** on NagiosExchange,^([[290](#ftn.CHP-24-FN-1)]) then the best solution
+    is for you to write a plugin yourself.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The plugin needs only to be executable on the command line, and to return a
+    short text output for the admin and a standardized return value. If you want to
+    make it available on the Internet as well, you need to comply with various guidelines
+    so that it will be widely used and accepted without the need for extensive support.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is no restriction *in theory* on the programming language used. Exotic
+    programming languages do restrict portability to other systems and platforms,
+    however, and script languages need to be interpreted, so scripted plugins require
+    more time to execute than compiled ones. But this should not stop anyone from
+    using the language of his or her choice where rapid implementation is more important
+    than portability and speed of execution. But if you are planning to run 2,000
+    or more checks at five-minute intervals using a script language, you will be forced
+    to tackle the issue of performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Below we will be using the Perl programming language. This exists on almost
+    every Unix system, and the many small tasks that a plugin has to perform, requiring
+    simple text output, are within the classical domain of this script language. There
+    are also numerous ready-made modules available via the CPAN,^([[291](#ftn.CHP-24-FN-2)])
+    which you can use to deal with emerging tasks in a modular fashion. There remains
+    the problem of the drag on performance caused by the script language. However,
+    with ePN, Nagios has its own integrated Perl interpreter, which considerably improves
+    performance. A separate chapter is devoted to this, from page 669.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The central hub used when developing a Nagios plugin with Perl is the Perl module
+    **`Nagios::Plugin`** by Tom Voon, which really simplifies concrete programming
+    in many aspects. The module **`Pod::Usage`** is also used, which enables man pages
+    embedded in the source code of the plugin to be formatted as online help.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.1 Programming Guidelines for Plugins
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Even if you just want to quickly throw something together, you will ultimately
+    make life easier for yourself if you keep to the official *Developer Guidelines*^([[292](#ftn.CHP-24-FN-3)])
+    right from the beginning, as you will seldom be the only person involved with
+    the resulting plugin.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Developer Guidelines currently do not provide an option for processing multiple-line
+    output with Nagios 3.0\. The new Application Programming Interface (API) for Nagios
+    3 plugins is described on the Nagios homepage.^([[293](#ftn.CHP-24-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.1.1 Return values
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Nagios expects from a plugin a standardized return value from **`0`** to **`3`**,
+    which describes the current state of the check performed. The differentiation
+    between the values **`0`** (OK) and **`2`** (CRITICAL) is almost always defined
+    by the adminstrator when defining the individual check via warning and critical
+    thresholds—only for a few plugins does the plugin itself specify the thresholds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The return value **`3`** (UNKNOWN) is reserved for errors in operating the plugin
+    (the wrong setting for options, nonexistent options) or internal plugin errors
+    that may prevent the plugin from carrying out its work. The Development Guidelines
+    cite the example here of a network socket which the plugin would like to open,
+    but the call fails. Normal timeouts, on the other hand, should not be answered
+    with UNKNOWN. There are certainly plugins which return WARNING when there is a
+    timeout and only return CRITICAL if a specific threshold has been exceeded. In
+    many cases CRITICAL makes more sense for a general timeout, since this can normally
+    be interpreted as *service xyz won't work*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Table 24-1](../Text/ch24.html#return_values_for_nagios_plugins-id1 "Table 24-1. Return
+    values for Nagios plugins") summarizes the return values and their meanings, arranged
+    by service and host checks. For host checks, Nagios has the states OK, DOWN, and
+    UNREACHABLE, where the difference between DOWN and UNREACHABLE reflects only the
+    spatial arrangement: Is the failed host *itself* involved, or a host that lies
+    *behind* a failed host? This is why it makes sense to distinguish only between
+    return values for *state ok* (**`0`**) and *error state* (**`2`**).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 24-1. Return values for Nagios plugins
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Status | Service Check | Host Check |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 0 | OK | UP |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1 | WARNING | UP or DOWN/UNREACHABLE^([[a](#ftn.CHP-24-FN-5)]) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 2 | CRITICAL | DOWN/UNREACHABLE |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 3 | UNKNOWN | DOWN/UNREACHABLE |'
+  prefs: []
+  type: TYPE_TB
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[a](#CHP-24-FN-5)]) see text
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'How the return value 1 is handled in Nagios 3.0 depends on the parameter **`use_aggressive_host_checking`**
+    ([A.1 The Main Configuration File nagios.cfg](../Text/apa.html#an_overview_of_the_nagios_configuration
+    "A.1 The Main Configuration File nagios.cfg")): if this is set to **`1`**, the
+    return value **`1`** means DOWN/UNREACHABLE, otherwise Nagios will evaluate the
+    host as UP.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.1.2 Information for the administrator on the standard output
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Nagios expects a text on the standard output that informs the administrator—in
+    the Web interface, for instance—about the current state. This output should keep
+    to specific form, however:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In practice this looks something like what is shown in the following three
+    examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Web interface shows the return value itself only indirectly via the color,
+    and the text contains the current state in a legible form. The contents of the
+    text output should otherwise be based on what will provide the administrator with
+    the most information for the check specifically carried out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are considerable differences between Nagios 2.x and Nagios 3.0 with respect
+    to the requirements of the text output. For Nagios 2.x the text must be in one
+    line, as shown in the examples. It will only process the first line of a multiple-line
+    output. The entire text, including the performance data (we will discuss this
+    in [24.1.6 Timeout](../Text/ch24.html#timeout "24.1.6 Timeout")) may not exceed
+    a length of 300 bytes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Nagios 3.0 processes output of up to a maximum length of 8192 bytes, and the
+    output may contain several lines. The multiple-line format is described in [8.5.1
+    Multiple-line plugin output](../Text/ch08s05.html#multiple-line_plugin_output
+    "8.5.1 Multiple-line plugin output") in page 193.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are programming a plugin that makes use of the advantages of Nagios 3.0
+    (multiple lines, text longer than 300 bytes), you need to realize that this plugin
+    can only be used with limitations in Nagios 2.x. You should therefore carefully
+    consider whether the multiple-line output format is the right approach for the
+    specific problem. Remember that you can summarize the results of several individual
+    checks with the **`check_multi`** plugin (see [8.5 Summarizing Checks with check_multi](../Text/ch08s05.html
+    "8.5 Summarizing Checks with check_multi"), page 191) and in this way reduce the
+    number of individual checks performed—to optimize performance, say—without missing
+    out on detailed text information. However, an individual check always provides
+    just one return value, which in this case is a collective result. Another approach
+    would be to start the test via a script and cron, and pass on individual results
+    to Nagios as passive checks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this reason, it is recommended that you do without multiple-line output
+    for general plugins and comply with the limitations of Nagios 2.x.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.1.3 Onboard online help?
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Classic Nagios plugins, including the core plugins, do not include separate
+    man pages but are *self-documenting:* Help is obtained by calling with the switches
+    **`-h`** or **`--help`**. This does not mean that there cannot be any other documentation,
+    but the integrated help shold be be complete and all existing options described
+    in detail, so that the plugin can be used without any further documentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some plugins provide just a short help text with **`-h`** and the complete help
+    text with **`--help`**. In this case, the output of **`-h`** should indicate that
+    more information can be retrieved with the long form.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The help text should also be adjusted to the width of a normal terminal and
+    not exceed 80 characters in length. It is quite often the case that an administrator
+    is in the server room trying to solve a problem, faced with a simple console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The help should always be written in English. For localization purposes, that
+    is, output in different languages, **`gettext`** can be used. This tool translates
+    text to be displayed using a simple file-based database. If no text exists for
+    the target language, **`gettext`** displays the untranslated text, so it behaves
+    in an error-tolerant manner. Further information can be found in the man page
+    or info page for **`gettext`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For Perl scripts, **`man perllocale`**^([[294](#ftn.CHP-24-FN-6)]) is a good
+    starting point. For a concrete application, we recommend the Perl module **`Text::Domain`**,
+    which considerably simplifies localization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.1.4 Reserved options
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The programming guidelines provide options that have the same meaning for all
+    plugins. The most important of these are listed in [Table 6-2](../Text/ch06.html#standard_options_of_plugins
+    "Table 6-2. Standard options of plugins") in page 108.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition there are several reserved options which are sometimes assigned
+    twice in the short form. Thus, **`-u`** can stand for a user name (**`--user`**),
+    but also for a URL (**`--url`**). The option **`-p`** in turn allows a TCP or
+    UDP port (**`--port`**) to be specified, but also a password (**`--password`**).
+    The user name can also be passed on with **`−l`** or **`--logname`**, and the
+    password (in more general terms, the authentication string, which can also be
+    a Kerberos realm) with **`-a`** or **`--authentication`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The fact that these options may have two different meanings is rather unfortunate,
+    and is presumably for historical reasons. In case of doubt you should steer clear
+    of such double assignments and use only the long form of the option whose meaning
+    is clear. Many GNU and other Open Source programs behave in a similar fashion
+    (e.g., **`tar`**, **`rsync`**,...). The main thing here is that a reserved option
+    is not used for another purpose. The reserved option **`-C`**/**`--community`**,
+    for instance, only makes sense in combination with SNMP queries. If the plugin
+    has nothing to do with SNMP, you should not misuse it for other purposes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.1.5 Specifying thresholds
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Thresholds* determine whether a plugin returns OK or an error value (WARNING,
+    CRITICAL). Thresholds always specify a range according to the pattern *from:to*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The exclusion principle here takes some getting used to. A warning threshold
+    in the form **`-w 10:20`** means that a value within the specified range does
+    *not* lead to a WARNING. The warning state includes all values from -∞ to and
+    including 9 and from 21 to ∞.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The interaction between warning and critical thresholds can best be explained
+    by means of an example. Suppose Nagios is monitoring the temperature in the server
+    room. Normally the temperature should lie between 18°C and 22°C. In each case,
+    two degrees Centigrade above and below this range is set as the tolerance range,
+    for which a WARNING should be shown. Below 16°C and above 24°C, Nagios should
+    report a CRITICAL state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Converted into thresholds, the scenario sketched in [Figure 24-1](../Text/ch24.html#what_happens_with_the_thresholds_-w_18
+    "Figure 24-1. What happens with the thresholds -w 18:22 -c 16:24?") should look
+    like this: **`-w 18:22 -c 16:24`**. The temperatures between 22°C and 24°C are
+    not critical, but are only covered by the warning range. The temperature range
+    above 24°C covers both threshold intervals, and there the stronger error value
+    (CRITICAL) predominates.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![What happens with the thresholds -w 18:22 -c 16:24?](../Images/tagoreillycom20081104nostarchimages224012.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 24-1. What happens with the thresholds `-w 18:22 -c 16:24`?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To negate a value range, you just place a **`@`** in front of it: **`-w @10:20`**
+    now ensures that a WARNING will be shown if the value determined is larger or
+    equal to 10 and smaller or equal to 20\. If the start value equals 0, this can
+    be left out: **`-w 20`** has the same effect as **`-w 0:20`**. An infinite final
+    value does not need to be specified, but the colon after the start value must
+    remain in place: **`-w 10:`**. The tilde (**`˜`**) stands for negative infinity,
+    and no provision is made for a separate sign for infinity (see [Table 24-2](../Text/ch24.html#special_syntax_for_specifying_thresholds
+    "Table 24-2. Special syntax for specifying thresholds")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 24-2. Special syntax for specifying thresholds
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Threshold | Area covered |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **``*`end`*``** | **`0:`** **``*`end`*``** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **``*`start:`*``** | **``*`start:`*``**∞ |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **`˜:`** **``*`end`*``** | -∞**`:`****``*`end`*``** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **``*`@start:end`*``** | not **``*`start:end`*``** |'
+  prefs: []
+  type: TYPE_TB
+- en: 24.1.6 Timeout
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A plugin may not always perform its task in a reasonable amount of time. For
+    instance, it may use **`df`** to access a volume mounted via NFS, the host of
+    which is not currently available. Or, a firewall may reject the network packets
+    from a network plugin, and the plugin was not designed to notice this. However,
+    Nagios would like to receive a sensible reply from its plugins at some point in
+    time; if any type of checks are hanging around in limbo somewhere, this consumes
+    unnecessary resources and can really cause chaos for the Nagios scheduler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each plugin should therefore cancel its actions after a preset time—normally
+    ten seconds—and return a corresponding error result to Nagios. The option **`-t`**
+    (**`--timeout`**) enables a different timeout value to be specified when a plugin
+    is called.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A modified timeout makes sense, for instance, if a plugin is run indirectly
+    via NRPE (see [Chapter 10](../Text/ch10.html "Chapter 10. The Nagios Remote Plugin
+    Executor (NRPE)") from page 213). The timeout of **`check_nrpe`**, which Nagios
+    is running directly, should sensibly be somewhat longer than the timeout for the
+    plugin itself, so that **`check_nrpe`** does not cancel the execution without
+    learning something about the real cause.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.1.7 Performance data
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Performance data present result values in a standardized form, described from
+    page 404, which enables these values to be processed automatically by external
+    programs. They come after the normal text output, separated by the | sign.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As long as the plugin finds numerical values, it should always display these
+    values as performance data. If an external program can process such data automatically,
+    there is little configuration work for the administrator. There are some external
+    programs that can, if necessary, fish out information from the normal text output,
+    but because of the lack of standardization, this is always associated with extra
+    work—and not every Nagios admin can handle Perl-compatible regular expressions
+    perfectly. For this reason, every plugin programmer should always include performance
+    data provided that the specific application allows this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.1.8 Copyright
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A plugin should be furnished with a clear copyright notice that names the license
+    and the author. For plugins written in languages that are compiled (such as C),
+    the two items are stored in separate text files so that this information is not
+    lost when the plugin is later distributed in binary form. The standard approach
+    is to have one **`COPYING`** file containing the complete license in question
+    (for example, the GNU Public License) and an **`AUTHORS`** file with the names
+    of the authors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For plugins written in script languages, it is sufficient to have the copyright
+    notice in the source code itself, since the plugin is normally distributed in
+    a readable form.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is also useful to provide a brief output of the copyright when displaying
+    the version number with the option **`--version`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the plugin is based on already existing code, or if individuals have been
+    involved in the form of patches or suggestions, the Developer Guidelines require
+    the files **`ACKNOWLEDGEMENTS`** and **`THANKS`**. The first one is used if the
+    code originally had a different author (or if parts of code are recycled), and
+    the latter includes the names of those who have made contributions in the form
+    of patches and sometimes in the form of important ideas.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[290](#CHP-24-FN-1)]) [http://www.nagiosexchange.org/Check_Plugins.21.0.html](http://www.nagiosexchange.org/Check_Plugins.21.0.html)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[291](#CHP-24-FN-2)]) [http://www.cpan.org](http://www.cpan.org)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[292](#CHP-24-FN-3)]) [http://nagiosplug.sourceforge.net/developer-guidelines.html](http://nagiosplug.sourceforge.net/developer-guidelines.html)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[293](#CHP-24-FN-4)]) [http://nagiosplug.sourceforge.net/developer-guidelines.html](http://nagiosplug.sourceforge.net/developer-guidelines.html)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[294](#CHP-24-FN-6)]) [http://perldoc.perl.org/perllocale.html](http://perldoc.perl.org/perllocale.html)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.2 The Perl Module **`Nagios::Plugin`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If you want to create plugins in Perl with as little effort as possible, while
+    at the same time conforming to the programming guidelines, the Perl module **`Nagios::Plugin`**
+    is at hand to provide support to developers. We will introduce it here in version
+    0.21 from October 2007\. In this version the main functions are well developed
+    and should not undergo any major changes, apart from the message functions, which
+    are still marked as being experimental.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This object-oriented module contains constants and variables to represent states;
+    exit functions that use not only a Nagios-compatible exit code, but also the same
+    formatting; and functions for testing thresholds and for the correct output of
+    performance data. In addition, it provides functions for parsing the command line,
+    as well as an integrated help function. On this last point, the module deviates
+    from the standard Perl convention: There is already an extensive module for the
+    command line with **`Getopt::Long`**, and for online help, Perl provides the Perl
+    Online Documentation (POD).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 24.2.1 Installation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**`Nagios::Plugin`** is one of the core plugins, but it can alternatively be
+    installed via the CPAN. This anchors the module in the system in such a way that
+    Perl finds it automatically. But the module does cause other modules to be installed
+    as well, which is not always desirable on a certified system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After the installation of the core plugins, **`Nagios::Plugin`** can be found
+    in its own directory, together with all dependent modules. The existing Perl installation
+    is not affected by this, but Perl does not find the module automatically in this
+    way. Any plugins based on this must explicitly set the path to the base directory
+    of the module themselves.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The method using the CPAN
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The CPAN installation command for **`Nagios::Plugin`** checks existing dependencies
+    and at the same time installs any modules required:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: In some circumstances, modules that you have previously installed will be updated.
+    If you are running **`perl -MCPAN`** for the first time, Perl will ask a number
+    of questions that are answered interactively—apart from the selection of the download
+    server, the suggested defaults can be used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Together with the core plugins
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Starting with version 1.4.10, the **`nagios-plugins*`** tar archive also contains
+    the Perl module. It is included in the installation if you use the **`--enable-perl-modules`**
+    switch (see [1.4 Installing and Testing Plugins](../Text/ch01s04.html "1.4 Installing
+    and Testing Plugins"), page 43) when running the **`configure`** command. The
+    module is installed to the directory **`/usr/local/nagios/perl`**, complying with
+    the conventions used in this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order for a plugin to be able to find the module, you must explicitly set
+    the path, via **`use lib`**. In his FAQ,^([[295](#ftn.CHP-24-FN-7)]) Ton Voon
+    recommends using the Perl module **`FindBin`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`FindBin`** is a component of the Perl distribution and finds the path to
+    the directory from which the plugin was called. In accordance with our conventions,
+    this is the directory **`/usr/local/nagios/libexec`**. This path is queried with
+    the variable **`$FindBin::Bin`**, and **`use lib`** then integrates the Nagios-specific
+    Perl directory relative to this directory. Whether the Linux distributions will
+    set up a Perl directory with an identical relative path remains to be seen. As
+    long as you install the core plugins yourself, the three-line command will work
+    as intended.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If **`Nagios::Plugin`** cannot be found in the path specified, Perl will search
+    through all other standard paths. In this way the module will be found if it originates
+    from the CPAN or (in the future) from distribution packages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[295](#CHP-24-FN-7)]) [http://www.nagiosplugins.org/faq/development/nagios-plugin-perl](http://www.nagiosplugins.org/faq/development/nagios-plugin-perl)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter 25. Determining File and Directory Sizes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For a specific example of a Perl plugin, we will look at **`check_du.pl`**.^([[296](#ftn.CHP-25-FN-1)])
+    It is used to determine the size of specified files or directories and to check
+    whether the total size lies within preset thresholds. To do this, it calls the
+    system program **`du`**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: When used with the **`-s`** option, **`du`** does not list all the individual
+    subdirectories but just shows the total size. **`-c`** adds up individual values
+    to reach a total size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At the beginning, the plugin generates a new **`new Nagios::Plugin`** object
+    with the **`new`** constructor so that it can make use of the functions of the
+    module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Various parameters can be used here. **`shortname`** contains the short name
+    of the check to be performed, which will be later prefixed to all outputs:^([[297](#ftn.CHP-25-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The contents of the first line after **`#!`** define the interpreter to be run,
+    which is Perl. The option **`-w`** and the following **`use warnings`**—which
+    both ensure extensive output, provided that Perl objects to something in the script—are
+    duplicated here intentionally. In Perl versions prior to 5.6, there is no **`use
+    warnings`** parameter, so you must comment out the statement and use **`-w`**.
+    To make sure that no one forgets this, **`-w`** is included from the beginning.
+    The instruction **`use strict`** enforces a strict syntactical check and forces
+    the programmer to pre-declare all variables. Many simple errors are avoided when
+    this is used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The core function of the plugin is constructed in a relatively simple manner:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`open`** calls the program **`du`** and handles the output as if this came
+    from an opened file. If the call fails, **`nagios_die`** from the module **`Nagios::Plugin`**
+    terminates execution of the plugin and issues an error message. Before the **`du`**
+    program is called, **`LANG=C`** explicitly sets the language to the English default,
+    so that the texts displayed by **`du`** do not depend on the specific environment.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **`while`** loop reads the output line for line and checks whether all directories
+    can be evaluated. If **`Permission denied`** appears in the text of the output,
+    the plugin makes a note of this in the variable **`$denied`**, which at the end
+    contains the number of nonreadable directories. If **`$verbose`** does not equal
+    zero, the plugin sends all lines received by **`du`** to STDOUT for debugging
+    purposes. **`chomp`** removes the end of line from the just-processed line called
+    in **`$_`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the line reporting the total size—identified by the text **`total`** at
+    the end of the line of output—the plugin extracts the displayed number using the
+    regular expression in the parentheses. This amount is what **`$1`** now contains.
+    If there is a match, **`last`** terminates the **`while`** loop, and then the
+    **`close`** function closes the file handle correctly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 25.1 Splitting up the Command Line With **`Getopt::Long`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The module **`Getopt::Long`** provides a function, **`GetOptions`**, that simplifies
+    the fragmentation of the command line in the style of many GNU programs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The instruction **`qw(:conf ig no_ignore_case)`** configures the behavior of
+    **`GetOptions`** so that a distinction is made between upper and lower case.**`qw(:config
+    bundling)`** allows short options to be combined, as is normal for older Unix
+    and GNU programs; instead of **`-a -b -c`**, the user can write **`-abc`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the **`GetOptions`** option, you enumerate all the options of the plugin
+    and pass a reference to a variable for each option. The variables used in the
+    call of **`GetOptions`** had to be pre-declared because of the **`use strict`**
+    parameter (e. g., with **`my $what = ";`**). This stores the arguments that have
+    been passed on the command line with the corresponding option. The string on the
+    left side defines under what name the option can be called. An option listed as
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: can be called as **`-P`** **``*`path`*``**, **`--path`** **``*`path`*``**, **`--path=`****``*`path`*``**,
+    and also as **`--directory=`****``*`path`*``**. All long forms can also be abbreviated,
+    as long as the abbreviation is unambiguous. Examples of this are **`--pf`** **``*`path`*``**,
+    **`--pa`** **``*`path`*``**, or **`--dir=`****``*`path`*``**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The instruction **`=s`** at the end states that the argument, which in this
+    case is of the type string (**`s`**), must follow the option. Alternatives are
+    **`i`**(integer), **`o`** (Perl integer, i.e., including octal and hexadecimal
+    numbers), and **`f`** (floating-point decimal). If a colon is used instead of
+    the equals sign, the argument is optional.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A plus sign following the option name, as in **v |****`verbose+`**, allows
+    the option to be specified multiple times on the command line. Each time it is
+    used, the variable is incremented. If the user selects the option **`--verbose`**,
+    **`$verbose`** will contain the value **`1`**, but if he selects **`--verbose
+    --verbose`** (or **`--verbose`** **-v**), it will contain **`2`**, and so on.
+    If you include the plus sign in combination with the colon (e. g., **`d|debug:+`**),
+    the user can assign an integer to the variable when running the command: **`--debug=5`**
+    sets the variable **`$debug`** to **`5`**. If he calls just **`--debug`**, **`$debug`**
+    will only have the value **`1`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When calling **`GetOptions`** you should always check to see whether an error
+    occurs, for instance through an error condition. In Perl this is written as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: In case of error, the Developer Guidelines demand that the reason for termination
+    must be specified, along with a short online help. For this, we need to use the
+    Perl Online Documentation and the module **`Pod::Usage`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[296](#CHP-25-FN-1)]) The plugin is available on the author's homepage at
+    [http://linux.swobspace.net/projects/nagios/perl-nagios-plugins.html](http://linux.swobspace.net/projects/nagios/perl-nagios-plugins.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[297](#CHP-25-FN-2)]) Other parameters are required for the online help functions
+    of the module, which we will not use here. We will use the module **`Pod::Usage`**
+    instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 25.2 The Perl Online Documentation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Perl Online Documentation (POD) is a simple markup language, which is based
+    on conventional man pages. It enables you to include the documentation for a Perl
+    script in the script itself. The command **`perldoc`** **``*`script`*``** provides
+    this ready-formatted:^([[298](#ftn.CHP-25-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Each instruction begins with an equals sign as the first character in the line,
+    as can be seen in the headings **`=head1`** to **`=head4`**. The lines before
+    and after an instruction are kept empty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The instruction **`=over 4`** starts a listing with an indentation of four characters,
+    in which only **`=item`** may be used as a POD instruction. **`=cut`** ends the
+    inserted documentation, after which you can continue with normal Perlcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Perl script may contain as many POD sections as you wish. Usually the important
+    ones are set at the beginning of the script, and less important ones, such as
+    the details for **`SEE ALSO-`**, **`AUTHOR-`** or **`BUGS`** for the man pages,
+    are placed at the end.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Apart from **`perldoc`** there are programs such as **`pod2html`**, **`pod2latex`**,
+    **`pod2man`**, **`pod2text`**, and **`pod2usage`**, which display the inline documentation
+    in other formats. It should be pointed out, however, that POD basically displays
+    an inline man page, and a man page converted to HTML will still have the appearance
+    of a man page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The individual sections of a man page are described by **`man man;`** important
+    ones are **`NAME`**, **`SYNOPSIS`**, **`DESCRIPTION`**, **`OPTIONS`**, **`FILES`**,
+    **`SEE ALSO`**, **`BUGS`**, and **`AUTHOR`**. If the plugin requires more extensive
+    documentation, you can add your own sections. Syntax and construction of the POD
+    format are described in detail by **`man perlpod`**, while **`man perldoc`** explains
+    how the embedded help can be extracted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 25.2.1 The module Pod::Usage
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**`Pod::Usage`** as a component of the Perl core distribution displays the
+    inline documentation either in full or in extracts, and ends the script with a
+    predefined exit code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can specify an additional text, such as a note on the incorrect use of the
+    plugin, with the switch **`-msg`**, which is displayed before the inline documentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`-exitval`** determines the return code with which the script ends. For a
+    Nagios plugin, the constant UNKNOWN, which is imported with **`Nagios:: Plugin`**,
+    should always be used here.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`-verbose`** defines the amount of documentation displayed. With the value
+    **`0, pod2usage`** generates a short usage message. For **`-verbose ⇒ 1`** the
+    output includes the sections **`SYNOPSIS`**, **`OPTIONS`**, and **`ARGUMENTS`**,
+    and for **`-verbose ⇒ 2`** it includes the entire documentation. A special role
+    is played by the value **`99`**. This is used, together with the **`-sections`**
+    switch, to specify which sections will be shown:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Individual sections are separated with a **`|`** sign. The switch **`-output`**
+    finally defines where the information should end up—to STDOUT for verbose values
+    of **`0`** or **`1`** and to STDERR for for **`2`** and higher. For the output
+    of the complete online help you should therefore set this explicitly (otherwise
+    the user would first have to redirect STDERR to STDOUT in order to be able to
+    see the help):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the plugin you first check whether the **`GetOptions`** fails, for example
+    because an invalid option has been specified. In case of an error, the instruction
+    following **`or`**—in this case **`pod2usage`**—is executed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The return value is then UNKNOWN, since the plugin is used incorrectly. **`-verbose`**
+    is set to **`0`**, since a brief usage message is sufficient in this case. **`-msg`**
+    explains more precisely to the user what he has done wrong; this message is placed
+    before the usage message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the user requests the online help, the entire help text contained in the
+    plugin is displayed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Because **`pod2usage`** normally uses STDERR here, **`-output`** explicitly
+    ensures that the output goes to STDOUT.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To display the version number, **`pod2usage`** can also be used. Many GNU programs
+    include copyright information along with the version number. To do this, you create
+    a POD section **`=head1 LICENSE`** and output this with **`verbose ⇒ 99:`**
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since the output for this verbose level goes to STDERR, you also use **`-output`**
+    here to ensure that the output goes to STDOUT. The **`NAME`** and **`LICENSE`**
+    sections may be located in the plugin file either before or after the **`pod.2-usage`**
+    call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the plugin expects mandatory details—in our case, the path to the directory
+    subtree whose total size should be determined—the parameter is checked for existing
+    values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: If the user calls the plugin without the **`--path`** option, the variable **`$what`**
+    will remain empty and **`pod2usage`** will issue a corresponding message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[298](#CHP-25-FN-3)]) The complete text is contained in the plugin **`check_du.pl`**
+    at [http://linux.swobspace.net/projects/nagios/perl-nagios-plugins.html](http://linux.swobspace.net/projects/nagios/perl-nagios-plugins.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 25.3 Determining Thresholds
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The format of the thresholds, which was discussed in [24.1.5 Specifying thresholds](../Text/ch24.html#specifying_thresholds
+    "24.1.5 Specifying thresholds"), page 557, is not easy to parse, which is why
+    the functions from the module **`Nagios::Plugin`** are a welcome help:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: The method **`set_thresholds`** has the task of setting the thresholds for the
+    **`Nagios::Plugin`** instance **`$np.$warn_threshold`** and **`$crit_threshold`**
+    contain the details that the user passed on to the options **`--warning`** and
+    **`--critical`** on the command line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`check_threshold`** compares the thresholds with the total size of the directory
+    in **`$size`** and stores the return code in the variable **`$result`** (either
+    OK, WARNING, or CRITICAL). This can be used right away in the function **`nagios_exit.Nagios::Plugin`**
+    does all the work of parsing and checking.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 25.4 Implementing Timeouts
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To implement a hard timeout, the function **`alarm()`** is available in C,
+    Perl, and other programming languages, which normally calls the system functon
+    of the same name (see **`man 2 alarm`**). For the Perl **`alarm()`** function,
+    the timeout is specified in seconds:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: The **`alarm($timeout)`** call starts the alarm function, the argument **`0`**
+    for the second call stops it again. The first call should be used before time-intensive
+    processing steps, in network-based plugins before opening sockets, and similar
+    situations where a long delay may occur. A good place is after the command line
+    has been processed via **`GetOptions`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the end of the plugin it is recommended that you reset the alarm. This may
+    not be necessary for standalone programs, but if the Perl plugin is running in
+    the Embedded Perl interpreter, some undesired side effects could result if this
+    step is not taken. By explicitly stopping the alarm, you are certainly on the
+    safe side.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'What happens if the alarm is set off, which means that the timeout has expired?
+    Perl checks whether an accompanying signal handler is installed, and executes
+    it if this is the case. It is recommended that you make use of this possibility
+    and install your own signal handler, so that the plugin behaves in compliance
+    with the Developer Guidelines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: The signal handler—an anonymous subroutine—is assigned the variable **`$SIG{ALRM}`**.
+    The subroutine calls the function **`nagios_die`** from the **`Na-gios::Plugin`**
+    module. In case of a timeout, the plugin will terminate and send back the return
+    code UNKNOWN with a suitable error message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 25.5 Displaying Performance Data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Displaying performance data with **`Nagios::Plugin`** is just as simple as
+    processing thresholds. All you need to do is run the function **`add_perfdata`**
+    with a few parameters, and the rest is handled by **`nagios_exit`** automatically:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: The parameter **`label`** defines the name of the variable. **`value`** contains
+    the measured value, **`uom`** defines the unit of measurements, in this case KB.
+    **`threshold`** expects a threshold object, which is generated with the function
+    **`threshold()`**. The thresholds must already have been set, with **`set_thresholds`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The output is shown automatically when **`nagios_exit`** is run, provided that
+    the performance data were defined before the first **`nagios_exit`** call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **`Nagios::Plugin`** package also contains the module **`Nagios::Plugin::Performance`**,
+    which provides a parser for performance data in **`parse_perf string()`**, which
+    splits up a performance data string. If you are programming addons in Perl that
+    process performance data, you can save yourself a lot of work with this function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 25.6 Configuration Files for Plugins
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A simple plugin can always be configured entirely on the command line. But if
+    you need to incorporate more complex defaults, or if parameters should not appear
+    as arguments in the process list, a configuration file may be of use. The module
+    **`Nagios::Plugin`** enables you to access configuration files in a simple manner—one
+    reason certainly being to encourage plugin programmers to use a uniform format,
+    since this would considerably simplify configuration work for the Nagios admin,
+    who no longer has to get used to different formats for every plugin.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`Nagios::Plugin`** provides an interface for the module **`Config::Tiny`**.
+    The file format corresponds to that of the INI files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'A section begins with an entry in square brackets, in this example **`[math]`**.
+    Everything written before this (in the example here, the variable **`root-property)`**
+    is referred to as *root property*. Instructions are given according to the pattern
+    **``*`parameter=value`*``**. Lines beginning with # and ; are comments; spaces
+    before and after the equals sign are allowed and are simply ignored. More information
+    is provided by the man page **`man Config::Tiny`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Access to the configuration file is made through a **`Config`** object from
+    the module **`Nagios::Plugin::Config`**, which is generated using the **`read()`**
+    method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: At the same time, **`read()`** reads in the configuration file specified. If
+    you omit the path details and call **`read()`** without parameters, the module
+    will search for various configuration files. The exact listing of the search paths
+    is contained in the man page **`man Nagios::Plugin::Config`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although it is conceivable that a single configuration file might be used for
+    all plugins, for reasons of maintenance it is recommended that you set up a separate
+    configuration file for each plugin, each containing an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuration parameters in the **`[math]`** section are now addressed via the
+    construct
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'and for the root properties, _ is used as a section delimiter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Chapter 26. Monitoring Oracle with the Instant Client
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If a specific task requires you to manipulate the STDIN and read the STD-OUT
+    of the external program at the same time, another tool is needed, in the form
+    of the module **`IPC::0pen2`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following chapter will not introduce any finished plugins, but illustrate
+    how you can build your own Oracle plugin, using an example that monitors Oracle.
+    Some plugins do already exist for this DBMS, such as **`check_oracle`**, one of
+    the standard Nagios plugins, or **`check_oracle_writeaccess`**^([[299](#ftn.CHP-26-FN-1)])
+    by Mathias Kettner. But both of them require the normal Oracle client, and most
+    non-Oracle administrators will be out of their depth attempting to install it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Luckily there is an easier solution: For some time now, Oracle has been offering
+    an *instant client*, which drastically reduces the installation work: unpack the
+    zip files, set the variables, and the installation is finished—the command-line
+    tool **`sqlplus`** can be used immediately. The latter can be used in a plugin—just
+    like the Perl script introduced in this chapter does, which sends a request to
+    the Oracle database using **`sqlplus`** and evaluates the response.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 26.1 Installing the Oracle Instant Client
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Even though the instant client has been available only since Oracle version
+    10g, it can be used just as well with older Oracle databases such as 8i or 9i.
+    The software is available in the form of zip files at the Oracle homepage,^([[300](#ftn.CHP-26-FN-2)])
+    provided you have previously registered on the Web site of the company. When downloading,
+    you are asked some additional questions on export conditions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although the software costs nothing, you must observe Oracle's license terms.
+    If your Oracle database is licensed on a CPU basis, you do not need to worry about
+    additional access by another user (Nagios).
+  prefs: []
+  type: TYPE_NORMAL
+- en: For **`sqlplus`** you require two zip files,^([[301](#ftn.CHP-26-FN-3)]) **`instantclient-basic-linux32-10.1.0.3.zip`**
+    and **`instantclient-sqlplus-linux32-10.1.0.3.zip`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **`instantclient-basic`** package, some 31 MB in size, contains all the
+    necessary libraries, and the **`instantclient-sqlplus`** included, only 320 KB
+    in size, contains a short documentation (**`READFR0M_IC.htm`**) as well as the
+    client itself with a further library. It does not matter for the installation
+    where the files are unpacked; in this case we will use **`/usr/local/oracle:`**
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This creates a subdirectory **`instantclient 10_1`**, containing all the required
+    files. After setting two environment variables, the instant client is ready for
+    use:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`LD_LIBRARY_PATH`** ensures first that all shared libraries from the instant
+    client directory are taken into account when programs are run, before the libraries
+    installed system-wide are loaded. **`SQLPATH`** reveals to **`sqlplus`** where
+    it needs to look for the file **`glogin.sql`**. This file makes a number of default
+    settings for accessing the Oracle database, and no adjustments are necessary for
+    our purposes.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[299](#CHP-26-FN-1)]) [http://mathias-kettner.de/nagios_plugins.html](http://mathias-kettner.de/nagios_plugins.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[300](#CHP-26-FN-2)]) [http://www.oracle.com/technology/software/tech/oci/instantclient](http://www.oracle.com/technology/software/tech/oci/instantclient)
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[301](#CHP-26-FN-3)]) Apart from the Linux version introduced here on Intel
+    x86-32 systems, the client is also available for Linux x86-64, Linux Itanium,
+    MAC OS-X, HP-UX (32- and 64-bit, for both PA-RISC and Itanium), Solaris SPARC
+    (32- and 64-bit), Solaris x86-32, AIX 5L (32- and 64-bit), and HP Tru64 UNIX.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 26.2 Establishing a Connection to the Oracle Database
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**`sqlplus`** requires the following details to make contact with the database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: The placeholder **`user`** is replaced by a user who exists in the database,
+    and the password is followed by a forward slash. After the **`@//`** sign comes
+    the host name or IP address, followed by the name of the database to which **`sqlplus`**
+    should make a connection. In the following example we will use the database **`DEMO:`**
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'On the connect you are shown the version of the instant client used (here:
+    **`10.1.0.3.0`**) as well as a note on the version of the Oracle database used,
+    in this case **`8.1.7.0.0`**. The **`quit`** command terminates the connection.
+    If the password is wrong, or if the user does not exist, Oracle explicitly requests
+    the user to enter both again.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 26.3 A Wrapper Plugin for **`sqlplus`**
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To query an Oracle database, **`sqlplus`** is given the appropriate SQL statement
+    via standard input and receives a reply via the standard output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: The switch **`-s`** (*silent*) prevents the output of things like version and
+    copyright, and restricts the reply to the really interesting part. If the query
+    fails, as above, the text merely points out the error that has occurred. **`sqlplus`**
+    itself only returns an error status as a return value if the error occurred when
+    using the client itself, otherwise it just returns OK (command executed). This
+    is why **`sqlplus`** cannot be used directly by Nagios. Instead, a *wrapper* must
+    be written around the actual query which evaluates the reply of the database,
+    which in the above example generates a CRITICAL return value appropriate for Nagios
+    from the **`ERROR`** reply, and adds a short one-line reply.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`sqlplus`** can in principle be run with any scripting language that enables
+    the text response to be interpreted. Since this is one of the strengths of Perl,
+    we shall use this language for the wrapper plugin—but it could also be written
+    in a shell like Bash; the basic principle is always the same.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 26.3.1 How the wrapper works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The wrapper plugin is constructed on the following lines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`sqlplus`** receives an SQL statement on the standard input, and the plugin
+    retrieves the result from the standard output. Wrappers can be built around (almost)
+    any program which does not provide sensible return values, but "hides" the result
+    in text.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Perl itself does not provide a direct way of checking standard input and output
+    at the same time. But Perl would not be Perl if there were not a module created
+    specifically for this purpose. **`ICP:: Open2`**^([[302](#ftn.CHP-26-FN-4)]) fullfils
+    exactly this purpose:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The routine **`open2`** requires two file handles. Their names, **`WRITETO`**
+    and **`READFROM`**, describe the interaction from the point of view of the wrapper,
+    and seen from **`open2`** its behavior is exactly the opposite: **`open2`** reads
+    from its standard input (**`WRITETO`**) and writes to its output (**`READFROM`**),
+    where no distinction is made between standard output and error output. The third
+    argument is a program with its complete path, followed by any number of arguments
+    for the program, each separated from the next by a comma.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With the **`WRITETO`** file handle, the desired commands are sent with **`print`**.
+    Each line for **`sqlplus`** should end here with a correct end-of-line (Perl:
+    **`''\n`**''). With the **`while (<READFR0M>)`** construction, Perl reads line
+    by line from the standard (or error) output until there are no more lines. Then
+    **`close ()`** closes the two file handles.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using **`IPC::Open2`** can cause problems, however: it is conceivable that
+    the program used (in our case, **`sqlplus`**) gets blocked, because it continues
+    processing a part of the input only after it has written something. If the plugin
+    only processes the output once all the input is completed, you have the classic
+    situation of a deadlock. For this reason you must make sure there are no blocks
+    when reading and writing. Luckily the danger of this happening in our simple application
+    is minimal.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 26.3.2 The Perl plugin in detail
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A good Perl script starts with the instructions **`use strict`** and **`use
+    warnings`**. Then all variables must be declared, and in other ways Perl is very
+    particular with syntax.^([[303](#ftn.CHP-26-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`$ipath`** contains the path to the directory in which the instant client
+    is located, and **`$sqlplus`** has the absolute path to the program **`sqlplus`**.
+    The connect string was already explained above. With the hash **`%ENV`**, the
+    script sets the two required environment variables. Hash entries are referenced
+    by Perl with **`$ENV{''`***`variable name''`***`}`**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The database query statement is defined for this example in a variable:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: The instruction **`.=`** appends the following text to that already existing
+    in **`$select`**. The SQL statement therefore selects, from the Oracle system
+    table **`all_tables`**, which contains all the names of existing tables, the column
+    **`table_name`**, in this case with an additional restriction to the table name
+    **`VERSION`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next step the plugin opens the standard input and output with the routine
+    **`open2:`**
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The **`sqlplus`** switch **`-s`** prevents unnecessary connect output. For
+    adequate error processing, we embed the **`open2`** command in an **`eval`** environment:
+    since **`open2`** aborts directly if there is an error, the programmer would otherwise
+    have no chance to display a sensible error message. If it is needed, the error
+    output is obtained in the **`eval`** environment through **`$@`**. The **`die`**
+    function outputs this and aborts the execution of the Perl script.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The only thing remaining now is to send the SQL statement, with **`print WRITETO`**,
+    to **`sqlplus`** (afterwards we close down the standard input **`WRITETO`**, to
+    be on the safe side) and evaluate the output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`while <READFR0M>`** reads the output line by line. The contents of the current
+    line are contained in **`$_`**. With your first attempts, we recommend that you
+    have the output of all lines displayed with **`print $_;`** so that you can determine
+    whether everything is working.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If this is the case, the actual logic can be expanded: if the table name sought
+    exists in the database, Oracle first displays the column header, then (separated
+    by **`hyphens`**) the actual contents, that is, the name of the table being sought:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If such a table does not exist in the database, the response is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: If an error occurs in the query, perhaps because the column sought, **`table_name`**,
+    is missing or the table **`all_tables`** does not exist, **`sqlplus`** returns
+    a message containing the keyword **`ERROR`**, as in the initial example in [26.3
+    A Wrapper Plugin for sqlplus](../Text/ch26s03.html "26.3 A Wrapper Plugin for
+    sqlplus").
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The **`while`** loop now looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The search instruction **`/^VERSION/i`** contains two special features: the
+    **`i`** at the end ensures that the comparison ignores upper or lower case. The
+    **`^`** at the beginning ensures that the text **`VERSION`** must stand at the
+    beginning of the line. If the SQL statement sent by Oracle was incorrect, the
+    error message repeats this first—but then the text **`VERSION`** is *not* at the
+    beginning of the line.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the plugin finds the sought table name **`VERSION`** in the response sent,
+    an OK text message is displayed and it terminates with the return value **`0`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the database issues **`no rows selected`** or even an **`ERROR`**, however,
+    the script feeds Nagios a corresponding reply and terminates with **`exit`** and
+    the corresponding return value. If none of the three search patterns match, a
+    return value must also be accounted for; otherwise the script will end with the
+    status **`0`**, and Nagios will announce: "Everything in order." Here we take
+    advantage of the **`UNKNOWN`** status, which is actually reserved for error processing
+    for the plugin.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Armed with this background knowledge, it should not be too difficult to write
+    your own Oracle plugin. Its use here is not restricted to read access: provided
+    you have write permissions for the user in question, you can just as well formulate
+    SQL statements with UPDATE, INSERT, or DELETE, and evaluate the answer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[302](#CHP-26-FN-4)]) The module is included in the standard package of Perl
+    5.8.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[303](#CHP-26-FN-5)]) Some programmers get very irritated, especially at
+    the start, because Perl reacts very pettily with **`use strict`**. Without this
+    instruction, variables do not need to be declared. One single typing error in
+    a variable name is sometimes sufficient to keep you searching for hours to find
+    out why the value at a certain position is always **`0`**.
+  prefs: []
+  type: TYPE_NORMAL

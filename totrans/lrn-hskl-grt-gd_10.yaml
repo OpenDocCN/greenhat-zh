@@ -1,0 +1,744 @@
+- en: Chapter 10. Functionally Solving Problems
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we’ll look at a couple of interesting problems, and we’ll think
+    about how to solve them as elegantly as possible using functional programming
+    techniques. This will give you the opportunity to flex your newly acquired Haskell
+    muscles and practice your coding skills.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reverse Polish Notation Calculator
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Usually, when we work with algebraic expressions in school, we write them in
+    an infix manner. For instance, we write `10 - (4 + 3) * 2`. Addition (`+`), multiplication
+    (`*`), and subtraction (`-`) are infix operators, just like the infix functions
+    in Haskell (`` + `elem` ``, and so on). As humans, we can parse this form easily
+    in our minds. The downside is that we need to use parentheses to denote precedence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another way to write algebraic expressions is to use *reverse polish notation*,
+    or *RPN*. In RPN, the operator comes after the numbers, rather than being sandwiched
+    between them. So, instead of writing `4 + 3`, we write `4 3 +`. But how do we
+    write expressions that contain several operators? For example, how would we write
+    an expression that adds `4` and `3` and then multiplies that by `10`? It’s simple:
+    `4 3 + 10 *`. Because `4 3 +` is equivalent to `7`, that whole expression is the
+    same as `7 10 *`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Calculating RPN Expressions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To get a feel for how to calculate RPN expressions, think of a stack of numbers.
+    We go over the expression from left to right. Every time a number is encountered,
+    put it on top of the stack (*push* it onto the stack). When we encounter an operator,
+    we take the two numbers that are on top of the stack (*pop* them), use the operator
+    with those two, and then push the resulting number back onto the stack. When we
+    reach the end of the expression, we should be left with a single number that represents
+    the result (assuming the expression was well formed).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s see how we would calculate the RPN expression `10 4 3 + 2 * -`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We push `10` onto the stack, so the stack consists of `10`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The next item is `4`, so we push it onto the stack as well. The stack is now
+    `10, 4`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We do the same with `3`, and the stack is now `10, 4, 3`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We encounter an operator: `+`. We pop the two top numbers from the stack (so
+    now the stack is just `10`), add those numbers together, and push that result
+    to the stack. The stack is now `10, 7`.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We push `2` to the stack, and the stack becomes `10, 7, 2`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We encounter another operator. We pop `7` and `2` off the stack, multiply them,
+    and push that result to the stack. Multiplying `7` and `2` produces `14`, so the
+    stack is now `10, 14`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, there’s a `-`. We pop `10` and `14` from the stack, subtract `14` from
+    `10`, and push that back.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The number on the stack is now `-4`. Because there are no more numbers or operators
+    in our expression, that’s our result!
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802634.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: So, that’s how to calculate an RPN expression by hand. Now let’s think about
+    how to make a Haskell function to do the same thing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writing an RPN Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Our function will take a string that contains an RPN expression as its parameter
+    (like `"10 4 3 + 2 * -"`) and give us back that expression’s result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'What would the type of that function be? We want it to take a string as a parameter
+    and produce a number as its result. Let’s say that we want the result to be a
+    floating-point number of double precision, because we want to include division
+    as well. So its type will probably be something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: It really helps to first think what the type declaration of a function should
+    be before dealing with the implementation. In Haskell, a function’s type declaration
+    tells you a whole lot about the function, due to the very strong type system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802636.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When implementing a solution to a problem in Haskell, it can be helpful to
+    consider how you did it by hand. For our RPN expression calculation, we treated
+    every number or operator that was separated by a space as a single item. So it
+    might help us if we start by breaking a string like `"10 4 3 + 2 * -"` into a
+    list of items, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next up, what did we do with that list of items in our head? We went over it
+    from left to right and kept a stack as we did that. Does that process remind you
+    of anything? In [I Fold You So](ch05s05.html "I Fold You So") in [I Fold You So](ch05s05.html
+    "I Fold You So"), you saw that pretty much any function where you traverse a list
+    element by element, and build up (*accumulate*) some result—whether it’s a number,
+    a list, a stack, or something else—can be implemented with a fold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case, we’re going to use a left fold, because we go over the list from
+    left to right. The accumulator value will be our stack, so the result from the
+    fold will also be a stack (though as we’ve seen, it will contain only one item).
+  prefs: []
+  type: TYPE_NORMAL
+- en: One more thing to think about is how we will represent the stack. Let’s use
+    a list and keep the top of our stack at the head of the list. Adding to the head
+    (beginning) of a list is much faster than adding to the end of it. So if we have
+    a stack of, say, `10, 4, 3`, we’ll represent that as the list `[3,4,10]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we have enough information to roughly sketch our function. It’s going to
+    take a string like `"10 4 3 + 2 * -"` and break it down into a list of items by
+    using `words`. Next, we’ll do a left fold over that list and end up with a stack
+    that has a single item (in this example, `[-4]`). We take that single item out
+    of the list, and that’s our final result!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a sketch of that function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: We take the expression and turn it into a list of items. Then we fold over that
+    list of items with the folding function. Notice the `[]`, which represents the
+    starting accumulator. The accumulator is our stack, so `[]` represents an empty
+    stack, which is what we start with. After getting the final stack with a single
+    item, we apply `head` to that list to get the item out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All that’s left now is to implement a folding function that will take a stack,
+    like `[4,10]`, and an item, like `"3"`, and return a new stack `[3,4,10]`. If
+    the stack is `[4,10]` and the item is `"*"`, then the function will need to return
+    `[40]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before we write the folding function, let’s turn our function into point-free
+    style, because it has a lot of parentheses that are kind of freaking me out:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: That’s much better.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The folding function will take a stack and an item and return a new stack.
+    We’ll use pattern matching to get the top items of a stack and to pattern match
+    against operators like `"*"` and `"-"`. Here it is with the folding function implemented:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: We laid this out as four patterns. The patterns will be tried from top to bottom.
+    First, the folding function will see if the current item is `"*"`. If it is, then
+    it will take a list like `[3,4,9,3]` and name its first two elements `x` and `y`,
+    respectively. So in this case, `x` would be `3`, and `y` would be `4`. `ys` would
+    be `[9,3]`. It will return a list that’s just like `ys`, but with `x` and `y`
+    multiplied as its head. With this, we pop the two topmost numbers off the stack,
+    multiply them, and push the result back onto the stack. If the item is not `"*"`,
+    the pattern matching will fall through, `"+"` will be checked, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the item is none of the operators, we assume it’s a string that represents
+    a number. If it’s a number, we just apply `read` to that string to get a number
+    from it and return the previous stack but with that number pushed to the top.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the list of items `["2","3","+"]`, our function will start folding from
+    the left. The initial stack will be `[]`. It will call the folding function with
+    `[]` as the stack (accumulator) and `"2"` as the item. Because that item is not
+    an operator, it will be read and then added to the beginning of `[]`. So the new
+    stack is now `[2]`. The folding function will be called with `[2]` as the stack
+    and `"3"` as the item, producing a new stack of `[3,2]`. Then it’s called for
+    the third time with `[3,2]` as the stack and `"+"` as the item. This causes these
+    two numbers to be popped off the stack, added together, and pushed back. The final
+    stack is `[5]`, which is the number that we return.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s play around with our function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Cool, it works!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding More Operators
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One nice thing about this solution is that it can be easily modified to support
+    various other operators. They don’t even need to be binary operators. For instance,
+    we can make an operator `"log"` that just pops one number off the stack and pushes
+    back its logarithm. We can also make operators that operate on several numbers,
+    like `"sum"`, which pops off all the numbers and pushes back their sum.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s modify our function to accept a few more operators.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `/` is division, of course, and `**` is exponentiation. With the logarithm
+    operator, we just pattern match against a single element and the rest of the stack,
+    because we need only one element to perform its natural logarithm. With the sum
+    operator, we return a stack that has only one element, which is the sum of the
+    stack so far.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: I think that making a function that can calculate arbitrary floating-point RPN
+    expressions and has the option to be easily extended in 10 lines is pretty awesome.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This RPN calculation solution is not really fault tolerant. When given input
+    that doesn’t make sense, it might result in a runtime error. But don’t worry,
+    you’ll learn how to make this function more robust in [Chapter 14](ch14.html "Chapter 14. For
+    a Few Monads More").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Heathrow to London
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Suppose that we’re on a business trip. Our plane has just landed in England,
+    and we rent a car. We have a meeting really soon, and we need to get from Heathrow
+    Airport to London as fast as we can (but safely!).
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are two main roads going from Heathrow to London, and a number of regional
+    roads cross them. It takes a fixed amount of time to travel from one crossroad
+    to another. It’s up to us to find the optimal path to take so that we get to our
+    meeting in London on time. We start on the left side and can either cross to the
+    other main road or go forward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802638.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: As you can see in the picture, the quickest path from Heathrow to London in
+    this case is to start on main road B, cross over, go forward on A, cross over
+    again, and then go forward twice on B. If we take this path, it takes us 75 minutes.
+    Had we chosen any other path, it would take longer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our job is to make a program that takes input that represents a road system
+    and prints out the quickest path across it. Here’s what the input would look like
+    for this case:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: To mentally parse the input file, read it in threes and mentally split the road
+    system into sections. Each section is composed of road `A`, road `B`, and a crossing
+    road. To have it neatly fit into threes, we say that there’s a last crossing section
+    that takes 0 minutes to drive over. That’s because we don’t care where we arrive
+    in London, as long as we’re in London, mate!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Just as we did when considering the RPN calculator problem, we’ll solve this
+    problem in three steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Forget Haskell for a minute and think about how to solve the problem by hand.
+    In the RPN calculator section, we first figured out that when calculating an expression
+    by hand, we keep a sort of stack in our minds and then go over the expression
+    one item at a time..
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Think about how we’re going to represent our data in Haskell. For our RPN calculator,
+    we decided to use a list of strings to represent our expression..
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Figure out how to operate on that data in Haskell so that we produce a solution.
+    For the calculator, we used a left fold to walk over the list of strings, while
+    keeping a stack to produce a solution.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Calculating the Quickest Path
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: So how do we figure out the quickest path from Heathrow to London by hand? Well,
+    we can just look at the whole picture and try to guess what the quickest path
+    is and hope our guess is correct. That solution works for very small inputs, but
+    what if we have a road that has 10,000 sections? Yikes! We also won’t be able
+    to say for certain that our solution is the optimal one; we can just say that
+    we’re pretty sure. So, that’s not a good solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a simplified picture of our road system:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802640.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Can we figure out the quickest path to the first crossroads (the first dot on
+    `A`, marked `A1`) on road `A`? That’s pretty trivial. We just see if it’s faster
+    to go directly forward on `A` or to go forward on `B` and then cross over. Obviously,
+    it’s faster to go forward via `B` and then cross over, because that takes 40 minutes,
+    whereas going directly via `A` takes 50 minutes. What about crossroads `B1`? We
+    see that it’s a lot faster to just go directly via `B` (incurring a cost of 10
+    minutes), because going via `A` and then crossing over would take us 80 minutes!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now we know the quickest path to `A1`: Go via `B` and then cross over. We’ll
+    say that’s path `B, C` with a cost of 40 minutes. We also know the quickest path
+    to `B1`: Go directly via `B`. So that’s a path consisting just of `B` for 10 minutes.
+    Does this knowledge help us at all if we want to know the quickest path to the
+    next crossroads on both main roads? Gee golly, it sure does!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s see what the quickest path to `A2` would be. To get to `A2`, we’ll either
+    go directly to `A2` from `A1` or we’ll go forward from `B1` and then cross over
+    (remember that we can only move forward or cross to the other side). And because
+    we know the cost to `A1` and `B1`, we can easily figure out the best path to `A2`.
+    It takes us 40 minutes to get to `A1` and then 5 minutes to get from `A1` to `A2`,
+    so that’s path `B, C, A`, for a cost of 45\. It takes us only 10 minutes to get
+    to `B1`, but then it would take an additional 110 minutes to go to `B2` and then
+    cross over! So obviously, the quickest path to `A2` is `B, C, A`. In the same
+    way, the quickest way to `B2` is to go forward from `A1` and then cross over.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Maybe you’re asking yourself, “But what about getting to `A2` by first crossing
+    over at `B1` and then going forward?” Well, we already covered crossing from `B1`
+    to `A1` when we were looking for the best way to `A1`, so we don’t need to take
+    that into account in the next step as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have the best path to `A2` and `B2`, we can repeat this until we
+    reach the end. Once we have calculated the best paths for `A4` and `B4`, the one
+    that takes less time is the optimal path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So in essence, for the second section, we just repeat the step we did at first,
+    but we take into account the previous best paths on `A` and `B`. We could say
+    that we also took into account the best paths on `A` and on `B` in the first step—they
+    were both empty paths with a cost of 0 minutes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In summary, to get the best path from Heathrow to London, we do this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We see what the best path to the next crossroads on main road `A` is. The two
+    options are going directly forward or starting at the opposite road, going forward
+    and then crossing over. We remember the cost and the path.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We use the same method to find the best path to the next crossroads on main
+    road `B` and remember that.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We see if the path to the next crossroads on `A` takes less time if we go from
+    the previous `A` crossroads or if we go from the previous `B` crossroads and then
+    cross over. We remember the quicker path. We do the same for the crossroads opposite
+    of it.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We do this for every section until we reach the end.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once we’ve reached the end, the quicker of the two paths that we have is our
+    optimal path.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: So, in essence, we keep one quickest path on the `A` road and one quickest path
+    on the `B` road. When we reach the end, the quicker of those two is our path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We now know how to figure out the quickest path by hand. If you had enough time,
+    paper, and pencils, you could figure out the quickest path through a road system
+    with any number of sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Representing the Road System in Haskell
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: How do we represent this road system with Haskell’s data types?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Thinking back to our solution by hand, we checked the durations of three road
+    parts at once: the road part on the `A` road, its opposite part on the `B` road,
+    and part `C`, which touches those two parts and connects them. When we were looking
+    for the quickest path to `A1` and `B1`, we dealt with the durations of only the
+    first three parts, which were 50, 10, and 30\. We’ll call that one section. So
+    the road system that we use for this example can be easily represented as four
+    sections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`50, 10, 30`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`5, 90, 20`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`40, 2, 25`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`10, 8, 0`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'It’s always good to keep our data types as simple as possible (although not
+    any simpler!). Here’s the data type for our road system:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is as simple as it gets, and I have a feeling it will work perfectly for
+    implementing our solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`Section` is a simple algebraic data type that holds three integers for the
+    durations of its three road parts. We introduce a type synonym as well, saying
+    that `RoadSystem` is a list of sections.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We could also use a triple of `(Int, Int, Int)` to represent a road section.
+    Using tuples instead of making your own algebraic data types is good for some
+    small, localized stuff, but it’s usually better to make a new type for more complex
+    representations. It gives the type system more information about what’s what.
+    We can use `(Int, Int, Int)` to represent a road section or a vector in 3D space,
+    and we can operate on those two, but that allows us to mix them up. If we use
+    `Section` and `Vector` data types, then we can’t accidentally add a vector to
+    a section of a road system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our road system from Heathrow to London can now be represented like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: All we need to do now is implement the solution in Haskell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writing the Optimal Path Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: What should the type declaration for a function that calculates the quickest
+    path for any given road system be? It should take a road system as a parameter
+    and return a path. We’ll represent a path as a list as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s introduce a `Label` type that’s just an enumeration of `A`, `B`, or `C`.
+    We’ll also make a type synonym called `Path`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Our function, which we’ll call `optimalPath`, should have the following type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If called with the road system `heathrowToLondon`, it should return the following
+    path:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: We’re going to need to walk over the list with the sections from left to right
+    and keep the optimal path on `A` and optimal path on `B` as we go along. We’ll
+    accumulate the best path as we walk over the list, left to right. What does that
+    sound like? Ding, ding, ding! That’s right, a *left fold*!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When doing the solution by hand, there was a step that we repeated over and
+    over. It involved checking the optimal paths on `A` and `B` so far and the current
+    section to produce the new optimal paths on `A` and `B`. For instance, at the
+    beginning, the optimal paths were `[]` and `[]` for `A` and `B`, respectively.
+    We examined the section `Section 50 10 30` and concluded that the new optimal
+    path to `A1` was `[(B,10),(C,30)]` and the optimal path to `B1` was `[(B,10)]`.
+    If you look at this step as a function, it takes a pair of paths and a section
+    and produces a new pair of paths. So its type is this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s implement this function, because it’s bound to be useful:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: What’s going on here? First, we calculate the optimal time on road A based on
+    the best so far on `A`, and we do the same for `B`. We do `sum (map snd pathA)`,
+    so if `pathA` is something like `[(A,100),(C,20)]`, `timeA` becomes `120`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`forwardTimeToA` is the time that it would take to get to the next crossroads
+    on `A` if we went there directly from the previous crossroads on `A`. It equals
+    the best time to our previous `A` plus the duration of the `A` part of the current
+    section.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802642.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '`crossTimeToA` is the time that it would take if we went to the next `A` by
+    going forward from the previous `B` and then crossing over. It’s the best time
+    to the previous `B` so far plus the `B` duration of the section plus the `C` duration
+    of the section.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We determine `forwardTimeToB` and `crossTimeToB` in the same manner.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know the best way to `A` and `B`, we just need to make the new paths
+    to `A` and `B` based on that. If it’s quicker to go to `A` by just going forward,
+    we set `newPathToA` to be `(A, a):pathA`. Basically, we prepend the `Label A`
+    and the section duration `a` to the optimal path on `A` so far. We say that the
+    best path to the next `A` crossroads is the path to the previous `A` crossroads
+    and then one section forward via `A`. Remember that `A` is just a label, whereas
+    `a` has a type of `Int`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why do we prepend instead of doing `pathA ++ [(A, a)]`? Well, adding an element
+    to the beginning of a list is much faster than adding it to the end. This means
+    that the path will be the wrong way around once we fold over a list with this
+    function, but it’s easy to reverse the list later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If it’s quicker to get to the next `A` crossroads by going forward from road
+    `B` and then crossing over, `newPathToA` is the old path to `B` that then goes
+    forward and crosses to `A`. We do the same thing for `newPathToB`, except that
+    everything is mirrored.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we return `newPathToA` and `newPathToB` in a pair.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s run this function on the first section of `heathrowToLondon`. Because
+    it’s the first section, the best paths on `A` and `B` parameter will be a pair
+    of empty lists.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Remember that the paths are reversed, so read them from right to left. From
+    this, we can read that the best path to the next `A` is to start on `B` and then
+    cross over to `A`. The best path to the next `B` is to just go directly forward
+    from the starting point at `B`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When we do `timeA = sum (map snd pathA)`, we’re calculating the time from the
+    path on every step. We wouldn’t need to do that if we implemented `roadStep` to
+    take and return the best times on `A` and `B`, along with the paths themselves.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that we have a function that takes a pair of paths and a section, and produces
+    a new optimal path, we can easily do a left fold over a list of sections. `roadStep`
+    is called with `([], [])` and the first section, and returns a pair of optimal
+    paths to that section. Then it’s called with that pair of paths and the next section,
+    and so on. When we’ve walked over all the sections, we’re left with a pair of
+    optimal paths, and the shorter of them is our answer. With this in mind, we can
+    implement `optimalPath`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: We left fold over `roadSystem` (remember that it’s a list of sections) with
+    the starting accumulator being a pair of empty paths. The result of that fold
+    is a pair of paths, so we pattern match on the pair to get the paths themselves.
+    Then we check which one of these was quicker and return it. Before returning it,
+    we also reverse it, because the optimal paths so far were reversed due to us choosing
+    prepending over appending.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s test this!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is the result that we were supposed to get! It differs from our expected
+    result a bit, because there’s a step `(C,0)` at the end, which means that we cross
+    over to the other road once we’re in London. But because that crossing doesn’t
+    take any time, this is still the correct result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting a Road System from the Input
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have the function that finds an optimal path, so now we just need to read
+    a textual representation of a road system from the standard input, convert it
+    into a type of `RoadSystem`, run that through our `optimalPath` function, and
+    print the resulting path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let’s make a function that takes a list and splits it into groups of
+    the same size. We’ll call it `groupsOf`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For a parameter of `[1..10]`, `groupsOf 3` should result in the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, it’s a standard recursive function. Doing `groupsOf 3 [1..10]`
+    equals the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When the recursion is done, we get our list in groups of three. And here’s
+    our main function, which reads from the standard input, makes a `RoadSystem` out
+    of it, and prints out the shortest path:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: First, we get all the contents from the standard input. Then we apply `lines`
+    to our contents to convert something like `"50\n10\n30\n ...` to something cleaner,
+    like `["50","10","30" ...`. We then map `read` over that to convert it to a list
+    of numbers. We apply `groupsOf 3` to it so that we turn it to a list of lists
+    of length 3\. We map the lambda `(\[a,b,c] -> Section a b c)` over that list of
+    lists.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you can see, the lambda just takes a list of length 3 and turns it into
+    a section. So `roadSystem` is now our system of roads, and it even has the correct
+    type: `RoadSystem` (or `[Section]`). We apply `optimalPath` to that, get the path
+    and the total time in a nice textual representation, and print it out.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We save the following text in a file called *paths.txt*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then we feed it to our program like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Works like a charm!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can use your knowledge of the `Data.Random` module to generate a much longer
+    system of roads, which you can then feed to the code we just wrote. If you get
+    stack overflows, you can change `foldl` to `foldl''` and `sum` to `foldl'' (+)
+    0`. Alternatively, try compiling it like this before running it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Including the `O` flag turns on optimizations that help prevent functions such
+    as `foldl` and `sum` from causing stack overflows.
+  prefs: []
+  type: TYPE_NORMAL

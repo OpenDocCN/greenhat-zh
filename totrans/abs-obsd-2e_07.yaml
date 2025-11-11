@@ -1,0 +1,1165 @@
+- en: Chapter 7. Root, and How to Avoid It
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*The root of all evil*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*is never far from your touch.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*sudo saves your life.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages1616079.png) The security of most
+    Unix-like operating systems has long been considered coarsely grained. One superuser,
+    root, can do anything. Other users are lowly sharecroppers who endure the shackles
+    root places upon them. The problem is that root doesn’t have many shackles and
+    it can’t individualize the ones that it has very well. Some operating systems
+    use POSIX access control lists (ACLs) to provide more fine-grained access controls,
+    but these are difficult to configure correctly.^([[15](#ftn.id411230)])'
+  prefs: []
+  type: TYPE_IMG
+- en: While it’s true that Unix-like operating systems don’t have detailed access
+    controls, the fact is that most people don’t bother using the controls that *do*
+    exist. Fortunately, you can combine groups and permissions to handle almost any
+    problem securely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Root Password
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The root user owns the system and has absolute power over every piece of hardware
+    as well as certain actions that require absolute control, such as manipulating
+    the kernel and changing authentication sources. You need root permissions to perform
+    these tasks. You can log in as root, use `su(1)` to become root, or use `sudo(8)`
+    (discussed later this chapter) to get certain root-level privileges without actually
+    using the root account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To use the root password, you can either log in as root at a console login
+    prompt or, if you belong to the group `wheel`, log in as yourself and use the
+    switch user command `su(1)`. Of the two, I recommend using `su`; it logs who uses
+    it and can be used when you are logged in from a remote system. To use `su`, run
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: When prompted, enter the root password. Now check your current user ID with
+    `id(1)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the UID is 0, which means that you now own the system, and I
+    do mean *own* it. Consider every keystroke carefully. Carelessness could return
+    your hard drive to its primordial, unformatted state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Only users in the group `wheel` can use the root password to become root via
+    `su`. If you give the root password to users without physical console access and
+    who are in the `wheel` group, they can enter `su` and the root password as many
+    times as they want, and it won’t work. (But anyone can use the root account and
+    password at the system console, so don’t make a habit of blabbing the root password
+    all around the office.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Requiring group membership to use the root password leads to the question, “Who
+    needs root access?” Root is required to configure many parts of OpenBSD, but once
+    the system is running properly, you can greatly decrease or discontinue your use
+    of root. For any remaining tasks that absolutely require root, use `sudo`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Groups
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One of the simplest ways to reduce the need for root is with groups. Unix-like
+    operating systems classify users into groups, which consist of accounts of users
+    who perform similar administrative functions. You can, for example, define a group
+    named `dnsadmins` and add the accounts of every user who edits DNS zone files
+    to that group. Then, by setting the permissions of the zone files and their directory
+    appropriately, members of that group can edit zone files and reload the name server
+    without the root password. The good news is that you could create such a group
+    for almost any system function, and thereby avoid giving those users root access.
+    Using groups in this manner is a powerful and often neglected system administration
+    tool. I use groups for administering my own servers—just because I *can* use root
+    doesn’t mean that I *want* to use root. Users can identify the groups they belong
+    to by using `id(1)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: My UID is 1000, and my username is `mwlucas`. My GID, the primary group ID,
+    is also 1000 and is also named `mwlucas`. I’m also in the `wheel` and `dnsadmin`
+    groups.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/group File
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The file */etc/group* contains all group information. Each line contains four
+    colon-delimited fields: the group name, password, ID number, and list of members.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The *group name* is a human-friendly name for the group. This group is named
+    `wheel`. Group names are completely arbitrary and you could call a group `lickspittles`
+    if you want, but you should choose a name that gives an idea of the group’s purpose.
+    While you might remember that `lickspittles` can edit the company web page, will
+    that group name make any sense to your coworkers? If it does, you probably need
+    better coworkers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second field, the group password, was a great theory that became an appalling
+    practice once exposed to the real world. Modern Unix-like systems don’t do anything
+    with the group password, but the field remains because old programs expect to
+    find something here. The asterisk is just a placeholder to placate such software.
+    (While OpenBSD could eliminate this field, some enterprises share */etc/group*
+    across operating systems.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third field gives the group’s unique numeric GID. Many programs use the
+    GID rather than the name to identify a group. The `wheel` group has a GID of 0\.
+    The maximum GID is 232, or 4,294,967,296.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Last is a comma-separated list of all users in the group. As you can see, the
+    users `root`, `mwlucas`, and `pkdick` are all members of the `wheel` group. To
+    add users to a group, add their username to this list, but remember that no */etc/group*
+    entry can contain more than 200 users or be longer than 1024 characters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating Groups
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In order to create a new group, you need a name and GID number. OpenBSD usually
+    assigns the next free GID to a newly created group with GIDs below 1000 reserved
+    for OpenBSD. Programs included in OpenBSD that need a dedicated group ID use one
+    below 1000\. Software installed via the OpenBSD package system or ports (discussed
+    in [Chapter 13](ch13.html "Chapter 13. Software Management")) assigns dedicated
+    GIDs in the 500 to 1000 range. GIDs for user accounts start at 1000 and go up.
+    If you create groups for special roles, start at a high GID so that these administrative
+    groups will be obviously different from user accounts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Groups, Unprivileged Users, and Group Permissions
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The simplest way to create a new group is to use `adduser` to create an unprivileged
+    user for the role, and use that user’s group to assign file permissions. As with
+    any other unprivileged user, give this account the home directory */var/empty*
+    and a shell of `nologin`. Do not add this user to any other groups (especially
+    not `wheel`). Lastly, let `adduser` disable the account. Sure, the shell will
+    prevent logins, but an extra layer of defense won’t hurt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you have an administrative user and a group, you can assign file ownership.
+    A user and a group own every file. To view the permissions on existing files,
+    including hidden ones, use `ls -la`. (If you’ve forgotten how file ownership and
+    permissions work, read `ls(1)` and `chmod(1)`.) Many system administrators focus
+    on file ownership and owner permissions, invest somewhat less time on worldwide
+    permissions, and gloss over group permissions as if they don’t exist. Look closely
+    at the sample DNS files that follow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This directory contains two files. The file *rndc.key* can be read and written
+    by the user `mwlucas`; anyone in the `wheel` group can read *rndc.key*; and no
+    one else can even read it. The file *michaelwlucas.com.db* can be read or written
+    by the user `mwlucas` or anyone in the group `wheel`, but others can only read
+    it. If you’re in the group `mwlucas`, you can edit this file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Say I want my junior DNS administrators to be able to edit zone files but not
+    be able to edit the `rndc(8)` configuration. The file permissions are correct,
+    but I need the files to be owned by my DNS administrative user, `dnsadmin`. I
+    also want my DNS admins to be able to create new zone files, so they need write
+    permissions on the directory. Here’s how I would do that:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, these files are now owned by the user `dnsadmin` and the group
+    `dnsadmin`. Anyone in the group `dnsadmin` should be able to edit *michaelwlucas.com.db*
+    without using the root password. The user `named`—the unprivileged user for the
+    DNS server—should be able to read both files. Add your DNS administrators to the
+    `dnsadmin` group in */etc/group*, and they should no longer need the root password
+    to do their jobs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This model has limitations, however. While your junior admins can’t accidentally
+    edit *rndc.conf*, they can delete and replace it. It would be better to put that
+    file in a directory they can read but not edit. And while our DNS administrators
+    might think that they need the root password to restart the name server, they’re
+    wrong. Use `rndc(8)` to manage the DNS server; other tasks can be managed via
+    `cron(8)` or through `sudo`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hiding Root with sudo
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: While the proper use of groups can almost eliminate the need for root access
+    to edit files, that won’t help with commands that can be run only by root. You
+    could set up a cron job to reload the name server each day at midnight, but every
+    piece of software occasionally needs a manual restart. Because root is an all-or-nothing
+    affair, people who have one minor task to perform have traditionally needed the
+    root password.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD includes `sudo(8)` and its associated tools, which implement fine-grained
+    access control for commands that can be run only by particular users. When configured
+    properly, `sudo` lets normal users run specific programs as other users, including
+    root. Configured improperly, `sudo` permits full root access. I’ll explain a basic
+    `sudo` setup that covers almost all uses, but remember that many more combinations
+    are possible. And don’t be afraid to read `sudo(8)`, `sudoers(5)`, and the documentation
+    at the `sudo` home page (*[http://www.gratisoft.us/sudo/](http://www.gratisoft.us/sudo/)*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why Use sudo?
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `sudo` tool provides benefits beyond fine-grained privilege control. Every
+    command run via `sudo` is logged, making it very easy to track who did what. The
+    senior sysadmin can change the root password and not give it out, even to people
+    who have root-level access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `sudo` configuration file is designed to be shared across multiple systems,
+    so one `sudo` policy can cover your entire network and every operating system.
+    Admittedly, you’ll have trouble using a single `sudo` configuration on operating
+    systems with wildly unique directory layouts, such as Mac OS X, but you can easily
+    share one configuration among OpenBSD, other BSDs, Linux, and even OpenSolaris
+    or AIX.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sudo Disadvantages
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The most common problem with `sudo` is getting your users to accept it. People
+    who have historically had access to the root account think they “lose something”
+    by working through `sudo`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The key to overcoming this is to give users access only to what’s required to
+    perform the tasks for which they’re responsible. A junior administrator who complains
+    about insufficient privileges has either overreached his responsibilities or needs
+    more privileges. One sure way to discover what people actually do is to implement
+    a minimal `sudo` permissions scheme and wait for complaints. If no one complains,
+    they’re not working very hard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The configuration syntax for `sudo` can be confusing because its configuration
+    doesn’t closely resemble any other configuration file, and getting everything
+    right can be difficult at first. The configuration file is actually well suited
+    to its purpose, however. Once you understand it, adjusting privileges is quick
+    and easy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: More seriously, a faulty `sudo` setup can create the appearance of security
+    while leaving gaps for a user to become root. Be sure to test `sudo` every time
+    you make a change, and avoid the common configuration mistakes I document here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some users will do their best to push the limits of their access, for no other
+    reason than to see if they can outsmart you. These users are best managed with
+    a combination of careful configuration, administrative policy, and a cricket bat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An Overview of the sudo Software
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `sudo` program is a `setuid` root wrapper that can run commands as any other
+    user. Use `sudo` by giving it the command you want to run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `sudo` software compares the desired command (in this case, `/etc/rc.d/named
+    restart`) to its internal list of permissions and privileges. If the configuration
+    file allows that particular user to run that command as root, `sudo` runs it as
+    root. And, because root can run any command as any user, `sudo` can also run commands
+    as any arbitrary system user. You can use this fact to grant any user the ability
+    to run specific commands as chosen users; for example, administrators of certain
+    database servers must frequently run commands as the database user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `sudo` software is a suite with four pieces. The first piece is the actual
+    `sudo(8)` command, the `setuid` root wrapper. The second is the configuration
+    file */etc/sudoers*, which describes who may run which commands as what user.
+    (*/etc/sudoers* is fully documented in `sudoers(5)`.) Third is the `visudo(8)`
+    command that opens */etc/sudoers* in an editor and checks the configuration file
+    syntax before exiting. Finally, the `sudoedit(8)` program is specifically for
+    editing files as another user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The visudo(8) Command
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If */etc/sudoers* contains incorrect syntax, `sudo` will not run. If you rely
+    on `sudo` to provide root-level access to the system and you break your *sudoers*
+    file, you’ll lock yourself out of the root account and lose the ability to correct
+    your error. That is bad.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fortunately, the `visudo(8)` program provides some protection against this sort
+    of error by locking */etc/sudoers* so that only one person can edit the configuration
+    at a time. It then opens */etc/sudoers* in a text editor (vi by default, but it
+    respects the `$EDITOR` environment variable). Make your changes and save your
+    work. When you exit the editor, `visudo` should parse the file for syntactic correctness.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If `visudo` detects an error, it prints out the offending line number and asks
+    what you want to do.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, I’ve made an error near line 34\. I can reedit the file to fix the error,
+    quit without saving any changes, or force `visudo` to accept this file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Press the E key, and `visudo` should return you to the editor. Go to the offending
+    line, fix your error, save the file, and exit the editor again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enter the X key, and `visudo` should quit and revert the configuration file
+    to its original state. Your changes will be lost, but that might be acceptable.
+    It’s better to have an old, working configuration than a new, broken one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pressing Q forces `visudo` to accept the file, busted syntax and all. If `sudo`
+    can’t parse */etc/sudoers*, it will immediately exit. Essentially, you’re telling
+    `visudo` to break `sudo` until you log in as root to fix the problem. If you think
+    you understand */etc/sudoers* better than `visudo` does, you’re probably wrong.
+    Even if you’re right, you’re wrong.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `visudo` program doesn’t guarantee that the configuration will do what you
+    desire, only that the configuration parses and is valid. A properly formatted
+    configuration that declares “No one may do anything via `sudo`” is perfectly acceptable
+    to `visudo`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/sudoers File
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The */etc/sudoers* file determines who may run which commands as which users.
+    Never edit */etc/sudoers* directly, even if you think you know exactly what change
+    you want to make. Always use `visudo` to change */etc/sudoers*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The various *sudoers* sample configurations you’ll find are usually very complicated,
+    as they demonstrate all the nifty things `sudo` can do. At this point, however,
+    you want to do only simple, boring things, like giving particular users access
+    to run specific commands. And the bare syntax is very simple. Every *sudoers*
+    rule follows this format:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The *`username`* is the username of the user who may execute the command, an
+    alias for usernames, or a system group.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The *`host`* is the hostname of the system this rule applies to. You can share
+    */etc/sudoers* across multiple systems. This entry permits per-host rules.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The *`command`* space lists the commands this rule applies to. You must list
+    the full path to each command, or `sudo` will not recognize it. If this weren’t
+    a requirement, some untrustworthy soul could just adjust his `$PATH` to access
+    renamed versions of commands.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For example, suppose I trust user `sbaxter` to run any command, on any system,
+    as root. I use the keyword `ALL` to match all possible options for host and command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: As the lead sysadmin, I should know which duties I have assigned `sbaxter`,
+    and exactly which commands he needs. Suppose `sbaxter` is my DNS minion. I control
+    the actual editing of zone files with group permissions, but there are many legitimate
+    occasions for him to stop, restart, or otherwise slap around the name server program.
+    I want him to use the system script */etc/rc.d/named* for this task, and this
+    *sudoers* entry gives him permission to use the script on all machines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: If I share this file across several machines, it’s likely that many of those
+    machines don’t even run a name server. To restrict my minion’s access to only
+    the DNS server, I’ll change the host field.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then again, `sbaxter` is the administrator of the email server `mail1`. This
+    server is his responsibility, so he needs to run any command. I can set entirely
+    different privileges for him on the mail server and still use the same *sudoers*
+    file on all the systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Yes, `sbaxter` can use `visudo` on `mail1`, but he already has full privileges
+    on that machine. I’m comfortable with this, as he knows I’ll hold him responsible
+    for any downtime.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multiple Entries in a sudoers Field
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Separate multiple entries in a single field with commas. For example, after
+    a while, I get tired of `sbaxter` asking me to mount NFS shares on the DNS server,
+    so I add `mount_nfs` to his privileges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: He can now mount his own blasted NFS shares and leave me alone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running Commands As Non-root Users
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Specify a username in parentheses before a command to say that the user can
+    use `sudo` to run commands as a particular user. For example, my user `dwsmith`
+    is a database administrator and needs to run any command as the user `_postgresql`
+    on the database server `db1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `_postgresql` user can’t successfully run critical system programs like
+    `fdisk` and `newfs`, but it can restart the database, back it up, and perform
+    other database-administration tasks. By choosing a specific user, a specific machine,
+    and a specific command, you can define arbitrarily complex *sudoers* policies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Long Lines
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: If you have several commands, usernames, or hosts on a line, that line might
+    become uncomfortably long. Use a backslash (`\`) to indicate that a rule continues
+    on the next line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Use as many lines as you like to make your *sudoers* file easier to manage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: /etc/sudoers Aliases
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take several machines with different roles, add multiple sysadmins with differing
+    privilege levels, and your */etc/sudoers* file will quickly become complicated.
+    When you have a few users with identical privileges and long lists of commands
+    that you would like them to access, maintaining consistency in each user’s privilege
+    list becomes tedious. *Aliases* simplify these tasks and make */etc/sudoers* much
+    more comprehensible, which makes your life easier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An alias is a group of users, hosts, or commands. You can use aliases anywhere
+    you would normally use users, hosts, or commands. You might, for example, create
+    an alias called `DATABASE_COMMANDS` that contains all of the commands your database
+    administrators need to run using `sudo`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s take database administrator `dwsmith` and use an alias to specify his
+    commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: This alias might not seem to save us much, but suppose we have several database
+    administrators. We could create an alias called `DBAs` that includes all of them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Suddenly, this one line represents multiple rules. All of the database admins
+    have identical `sudo` privileges, and when you discover that you need to give
+    them access to an additional command, add the command to the alias, and it immediately
+    becomes available to every database admin. There’s no tedious and error-prone
+    copying of entries between users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You must define an alias before you can use it, so aliases normally appear at
+    the top of the file. Each alias is made up of a label identifying its type, a
+    name, and a list of its items. Alias types include user aliases, run as aliases,
+    host aliases, and command aliases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: User Aliases
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: A *user alias* is a group of users, and it is labeled with the string `User_Alias`.
+    Put only usernames in this alias.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the user alias `DBAs` contains the users `dwsmith` and `kkrusch`. By using
+    the alias in my *sudoers* rules instead of the usernames, I ensure that these
+    users receive exactly the same `sudo` privileges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can use system groups in user aliases by prefacing them with a percent sign
+    (`%`). I might create a group in */etc/groups* called `databaseteam`, and make
+    `dwsmith` and `kkrusch` part of that team.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Perhaps the most common usage of this is giving the `wheel` group unlimited
+    `sudo` access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: This rule permits the `wheel` group to run any command as root through `sudo`.
+    It doesn’t change the group members’ privileges, but gives them access via `sudo`.
+    This is convenient for running single commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Run as Aliases
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: A *run as* alias is a list of users that other users can run commands as. For
+    example, on certain application servers, the database admins need to run commands
+    both as the database owner `_postgresql` and as the web server owner `www`. If
+    the user must run commands as multiple users, however, you would need a separate
+    *sudoers* entry for each target user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A run as alias lets you group these accounts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can now write a single rule allowing users to run commands as either `_postgresql`
+    or `www`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Host Aliases
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'A *host alias* is a list of hosts, defined as hostnames, IP addresses, or network
+    blocks. Label host aliases with the string `Host_Alias`. Here are examples of
+    all host alias types:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: I warn elsewhere in this book about how security rules based on a hostname are
+    vulnerable to DNS spoofing attacks. An intruder can’t spoof the machine’s local
+    hostname, however, so you can safely use the hostname from */etc/myname* in *sudoers*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Command Aliases
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: A *command alias* is a list of commands. For example, you might have a command
+    alias that includes all of the commands needed to back up the system or restore
+    from a backup. They’re labeled with the string `Cmnd_Alias`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can tell a command alias to include everything in a particular directory
+    by using a wildcard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can also list partial command names. For example, most of PostgreSQL’s
+    commands begin with the `pg_` prefix. To give a user access to these commands,
+    use a wildcard like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you find yourself writing command aliases that include paths like */sbin/**,
+    stop and reconsider, because you’re essentially giving the user unlimited root
+    access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Aliases in /etc/sudoers
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Use an alias exactly as you would normally list the user, command, or hostname.
+    In the previous examples, I defined the user alias `DBAs`, the run as alias `APPOWNER`,
+    the host alias `DB`, and the command alias `APPCOMMANDS`. Here’s how they might
+    be used:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the user group `DBAs` can run any command on any server in the `DB` group,
+    as any user. The members of the group own the servers, and if they screw them
+    up, it’s not my problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Well, this attitude sounds good, but the truth is that when they destroy the
+    server, I must get involved. Even if it’s not my fault that they drove the database
+    server into the ditch, it *is* my problem. I must lock down the commands that
+    they can run, restricting them to only the commands in the `APPCOMMANDS` alias.
+    So, the `DBAs` group can now run any command in `APPCOMMANDS` on the `DB` servers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then I discover that my database admins are either cleverer or dafter than I
+    thought. They run certain database commands as root, creating log files owned
+    by root. The unprivileged database user `_postgresql` cannot write to these log
+    files, and so the application server crashes. Fixing this requires changing the
+    permissions on those log files, but the database admins do not have permission
+    to run `chown`. If I give them the ability to change the permissions on arbitrary
+    files, I might as well just give them root access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To keep this from happening again, I restrict their privileges so they can run
+    their commands only as the application unprivileged users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Everyone in the `DBAs` group can run any command in `APPCOMMANDS`, as any user
+    in `APPOWNER`, on any server in `DB`. I can change their access by adding entries
+    to the various aliases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Without aliases, what would this rule look like?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: That’s ugly, and it does exactly the same thing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you name your aliases well, you’ll find rules easier to understand. While
+    these example aliases are fairly short, I’ve used aliases with up to 20 members.
+    The resulting rules are appalling without aliases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Some of the permissions granted by `sudo` in this case are unnecessary. For
+    example, the unprivileged web server user doesn’t need to run the various PostgreSQL
+    utilities, and if `www` did try to run the database, nothing much would happen.
+    If you don’t like this, make two separate rules. Either way, it’s tighter security
+    than giving database administrators the root password.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Nesting Aliases
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'You can include aliases in aliases. Here, I combine two user aliases into a
+    single alias for my application administrators:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Alias Naming Conventions
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'It’s traditional, but not mandatory, to give aliases names in all capital letters
+    to help differentiate them from users, hosts, and so on. And though it’s valid
+    syntax, it’s best to avoid naming aliases after users or hosts. Here’s an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: This would quickly drive me batty.^([[16](#ftn.id365199)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also reuse alias names if they are for different types of aliases. For
+    example, the following is perfectly legal, but perfectly offensive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you do this, anyone who must debug your `sudo` configuration will curse your
+    name. Even if you consider being cursed a job perk, this naming scheme makes your
+    phone ring at inconvenient times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changing sudo’s Default Behavior
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You can customize `sudo`’s behavior, or its behavior for certain users, hosts,
+    or aliases, with the `Defaults` field. For example, one feature of `sudo` is that
+    if you enter the wrong password, it insults you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: I typed my password incorrectly. `sudo` insulted me and offered me a chance
+    to enter my password again. If I enter the wrong password three times, `sudo`
+    exits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Insulting the user is just fine in an open source environment, but if you’re
+    in a company, someone will complain to management. You can either go to sensitivity
+    training or proactively disable insults by adding the following line to *sudoers*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `Defaults` statement indicates that the following item affects one or more
+    `sudo` defaults. The `insults` option controls insulting the user. The exclamation
+    point (`!`) is a negation symbol. By putting an exclamation point in front of
+    the option, you turn off the feature. The system will no longer insult users when
+    they demonstrate that they cannot type as well as my pet rat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can override defaults globally or on a per-alias basis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overriding Defaults per Host
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'To override the defaults on a per-host basis, use an `@` symbol after `Defaults`
+    and give either a host or a host alias. Here, I want to insult users who can’t
+    type their password on `caddis` or on a machine in the alias `APPSERVERS`, while
+    leaving insults disabled for all other servers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: This lets me enable or disable functions for any combination of servers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overriding Defaults per User
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: To change `sudo` defaults on a per-user basis, use a `%` and the user or user
+    alias.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: It doesn’t matter where `lasnyder` logs in—I’m going to insult him, as well
+    as the users in the `DBAs` alias. But database administrators are used to poor
+    treatment by their software, and to not insult them would confuse and disappoint
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overriding Defaults per Command
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: You can also change how `sudo` behaves on a command-by-command basis by putting
+    an exclamation point between `Defaults` and the command list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: Anyone who tries to use `newfs(8)` or `fsck(8)` (discussed in [Chapter 8](ch08.html
+    "Chapter 8. Disks and Filesystems")) and cannot type their password needs insulting.
+    The application administration commands might not merit insults, but I can always
+    claim it was an oversight.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overriding Defaults per Run As
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Lastly, you can change the defaults based on who the command is being run as.
+    Use a right angle bracket (`<`) to indicate changing behavior for a run as alias.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: If a user runs a command as `_postgresql`, or as any user in the `APPOWNER`
+    run as alias, and types his password incorrectly, he gets insulted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the rest of this chapter, we’ll use `Default` widely. Please assume that
+    each section includes the text “Restrict this as necessary by user, host, command,
+    or run as.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: sudo and the Environment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Certain environment variables can cause problems. For example, `$HOME` is an
+    obvious one—a user cannot create files in another user’s home directory. Others,
+    such as `LD_LIBRARY_PATH`, can cause endless annoyance as well as security issues,
+    as applications try to link against the wrong libraries. The `sudo` program can
+    remove suspicious environment variables, completely reset the user’s environment,
+    or be configured to preserve the original user’s environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `env_reset` *sudoers* option is set by default. It purges all environment
+    variables except `LOGNAME`, `SHELL`, `USER`, `USERNAME`, and anything beginning
+    with `SUDO_`. You can change this behavior by disabling `env_reset`, but I strongly
+    recommend against disabling environment purging.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead of letting users blindly carry all the random garbage in their environment
+    along with them, create a list of necessary and safe environment variables that
+    they can retain. You’ll see examples in OpenBSD’s default *sudoers* file using
+    the `env_keep` option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: The OpenBSD team deems these environment variables safe to pass into a new user
+    account. The `+=` means “add these to the existing list of items to keep.” The
+    environment variables themselves are in quotation marks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you need to pass your SSH environment around your servers, you can use `scp(1)`
+    and `sftp(1)` to move files to other servers. Read the documentation, create a
+    list of approved environment variables, and add an entry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The ability to copy files to other servers probably should be restricted to
+    people in a certain group. Sysadmins might need to copy files to other servers,
+    but many other users don’t need this access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using sudo
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that you know how to set `sudo` permissions, let’s see how to actually use
+    it. First, let’s tell `sudo` that your account has permission to run any command.
+    (You should have root access on your test machine, at least, so this won’t be
+    a security issue.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The easy way to accomplish this is to uncomment the *sudoers* entry allowing
+    `wheel` members access to all commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: As a user in `wheel`, check your `sudo` permissions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: When `sudo` asks for a password, enter your own password, not the root password.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `-l` flag tells `sudo` to show you which privileges and settings you have.
+    In response, `sudo` parses */etc/sudoers* and spits out all of the settings that
+    apply to your account on this system. Any host-specific limitations are already
+    evaluated and do not appear.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sudo Password Caching
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When you enter your password correctly, `sudo` records the time, and for the
+    next five minutes, it remembers that you’ve recently entered your password and
+    will work without requiring you to enter it again. After five minutes, you must
+    reauthenticate. This simplifies work when entering a series of `sudo` commands,
+    but it times out reasonably quickly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can tell `sudo` to forget your cached password by running `sudo -k`. You
+    can control the number of minutes before `sudo` asks for the password again with
+    the `timestamp_timeout` option in *sudoers*. Here, we tell `sudo` to not time
+    out the password for 10 minutes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you set the timeout to 0, `sudo` always asks for a password. If you set it
+    to a negative value, `sudo` caches the password throughout this login session.
+    You must run `sudo -k` to make `sudo` forget that you entered your password.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running Commands Under sudo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To run commands via `sudo`, just put the command name after the `sudo` command.
+    For example, here’s how you would run `tcpdump` via `sudo`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `sudo` command should prompt for your password. Enter it correctly, and
+    `tcpdump` should run as root.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also run commands that include arguments under `sudo`. For example,
+    I use `tail -f` to view the end of a log file and show new entries as they appear.
+    But some log files are accessible only to root, such as the authentication log
+    and the log that contains detailed `sudo` logs. You can view these logs without
+    becoming root by using `sudo`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can configure *sudoers* to permit any combination of commands and arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running Commands as Other Users
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Earlier, you saw how to give some users permission to run commands as users
+    other than root. Specify the user with the `-u` flag.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you don’t have permission to run that command as that user, you’ll get an
+    error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sudoedit
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'My flunky `sbaxter` needs to edit the *named* configuration file, */etc/named.conf*.
+    Consider this `sudo` configuration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: Looks good, right?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Uh, no.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first problem is that I’m requiring `sbaxter` to use a specific editor.
+    Minimal competence in vi is required for system administrators, but I don’t want
+    to force him to use a specific editor to do his day-to-day job. Also, many editors
+    offer shell escapes. While most people are aware of escaping to a shell in vi,
+    emacs has a shell escape as well. If my flunky can escape to a shell while running
+    an editor as root, he gains root access. This is exactly what I want to avoid.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `sudoedit` feature lets users edit specific files with their preferred editor,
+    or a default chosen by the sysadmin, without working as root.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: The keyword `sudoedit` is followed by a list of the files that the user can
+    edit, thereby permitting the user to change those files without root privileges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The user edits the file by passing a filename to `sudoedit`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: Technically, the user doesn’t edit the actual file; instead, `sudoedit` copies
+    the file to a temporary file owned by the user, and when the user closes the editor,
+    it copies the temporary file to the original location. The user never runs the
+    editor as root.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `sudoedit` keyword uses the editor given by the environment variable `$SUDO_EDITOR`,
+    `$VISUAL`, or `$EDITOR`. Users can set that variable in their shell if they don’t
+    like what the system offers them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Biggest sudo Mistake: Exclusions'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that you know the basics of `sudo`, let’s consider a configuration that
+    trips up even experienced system administrators. Sometimes you want to prevent
+    users from executing specific commands but give them access to every other command.
+    The *sudoers* documentation says that you can do this using the exclamation point
+    (`!`) as a negation character, but that’s not entirely effective. Because this
+    is a popular method, however, I’ll discuss how it works, and then demonstrate
+    how your users automatically get root if you use it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start by defining command aliases that contain the forbidden commands. One popular
+    exclusion is `su`. Another common exclusion is user shells, because if you execute
+    a shell as a user, you become that user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now configure a command alias that excludes those commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: Looks sensible, doesn’t it? And it seems to work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s the catch: Commands are defined by full paths. You’re allowing the user
+    to run any command except for a few specified by full path. All this user needs
+    to do is copy the command to another location and run it.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: Welcome to root!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Negating commands can be bypassed by anyone who understands even the basics
+    of `sudo`, as you’ll find well documented in the `sudo` manual and other literature.
+    People *still* insist on using it to protect production systems. Don’t be one
+    of those people.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sudo Logs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Every `sudo` command is logged to */var/log/secure* by `syslogd`. Each log message
+    contains a timestamp, a username, a terminal, the directory where the command
+    was run, the user the command was run as, and the command used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: By checking the file *secure*, you can track exactly who did what and when.
+    (Send your *syslog* messages to a logging server that your users cannot access
+    to prevent those who screw up from deleting the logs of their screwup.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: I know exactly who broke this system and when. The log entry transforms what’s
+    about to happen from “homicide” to “justifiable manslaughter.” That alone makes
+    `sudo` worth using properly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter has given you some tips on how to avoid screwing up your system
+    accidentally. Now let’s look at ways to really mess up your system, by mucking
+    with disks and filesystems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[15](#id411230)]) I could just say that “I have never seen POSIX ACLs configured
+    correctly,” but personal anecdotal evidence is not proof. Even the dozens of horrifying
+    personal anecdotes I’ve gathered over decades in this business are not proof.
+    Feel free to prove me wrong, but please, do it on *your* server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[16](#id365199)]) Oh, all right—battier. Happy?
+  prefs: []
+  type: TYPE_NORMAL

@@ -1,0 +1,1363 @@
+- en: Chapter 11. Applicative Functors
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Haskell’s combination of purity, higher-order functions, parameterized algebraic
+    data types, and type classes makes implementing polymorphism much easier than
+    in other languages. We don’t need to think about types belonging to a big hierarchy.
+    Instead, we consider what the types can act like and then connect them with the
+    appropriate type classes. An `Int` can act like a lot of things—an equatable thing,
+    an ordered thing, an enumerable thing, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Type classes are open, which means that we can define our own data type, think
+    about what it can act like, and connect it with the type classes that define its
+    behaviors. We can also introduce a new type class and then make already existing
+    types instances of it. Because of that, and because Haskell’s type system allows
+    us to know a lot about a function just by its type declaration, we can define
+    type classes that define very general and abstract behavior.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ve talked about type classes that define operations for seeing if two things
+    are equal and comparing two things by some ordering. Those are very abstract and
+    elegant behaviors, although we don’t think of them as very special, since we’ve
+    been dealing with them for most of our lives. [Chapter 7](ch07.html "Chapter 7. Making
+    Our Own Types and Type Classes") introduced functors, which are types whose values
+    can be mapped over. That’s an example of a useful and yet still pretty abstract
+    property that type classes can describe. In this chapter, we’ll take a closer
+    look at functors, along with slightly stronger and more useful versions of functors
+    called *applicative functors*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Functors Redux
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As you learned in [Chapter 7](ch07.html "Chapter 7. Making Our Own Types and
+    Type Classes"), functors are things that can be mapped over, like lists, `Maybe`s,
+    and trees. In Haskell, they’re described by the type class `Functor`, which has
+    only one type class method: `fmap`. `fmap` has a type of `fmap :: (a -> b) ->
+    f a -> f b`, which says, “Give me a function that takes an `a` and returns a `b`
+    and a box with an `a` (or several of them) inside it, and I’ll give you a box
+    with a `b` (or several of them) inside it.” It applies the function to the element
+    inside the box.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can also look at functor values as values with an added *context*. For instance,
+    `Maybe` values have the extra context that they might have failed. With lists,
+    the context is that the value can actually be several values at once or none.
+    `fmap` applies a function to the value while preserving its context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we want to make a type constructor an instance of `Functor`, it must have
+    a kind of `* -> *`, which means that it takes exactly one concrete type as a type
+    parameter. For example, `Maybe` can be made an instance because it takes one type
+    parameter to produce a concrete type, like `Maybe Int` or `Maybe String`. If a
+    type constructor takes two parameters, like `Either`, we need to partially apply
+    the type constructor until it takes only one type parameter. So we can’t write
+    `instance Functor Either where`, but we *can* write `instance Functor (Either
+    a) where`. Then if we imagine that `fmap` is only for `Either a`, it would have
+    this type declaration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the `Either a` part is fixed, because `Either a` takes only
+    one type parameter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I/O Actions As Functors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'You’ve learned how a lot of types (well, type constructors really) are instances
+    of `Functor`: `[]`, and `Maybe`, `Either a`, as well as a `Tree` type that we
+    created in [Chapter 7](ch07.html "Chapter 7. Making Our Own Types and Type Classes").
+    You saw how you can map functions over them for great good. Now, let’s take a
+    look at the `IO` instance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If some value has a type of, say, `IO String`, that means it’s an I/O action
+    that will go out into the real world and get some string for us, which it will
+    then yield as a result. We can use `<-` in `do` syntax to bind that result to
+    a name. In [Chapter 8](ch08.html "Chapter 8. Input and Output"), we talked about
+    how I/O actions are like boxes with little feet that go out and fetch some value
+    from the outside world for us. We can inspect what they fetched, but after inspecting,
+    we need to wrap the value back in `IO`. Considering this box with feet analogy,
+    you can see how `IO` acts like a functor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s see how `IO` is an instance of `Functor`. When we `fmap` a function over
+    an I/O action, we want to get back an I/O action that does the same thing but
+    has our function applied over its result value. Here’s the code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The result of mapping something over an I/O action will be an I/O action, so
+    right off the bat, we use the `do` syntax to glue two actions and make a new one.
+    In the implementation for `fmap`, we make a new I/O action that first performs
+    the original I/O action and calls its result `result`. Then we do `return (f result)`.
+    Recall that `return` is a function that makes an I/O action that doesn’t do anything
+    but only yields something as its result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The action that a `do` block produces will always yield the result value of
+    its last action. That’s why we use `return` to make an I/O action that doesn’t
+    really do anything; it just yields `f result` as the result of the new I/O action.
+    Check out this piece of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The user is prompted for a line, which we give back, but reversed. Here’s how
+    to rewrite this by using `fmap`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802644.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Just as we can `fmap reverse` over `Just "blah"` to get `Just "halb"`, we can
+    `fmap reverse` over `getLine`. `getLine` is an I/O action that has a type of `IO
+    String`, and mapping `reverse` over it gives us an I/O action that will go out
+    into the real world and get a line and then apply `reverse` to its result. In
+    the same way that we can apply a function to something that’s inside a `Maybe`
+    box, we can apply a function to what’s inside an `IO` box, but it must go out
+    into the real world to get something. Then when we bind it to a name using `<-`.
+    The name will reflect the result that already has `reverse` applied to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The I/O action `fmap (++"!") getLine` behaves just like `getLine`, except that
+    its result always has `"!"` appended to it!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If `fmap` were limited to `IO`, its type would be `fmap :: (a -> b) -> IO a
+    -> IO b`. `fmap` takes a function and an I/O action and returns a new I/O action
+    that’s like the old one, except that the function is applied to its contained
+    result.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you ever find yourself binding the result of an I/O action to a name, only
+    to apply a function to that and call that something else, consider using `fmap`.
+    If you want to apply multiple functions to some data inside a functor, you can
+    declare your own function at the top level, make a lambda function, or, ideally,
+    use function composition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s what happens if we run this with the input `hello there`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `intersperse ''-'' . reverse . map toUpper` function takes a string, maps
+    `toUpper` over it, applies `reverse` to that result, and then applies `intersperse
+    ''-''` to that result. It’s a prettier way of writing the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Functions As Functors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Another instance of `Functor` that we’ve been dealing with all along is `(->)
+    r`. But wait! What the heck does `(->) r` mean? The function type `r -> a` can
+    be rewritten as `(->) r a`, much like we can write `2 + 3` as `(+) 2 3`. When
+    we look at it as `(->) r a`, we can see `(->)` in a slightly different light.
+    It’s just a type constructor that takes two type parameters, like `Either`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But remember that a type constructor must take exactly one type parameter so
+    it can be made an instance of `Functor`. That’s why we can’t make `(->)` an instance
+    of `Functor`; however, if we partially apply it to `(->) r`, it doesn’t pose any
+    problems. If the syntax allowed for type constructors to be partially applied
+    with sections (like we can partially apply `+` by doing `(2+)`, which is the same
+    as `(+) 2`), we could write `(->) r` as `(r ->)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'How are functions functors? Let’s take a look at the implementation, which
+    lies in `Control.Monad.Instances`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'First, let’s think about `fmap`’s type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, let’s mentally replace each `f`, which is the role that our functor instance
+    plays, with `(->) r`. This will let us see how `fmap` should behave for this particular
+    instance. Here’s the result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now we can write the `(->) r a` and `(->) r b` types as infix `r -> a` and
+    `r -> b`, as we normally do with functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Okay, mapping a function over a function must produce a function, just like
+    mapping a function over a `Maybe` must produce a `Maybe`, and mapping a function
+    over a list must produce a list. What does the preceding type tell us? We see
+    that it takes a function from `a` to `b` and a function from `r` to `a` and returns
+    a function from `r` to `b`. Does this remind you of anything? Yes, function composition!
+    We pipe the output of `r -> a` into the input of `a -> b` to get a function `r
+    -> b`, which is exactly what function composition is all about. Here’s another
+    way to write this instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This makes it clear that using `fmap` over functions is just function composition.
+    In a script, import `Control.Monad.Instances`, since that’s where the instance
+    is defined, and then load the script and try playing with mapping over functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can call `fmap` as an infix function so that the resemblance to `.` is clear.
+    In the second input line, we’re mapping `(*3)` over `(+100)`, which results in
+    a function that will take an input, apply `(+100)` to that, and then apply `(*3)`
+    to that result. We then apply that function to `1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just like all functors, functions can be thought of as values with contexts.
+    When we have a function like `(+3)`, we can view the value as the eventual result
+    of the function, and the context is that we need to apply the function to something
+    to get to the result. Using `fmap (*3)` on `(+100)` will create another function
+    that acts like `(+100)`, but before producing a result, `(*3)` will be applied
+    to that result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The fact that `fmap` is function composition when used on functions isn’t so
+    terribly useful right now, but at least it’s very interesting. It also bends our
+    minds a bit and lets us see how things that act more like computations than boxes
+    (`IO` and `(->) r`) can be functors. The function being mapped over a computation
+    results in the same sort of computation, but the result of that computation is
+    modified with the function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802646.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Before we go on to the rules that `fmap` should follow, let’s think about the
+    type of `fmap` once more:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The introduction of curried functions in [Chapter 5](ch05.html "Chapter 5. Higher-Order
+    Functions") began by stating that all Haskell functions actually take one parameter.
+    A function `a -> b -> c` takes just one parameter of type `a` and returns a function
+    `b -> c`, which takes one parameter and returns `c`. That’s why calling a function
+    with too few parameters (partially applying it) gives us back a function that
+    takes the number of parameters that we left out (if we’re thinking about functions
+    as taking several parameters again). So `a -> b -> c` can be written as `a ->
+    (b -> c)`, to make the currying more apparent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the same vein, if we write `fmap :: (a -> b) -> (f a -> f b)`, we can think
+    of `fmap` not as a function that takes one function and a functor value and returns
+    a functor value, but as a function that takes a function and returns a new function
+    that’s just like the old one, except that it takes a functor value as a parameter
+    and returns a functor value as the result. It takes an `a -> b` function and returns
+    a function `f a -> f b`. This is called *lifting* a function. Let’s play around
+    with that idea using GHCi’s `:t` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The expression `fmap (*2)` is a function that takes a functor `f` over numbers
+    and returns a functor over numbers. That functor can be a list, a `Maybe`, an
+    `Either String`, or anything else. The expression `fmap (replicate 3)` will take
+    a functor over any type and return a functor over a list of elements of that type.
+    This is even more apparent if we partially apply, say, `fmap (++"!")` and then
+    bind it to a name in GHCi.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can think of `fmap` in two ways:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a function that takes a function and a functor value and then maps that function
+    over the functor value
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As a function that takes a function and lifts that function so it operates on
+    functor values
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Both views are correct.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The type `fmap (replicate 3) :: (Functor f) => f a -> f [a]` means that the
+    function will work on any functor. What it will do depends on the functor. If
+    we use `fmap (replicate 3)` on a list, the list’s implementation for `fmap` will
+    be chosen, which is just `map`. If we use it on `Maybe a`, it will apply `replicate
+    3` to the value inside the `Just`. If it’s `Nothing`, it stays `Nothing`. Here
+    are some examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Functor Laws
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: All functors are expected to exhibit certain kinds of properties and behaviors.
+    They should reliably behave as things that can be mapped over. Calling `fmap`
+    on a functor should just map a function over the functor—nothing more. This behavior
+    is described in the *functor laws*. All instances of `Functor` should abide by
+    these two laws. They aren’t enforced by Haskell automatically, so you need to
+    test them yourself when you make a functor. All the `Functor` instances in the
+    standard library obey these laws.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Law 1
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The first functor law states that if we map the `id` function over a functor
+    value, the functor value that we get back should be the same as the original functor
+    value. Written a bit more formally, it means that `fmap id = id`. So essentially,
+    this says that if we do `fmap id` over a functor value, it should be the same
+    as just applying `id` to the value. Remember that `id` is the identity function,
+    which just returns its parameter unmodified. It can also be written as `\x ->
+    x`. If we view the functor value as something that can be mapped over, the `fmap
+    id = id` law seems kind of trivial or obvious.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s see if this law holds for a few values of functors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Looking at the implementation of `fmap` for `Maybe`, for example, we can figure
+    out why the first functor law holds:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: We imagine that `id` plays the role of the `f` parameter in the implementation.
+    We see that if we `fmap id` over `Just x`, the result will be `Just (id x)`, and
+    because `id` just returns its parameter, we can deduce that `Just (id x)` equals
+    `Just x`. So now we know that if we map `id` over a `Maybe` value with a `Just`
+    value constructor, we get that same value back.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Seeing that mapping `id` over a `Nothing` value returns the same value is trivial.
+    So from these two equations in the implementation for `fmap`, we find that the
+    law `fmap id = id` holds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Law 2
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The second law says that composing two functions and then mapping the resulting
+    function over a functor should be the same as first mapping one function over
+    the functor and then mapping the other one. Formally written, that means `fmap
+    (f . g) = fmap f . fmap g`. Or to write it in another way, for any functor value
+    `x`, the following should hold: `fmap (f . g) x = fmap f (fmap g x)`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802648.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: If we can show that some type obeys both functor laws, we can rely on it having
+    the same fundamental behaviors as other functors when it comes to mapping. We
+    can know that when we use `fmap` on it, there won’t be anything other than mapping
+    going on behind the scenes and that it will act like a thing that can be mapped
+    over—that is, a functor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We figure out how the second law holds for some type by looking at the implementation
+    of `fmap` for that type and then using the method that we used to check if `Maybe`
+    obeys the first law. So, to check out how the second functor law holds for `Maybe`,
+    if we use `fmap (f . g)` over `Nothing`, we get `Nothing`, because calling `fmap`
+    with any function over `Nothing` returns `Nothing`. If we call `fmap f (fmap g
+    Nothing)`, we get `Nothing`, for the same reason.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Seeing how the second law holds for `Maybe` if it’s a `Nothing` value is pretty
+    easy. But how about if it’s a `Just` value? Well, if we use `fmap (f . g) (Just
+    x)`, we see from the implementation that it’s implemented as `Just ((f . g) x)`,
+    which is `Just (f (g x))`. If we use `fmap f (fmap g (Just x))`, we see from the
+    implementation that `fmap g (Just x)` is `Just (g x)`. Ergo, `fmap f (fmap g (Just
+    x))` equals `fmap f (Just (g x))`, and from the implementation, we see that this
+    equals `Just (f (g x))`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you’re a bit confused by this proof, don’t worry. Be sure that you understand
+    how function composition works. Many times, you can intuitively see how these
+    laws hold because the types act like containers or functions. You can also just
+    try them on a bunch of different values of a type and be able to say with some
+    certainty that a type does indeed obey the laws.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Breaking the Law
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let’s take a look at a pathological example of a type constructor being an
+    instance of the `Functor` type class but not really being a functor, because it
+    doesn’t satisfy the laws. Let’s say that we have the following type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `C` here stands for counter. It’s a data type that looks much like `Maybe
+    a`, but the `Just` part holds two fields instead of one. The first field in the
+    `CJust` value constructor will always have a type of `Int`, and it will be some
+    sort of counter. The second field is of type `a`, which comes from the type parameter,
+    and its type will depend on the concrete type that we choose for `CMaybe a`. Let’s
+    play with our new type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: If we use the `CNothing` constructor, there are no fields. If we use the `CJust`
+    constructor, the first field is an integer and the second field can be any type.
+    Let’s make this an instance of `Functor` so that each time we use `fmap`, the
+    function is applied to the second field, whereas the first field is increased
+    by 1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is kind of like the instance implementation for `Maybe`, except that when
+    we do `fmap` over a value that doesn’t represent an empty box (a `CJust` value),
+    we don’t just apply the function to the contents; we also increase the counter
+    by 1\. Everything seems cool so far. We can even play with this a bit:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Does this obey the functor laws? In order to see that something doesn’t obey
+    a law, it’s enough to find just one counterexample:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: As the first functor law states, if we map `id` over a functor value, it should
+    be the same as just calling `id` with the same functor value. Our example demonstrates
+    that this is not true for our `CMaybe` functor. Even though it’s part of the `Functor`
+    type class, it doesn’t obey this functor law and is therefore not a functor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since `CMaybe` fails at being a functor even though it pretends to be one, using
+    it as a functor might lead to some faulty code. When we use a functor, it shouldn’t
+    matter if we first compose a few functions and then map them over the functor
+    value or we just map each function over a functor value in succession. But with
+    `CMaybe` it matters, because it keeps track of how many times it has been mapped
+    over. Not cool! If we want `CMaybe` to obey the functor laws, we need to make
+    it so that the `Int` field stays the same when we use `fmap`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At first, the functor laws might seem a bit confusing and unnecessary. But if
+    we know that a type obeys both laws, we can make certain assumptions about how
+    it will act. If a type obeys the functor laws, we know that calling `fmap` on
+    a value of that type will only map the function over it—nothing more. This leads
+    to code that is more abstract and extensible, because we can use laws to reason
+    about behaviors that any functor should have and make functions that operate reliably
+    on any functor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next time you make a type an instance of `Functor`, take a minute to make
+    sure that it obeys the functor laws. You can go over the implementation line by
+    line and see if the laws hold or try to find a counterexample. Once you’ve dealt
+    with enough functors, you will begin to recognize the properties and behaviors
+    that they have in common, and begin to intuitively see if a type obeys the functor
+    laws.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Applicative Functors
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we’ll take a look at applicative functors, which are beefed-up
+    functors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, we have focused on mapping functions that take only one parameter over
+    functors. But what happens when we map a function that takes two parameters over
+    a functor? Let’s take a look at a couple of concrete examples of this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802650.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: If we have `Just 3` and we call `fmap (*) (Just 3)`, what do we get? From the
+    instance implementation of `Maybe` for `Functor`, we know that if it’s a `Just`
+    value, it will apply the function to the value inside the `Just`. Therefore, doing
+    `fmap (*) (Just 3)` results in `Just ((*) 3)`, which can also be written as `Just
+    (3 *)` if we use sections. Interesting! We get a function wrapped in a `Just`!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are some more functions inside functor values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: If we map `compare`, which has a type of `(Ord a) => a -> a -> Ordering`, over
+    a list of characters, we get a list of functions of type `Char -> Ordering`, because
+    the function `compare` gets partially applied with the characters in the list.
+    It’s not a list of `(Ord a) => a -> Ordering` function, because the first `a`
+    applied was a `Char`, and so the second `a` must decide to be of type `Char`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We see how by mapping “multiparameter” functions over functor values, we get
+    functor values that contain functions inside them. So now what can we do with
+    them? For one, we can map functions that take these functions as parameters over
+    them, because whatever is inside a functor value will be given to the function
+    that we’re mapping over it as a parameter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: But what if we have a functor value of `Just (3 *)` and a functor value of `Just
+    5`, and we want to take out the function from `Just (3 *)` and map it over `Just
+    5`? With normal functors, we’re out of luck, because they support only mapping
+    normal functions over existing functors. Even when we mapped `\f -> f 9` over
+    a functor that contained functions, we were just mapping a normal function over
+    it. But we can’t map a function that’s inside a functor value over another functor
+    value with what `fmap` offers us. We could pattern match against the `Just` constructor
+    to get the function out of it and then map it over `Just 5`, but we’re looking
+    for a more general and abstract approach that works across functors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Say Hello to Applicative
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Meet the `Applicative` type class, in the `Control.Applicative` module. It
+    defines two functions: `pure` and `<*>`. It doesn’t provide a default implementation
+    for either of them, so we need to define them both if we want something to be
+    an applicative functor. The class is defined like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: This simple three-line class definition tells us a lot! The first line starts
+    the definition of the `Applicative` class, and it also introduces a class constraint.
+    The constraint says that if we want to make a type constructor part of the `Applicative`
+    type class, it must be in `Functor` first. That’s why if we know that a type constructor
+    is part of the `Applicative` type class, it’s also in `Functor`, so we can use
+    `fmap` on it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first method it defines is called `pure`. Its type declaration is `pure
+    :: a -> f a`. `f` plays the role of our applicative functor instance here. Because
+    Haskell has a very good type system, and because all a function can do is take
+    some parameters and return some value, we can tell a lot from a type declaration,
+    and this is no exception.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`pure` should take a value of any type and return an applicative value with
+    that value inside it. “Inside it” refers to our box analogy again, even though
+    we’ve seen that it doesn’t always stand up to scrutiny. But the `a -> f a` type
+    declaration is still pretty descriptive. We take a value and we wrap it in an
+    applicative value that has that value as the result inside it. A better way of
+    thinking about `pure` would be to say that it takes a value and puts it in some
+    sort of default (or pure) context—a minimal context that still yields that value.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `<*>` function is really interesting. It has this type declaration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Does this remind you of anything? It’s like `fmap :: (a -> b) -> f a-> f b`.
+    You can think of the `<*>` function as sort of a beefed-up `fmap`. Whereas `fmap`
+    takes a function and a functor value and applies the function inside the functor
+    value, `<*>` takes a functor value that has a function in it and another functor,
+    and extracts that function from the first functor and then maps it over the second
+    one.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Maybe the Applicative Functor
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let’s take a look at the `Applicative` instance implementation for `Maybe`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, from the class definition, we see that the `f` that plays the role of
+    the applicative functor should take one concrete type as a parameter, so we write
+    `instance Applicative Maybe where` instead of `instance Applicative (Maybe a)
+    where`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we have `pure`. Remember that it’s supposed to take something and wrap
+    it in an applicative value. We wrote `pure = Just`, because value constructors
+    like `Just` are normal functions. We could have also written `pure x = Just x`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we have the definition for `<*>`. We can’t extract a function out of
+    a `Nothing`, because it has no function inside it. So we say that if we try to
+    extract a function from a `Nothing`, the result is a `Nothing`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the class definition for `Applicative`, there’s a `Functor` class constraint,
+    which means that we can assume that both of the `<*>` function’s parameters are
+    functor values. If the first parameter is not a `Nothing`, but a `Just` with some
+    function inside it, we say that we then want to map that function over the second
+    parameter. This also takes care of the case where the second parameter is `Nothing`,
+    because doing `fmap` with any function over a `Nothing` will re turn a `Nothing`.
+    So for `Maybe`, `<*>` extracts the function from the left value if it’s a `Just`
+    and maps it over the right value. If any of the parameters is `Nothing`, `Nothing`
+    is the result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now let’s give this a whirl:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: You see how doing `pure (+3)` and `Just (+3)` is the same in this case. Use
+    `pure` if you’re dealing with `Maybe` values in an applicative context (using
+    them with `<*>`); otherwise, stick to `Just`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first four input lines demonstrate how the function is extracted and then
+    mapped, but in this case, they could have been achieved by just mapping unwrapped
+    functions over functors. The last line is interesting, because we try to extract
+    a function from a `Nothing` and then map it over something, which results in `Nothing`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With normal functors, when you map a function over a functor, you can’t get
+    the result out in any general way, even if the result is a partially applied function.
+    Applicative functors, on the other hand, allow you to operate on several functors
+    with a single function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Applicative Style
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'With the `Applicative` type class, we can chain the use of the `<*>` function,
+    thus enabling us to seamlessly operate on several applicative values instead of
+    just one. For instance, check this out:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802652.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: We wrapped the `+` function inside an applicative value and then used `<*>`
+    to call it with two parameters, both applicative values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s take a look at how this happens, step by step. `<*>` is left-associative,
+    which means that this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'is the same as this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: First, the `+` function is put in an applicative value—in this case, a `Maybe`
+    value that contains the function. So we have `pure (+)`, which is `Just (+)`.
+    Next, `Just (+) <*> Just 3` happens. The result of this is `Just (3+)`. This is
+    because of partial application. Only applying the `+` function to `3` results
+    in a function that takes one parameter and adds 3 to it. Finally, `Just (3+) <*>
+    Just 5` is carried out, which results in a `Just 8`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Isn’t this awesome? Applicative functors and the applicative style of `pure
+    f <*> x <*> y <*> ...` allow us to take a function that expects parameters that
+    aren’t applicative values and use that function to operate on several applicative
+    values. The function can take as many parameters as we want, because it’s always
+    partially applied step by step between occurrences of `<*>`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This becomes even more handy and apparent if we consider the fact that `pure
+    f <*> x` equals `fmap f x`. This is one of the applicative laws. We’ll take a
+    closer look at the applicative laws later in the chapter, but let’s think about
+    how it applies here. `pure` puts a value in a default context. If we just put
+    a function in a default context and then extract and apply it to a value inside
+    another applicative functor, that’s the same as just mapping that function over
+    that applicative functor. Instead of writing `pure f <*> x <*> y <*> ...`, we
+    can write `fmap f x <*> y <*> ...`. This is why `Control.Applicative` exports
+    a function called `<$>`, which is just `fmap` as an infix operator. Here’s how
+    it’s defined:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Remember that type variables are independent of parameter names or other value
+    names. The `f` in the function declaration here is a type variable with a class
+    constraint saying that any type constructor that replaces `f` should be in the
+    `Functor` type class. The `f` in the function body denotes a function that we
+    map over `x`. The fact that we used `f` to represent both of those doesn’t mean
+    that they represent the same thing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By using `<$>`, the applicative style really shines, because now if we want
+    to apply a function `f` between three applicative values, we can write `f <$>
+    x <*> y <*> z`. If the parameters were normal values rather than applicative functors,
+    we would write `f x y z`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s take a closer look at how this works. Suppose we want to join the values
+    `Just "johntra"` and `Just "volta"` into one `String` inside a `Maybe` functor.
+    We can do this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Before we see how this happens, compare the preceding line with this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: To use a normal function on applicative functors, just sprinkle some `<$>` and
+    `<*>` about, and the function will operate on applicatives and return an applicative.
+    How cool is that?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Back to our `(++) <$> Just "johntra" <*> Just "volta"`: First `(++)`, which
+    has a type of `(++) :: [a] -> [a] -> [a]`, is mapped over `Just "johntra"`. This
+    results in a value that’s the same as `Just ("johntra"++)` and has a type of `Maybe
+    ([Char] -> [Char])`. Notice how the first parameter of `(++)` got eaten up and
+    how the `a`s turned into `Char` values. And now `Just ("johntra"++) <*> Just "volta"`
+    happens, which takes the function out of the `Just` and maps it over `Just "volta"`,
+    resulting in `Just "johntravolta"`. Had either of the two values been `Nothing`,
+    the result would have also been `Nothing`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, we’ve used only `Maybe` in our examples, and you might be thinking that
+    applicative functors are all about `Maybe`. There are loads of other instances
+    of `Applicative`, so let’s meet them!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lists
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Lists (actually the list type constructor, `[]`) are applicative functors.
+    What a surprise! Here’s how `[]` is an instance of `Applicative`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: Remember that `pure` takes a value and puts it in a default context. In other
+    words, it puts it in a minimal context that still yields that value. The minimal
+    context for lists would be the empty list, but the empty list represents the lack
+    of a value, so it can’t hold in itself the value on which we used `pure`. That’s
+    why `pure` takes a value and puts it in a singleton list. Similarly, the minimal
+    context for the `Maybe` applicative functor would be a `Nothing`, but it represents
+    the lack of a value instead of a value, so `pure` is implemented as `Just` in
+    the instance implementation for `Maybe`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s `pure` in action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'What about `<*>`? If the `<*>` function’s type were limited to only lists,
+    we would get `(<*>) :: [a -> b] -> [a] -> [b]`. It’s implemented with a list comprehension.
+    `<*>` must somehow extract the function out of its left parameter and then map
+    it over the right parameter. But the left list can have zero functions, one function,
+    or several functions inside it, and the right list can also hold several values.
+    That’s why we use a list comprehension to draw from both lists. We apply every
+    possible function from the left list to every possible value from the right list.
+    The resulting list has every possible combination of applying a function from
+    the left list to a value in the right one.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can use `<*>` with lists like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: The left list has three functions, and the right list has three values, so the
+    resulting list will have nine elements. Every function in the left list is applied
+    to every function in the right one. If we have a list of functions that take two
+    parameters, we can apply those functions between two lists.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following example, we apply two function between two lists:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`<*>` is left-associative, so `[(+),(*)] <*> [1,2]` happens first, resulting
+    in a list that’s the same as `[(1+),(2+),(1*),(2*)]`, because every function on
+    the left gets applied to every value on the right. Then `[(1+),(2+),(1*),(2*)]
+    <*> [3,4]` happens, which produces the final result.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the applicative style with lists is fun!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, we used a normal function that takes two strings between two lists of
+    strings just by inserting the appropriate applicative operators.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can view lists as nondeterministic computations. A value like `100` or `"what"`
+    can be viewed as a deterministic computation that has only one result, whereas
+    a list like `[1,2,3]` can be viewed as a computation that can’t decide on which
+    result it wants to have, so it presents us with all of the possible results. So
+    when you write something like `(+) <$> [1,2,3] <*> [4,5,6]`, you can think of
+    it as adding together two nondeterministic computations with `+`, only to produce
+    another nondeterministic computation that’s even less sure about its result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using the applicative style on lists is often a good replacement for list comprehensions.
+    In [Chapter 1](ch01.html "Chapter 1. Starting Out"), we wanted to see all the
+    possible products of `[2,5,10]` and `[8,10,11]`, so we did this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We’re just drawing from two lists and applying a function between every combination
+    of elements. This can be done in the applicative style as well:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This seems clearer to me, because it’s easier to see that we’re just calling
+    `*` between two nondeterministic computations. If we wanted all possible products
+    of those two lists that are more than 50, we would use the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: It’s easy to see how `pure f <*> xs` equals `fmap f xs` with lists. `pure f`
+    is just `[f]`, and `[f] <*> xs` will apply every function in the left list to
+    every value in the right one, but there’s just one function in the left list,
+    so it’s like mapping.
+  prefs: []
+  type: TYPE_NORMAL
+- en: IO Is An Applicative Functor, Too
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Another instance of `Applicative` that we’ve already encountered is `IO`. This
+    is how the instance is implemented:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802654.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Since `pure` is all about putting a value in a minimal context that still holds
+    the value as the result, it makes sense that `pure` is just `return`. `return`
+    makes an I/O action that doesn’t do anything. It just yields some value as its
+    result, without performing any I/O operations like printing to the terminal or
+    reading from a file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If `<*>` were specialized for `IO`, it would have a type of `(<*>) :: IO (a
+    -> b) -> IO a -> IO b`. In the case of `IO`, it takes the I/O action `a`, which
+    yields a function, performs the function, and binds that function to `f`. Then
+    it performs `b` and binds its result to `x`. Finally, it applies the function
+    `f` to `x` and yields that as the result. We used `do` syntax to implement it
+    here. (Remember that `do` syntax is about taking several I/O actions and gluing
+    them into one.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With `Maybe` and `[]`, we could think of `<*>` as simply extracting a function
+    from its left parameter and then applying it over the right one. With `IO`, extracting
+    is still in the game, but now we also have a notion of *sequencing*, because we’re
+    taking two I/O actions and gluing them into one. We need to extract the function
+    from the first I/O action, but to extract a result from an I/O action, it must
+    be performed. Consider this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is an I/O action that will prompt the user for two lines and yield as
+    its result those two lines concatenated. We achieved it by gluing together two
+    `getLine` I/O actions and a `return`, because we wanted our new glued I/O action
+    to hold the result of `a ++ b`. Another way of writing this is to use the applicative
+    style:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is the same thing we did earlier when we were making an I/O action that
+    applied a function between the results of two other I/O actions. Remember that
+    `getLine` is an I/O action with the type `getLine :: IO String`. When we use `<*>`
+    between two applicative values, the result is an applicative value, so this all
+    makes sense.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we return to the box analogy, we can imagine `getLine` as a box that will
+    go out into the real world and fetch us a string. Calling `(++) <$> getLine <*>
+    getLine` makes a new, bigger box that sends those two boxes out to fetch lines
+    from the terminal and then presents the concatenation of those two lines as its
+    result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The type of the expression `(++) <$> getLine <*> getLine` is `IO String`. This
+    means that the expression is a completely normal I/O action like any other, which
+    also yields a result value, just like other I/O actions. That’s why we can do
+    stuff like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: Functions As Applicatives
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Another instance of `Applicative` is `(->) r`, or functions. We don’t often
+    use functions as applicatives, but the concept is still really interesting, so
+    let’s take a look at how the function instance is implemented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we wrap a value into an applicative value with `pure`, the result it yields
+    must be that value. A minimal default context still yields that value as a result.
+    That’s why in the function instance implementation, `pure` takes a value and creates
+    a function that ignores its parameter and always returns that value. The type
+    for `pure` specialized for the `(->) r` instance is `pure :: a -> (r -> a)`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: Because of currying, function application is left-associative, so we can omit
+    the parentheses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The instance implementation for `<*>` is a bit cryptic, so let’s just take
+    a look at how to use functions as applicative functors in the applicative style:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: Calling `<*>` with two applicative values results in an applicative value, so
+    if we use it on two functions, we get back a function. So what goes on here? When
+    we do `(+) <$> (+3) <*> (*100)`, we’re making a function that will use `+` on
+    the results of `(+3)` and `(*100)` and return that. With `(+) <$> (+3) <*> (*100)
+    $ 5`, `(+3)` and `(*100)` are first applied to `5`, resulting in `8` and `500`.
+    Then `+` is called with `8` and `500`, resulting in `508`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code is similar:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: We create a function that will call the function `\x y z -> [x,y,z]` with the
+    eventual results from `(+3)`, `(*2)` and `(/2)`. The `5` is fed to each of the
+    three functions, and then `\x y z -> [x, y, z]` is called with those results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802656.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: It’s not very important that you get how the `(->) r` instance for `Applicative`
+    works, so don’t despair if you don’t understand this all right now. Try playing
+    with the applicative style and functions to get some insight into using functions
+    as applicatives.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Zip Lists
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'It turns out there are actually more ways for lists to be applicative functors.
+    We’ve already covered one way: calling `<*>` with a list of functions and a list
+    of values, which results in a list containing all the possible combinations of
+    applying functions from the left list to the values in the right list.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, if we write `[(+3),(*2)] <*> [1,2]`, `(+3)` will be applied to
+    both `1` and `2`, and `(*2)` will also be applied to both `1` and `2`, resulting
+    in a list that has four elements: `[4,5,2,4]`. However, `[(+3),(*2)] <*> [1,2]`
+    could also work in such a way that the first function in the left list is applied
+    to the first value in the right one, the second function is applied to the second
+    value, and so on. That would result in a list with two values: `[4,4]`. You could
+    look at it as `[1 + 3, 2 * 2]`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An instance of `Applicative` that we haven’t encountered yet is `ZipList`, and
+    it lives in `Control.Applicative`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because one type can’t have two instances for the same type class, the `ZipList
+    a` type was introduced, which has one constructor (`ZipList`) with just one field
+    (a list). Here’s the instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`<*>` applies the first function to the first value, the second function to
+    the second value, and so on. This is done with `zipWith (\f x -> f x) fs xs`.
+    Because of how `zipWith` works, the resulting list will be as long as the shorter
+    of the two lists.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`pure` is also interesting here. It takes a value and puts it in a list that
+    just has that value repeating indefinitely. `pure "haha"` results in `ZipList
+    (["haha", "haha","haha"...`. This might be a bit confusing, since you’ve learned
+    that `pure` should put a value in a minimal context that still yields that value.
+    And you might be thinking that an infinite list of something is hardly minimal.
+    But it makes sense with zip lists, because it must produce the value on every
+    position. This also satisfies the law that `pure f <*> xs` should equal `fmap
+    f xs`. If `pure 3` just returned `ZipList [3]`, `pure (*2) <*> ZipList [1,5,10]`
+    would result in `ZipList [2]`, because the resulting list of two zipped lists
+    has the length of the shorter of the two. If we zip a finite list with an infinite
+    list, the length of the resulting list will always be equal to the length of the
+    finite list.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So how do zip lists work in an applicative style? Well, the `ZipList a` type
+    doesn’t have a `Show` instance, so we need to use the `getZipList` function to
+    extract a raw list from a zip list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `(,,)` function is the same as `\x y z -> (x,y,z)`. Also, the `(,)` function
+    is the same as `\x y -> (x,y)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Aside from `zipWith`, the standard library has functions such as `zipWith3`
+    and `zipWith4`, all the way up to `zipWith7`. `zipWith` takes a function that
+    takes two parameters and zips two lists with it. `zipWith3` takes a function that
+    takes three parameters and zips three lists with it, and so on. By using zip lists
+    with an applicative style, we don’t need to have a separate zip function for each
+    number of lists that we want to zip together. We just use the applicative style
+    to zip together an arbitrary amount of lists with a function, and that’s pretty
+    handy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applicative Laws
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Like normal functors, applicative functors come with a few laws. The most important
+    law is the one that `pure f <*> x = fmap f x` holds. As an exercise, you can prove
+    this law for some of the applicative functors that we’ve met in this chapter.
+    The following are the other applicative laws:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`pure id <*> v = v`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pure (.) <*> u <*> v <*> w = u <*> (v <*> w)`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pure f <*> pure x = pure (f x)`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`u <*> pure y = pure ($ y) <*> u`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We won’t go over them in detail because that would take up a lot of pages and
+    be kind of boring. If you’re interested, you can take a closer look at them and
+    see if they hold for some of the instances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Useful Functions for Applicatives
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '`Control.Applicative` defines a function that’s called `liftA2`, which has
+    the following type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It’s defined like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: It just applies a function between two applicatives, hiding the applicative
+    style that we’ve discussed. However, it clearly showcases why applicative functors
+    are more powerful than ordinary functors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With ordinary functors, we can just map functions over one functor value. With
+    applicative functors, we can apply a function between several functor values.
+    It’s also interesting to look at this function’s type as `(a -> b -> c) -> (f
+    a -> f b -> f c)`. When we look at it like this, we can say that `liftA2` takes
+    a normal binary function and promotes it to a function that operates on two applicatives.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s an interesting concept: We can take two applicative values and combine
+    them into one applicative value that has inside it the results of those two applicative
+    values in a list. For instance, we have `Just 3` and `Just 4`. Let’s assume that
+    the second one contains a singleton list, because that’s really easy to achieve:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Okay, so let’s say we have `Just 3` and `Just [4]`. How do we get `Just [3,4]`?
+    That’s easy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: Remember that `:` is a function that takes an element and a list and returns
+    a new list with that element at the beginning. Now that we have `Just [3,4]`,
+    could we combine that with `Just 2` to produce `Just [2,3,4]`? Yes, we could.
+    It seems that we can combine any amount of applicative values into one applicative
+    value that has a list of the results of those applicative values inside it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s try implementing a function that takes a list of applicative values and
+    returns an applicative value that has a list as its result value. We’ll call it
+    `sequenceA`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: Ah, recursion! First, we look at the type. It will transform a list of applicative
+    values into an applicative value with a list. From that, we can lay some groundwork
+    for a base case. If we want to turn an empty list into an applicative value with
+    a list of results, we just put an empty list in a default context. Now comes the
+    recursion. If we have a list with a head and a tail (remember that `x` is an applicative
+    value and `xs` is a list of them), we call `sequenceA` on the tail, which results
+    in an applicative value with a list inside. Then we just prepend the value inside
+    the applicative `x` into that applicative with a list, and that’s it!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Suppose we do this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'By definition, that’s equal to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Breaking this down further, we get this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We know that `sequenceA []` ends up as being `Just []`, so this expression
+    is now as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'which is this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: This equals `Just [1,2]`!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another way to implement `sequenceA` is with a fold. Remember that pretty much
+    any function where we go over a list element by element and accumulate a result
+    along the way can be implemented with a fold:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: We approach the list from the right and start off with an accumulator value
+    of `pure []`. We put `liftA2 (:)` between the accumulator and the last element
+    of the list, which results in an applicative that has a singleton in it. Then
+    we call `liftA2 (:)` with the now last element and the current accumulator and
+    so on, until we’re left with just the accumulator, which holds a list of the results
+    of all the applicatives.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s give our function a whirl on some applicatives:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: When used on `Maybe` values, `sequenceA` creates a `Maybe` value with all the
+    results inside it as a list. If one of the values is `Nothing`, then the result
+    is also a `Nothing`. This is cool when you have a list of `Maybe` values, and
+    you’re interested in the values only if none of them is a `Nothing`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When used with functions, `sequenceA` takes a list of functions and returns
+    a function that returns a list. In our example, we made a function that took a
+    number as a parameter and applied it to each function in the list and then returned
+    a list of results. `sequenceA [(+3),(+2),(+1)] 3` will call `(+3)` with `3`, `(+2)`
+    with `3`, and `(+1)` with `3`, and present all those results as a list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Doing `(+) <$> (+3) <*> (*2)` will create a function that takes a parameter,
+    feeds it to both `(+3)` and `(*2)`, and then calls `+` with those two results.
+    In the same vein, it makes sense that `sequenceA [(+3),(*2)]` makes a function
+    that takes a parameter and feeds it to all of the functions in the list. Instead
+    of calling `+` with the results of the functions, a combination of `:` and `pure
+    []` is used to gather those results in a list, which is the result of that function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using `sequenceA` is useful when we have a list of functions and we want to
+    feed the same input to all of them and then view the list of results. For instance,
+    suppose that we have a number and we’re wondering whether it satisfies all of
+    the predicates in a list. Here’s one way to do that:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Remember that `and` takes a list of Booleans and returns `True` if they’re
+    all `True`. Another way to achieve the same thing is with `sequenceA`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`sequenceA [(>4),(<10),odd]` creates a function that will take a number and
+    feed it to all of the predicates in `[(>4),(<10),odd]` and return a list of Booleans.
+    It turns a list with the type `(Num a) => [a -> Bool]` into a function with the
+    type `(Num a) => a -> [Bool]`. Pretty neat, huh?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because lists are homogenous, all the functions in the list must be functions
+    of the same type. You can’t have a list like `[ord, (+3)]`, because `ord` takes
+    a character and returns a number, whereas `(+3)` takes a number and returns a
+    number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When used with `[]`, `sequenceA` takes a list of lists and returns a list of
+    lists. It actually creates lists that have all possible combinations of their
+    elements. For illustration, here’s the preceding example done with `sequenceA`
+    and then done with a list comprehension:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE68]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`(+) <$> [1,2] <*> [4,5,6]` results in a nondeterministic computation `x +
+    y`, where `x` takes on every value from `[1,2]` and `y` takes on every value from
+    `[4,5,6]`. We represent that as a list that holds all of the possible results.
+    Similarly, when we call `sequenceA [[1,2],[3,4],[5,6]]`, the result is a nondeterministic
+    computation `[x,y,z]`, where `x` takes on every value from `[1,2]`, `y` takes
+    on every value from `[3,4]` and so on. To represent the result of that nondeterministic
+    computation, we use a list, where each element in the list is one possible list.
+    That’s why the result is a list of lists.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When used with I/O actions, `sequenceA` is the same thing as `sequence`! It
+    takes a list of I/O actions and returns an I/O action that will perform each of
+    those actions and have as its result a list of the results of those I/O actions.
+    That’s because to turn an `[IO a]` value into an `IO [a]` value, to make an I/O
+    action that yields a list of results when performed, all those I/O actions must
+    be sequenced so that they’re then performed one after the other when evaluation
+    is forced. You can’t get the result of an I/O action without performing it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s sequence three `getLine` I/O actions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE69]'
+  prefs: []
+  type: TYPE_PRE
+- en: In conclusion, applicative functors aren’t just interesting, they’re also useful.
+    They allow us to combine different computations—such as I/O computations, nondeterministic
+    computations, computations that might have failed, and so on—by using the applicative
+    style. Just by using `<$>` and `<*>`, we can employ normal functions to uniformly
+    operate on any number of applicative functors and take advantage of the semantics
+    of each one.
+  prefs: []
+  type: TYPE_NORMAL

@@ -1,0 +1,702 @@
+- en: '![](../images/101-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[**LOGGING**](toc.html#chapter6)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/as.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: A *log message* is an asynchronous report of an event of interest. This chapter
+    discusses logging in general and then looks in some detail at syslog, the default
+    logging system on Linux. We also describe how to control logging thresholds while
+    a daemon is running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ve organized this chapter into the following sections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Do You Need Logging?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Architecture of a Logging System
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: syslog
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: On-Demand Logging
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[**Do You Need Logging?**](toc.html#chapter6.1)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before getting into the mechanics of logging, let’s discuss why you might want
+    logging on your appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Uptime**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The number one reason for logging is to increase the system availability of
+    your appliance. Proper routing and displaying of log messages like *CPU fan speed
+    below 1000 RPM* can help your end users keep their systems up and running. A regression
+    or trend analysis of the system’s collected log messages can help identify problems
+    before they interrupt service. Trend analysis is particularly useful in spotting
+    problems with fans, disks, and power supplies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Security**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your appliance is on a network, it will almost certainly come under attack
+    at some point. You can use log messages to trigger changes in the firewall rules
+    or to notify the system operator or the end user that the system is under attack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Debug**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first step in fixing a bug is recognizing that a bug exists. Log messages
+    that report any inconsistency in input or output of a subroutine are invaluable
+    for finding bugs. You can use the on-demand logging described later in this chapter
+    to trace program execution and to record subroutine inputs and outputs when a
+    bug is detected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Integral to the application**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Laddie is a good example of an application with integrated logging and event
+    processing. It simplified our design of the ladd daemon to have it report all
+    alarm transitions using only a log message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You may be unable to use logging on some deeply embedded Linux systems with
+    limited connectivity and limited disk space. But for most systems, logging will
+    be a real asset for your appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Architecture of a Logging System**](toc.html#chapter6.2)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section describes the architecture and properties of an “ideal” logging
+    system. The next section describes syslog and compares it to the ideal presented
+    below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A logging system can be divided into three major sections: one to collect log
+    messages, one to route them, and one to deliver them (or to start other actions).
+    Figure 6-1 illustrates the architecture of a logging system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s consider each of these three sections in more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Message Sources***](toc.html#chapter6.3)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ideal logging system is a clearing house for messages from anywhere on the
+    appliance, and it should be able to accept messages from many sources, including
+    Unix sockets, UDP and TCP sockets, named pipes, and from following a file (the
+    output of tail -f).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/103-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 6-1: Log message flow in an appliance*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source code of the logging system should be well documented and modular
+    to make it easy to add new types of message sources. The configuration of the
+    system should make it easy to add new sources while the system is running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s discuss three common message sources in a little more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Unix sockets**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Syslog, the most popular logging system on Linux, uses a Unix socket as its
+    message collection point. Stream-oriented communication channels, such as a Unix
+    socket, must have a delimiter to separate the messages. The two most common delimiters
+    are a null character, which syslog uses, and a carriage return.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Network sockets**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network messages might arrive in a UDP datagram or over a TCP connection. Some
+    applications accept TCP connections and broadcast their log messages to all connected
+    sockets. The logging system should be able to accept TCP connections as well as
+    initiate them. If the log messages are going to traverse an insecure network link,
+    the system should encrypt them in transit using either Stunnel or SSH with port
+    forwarding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Following a file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Many applications write log messages directly to a file. If you want to capture
+    the events reported in these log messages, you must watch the file for new messages.
+    The tail -f command does this. Most often, you’ll see this as the command string:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: tail -f app_log_file | logger
+  prefs: []
+  type: TYPE_NORMAL
+- en: It seems a waste to create two processes just to capture an application’s log
+    messages, and a good logging system should handle following a file as part of
+    its core functionality.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Message Routing***](toc.html#chapter6.4)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The routing section identifies the appropriate destinations for each message.
+    The routing criteria vary from one system to another, but most systems include
+    the ability to route based on event importance and source programs (such as mail,
+    cron, kernel, and authentication). Some systems include filters that recognize
+    and route based on the text in the log message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we define a *filter* as a set of routing rules and the destination
+    associated with each rule. The routing rules and their associated destinations
+    are stored in a configuration file (or, in the case of Laddie, in an RTA table).
+    Filters only make sense if the system supports (and you use) multiple message
+    destinations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Message Destinations***](toc.html#chapter6.5)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A logging system finishes processing a message by sending it to a destination.
+    Common destinations are discussed below. While the following list of message destinations
+    may seem quite long, there are in fact many possible destinations not described.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Files**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Files are the most common destination for log messages. Log files are the accepted
+    norm, perhaps because they are so easy to access for periodic post-processing
+    analysis. Unfortunately, files pose a problem for many embedded systems that do
+    not have hard disks: RAM is volatile, and flash memory is too expensive to use
+    for archiving log messages. Your choices for a diskless appliance are to filter
+    messages heavily and only save a few to flash, to send them to a server on the
+    network, or to just not save log messages.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you save log messages to a file, you can use logrotate to periodically remove
+    the oldest file, rotate the newest file into a numbered archive, and send a SIGHUP
+    signal to the process that is the source of the messages. A SIGHUP should cause
+    the application to open a new log file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Named pipes**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Named pipes are an easy way to pass your filtered log messages to another program.
+    A helper application opens the named pipe for reading and then blocks while waiting
+    for log messages to arrive. When the logging system has a message to send, it
+    writes the message to the named pipe, unblocking the helper application. Make
+    sure your helper application can handle “broken pipe” errors, since they can occur
+    if the logging system is restarted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Named pipes and helper applications are very useful for destinations that are
+    too big or too complex for inclusion in the logging daemon itself. A named pipe
+    is a great way to tie the logging system to a custom application that is specific
+    to your appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One alternative to a named pipe is a *fanout* device, a kernel module and associated
+    /dev entries that act as a one-to-many multiplexer. Unlike named pipes, fanout
+    devices let many readers get the same message (hence the name *fanout*). This
+    book’s website hosts the fanout project, including source files and more detailed
+    documentation. Please visit [http://www.linuxappliancedesign.com](http://www.linuxappliancedesign.com/)
+    for more information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Remote UDP/syslog host**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your appliance is a network appliance designed for a large data center, be
+    sure to include the ability to forward log messages to another host in the network.
+    The syslogd logging daemon can receive and/or forward log messages to other hosts
+    using UDP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**TCP multiplexer**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you want to route some reports to other programs, you can define a listening
+    TCP socket that accepts connections. When a message arrives at the multiplexer,
+    it is replicated and sent down each open TCP connection on the socket.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, in our Laddie appliance we have a command line interface (CLI)
+    that can show Laddie alarm messages.¹ When a CLI user gives the command set logs
+    on, the CLI opens a TCP connection to logmuxd, Laddie’s logging daemon, and log
+    messages are sent down each accepted TCP connection to the CLI at the other end.
+    (logmuxd is described in the next chapter.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Email**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is nice to have significant events reported to you via email, since email
+    is ubiquitous, if not timely. Also, email is often used as a gateway to pagers
+    and cell phones (so that really important disasters can find you no matter where
+    you hide).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Console**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Output to /dev/console or to a serial port is a must for debugging. Some large
+    network centers still prefer to collect log messages over a physically secure
+    and non-shared channel like an RS-232 cable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Database**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some messages require an immediate response, but most of the time you are interested
+    more in trends or changes in the pattern of a system’s events. A relational database
+    is an ideal repository for log messages, since it has a wide range of tools to
+    sort and count log messages. Since databases can use a lot of CPU cycles while
+    they are sorting and counting, you might want to put the DB somewhere else on
+    the network instead of on your appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**SNMP traps**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most large networks have one or more dedicated network-management workstations
+    that run an SNMP manager. The operators of these networks often insist that all
+    network equipment use SNMP for status, configuration, and error reporting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**system()**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A system() call to run a utility is another common destination. While simple
+    and flexible, this approach uses more memory and CPU cycles than the other destinations
+    and is not appropriate for processing large numbers of log messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The use of system() is almost always considered a security risk. We mention
+    system() for completeness, but discourage its use. If you must run an external
+    command, try to use popen() in place of system(). We solve this problem on Laddie
+    by using the RTA-to-file utility described in Appendix D.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We do not have space here to describe all of the many possible destinations.
+    For example, we did not discuss pagers, voice mail, or instant messaging.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**syslog**](toc.html#chapter6.6)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A logging system needs a standard way to report events, a *lingua franca* for
+    log messages. That standard, for most of us, is syslog. There are several advantages
+    to syslog. It is the primary event-reporting mechanism used by all legacy Linux
+    applications, and it is well known and understood. In conjunction with the kernel
+    logging daemon, klogd, syslog captures kernel and other system log messages that
+    you may want to make visible to the appliance user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section describes how syslog works, how to use it in your applications,
+    and how to configure its message filters. We give enough detail that you should
+    have no trouble using syslog as the basis for your logging system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***syslog Architecture***](toc.html#chapter6.7)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Messages from syslog are generated in your program by a call to the glibc C-library
+    routine syslog(). Then, glibc formats the message and tries to write it to /dev/log,
+    a Unix socket that is opened when syslogd starts. syslogd reads the message from
+    /dev/log and handles it according to filters defined in /etc/syslog.conf, the
+    syslogd configuration file. Figure 6-2 shows the overall architecture and message
+    flow of syslog.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/106-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 6-2: Message flow with syslog*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Using syslog***](toc.html#chapter6.8)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost all Linux programming languages have a routine to send a syslog message.
+    The C-library prototype shown below is fairly typical of most languages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: void syslog(int priority, const char *format, ...);
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Priority* is combination of the log level, the importance or severity of the
+    event, and the *facility,* the type of program that generated the message.² Most
+    programmers specify only the log level when using the syslog routine. There are
+    eight log levels, ranging in importance from emergency to debug. This excerpt
+    from syslog.h shows the eight levels available.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/107-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The syslog() routine uses a printf style format string that can have a variable
+    number of arguments. The text in the format string should form a clear, unambiguous
+    description of the event, and any arguments to the format string should give further
+    details of the event.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we build appliances, a big part of what we deliver is documentation, and
+    a big part of our documentation is a list of all the appliance log messages and
+    their meanings. This list is easy to generate using grep on the source code. A
+    list of log messages will be exceptionally valuable to your customers, and generating
+    it requires only a little discipline on your part.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Generate a list of all log messages in your appliance as part of your appliance’s
+    documentation.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You have more control over what is sent to syslogd than just the priority and
+    text of the message. In particular, you can also use the optional openlog() routine
+    to control the syslog facility, the message prefix, and whether or not to include
+    the process ID with the log message. The openlog() calling syntax is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: void openlog(const char *ident, int option, int facility);
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The ident is a short string that syslog prepends to each log message. If you
+    do not specify one, ident defaults to the name of the program that called syslog().
+    The option parameter lets you control things such as what to do if /dev/log is
+    not available and whether or not to include the PID of the calling program. The
+    option is the bitwise OR of zero or more of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: LOG_CONS—write log to console on failure to write to /dev/log
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: LOG_NDELAY—open socket to /dev/log immediately
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: LOG_ODELAY—wait until first message to open socket to /dev/log
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: LOG_PERROR—write log to standard error as well as /dev/log
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: LOG_PID—include PID with each message
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The facility is meant to correspond to the type of program sending the log message.
+    It defaults to LOG_USER if openlog() is not called. There are 24 standard facilities
+    defined in syslog.h; the following excerpt shows the definitions for the most
+    common ones. Note that the values are shifted up by three bits to keep the lower
+    three bits reserved for the log level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/108-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: While the priority and facility are used by syslogd for routing, their values
+    are not part of the saved text; however, you can infer the priority and facility
+    of saved log messages by setting up syslogd to save messages with different priority
+    and facility values to different files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***The syslog Protocol***](toc.html#chapter6.9)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before going into a description of how to set up syslogd, let’s examine the
+    protocol used to send syslog messages. As mentioned earlier, syslogd opens a Unix
+    datagram socket on /dev/log and blocks while waiting for messages to arrive on
+    the socket. The information passed from the application to the syslogd daemon
+    includes a facility, a log level, and the message itself. The daemon uses the
+    facility and level as its sole filtering criteria.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The original authors of syslog combined the priority and facility into a 32-bit
+    integer, with the priority using the low three bits for the log level. The combined
+    facility/level is ASCII encoded and placed between angle brackets before being
+    written to /dev/log.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, say your program sets the facility to LOG_USER and sends an INFO
+    log message with the following code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/109-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If we looked at the message just after syslogd reads it from its Unix socket,
+    we would see:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '<14>Aug 2 13:18:31 my_prog: abc=2'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice how LOG_USER (8) and LOG_INFO (6) are combined into <14>. A newline or
+    other termination character is not needed, since syslog() adds a null character
+    before writing the message to the /dev/log socket. If you don’t include a newline,
+    syslogd will append one before writing the message to the log file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Using the syslogd Daemon***](toc.html#chapter6.10)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The syslog daemon reads the messages from the /dev/log Unix socket and routes
+    the messages based on their facility and log level. The destinations for a syslog
+    message are called *actions* and include files, named pipes, the system console
+    (or other TTY port), other syslogd systems on the network, and users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The filters and actions for syslogd are defined in /etc/syslog.conf. The configuration
+    file usually has one line per destination, with a list of as many facilities and
+    levels as needed for that destination. The facilities in the action are separated
+    by commas, followed by a dot and then a log level. An asterisk can be used to
+    represent all facilities or levels, and specifying a log level implies including
+    that level and all the levels more severe than it. For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/109-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The most common destinations for syslog messages include files, pipes, and
+    other log daemons on the network. Pipes are specified by giving a pipe symbol,
+    |, at the start of the destination. A network destination starts with an at symbol,
+    @. The man page for syslog.conf gives a more complete description on how to specify
+    which facility and priorities are routed to which actions. The lines of syslog.conf
+    that route all mail logs to /var/log/mail and all critical or higher print spooler
+    and FTP logs to a network log server are:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/109-3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Recall that the facility is part of the priority integer passed from syslog()
+    to syslogd, and that you can define your own facilities. This lets you build a
+    private logging system on top of syslog. You could add the new facility integer
+    and name to syslog.h, then rebuild glibc and syslogd. However, it is probably
+    easier to use an explicit integer for the new facility. There are 24 predefined
+    facilities, so choose a number much larger, say 1,000\. The code that sends an
+    INFO log with this facility might look like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: syslog((1000<<3) | LOG_INFO, "an event occurred");
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ve shown the shift and OR explicitly to illustrate what is happening. We
+    suggest that you use the equivalent LOG_MAKEPRI*(facility, level)* macro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To continue with this example, say you have a program listening for your new
+    log messages on the named pipe /usr/local/private_pipe. You could configure syslogd
+    to deliver all logs with the new facility by adding the following line to syslog.conf
+    and restarting syslogd.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/110-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Desktop developers might cringe at the thought of using syslog for event processing.
+    But then again, Linux desktop systems typically have more RAM and CPU resources
+    than an appliance, so they can afford the (relatively) high disk, memory, and
+    CPU overhead of D-Bus. We recommend syslog for its simplicity, availability in
+    almost all programming languages, and its small memory and CPU overhead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Limitations, Advantages, and Alternatives to syslogd***](toc.html#chapter6.11)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are a few limitations with the default syslogd daemon. As mentioned previously,
+    it does not save the message level or facility (although you can get them indirectly
+    by routing based on them). Syslogd can not route based on regular expressions,
+    it only accepts messages from Unix sockets, and it has a somewhat limited set
+    of actions. Some programmers find the limited numbers of levels a problem when
+    setting up debug and trace mechanisms. On the plus side, syslogd is universally
+    accepted and is thoroughly debugged, tested, and secure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The logger utility (which we saw briefly in the beginning of this chapter) lets
+    you work around the limited set of message sources for syslogd. Logger sends log
+    messages to syslogd, getting the log messages from either its command line or
+    from each line of its standard input. If you wish, you can specify level, facility,
+    and a prefix string. See the logger man page for more details. You can also combine
+    netcat (a simple utility to read and write from network connections) and a logger
+    to accept log messages from a single accepted TCP connection using a command similar
+    to the one shown below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: nc -l -p 2250 | logger
+  prefs: []
+  type: TYPE_NORMAL
+- en: The logger utility lets you “watch” other log files. For example, say you want
+    to have each line that is added to /usr/www/error.log to also be sent to syslog.
+    The following command line does this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: tail -f /usr/www/error.log | logger
+  prefs: []
+  type: TYPE_NORMAL
+- en: One other logging helper program worth mentioning is klogd. Since the Linux
+    kernel does not use glibc, it cannot use syslog() to send kernel log messages.
+    Instead, kernel log messages are made available either with the system call sys_syslog()
+    or from the circular buffer visible in /proc/kmsg. The daemon klogd translates
+    kernel log messages from either source into syslog messages. In addition, klogd
+    translates the hex addresses in the kernel log messages into their equivalent
+    symbolic names. To get the symbol from a hex address, klogd reads the memory map
+    in the System.map file. If you load or unload kernel modules after starting klogd,
+    be sure to tell klogd to reload its symbol table using the command klogd -i.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Popular alternatives to syslogd include nsyslog, which supports TCP using SSL;
+    minirsyslogd, which is a minimalist logger that can handle a very high volume
+    of traffic; and syslog-ng, which can filter on regular expressions, does message
+    rewriting, and supports TCP sources and destinations. The evlog package is one
+    of the best in terms of recognizing and responding to log messages. The latest
+    information on these alternatives can be found with a web search on the package
+    name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**On-Demand Logging**](toc.html#chapter6.12)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Wouldn’t it be nice if you could dynamically control how verbose the logging
+    is in your program? Sure, you can use a -v switch on the command line when starting
+    the program, but that’s not exactly dynamic. Also, it would be nice if you could
+    independently control the log level in different parts of your program. That way,
+    you could zoom in to study a particular piece of code. This section describes
+    how you use an RTA table called Logit and code from the Laddie appliance to independently
+    control the log thresholds in different parts of your code, while your program
+    is running. Figure 6-3 illustrates the idea of giving different parts of a program
+    different thresholds for logging.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the definition for a row in the Logit table:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/111-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](../images/112-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 6-3: Independent control of logging in each program section*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The idea is to have a separate logging threshold for each section of code, and
+    to send a log message only if the message’s level is numerically below the log
+    threshold for that section. Our implementation of Logit has 12 rows, the first
+    five of which are used internally by the Laddie prototype daemon. You can easily
+    change LOGIT_NROWS in logit.c to add more rows if you wish.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s work through an example. Say you want to add on-demand logging control
+    to two different sections of code, image processing (IM) and buffer management
+    (BM). During its initialization your program must create its entries in the Logit
+    table. You can do this directly, or you can use the wrapper function logitSetEntry().
+    The code below shows both methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/112-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: With the above initialization in place, you can now add log messages that you
+    can control by raising or lowering the threshold in the Logit table.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The LOG() macro defined in the Laddie empty daemon header file, empd.h, will
+    send a message to syslog() or send a standard error if the threshold set in the
+    LOG call is numerically lower than the threshold in Logit for that section of
+    code. For example, to selectively trace the operation of the image-processing
+    and buffer-management code, you might have a few lines like the following.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LOG(LOG_DEBUG, IM, "Deep into image processing");
+  prefs: []
+  type: TYPE_NORMAL
+- en: LOG(DBG_2, BM, "Freeing buffer ID=%d", buf_id);
+  prefs: []
+  type: TYPE_NORMAL
+- en: The file empd.h defines five additional log levels (DBG_0 to DBG_4) below LOG_DEBUG
+    to give you more precise control over the verbosity of debug messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With all of the above in place, you can enable and disable log messages in
+    individual sections of your program. For example, the SQL commands to disable
+    all logging except for the IM section might be:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: UPDATE Logit SET thres = 0
+  prefs: []
+  type: TYPE_NORMAL
+- en: UPDATE Logit SET thres = 10 WHERE sect = "IM"
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Summary**](toc.html#chapter6.13)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Logging is a valuable addition to almost all appliances, even those with limited
+    disk, memory, and CPU power. An ideal logging system has many sources and destinations
+    for log messages and allows for the addition of new sources and destinations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two components to syslog, the default logging system on Linux: a
+    library routine to send log messages, and a daemon to process them. The syslog()
+    library routine is available in every major programming language available on
+    Linux. The syslog daemon, syslogd, routes messages based on the source of the
+    message (the facility) and on the severity of the event reported (the log level).
+    In this chapter, you learned how to add your own facility to syslog in order to
+    route log messages specific to your appliance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: On-demand logging gives us the ability to dynamically control the verbosity
+    of logging in different parts of our application. While RTA makes on-demand logging
+    easier, it is not required for on-demand logging.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter reviewed logging and the collection and archiving of log messages.
+    The next chapter describes a logging system that can recognize specific text in
+    log messages and then rewrite and route the messages on a case-by-case basis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/114-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: __________________
+  prefs: []
+  type: TYPE_NORMAL
+- en: ¹ *Log messages* give a report of an event. An *alarm* is a system state of
+    failure or reduced availability. Log messages are used to report the transitions
+    in to and out of an alarm state, and the two terms are sometimes confused.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ² Unfortunately, the documentation for syslog and syslog.conf are not in full
+    agreement. One defines *priority* as the bitwise OR of facility and log level,
+    and the other defines *priority* as what we call log level. While this book is
+    self-consistent, you should use care when reading other syslog documentation.
+  prefs: []
+  type: TYPE_NORMAL

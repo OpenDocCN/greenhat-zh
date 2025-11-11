@@ -1,0 +1,946 @@
+- en: Chapter 6. Meterpreter
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this chapter, we’ll dive deeper into this “hacker’s Swiss army knife” that
+    can significantly improve your post exploitation experience. Meterpreter is one
+    of the flagship products in Metasploit and is leveraged as a payload after a vulnerability
+    is exploited. A *payload* is the information returned to us when we trigger an
+    exploit. For example, when we exploit a weakness in a Remote Procedure Call (RPC),
+    trigger the exploit, and select Meterpreter as the payload, we would be given
+    a Meterpreter shell to the system. Meterpreter is an extension of the Metasploit
+    Framework that allows us to leverage Metasploit’s functionality and further compromise
+    our target. Some of this functionality includes ways to cover your tracks, reside
+    purely in memory, dump hashes, access operating systems, pivot, and much more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we’ll leverage normal attack methods within Metasploit to compromise
+    a Windows XP machine. Our payload, Meterpreter, will allow us to perform additional
+    attacks after we’ve compromised the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compromising a Windows XP Virtual Machine
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Before we dive into the specifics of Meterpreter, we first need to compromise
+    a system and get a Meterpreter shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scanning for Ports with Nmap
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We begin by identifying the services and ports running on the target by conducting
+    a port scan with *nmap* to find a port to exploit, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: After conducting our port scan at ![](../images/00002.gif), we see that some
+    interesting ports are accessible, including MS SQL at ![](../images/00004.gif),
+    a potential attack vector. But perhaps the most interesting thing that *nmap*
+    tells us is that this machine is running Windows XP Service Pack 2 at![](../images/00005.gif),
+    which is now at the end of life, which means some published vulnerabilities will
+    not have been fixed or patched by the installation of SP3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also of note, we see the standard FTP ![](../images/00006.gif) and SMTP ![](../images/00007.gif)
+    ports, which might be available to be leveraged for an attack. And we see that
+    port 80 ![](../images/00026.gif) is open, which means we have a potential web
+    application to attack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attacking MS SQL
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In this example, we’ll attack port 1433, MS SQL, because this is often an entry
+    point of weakness that can lead to a complete compromise and full administrative-level
+    control over the target.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To begin, we identify the MS SQL installation, and then launch a MS SQL Server
+    brute force attack to see if we can guess a password. By default, MS SQL is installed
+    on TCP port 1433 and UDP port 1434, though newer versions allow for installation
+    on a dynamically allocated port, which can be randomized. Luckily, port 1434 UDP
+    (for which we did not scan) remains the same and can be queried to identify the
+    dynamic port of the SQL server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here, we scan the system and see that MS SQL port 1434 UDP is open:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, we scan our host at ![](../images/00002.gif) and see that MS
+    SQL UDP port 1434 at ![](../images/00004.gif) is open. ([Chapter 11](part0015.html#fast-track),
+    [Chapter 13](part0017.html#building_your_own_module), and [Chapter 17](part0021.html#simulated_penetration_test)
+    will cover MS SQL in much more depth.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: When targeting MS SQL, we can leverage the *mssql_ping* module to brute force
+    the MS SQL port and attempt to guess the username and password. When MS SQL is
+    first installed, the program will require the user to create an *sa*, or system
+    administrator, account. You’ll often be able to guess or brute force the *sa*
+    account password, because when administrators install this application they do
+    not understand the security ramifications of using either a blank password or
+    something too simple.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next example, we look for the *mssql_ping* module and attempt to brute
+    force the *sa* account:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: After calling the *mssql_ping* module with `use scanner/mssql/mssql_ping` and
+    setting our options, we see that a SQL Server installation is found at 192.168.33.130
+    ![](../images/00002.gif). The name of the server is `IHAZSECURITY` ![](../images/00004.gif).
+    Its version number 9.00.1399.06 shown at ![](../images/00005.gif) equates to SQL
+    Server 2005 Express, and we know that it’s listening on TCP port 1433 ![](../images/00006.gif).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Brute Forcing MS SQL Server
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Next, we brute force the server with the Framework’s *mssql_login* module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We select the *mssql_login* module at ![](../images/00002.gif) and point it
+    to the default password word list from Fast-Track at ![](../images/00004.gif).
+    (We discuss Fast-Track in more detail in [Chapter 11](part0015.html#fast-track).)
+    At ![](../images/00005.gif), we have successfully guessed the *sa* password: *password123*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Fast-Track is a tool created by one of the authors of this book that leverages
+    multiple attacks, exploits, and the Metasploit Framework for payload delivery.
+    One of Fast-Track’s features is its ability to use a brute-forcer to attack and
+    compromise MS SQL automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The xp_cmdshell
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: By running MS SQL from the *sa* account, we can execute the stored procedure
+    `xp_cmdshell`, which lets us interact with the underlying operating system and
+    execute commands. The `xp_cmdshell` is a built-in stored procedure that ships
+    by default with SQL Server. You can call this stored procedure and have it query
+    and execute underlying operating system calls directly with MS SQL. Think of it
+    as a kind of superuser command prompt that allows you to run anything you want
+    on the operating system. When we gain access to the *sa* account, we find that
+    the MS SQL server is generally running with SYSTEM-level permissions, which allows
+    us full access as an administrator to both MS SQL and the machine itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To get a payload onto the system, we’ll interact with the `xp_cmdshell`, add
+    a local administrator, and deliver the payload through an executable. David Kennedy
+    and Joshua Drake (*jduck*), have written a module (*mssql_payload*) that can be
+    used to deliver any Metasploit payload through `xp_cmdshell`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: After selecting the *mssql_payload* module and setting our payload to `meterpreter`
+    at ![](../images/00004.gif), all we need to do is set the standard options before
+    starting our Meterpreter session. We’ve succeeded in opening a Meterpreter session
+    at ![](../images/00005.gif) on the target machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To recap, in the attack described here, we used the *mssql_ping* module to guess
+    the MS SQL *sa* password, which we discovered is *password123*. We then leveraged
+    the *mssql_payload* module to communicate with MS SQL and upload a Meterpreter
+    shell through MS SQL, and the shell was presented to us, thereby completely compromising
+    the system. Once the Meterpreter shell is presented, we know that the exploit
+    was successful and we can continue with post exploitation on this system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Basic Meterpreter Commands
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Having successfully compromised the target and gained a Meterpreter console
+    on the system, we can glean more information with some basic Meterpreter commands.
+    Use the `help` command at any point for more information on how to use Meterpreter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Capturing a Screenshot
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Meterpreter’s `screenshot` command will export an image of the active user’s
+    desktop and save it to the */opt/metasploit3/msf3/* directory, as shown in [Figure 6-1](part0010.html#meterpreter-captured_screenshot).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Desktop screen captures offer a great way to learn about a target system. For
+    example, in [Figure 6-1](part0010.html#meterpreter-captured_screenshot), we can
+    see that McAfee antivirus software is installed and running, which means we’ll
+    need to be cautious about what we upload to the system. ([Chapter 7](part0011.html#avoiding_detection)
+    discusses antivirus evasion in more detail.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Meterpreter-captured screenshot](../images/00030.jpeg)Figure 6-1. Meterpreter-captured
+    screenshot'
+  prefs: []
+  type: TYPE_NORMAL
+- en: sysinfo
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Another command we can specify is `sysinfo`, which will tell us the platform
+    on which the system is running, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, this system is running Windows XP Service Pack 2\. Because SP2
+    is end of life, we can assume that we can find a ton of holes on this system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Capturing Keystrokes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now we’ll grab the password hash values from this system, which can either be
+    cracked or used in an attack. We’ll also start *keystroke logging* (recording
+    keystrokes) on the remote system. But first, let’s list the running processes
+    on the target system with the `ps` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Executing `ps` at ![](../images/00002.gif) provides a list of running processes,
+    including *explorer.exe* ![](../images/00004.gif). At ![](../images/00005.gif)
+    we issue the `migrate` command to move our session into the *explorer.exe* process
+    space. Once that move is complete, we start the *keylog_recorder* module at ![](../images/00006.gif),
+    stopping it after some time with ctrl-C, and finally, at ![](../images/00007.gif),
+    in another terminal window, we dump the contents of the keystroke logger to see
+    what we’ve caught.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dumping Usernames and Passwords
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the preceding example, we grabbed password hashes by logging what a user
+    typed. We can also use Meterpreter to obtain the usernames and password hashes
+    on a local file system without the use of keyloggers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extracting the Password Hashes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In this attack, we’ll leverage the *hashdump* post exploitation module in Meterpreter
+    to extract the username and password hashes from the system. Microsoft typically
+    stores hashes on LAN Manager (LM), NT LAN Manager (NTLM), and NT LAN Manager v2
+    (NTLMv2).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the case of LM, for example, when a use enters a password for the first time
+    or changes a password, the password is assigned a hash value. Depending on the
+    hash value length, the password can be split into seven-character hashes. For
+    example, if the password is *password123456*, the hash value could be stored as
+    *passwor* and *d123456*, so an attacker would simply need to crack a 7-character
+    password instead of a 14-character one. In NTLM, regardless of the password size,
+    *password123456* would be stored as a hash value of *password123456*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We’re using a super complex password here that we would not be able to crack
+    in a reasonable amount of time. Our password is larger than the 14-character maximum
+    that LM supports, so it has automatically converted itself to an NTLM-based hash
+    value. Even with rainbow tables or a super powerful cracking machine, it would
+    take a significant amount of time to crack these passwords.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following code, we extract a username and password hash for the *Administrator*
+    user account with UID 500 (the Windows Administrator system default). The strings
+    that follow `Administrator:500` are two hashes of the *Administrator* password.
+    This shows an example of a simple extract of a username and password hashes. Shortly,
+    we will extract our own username and password hashes from our Windows XP system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first hash at ![](../images/00002.gif) is an LM hash, and the second at
+    ![](../images/00004.gif) is an NTLM hash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dumping the Password Hash
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: On your target machine, change your password to something complex, such as *thisisacrazylongpassword&&!!@@##*
+    and use Meterpreter to dump the username and password hashes (shown in the preceding
+    code listing) from the target again. We will leverage the `use priv` command,
+    which means we are running as a privileged user account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To dump the Security Account Manager (SAM) database, we need to be running as
+    SYSTEM to get around the registry restrictions and dump the protected SAM storage
+    that contains our Windows usernames and passwords, as shown next. Try performing
+    this scenario on a test virtual machine to see if you can dump the username and
+    password hashes. In this listing, we execute the `hashdump` command, which dumps
+    all the usernames and password hashes from the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: A hash value that starts with *aad3b435* is simply an empty or null hash value
+    — a placeholder for an empty string. (Something like *Administrator:500:NOPASSWD:ntlmhash*
+    is also null.) Because our password was longer than 14 characters, Windows can
+    no longer store an LM hash, and it uses the standard *aad3b435* . . . string,
+    which represents a blank password.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Problem With Lm Hashes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Just for fun, try the following: Change your password to something complex
+    that is 14 characters or less. Then extract the password hashes from the system
+    with `hashdump` and copy the first hash value (such as the portion beginning with
+    *aad3b435* in the preceding example), which is the LM hash. Next, search for one
+    of the many online password crackers and submit your hash value. Wait a few minutes,
+    click the refresh button a couple of times, and your password should be cracked.
+    (Be careful not to use one of your real passwords, because the information is
+    frequently posted to everyone who visits the site!)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is a *rainbow table* attack. A *rainbow table* is a precomputed table used
+    for reversing cryptographic hash functions, usually for cracking passwords. Rainbow
+    tables use every combination of characters including 1–7, a–z, special symbols,
+    and spaces. When you submit your hash to an online cracker, the site’s server
+    searches through gigabytes of rainbow tables for your specific hash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pass the Hash
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In the preceding example, we ran into a slight complication: We have the administrator’s
+    username and password hashes, but we can’t crack the password in a reasonable
+    time frame. If we don’t know the password, how can we log into additional machines
+    and potentially compromise more systems with this one user account?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can use the *pass-the-hash* technique, which requires that we have only
+    the password hash, not the password itself. Metasploit’s *windows/smb/psexec*
+    module makes this all possible, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: After we select the *smb/psexec* module at ![](../images/00002.gif) and set
+    the options for `LHOST`, `LPORT`, and `RHOST`, we set the `SMBPass` variable,
+    and at ![](../images/00004.gif) we input the hash that we dumped earlier. As you
+    can see, authentication is successful and we gain our Meterpreter session. We
+    didn’t have to crack a password, and no password was needed. We’ve secured *Administrator*
+    privileges using the password hash alone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we successfully compromise one system on a large network, in most cases
+    that system will have the same administrator account on multiple systems. This
+    attack would allow us to hop from one system to another without ever needing to
+    crack the password itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Privilege Escalation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that we have access to the system, we can create a normal user account with
+    limited permissions using the `net user` command. We’ll create a new user account
+    to demonstrate how to elevate permissions as that user. (You will learn more about
+    this in [Chapter 8](part0012.html#exploitation_using_client-side_attacks).)
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we compromise a limited user account, we will run into restrictions that
+    prevent us from executing commands that require administrative-level permissions.
+    By elevating an account’s permissions, we overcome that restriction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On a Windows XP target machine, we enter the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, we create a Meterpreter-based payload, *payload.exe*, copy it to the target’s
+    XP machine, and run it under the user account *bob*. This will be our new limited
+    user account. In this example, we will use *msfpayload* to create a Meterpreter-based
+    payload as a normal Windows executable. (We’ll discuss *msfpayload* in more detail
+    in [Chapter 7](part0011.html#avoiding_detection).)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `LHOST` and `LPORT` options tell Metasploit that when it creates our Meterpreter
+    payload it should connect back to our attacker machine on port 443\. We then call
+    the *msfcli* interface to start a listener handler for us. This listener handler
+    will wait for connections, and when one is received, it will spawn a Meterpreter
+    shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the attacker machine, we create a new Meterpreter stand-alone executable
+    at ![](../images/00002.gif), copy the executable to the Windows XP machine, and
+    run it under the user account *bob*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We then set up a listener at ![](../images/00004.gif) to listen for the Meterpreter
+    connection. After the target executes the payload on the system (*payload.exe*),
+    we see a limited user Meterpreter console ![](../images/00005.gif). We can, for
+    example, generate a *payload.exe* on a Back|Track machine, copy the executable
+    to a Windows XP machine, and set up a listener to get a Meterpreter session.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As shown in the next listing, we drop to a Meterpreter shell at ![](../images/00002.gif)
+    and enter **`net user bob`**; we can see that user *bob* is a member of the *Users*
+    group, is not an administrator, and has limited rights. We have a limited footprint
+    from which to attack this device, and we can’t perform certain attacks, such as
+    dumping the SAM database to extract usernames and passwords. (Luckily, Meterpreter
+    has us covered, as you’ll see in a moment.) Our query complete, we press ctrl-Z,
+    which saves our Meterpreter session and keeps us in the exploited system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Here’s another Meterpreter trick: While you’re in the Meterpreter console,
+    enter **`background`** to jump back into *msfconsole* and leave the session running.
+    Then enter `sessions -l` and `sessions -isessionid` to return to your Meterpreter
+    console.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now let’s get administrative or SYSTEM rights. As shown in the next listing,
+    we enter **`use priv`** to load the *priv* extensions, which gets us access to
+    the privileged module (which may already be loaded). Next, we enter **`getsystem`**
+    in an attempt to elevate our privilege to that of local system, or administrator.
+    We then verify that we have admin privileges with the **`getuid`** command. The
+    server username returned is *NT AUTHORITY\SYSTEM*, which tells us that we’ve succeeded
+    at gaining administrator access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: To switch back to the previous user account where we initially got our Meterpreter
+    shell, we’d use `rev2self`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Token Impersonation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In *token impersonation*, we grab a Kerberos token on the target’s machine and
+    then use it in place of authentication to assume the identity of the user that
+    originally created that token. Token impersonation is very beneficial for penetration
+    tests and can be one of Meterpreter’s most powerful features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consider the following scenario, for example: You’re performing a penetration
+    test at your organization, and you successfully compromise the system and establish
+    a Meterpreter console. A domain administrator account has logged on within the
+    last 13 hours. When this account logs on, a Kerberos token is passed to the server
+    (single sign-on) and is valid for a certain period of time. You exploit this system
+    via the valid and active Kerberos token, and through Meterpreter you successfully
+    assume the role of a domain administrator, without needing the password. Then
+    you hack a domain administrator account or go after a domain controller. This
+    is probably one of the easiest ways to gain access into a system and just another
+    example of why Meterpreter is so useful.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using ps
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For this example, we’ll use the Meterpreter function `ps` to list the applications
+    running and show under which account they are running. We’ll use the domain name
+    *SNEAKS.IN* ![](../images/00002.gif) and the user account *ihazdomainadmin* ![](../images/00004.gif).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As shown in the following listing, we leverage `steal_token` and the PID (380
+    in this case) to steal the token of that user and assume the role of the domain
+    administrator:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: We have successfully impersonated the domain administrator account and Meterpreter
+    is now running under the context of that user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In some cases, `ps` may not list a running process running as a domain administrator.
+    We can leverage `incognito` to list available tokens on the system as well. When
+    performing a penetration test, we should check the output of both `ps` and `icognito`
+    because the results may vary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We load `incognito` with `use incognito` and then list tokens with `list_tokens
+    -u`. Looking through the list of tokens, we see the *SNEAKS.IN\ihazdomainadmin*
+    user account at ![](../images/00002.gif). Now we can pretend to be someone else.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: As shown in the next listing, we successfully impersonate the `ihazdomainadmin`
+    token at ![](../images/00002.gif) and add a user account at ![](../images/00004.gif),
+    which we then give domain administrator rights at ![](../images/00005.gif). (Be
+    sure to use two backslashes, `\\`, when entering the `DOMAIN\USERNAME` at ![](../images/00002.gif).)
+    Our domain controller is 192.168.33.50.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When entering the `add_user` and `add_group_user` commands, be sure to specify
+    the `-h` flag, which tells Incognito where to add the domain administrator account.
+    In this case, that would be the IP address of a domain controller. The implications
+    for this attack are devastating: Essentially, the Kerberos token on any system
+    that a domain administrator logs into can be assumed and used to access the entire
+    domain. This means that every server on your network is your weakest link!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pivoting onto Other Systems
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Pivoting* is a Meterpreter method that allows for the attack of other systems
+    on a network through the Meterpreter console. For example, if an attacker were
+    to compromise one system, he could use pivoting to compromise other systems on
+    the same network or to access systems to which he could not otherwise route traffic,
+    for whatever reason.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, suppose you’re performing a penetration test from the Internet.
+    You compromise a system through a vulnerability and have a Meterpreter console
+    to the internal network. You can’t directly access other systems on the network,
+    because the system you compromised did not provide you with everything you need
+    to do so, but you need to penetrate the network further. Pivoting will allow you
+    to attack multiple systems on the internal network through the Internet, using
+    the Meterpreter console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following example, we’ll attack a system from one subnet and route that
+    system to attack another system. First, we’ll exploit the Windows XP machine,
+    and then we’ll piggyback the attack from our attacking machine to an Ubuntu system
+    on the internal network. We’ll come from a 10.10.1.1/24 address and attack systems
+    within the 192.168.33.1/24 network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll assume that we already have access to one server via a compromise and
+    will focus on establishing a connection to that network. Next, we introduce external
+    scripts written with Meterpreter that can be found in the *scripts/meterpreter/*
+    directory. These scripts offer additional functionality that we can use within
+    Meterpreter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We begin by displaying local subnets on the compromised system within a Meterpreter
+    session with `run get_local_subnets`, as shown at ![](../images/00002.gif).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: We have successfully compromised our Windows XP machine and have full access
+    to it. Next, we background our running session at ![](../images/00004.gif) and
+    add a `route` command to the Framework at ![](../images/00005.gif), telling it
+    to route the remote network ID over session 1, the background Meterpreter session.
+    We then display active routes with `route print` at ![](../images/00006.gif),
+    and we can clearly see at ![](../images/00007.gif) that, just as we desired, the
+    route is active.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we’ll set up a second exploit against the targeted Linux system. The specific
+    exploit here is a Samba-based heap overflow, which would be vulnerable on our
+    Metasploitable machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compare the `LHOST` ![](../images/00002.gif) and `RHOST` ![](../images/00004.gif)
+    variables to the network information displayed by `ifconfig` ![](../images/00005.gif).
+    Our `LHOST` option specifies the IP address of our attacking machine. Also notice,
+    the `RHOST` option IP address is set to a different network subnet and that we
+    are attacking systems by tunneling our traffic through our compromised target
+    to additional systems on the target’s network. We are leveraging the pivoting
+    attack through Metasploit to pass communications through our exploited machine
+    to the target machine that resides on the local subnet. In this case, if the heap
+    overflow is successful, we should be presented with a reverse shell from 192.168.33.132,
+    simply by leveraging the network communications on the already compromised machine.
+    When we run the exploit with `exploit`, we see at ![](../images/00006.gif) that
+    a connection is set up as expected on a different machine, not the Windows XP
+    machine. Now, to port scan through the pivot, we would use the *scanner/portscan/tcp*
+    scanner module, which is built to handle routing through Metasploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You could also use the *scanner/portscan/tcp* scanner to conduct a series of
+    port scans through your compromised target on the local subnet itself. We won’t
+    go into the details here, but just know that you can perform port scanning on
+    a compromised network leveraging this module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the preceding examples, we used the `route add` command after we had compromised
+    the system. Alternatively, to add the routes automatically to Meterpreter upon
+    a new session spawn, we could use `load auto_add_route`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Using Meterpreter Scripts
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Several external Meterpreter scripts can help you to enumerate a system or perform
+    predefined tasks inside the Meterpreter shell. We won’t cover every script here,
+    but we will mention a few of the most notable ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The Meterpreter scripts are in the process of being moved to post exploitation
+    modules. We’ll cover both scripts and post exploitation modules in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To run a script from the Meterpreter console, enter **`run`***`scriptname`*.
+    The script will either execute or provide additional help on how to run it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Should you want to use an interactive remote GUI on the system, you can use
+    the VNC protocol to tunnel the active desktop communications and interact with
+    the GUI desktop on the target machine. But in some cases, the system may be locked
+    and you may be unable to access it. Never fear: Metasploit has us covered.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following example, we issue the `run vnc` command, which installs a VNC
+    session on the remote system. From there, we launch `run screen_unlock` to unlock
+    the target machine so that we can view the desktop. As a result, a VNC window
+    should appear, showing us the target desktop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will give us a VNC graphical interface to the target machine and allow
+    us to interact through a desktop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Migrating a Process
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Often, when we are attacking a system and exploiting a service such as Internet
+    Explorer, if the target user closes the browser, the Meterpreter session is also
+    closed and we lose our connection to the target. To avoid this problem, we can
+    use the *migrate* post exploitation module, shown next, to attempt to migrate
+    the service to a memory space that won’t close when the target closes the browser.
+    By migrating to a different, more stable process, we ensure that the process isn’t
+    closed and we maintain our connection to the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Killing Antivirus Software
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Antivirus software can block certain tasks. During penetration tests, we have
+    seen “smarter” antivirus or host-based intrusion prevention products block our
+    ability to run certain attack vectors. In such cases, we can run the `killav`
+    script to stop the processes preventing our tasks from running.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Obtaining System Password Hashes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Obtaining a copy of the system’s password hashes allows us to run pass-the-hash
+    attacks or to brute force the hash to reveal the plain-text password. We can obtain
+    the password hashes with the `run hashdump` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Viewing All Traffic on a Target Machine
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To see all traffic on a target, we can run a packet recorder. Everything captured
+    by `packetrecorder` is saved in the *.pcap* file format to be parsed with a tool
+    such as Wireshark.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this listing, we run the `packetrecorder` script with the `-i 1` option,
+    which specifies which interface we want to use to perform the packet captures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Scraping a System
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `scraper` script enumerates just about everything you could ever want from
+    a system. It will grab the usernames and passwords, download the entire registry,
+    dump password hashes, gather system information, and export the `HKEY_CURRENT_USER`
+    (`HKCU`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Using Persistence
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Meterpreter’s `persistence` script allows you to inject a Meterpreter agent
+    to ensure that Meterpreter is running even after the target system reboots. If
+    this is a reverse connection, you can set intervals for the target to connect
+    back to the attacker machine. If it’s a bind, you can have it attempt to bind
+    on an interface at a given time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Warning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you use this functionality, be sure that you remove it after you’re done.
+    If you forget to do this, any attacker can also gain access to the system without
+    authentication!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following listing, we run `persistence` and tell Windows to autostart
+    the agent at boot time (`-X`), wait 50 seconds (`-i 50`) before connection retries,
+    run on port 443 (`-p 443`), and connect to IP 192.168.33.129\. We then establish
+    a listener for the agent at ![](../images/00002.gif) with `use multi/handler`,
+    and after setting a couple of options and running `exploit`, we see at ![](../images/00005.gif)
+    that the connection comes in as expected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: As of this writing, the only way to remove the Meterpreter agent is to delete
+    the registry entry in *HKLM\Software\Microsoft\Windows\CurrentVersion\Run\* and
+    remove the VBScript located in *C:\WINDOWS\TEMP\*. Be sure to document the registry
+    keys and locations (such as *HKLM\Software\Microsoft\Windows\CurrentVersion\Run\xEYnaHedooc*
+    ![](../images/00004.gif)) to remove them manually. Generally, you can do this
+    through Meterpreter or drop to a shell and remove it that way. If you feel more
+    comfortable using a GUI, you can use `run vnc` and remove the script with *regedit*.
+    (Note that the registry keys will change each time, so make sure that you document
+    where Metasploit adds the registry keys.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Leveraging Post Exploitation Modules
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As mentioned earlier, the Meterpreter scripts are slowly being converted to
+    post exploitation modules. The move to post exploitation modules will finally
+    give a fully consistent standard and format to the Metasploit modules. As you
+    read through later chapters, you’ll see the overall structure of auxiliary modules
+    and exploits. In the past, Meterpreter scripts used their own format, which was
+    very different from the way other modules behaved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One added benefit of moving the modules to the same format is the ability to
+    perform the same attack on all sessions available. Suppose, for example, that
+    you have 10 open Meterpreter shells. In the traditional fashion, you would need
+    to run `hashdump` on each or write custom scripts to query through each console.
+    In the new format, you would be able to interact with each session and perform
+    the `hashdump` on multiple systems if needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next listing shows an example of how to use the post exploitation modules:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To see a list of post exploitation modules, enter the following and then press
+    the tab key on your keyboard at the end of the line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Upgrading Your Command Shell to Meterpreter
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One of the newer features in the Metasploit Framework is its ability to upgrade
+    a command shell payload to a Meterpreter payload once the system has been exploited,
+    by issuing the `sessions -u` command. This is useful if we use a command shell
+    payload as an initial stager and then find that this newly exploited system would
+    make the perfect launching pad for further attacks into the network. Let’s look
+    at a quick example from start to finish using MS08-067 with a reverse command
+    shell as the payload, and upgrade it to a Meterpreter shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ![](../images/00002.gif) we issue the `setg` command for `LHOST` and `LPORT`,
+    which is required in order for the `sessions -u 1` to upgrade to Meterpreter at
+    ![](../images/00005.gif). (The `setg` command sets the `LPORT` and `LHOST` globally
+    in Metasploit, not just for this exploit.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice at ![](../images/00004.gif) that when we exploit the system we issue
+    the `exploit -z` command, which will not interact with the session once the target
+    has been exploited. If you had already executed the `exploit` command at this
+    point, you could simply press ctrl-Z and run the session in the background.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Manipulating Windows APIs with the Railgun Add-On
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You can interface with the Windows native API directly through a Metasploit
+    add-on called *Railgun*, which was written by Patrick HVE. By adding Railgun to
+    the Metasploit Framework, you can natively call Windows APIs through Meterpreter,
+    all through the Windows API. For example, in the following listing, we’ll drop
+    into an interactive Ruby shell (`irb`), available through Meterpreter. The `irb`
+    shell allows us to interact directly with Meterpreter through Ruby-based syntax.
+    We call Railgun in this example and create a simple pop-up box saying “hello world”.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: On our target Windows XP machine, you should see a pop-up box with *world* in
+    the title bar and *hello* in the message box. In this example, we simply called
+    the *user32.dll* and the `MessageBoxA` function, which takes the parameters as
+    shown.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For a list of all documented API calls, visit [http://msdn.microsoft.com/](http://msdn.microsoft.com/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We won’t cover Railgun in detail (you can find a tutorial within the Framework
+    directory under *external/source/meterpreter/source/extensions/stdapi/server/railgun/*,
+    but this gives you an idea of its power.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The implications are huge: Railgun gives you the same capabilities as a native
+    Win32 application with full access to the Windows API.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Wrapping Up
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Hopefully, you’re now pretty comfortable with Meterpreter. We haven’t gone through
+    every Meterpreter flag and option, because we expect your knowledge of Meterpreter
+    to grow as you experiment and use it. Meterpreter is a continuously evolving tool
+    with an enormous amount of support for scripts and additions. Once you become
+    comfortable with the overall interface, you will be able to master anything new.
+    In [Chapter 16](part0020.html#meterpreter_scripting), you will learn how to create
+    your own Meterpreter scripts from scratch and how the overall structure of a Meterpreter
+    script is designed.
+  prefs: []
+  type: TYPE_NORMAL

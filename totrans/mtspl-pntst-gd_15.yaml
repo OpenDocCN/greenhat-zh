@@ -1,0 +1,547 @@
+- en: Chapter 15. Porting Exploits to the Metasploit Framework
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You can choose to convert exploits to Metasploit from a different format for
+    many reasons, not the least of which is to give back to the community and the
+    Framework. Not all exploits are based on the Metasploit Framework; some are programmed
+    in Perl and Python or C and C++.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you port exploits to Metasploit, you convert an existing stand-alone exploit,
+    such as a Python or Perl script, for use within Metasploit. And, of course, after
+    you have imported an exploit into the Framework, you can leverage the Framework’s
+    many high-end tools to handle routine tasks, so that you can concentrate on what
+    is unique about your particular exploit. In addition, although stand-alone exploits
+    often depend on your using a certain payload or operating system, once ported
+    to the Framework, payloads can be created on the fly and the exploit can be used
+    in multiple scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter will walk you through the process of porting two stand-alone exploits
+    to the Framework. With your knowledge of these basic concepts and a bit of hard
+    work on your part, you should be able to begin porting exploits into the Framework
+    yourself by the end of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assembly Language Basics
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To get the most out of this chapter, you’ll need a basic understanding of the
+    assembly programming language. We use a lot of low-level assembly language instructions
+    and commands in this chapter, so let’s take a look at the most common ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: EIP and ESP Registers
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Registers* are placeholders that store information, perform calculations,
+    or hold values that an application needs in order to run. The two most important
+    registers for the purposes of this chapter are *EIP*, the extended instruction
+    pointer register, and *ESP*, the extended starter pointer register.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The value in EIP tells the application where to go after it has executed some
+    code. In this chapter, we’ll overwrite our EIP return address and tell it to point
+    to our malicious shellcode. The ESP register is where, in our buffer overflow
+    exploit, we would overwrite the normal application data with our malicious code
+    to cause a crash. The ESP register is essentially a memory address and placeholder
+    for our malicious shellcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The JMP Instruction Set
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The *JMP instruction set* is the “jump” to the ESP memory address. In the overflow
+    example that we’ll explore in this chapter, we use the JMP ESP instruction set
+    to tell the computer to go to the ESP memory address that happens to contain our
+    shellcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: NOPs and NOP Slides
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A *NOP* is a no-operation instruction. Sometimes when you trigger an overflow,
+    you won’t know exactly where you’re going to land within the space allocated.
+    A NOP instruction simply says to the computer “Don’t do anything if you see me,”
+    and it is represented by a \x90 in hexadecimal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A *NOP slide* is a handful of NOPs, combined to create a slide to our shellcode.
+    When we go through and actually trigger the JMP ESP instructions, we will hit
+    a bunch of NOPs, which will slide down until we hit our shellcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Porting a Buffer Overflow
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Our first example is a typical remote buffer overflow that needs only a jump
+    to the extended stack pointer (JMP ESP) instruction to reach the shellcode. This
+    exploit, called the “MailCarrier 2.51 SMTP EHLO / HELO Buffer Overflow Exploit,”
+    uses MailCarrier 2.51 SMTP commands to cause a buffer overflow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You’ll find the exploit and a vulnerable application at [http://www.exploit-db.com/exploits/598/](http://www.exploit-db.com/exploits/598/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But this is an older exploit, originally written for Windows 2000\. When you
+    run it now, it doesn’t work quite as you’d expect. Conveniently, a Metasploit
+    module is already in the Framework to implement this exploit, although it could
+    use some improvement. After a little time investigating with varying buffer lengths,
+    you will find that more than 1000 bytes are available for shellcode, and the buffer
+    length needs to be adjusted by 4 bytes. (For more information on how this is accomplished,
+    read “Exploit Writing Tutorial Part 1: Stack Based Overflows,” at [http://www.exploit-db.com/download_pdf/13535/](http://www.exploit-db.com/download_pdf/13535/).)
+    The new proof of concept for this exploit follows: We have removed the shellcode
+    and replaced the jump instruction with a string (*AAAA*) to overwrite the EIP
+    register. (Proof of concept exploits contain the basic code necessary to demonstrate
+    the exploit but do not carry an actual payload, and in many cases they require
+    heavy modifications before they will work properly.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you might imagine, the easiest and fastest way to port a stand-alone exploit
+    to Metasploit is to modify a similar one from the Framework. And that’s what we’ll
+    do next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stripping the Existing Exploit
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As our first step in porting the MailCarrier exploit, we’ll strip down the
+    existing Metasploit module to a simple skeleton file, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Because this exploit does not require authentication, we need only the mixin
+    `Msf::Exploit::Remote::Tcp` shown at ![](../images/00002.gif). We’ve discussed
+    mixins in previous chapters; you’ll recall that mixins allow you to use built-in
+    protocols such as `Remote::Tcp` to perform basic remote TCP communications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the preceding listing, the target return address is set to the bogus value
+    `Oxdeadbeef` at ![](../images/00004.gif), and the default TCP port is set to `25`
+    at ![](../images/00005.gif). Upon connecting to the target, Metasploit will send
+    the malicious attack using `sock.put` as shown at ![](../images/00006.gif) and
+    craft our exploit for us.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring the Exploit Definition
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let’s look at how we initially configure our exploit definition. We will need
+    to feed the service a greeting as required by the protocol, a large buffer, a
+    placeholder where we will take control of EIP, a brief NOP slide, and a placeholder
+    for our shellcode. Here’s the code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The malicious buffer is built based on the original exploit code beginning with
+    the `EHLO` command at ![](../images/00002.gif) followed by a long string of *A*s
+    at ![](../images/00004.gif) (5093 of them), 4 bytes to overwrite the EIP register
+    at ![](../images/00005.gif), a small NOP slide at ![](../images/00006.gif), and
+    then some dummy shellcode at ![](../images/00007.gif).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case, we’ve selected an interrupt (breakpoint) at ![](../images/00007.gif)
+    so that execution will pause when it reaches our shellcode without us having to
+    set a breakpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having configured the exploit section, we save the file as *mailcarrier_book.rb*
+    at *modules/exploits/windows/smtp/*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing Our Base Exploit
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the next step, we load the module in *msfconsole*, set the required options,
+    and configure a payload of `generic/debug_trap` (a great payload for exploit development
+    that triggers a stop point when you are tracing the application in a debugger).
+    Then we run the module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: We set the options as if we were running a normal exploit, except that we use
+    the `generic/debug_trap` payload ![](../images/00002.gif) to test our exploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After the module runs, the debugger should pause with EIP overwritten by *42424242*
+    as shown in [Figure 15-1](part0019.html#mailcarrier_initial_overwrite); if you
+    see a successful EIP overwrite of *42424242*, you know your exploit is working.
+    Notice in [Figure 15-1](part0019.html#mailcarrier_initial_overwrite) that the
+    EIP register points to 42424242 and that the NOP slide and the dummy payload have
+    made it into the buffer as expected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![MailCarrier initial overwrite](../images/00054.jpeg)Figure 15-1. MailCarrier
+    initial overwrite'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing Features of the Framework
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Having proved that the basic skeleton of the module works by overwriting our
+    EIP address, we can slowly start to implement the features of the Framework. We
+    begin by setting the target return address (shown in bold in the following example)
+    in the `'Targets'` block to a JMP ESP address. This is the same address that was
+    used in the original exploit; it’s found in *SHELL32.DLL* on Windows XP SP2\.
+    We need to find a legitimate return address to ensure that our code executes properly
+    on the operating system we are targeting. Remember that some exploits work only
+    on specific operating systems, as is the case with this exploit. We are using
+    an address from *SHELL32.DLL*, which will change across different versions or
+    service packs. If we were to find a standard JMP ESP in the application’s memory
+    address, we would not need to use a Windows DLL and could make this exploit universal
+    to all Windows platforms, because the memory addresses would never change.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Metasploit will add the return address into the exploit at run time. You can
+    replace the return address in the exploit block with `[target['Ret']].pack('V')`.
+    This will insert the target return address into the exploit, reversing the bytes
+    in little-endian format. (The endian-ness is determined by the target CPU’s architecture,
+    and processors that are Intel-compatible use little-endian byte ordering.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you declared more than one target, this particular line would select the
+    proper return address based on the target you selected when running the exploit.
+    Notice how moving the exploit to the Framework is already adding versatility.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Re-executing the exploit module should result in a successful jump to the INT3
+    dummy shellcode instructions, as shown in [Figure 15-2](part0019.html#a_successful_jump_to_dummy_shellcode_sem).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A successful jump to dummy shellcode; we are at our user control’s INT3 instructions.](../images/00055.jpeg)Figure 15-2. A
+    successful jump to dummy shellcode; we are at our user control’s INT3 instructions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding Randomization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Most intrusion detections systems will trigger an alert when they detect a long
+    string of *A*s traversing the network, because this is a common buffer pattern
+    for exploits. Therefore, it’s best to introduce as much randomization as possible
+    into your exploits, because doing so will break many exploit-specific signatures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To add randomness to this exploit, edit the `''Targets''` section in the super
+    block to include the offset amount required prior to overwriting EIP, as shown
+    here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: By declaring the `Offset` here ![](../images/00002.gif), you will no longer
+    need to include the string of *A*s manually in the exploit itself. This is a very
+    useful feature, because in some cases the buffer length will differ across different
+    operating system versions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can now edit the exploit section to have Metasploit generate a random string
+    of uppercase alphabetic characters instead of the 5093 *A*s at runtime. From this
+    point on, each run of the exploit will have a unique buffer. (We’ll use `rand_text_alpha_upper`
+    to accomplish this, but we aren’t limited to this one engine. To see all available
+    text formats, see the *text.rb* file located on Back|Track under */opt/metasploit/msf3/lib/rex/*.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the string of *A*s will be replaced with a random string of
+    uppercase alphanumeric characters. And when we run the module again, it still
+    works properly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Removing the NOP Slide
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Our next step is to remove the very obvious NOP slide, because this is another
+    item that often triggers intrusion detection systems. Although `\x90` is the best-known
+    no-operation instruction, it isn’t the only one available. We can use the `make_nops()`
+    function to tell Metasploit to use random NOP-equivalent instructions in the module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: We run the module again and check our debugger, which should be paused again
+    on the INT3 instructions. The familiar NOP slide has been replaced by seemingly
+    random characters, as shown in [Figure 15-3](part0019.html#randomized_mailcarrier_buffer).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Removing the Dummy Shellcode
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: With everything in the module working correctly, we can now remove the dummy
+    shellcode. The encoder will exclude the bad characters declared in the module
+    super block.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![Randomized MailCarrier buffer](../images/00056.jpeg)Figure 15-3. Randomized
+    MailCarrier buffer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `payload.encoded` function tells Metasploit to append the indicated payload
+    to the end of the malicious string at run time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, when we load our module, set a real payload, and execute it, we should
+    be presented with our hard-earned shell, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our Completed Module
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Just to wrap things up, here is the complete and final code for this Metasploit
+    exploit module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: You’ve just completed your first port of a buffer overflow exploit to Metasploit!
+  prefs: []
+  type: TYPE_NORMAL
+- en: SEH Overwrite Exploit
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In our next example, we’ll convert a Structured Exception Handler (SEH) overwrite
+    exploit for Quick TFTP Pro 2.1 to Metasploit. SEH overwrites occur when you overwrite
+    the pointer to the applications exception handler. In this particular exploit,
+    the application triggers an exception, and when it arrives at the pointer over
+    which you have control, you can direct execution flow to your shellcode. The exploit
+    itself is a bit more complex than a simple buffer overflow, but it’s very elegant.
+    In an SEH overwrite, we attempt to bypass the handler that tries to close an application
+    gracefully when a major error or crash occurs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the balance of this chapter, we’ll use the *POP-POP-RETN* technique to allow
+    us to access our attacker-controlled memory space and gain full code execution.
+    The *POP-POP-RETN* technique is commonly used to try to get around the SEH and
+    execute our own code. The first *POP* in assembly pulls a memory address from
+    the stack, essentially removing one memory address instruction. The second *POP*
+    also pulls a memory address from the stack. The *RETN* returns us to a user-controlled
+    area of the code, where we can begin executing our memory instructions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To learn more about SEH overwrites, see [http://www.exploit-db.com/download_pdf/10195/](http://www.exploit-db.com/download_pdf/10195/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Quick TFTP Pro 2.1 exploit was written by Muts. You can find the code for
+    the complete exploit as well as the application at [http://www.exploit-db.com/exploits/5315/](http://www.exploit-db.com/exploits/5315/).
+    We’ve stripped down the exploit here to make it simpler to port into Metasploit
+    — for example, we’ve stripped out the payload. The remaining skeleton has all
+    of the information we’ll need to use the exploit in Metasploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we did with our previous JMP ESP example, we first create a skeleton for
+    our new module by using a base example of an exploit similar to the one we used
+    previously:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Because this exploit uses the Trivial File Transfer Protocol (TFTP), we need
+    to include the `Msf::Exploit::Remote::Udp` mixin shown at ![](../images/00002.gif).
+    And because it manipulates the structured exception handler, we also need to include
+    the `Msf::Exploit::Remote::Seh` mixin shown at ![](../images/00004.gif) to gain
+    access to certain functions that deal with SEH overflows. Because TFTP servers
+    typically listen on UDP port 69, we declare that port at ![](../images/00005.gif)
+    as the default for the module. Lastly, once the malicious string is built, the
+    code is put on the wire at ![](../images/00006.gif).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We begin by using the same skeleton from our original Python exploit earlier
+    in this chapter for the TFTP exploit. We will be adding the major parts of it
+    into our exploit section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Following the initial string of *A*s (1019 of them, represented by `\x41` in
+    hexadecimal), we add a short jump at ![](../images/00002.gif) to overwrite the
+    Next SE Handler (NSEH). At the beginning of this chapter, we used a simple stack
+    overflow example when we attacked MailCarrier and overwrote the instruction pointer.
+    Here, we overwrite the SEH and the NSEH to break out of the structured exception
+    handler. Then at ![](../images/00004.gif) we add the address of a *POP-POP-RETN*
+    sequence of instructions to overwrite SEH, which puts us into an area of memory
+    that we control.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, to make sure that the packet will be recognized as a write request by
+    the TFTP server, we append `\x00\x02` after the shellcode at ![](../images/00005.gif).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, when we load the module and run it against our target, our debugger should
+    pause with a SEH overwrite, as shown in [Figure 15-4](part0019.html#quick_tftp_apostrophy_s_initial_seh_over).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Quick TFTP’s initial SEH overwrite](../images/00057.jpeg)Figure 15-4. Quick
+    TFTP’s initial SEH overwrite'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because that long string of *A*s and the NOP slide sent to the application
+    will set off IDS alarms, we’ll replace the *A*s (as in the previous example) with
+    a random selection of uppercase alphabetic characters, and replace the `\x90`
+    characters with NOP equivalents, as shown in the following boldface code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: As always, it’s a good idea to check your new module’s functionality after every
+    change. As you can see in [Figure 15-5](part0019.html#quick_tftp_buffer_with_random_characters),
+    the random characters have been accepted by the application and SEH is still controlled
+    as it was before.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Quick TFTP buffer with random characters](../images/00058.jpeg)Figure 15-5. Quick
+    TFTP buffer with random characters'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know that the module is still behaving properly, we can set the
+    return address in the `'Targets'` definition. The address in this example is a
+    *POP-POP-RETN* from *oledlg.dll*, as in the original exploit. Remember that if
+    we can find a memory instruction set in the same application that is loaded every
+    time, we can create a universal exploit that is not dependent on Microsoft DLLs
+    and that can target every operating system. In this case, we use *oledlg.dll*
+    to make this exploit universal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: We now have our target of Windows XP SP2 and a return address of 0x74d31458,
+    as shown at ![](../images/00002.gif).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we create a random, alphabetical, uppercase string of 1019 bytes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `generate_seh_payload` function uses the declared return address and will
+    automatically insert the short jump (which jumps us over the SEH handler). The
+    `generate_seh_payload` function calculates the jumps for us, so it will go straight
+    to the *POP-POP-RETN*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We run the module one last time with the dummy shellcode and see that our debugger
+    contains numerous random characters, but everything is still under our direct
+    control, as shown in [Figure 15-6](part0019.html#quick_tftp_fully_controlled).
+    Random characters can be better than NOPs in some cases, because they serve to
+    trip up many IDSs that may be monitoring the network. Many signature-based IDSs
+    can trigger over large volumes of NOPs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Quick TFTP fully controlled](../images/00059.jpeg)Figure 15-6. Quick TFTP
+    fully controlled'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we remove the dummy shellcode and run the module with a real payload
+    to get our shell, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we have our Meterpreter shell, we’ve successfully ported an exploit
+    and used the Framework in an SEH exploit!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Wrapping Up
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This chapter was designed to help you understand how to port different stand-alone
+    exploits into the Metasploit Framework. You can import into the Framework in a
+    number of ways, and different exploits will require different approaches and techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the beginning of this chapter, you learned how to use some basic assembly
+    instructions to perform a simple stack overflow and port it into the Framework.
+    We moved on to SEH overwrites, which we were able to use to maneuver around the
+    handler and gain remote code execution. We used a *pop/pop/ret* technique to gain
+    the ability to execute code remotely, and we used Metasploit to open a Meterpreter
+    shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will begin to dive into the Meterpreter scripting language
+    and post exploitation modules. When we compromise a system and leverage Meterpreter,
+    we can perform a number of additional attacks. We’ll create our own Meterpreter
+    scripts and learn how the Framework is structured and how use it to maximum effect.
+  prefs: []
+  type: TYPE_NORMAL

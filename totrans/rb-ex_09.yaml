@@ -1,0 +1,790 @@
+- en: Chapter 9. More Complex Utilities and Tricks, Part I
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages686190.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This chapter is the first of two that explore more complex operations in Ruby.
+    This one deals extensively with text manipulations and larger-scale searches,
+    while the next details an important functional technique that expands your options
+    for abstraction in a very powerful way. For now, let’s dive right in to learn
+    some text processing techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#34 Finding Codes in the Bible or Moby-Dick (els_parser.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This script analyzes a phenomenon in large texts called equidistant letter sequences
+    (ELSes). These sequences are popularly known as *Bible Codes* or *Torah Codes*,
+    largely due to their description in Michael Drosnin’s book *The Bible Code* (Simon
+    & Schuster, 1997), in which he examined the Hebrew Bible. An *ELS* is a collection
+    of letters (what Ruby would call a String) with a known starting point within
+    the source text, a known length, and a known *skip value*, which is the distance
+    between the letters comprising that ELS. You could construct an ELS by saying,
+    “Start with the 23rd letter in this newspaper article and add every 8th letter
+    until you have 11 letters.” That String of 11 letters would be an ELS. Drosnin’s
+    work suggests that ELSes of particular significance (generally due to relevance
+    to the text they’re drawn from or due to accurate prediction of future events,
+    such as assassinations) appear at a rate greater than chance within certain religious
+    texts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: My `els_parser.rb` script also uses the work of Professor Brendan McKay of The
+    Australian National University. McKay has done his own research (available at
+    [http://cs.anu.edu.au/~bdm/dilugim/torah.html](http://cs.anu.edu.au/~bdm/dilugim/torah.html))
+    to find ELSes in texts like *War and Peace* and *Moby-Dick*, thus concluding that
+    the ELSes that Drosnin refers to as the Bible Codes do not occur more often in
+    the Hebrew Bible than can be expected due to chance. I can’t read Hebrew, so for
+    this script I’ve chosen to analyze Herman Melville’s *Moby-Dick* in English instead
+    of the Hebrew Bible. I downloaded the text from Project Gutenberg ([http://www.gutenberg.org](http://www.gutenberg.org))
+    into `extras/moby_dick.txt`. The `els_parser.rb` script allows you to choose a
+    text and a set of input parameters that describe a potential set of ELSes; then
+    `els_parser.rb` will report whether any ELSes that match the description exist
+    within the source text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `els_parser.rb` script only processes letters, ignoring whitespace and punctuation.
+    We know that Strings can also have non-letter characters, such a whitespace, numbers,
+    punctuation, and so on; therefore, we need a method that strips all non-letters
+    out of a String. Fortunately, we already have such a method—`letters_only`, defined
+    in `palindrome2.rb`. It is easy to take advantage of `letters_only` with a `require`
+    at the top of `els_parser.rb`. However, `palindrome2.rb` defined `letters_only`
+    as a `private` method, and (as will become clear), we want it available as a public
+    method. What can we do? One approach, which is what `els_parser.rb` does at ❶,
+    is to define a new public method, `just_letters`, that exists merely to call the
+    pre-existing `private` method `letters_only`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `just_letters` method is for Strings, but we want a new class called `ELS_Parser`
+    to do the overall management of the searching. `ELS_Parser` has a Hash Constant
+    called `DEFAULT_SEARCH_PARAMS` at ❷. The values for the `:start_pt` and `:end_pt`
+    Symbol keys represent the earliest and latest character index for the search,
+    respectively. The value for `:term` is the text to be searched for. Finally, the
+    values for `:min_skip` and `:max_skip` are the minimum and maximum number of letters
+    to jump past (i.e., skip) during the search. Why these particular default values?
+    They could have been any values, but I took a shortcut and started with values
+    from McKay’s web page ([http://cs.anu.edu.au/~bdm/dilugim/moby.html](http://cs.anu.edu.au/~bdm/dilugim/moby.html))
+    that are known to correspond to a particular match within the text of *Moby-Dick*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note some subtle differences—my values are 0-based (where a skip of 0 means
+    *Go to the next letter*), whereas McKay defines moving to the next letter as a
+    skip of 1\. There is a similar difference with regard to starting points. He also
+    accomplishes searches for backward terms using a negative skip value, while `els_parser.rb`
+    uses a positive skip search on a reversed term.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, in the String `‘abcdefgh’`, which we’ll call `contents`, searching
+    for an ELS with a `:start_pt` of `0`, a `:term` of `‘abc’`, and a `:min_skip`
+    of `0` would find a match, because the String `‘abc’` exists within `contents`
+    starting at 0 (right at the beginning) with a skip value of 0\. Similarly, `‘ceg’`
+    would be found within `contents` starting at 2 with a skip value of 1, and `‘heb’`
+    would be found starting at 1 with a skip value of 2, but as a reversed String.
+    If you expand these concepts greatly, use longer search terms, much larger `contents`
+    (such as the Bible or *Moby-Dick*), and much larger starting, ending, and skip
+    values, you will begin to understand the basics of ELS analysis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After defining `DEFAULT_SEARCH_PARAMS`, our ELS_Parser needs an `initialize`
+    method, in which it will define the instance variables `@contents`, to hold the
+    text being searched, and `@filename`, to store the name of the file it read `@contents`
+    from.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `@contents` variable is the result of calling the `prepare` method (defined
+    at ❾) on the `filename`. The `prepare` method takes in a mandatory `filename`
+    argument and an optional `case_matters` argument. All it does is open a new file,
+    extract its `contents` into a String with `readlines.to_s`, and call `just_letters`
+    on that String. This ensures that we strip out inappropriate characters from our
+    String before storing it in `@contents`. Note that `just_letters` takes an optional
+    argument for case sensitivity. If you’re curious about how this works, remember
+    that `just_letters` just calls the `letters_only` method defined in `palindrome2.rb`,
+    so you can refer to that script for further study.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `initialize` method also calls the `reset_params` method, defined right
+    below `initialize`, which simply sets the instance variable `@search_params` to
+    the `search_params` argument passed into `initialize`, falling back to the `DEFAULT_SEARCH_PARAMS`.
+    It also sets the `:end_pt` value to fall back to the last index of `@contents`
+    if the `:end_pt` value would otherwise be `nil`. This gives `ELS_Parser` a handy
+    shortcut: leaving out the `:end_pt` automatically means *Search to the end of*
+    *`@contents`*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next is `search` at ❸. It allows an optional `term` argument, which automatically
+    updates `@search_params[:term]` as needed. Since `search` is set up to find reversed
+    `term`s as well as normal-order `term`s, we define `reversed_term` right away.
+    We also report that the search is starting if `$DEBUG` is true using the method
+    `warn`, which writes out to *standard error*, instead of *standard out*. `$DEBUG`
+    is generally set as a command-line option to `ruby`, such that `$DEBUG` is true
+    when you execute `ruby` with either the `-d` or `--debug` flag. You may remember
+    standard error from `html_tidy.rb`. In that script, we sent standard error to
+    `/dev/null`, meaning we didn’t care about it. Here, we have a special message
+    designed specifically to go to standard error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After the standard error warning, we define `final_start_pt` at ❹. To understand
+    what `final_start_pt` is for, let’s go back to our `contents` = `‘abcdefgh’` search
+    example. What if we search for `‘hiccup’` with a `:start_pt` of 100? There aren’t
+    even 100 letters in our `contents`, so a search with that `:start_pt` value would
+    automatically fail. Instead of letting that happen, we want to figure out the
+    maximum starting index that could conceivably work, and make sure `:start_pt`
+    is not larger than that value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It’s even more complicated than that. Our search terms will always have letters,
+    and those letters take up space. If we start too close to the end of `@contents`,
+    we could run out of room even with relatively low skip values. We need to keep
+    enough room for the term being searched for, which we store in `@search_params[:term]`,
+    so we set `final_start_pt` accordingly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After setting `final_start_pt`, we enter two nested loops—one on `index` from
+    the lowest to highest starting points and one using `skip` to refer to each number
+    from the lowest to highest skip values. The first thing we do within those loops
+    is use `index` and `skip` at ❺ to assign the expression returned from `construct_candidate`,
+    defined at ❽, into `candidate`. The `construct_candidate` method takes the existing
+    `index` and `skip` values and makes a String of the same length as the term being
+    searched for. For a `@contents` of `‘abcdefgh’, construct_candidate(2, 1)` produces
+    `‘ceg’` where `@search_params[:term]` has three characters in it. The `construct_candidate`
+    method returns the empty String if the `new_index` being asked for ever goes beyond
+    the `@contents` String. Our `final_start_pt` limits should prevent this from ever
+    being needed, but it’s an additional safety check.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The *`construct_candidate`* method also uses the *`chr`* method, because extracting
+    a single character out of a String gives you that character’s ASCII value*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can test this in irb:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: After establishing our `candidate`, we want to see if it is a successful match,
+    which we start to do at ❻. If it does match, we `return` the result of calling
+    `report_match` with `skip` and `index` as arguments. However, we also want to
+    know whether our `candidate` matches the `reversed_term` instead of the term in
+    regular order, so we call `report_match`, again with `skip` and `index` as arguments,
+    but we also add the String `‘reversed ’`. Finally, at ❼ we return the result of
+    calling `report_match` with two explicit `false` arguments if we’ve looped through
+    all of the appropriate `skip` and `index` loops without already returning something.
+    This just means that we never found a match, either forward or reversed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We need to know how `report_match` works. It’s defined at ❿, and it takes arguments
+    for `skip, index`, and an optional `reversed` String, as already shown. If `index`
+    is `false, report_match` returns a String informing the user that there was no
+    match found. Otherwise, It returns the details of the successful match. Note that
+    `reversed` adds the String `‘reversed ’` (including the trailing space) as needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We can test this with another script called `demo_els_parser.rb`. Here is its
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Here is the result of calling this script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We could significantly increase the speed of `construct_candidate` by checking
+    against the search terms as we go and returning the empty string whenever it fails
+    to match—an application of the return guard notion within the construction of
+    the candidate. Where we define `final_start_pt`, we could also either limit `:max_skip`
+    in a similar way or report an error if impossible search parameters were asked
+    for.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*There’s also a better way to include the *`letters_only`* method than the
+    way I’ve done it here, using a concept called a mixin. Jump ahead to the *`to_lang.rb`*
+    script in [Chapter 10](ch10.html "Chapter 10. More Complex Utilities and Tricks,
+    Part II") to see mixins in action*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#35 Mutating Strings into Weasels (methinks.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This script is based on a program from Richard Dawkins’ *The Blind Watchmaker*
+    (W.W. Norton, 1996).The program demonstrates a simplified model of asexual natural
+    selection, starting with a String consisting of random characters and successively
+    mutating it to produce “children” that differ from the parent. The program then
+    selects the “best” child String (meaning the one that most closely matches the
+    target String `methinksitislikeaweasel`, a reference from *Hamlet*) to be the
+    next generation’s parent. This process continues until the parent String matches
+    the target String.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s implement Dawkins’ process in Ruby.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Dawkins wrote his program to demonstrate a version of cumulative selection
+    over time that was intentionally simpler than real-world neo-Darwinian natural
+    selection. Critics contend that the program is a suboptimal model, with the most
+    prominent criticisms being that it is overly simplified, it is unable to fail,
+    and it has a preset target, making it a better model of artificial selection than
+    natural selection. See [Hacking the Script](ch09s02.html#hacking_the_script-id023
+    "Hacking the Script") on page 175 for general suggestions for modifying this version
+    of the program to be a better model of real-world Darwinian selection*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We start by defining a new class called Children at ❶. You’ll notice the peculiar
+    `Children < Array` within the class definition, which suggests a relationship
+    between Children and Arrays. That relationship is *inheritance*. Children inherits
+    from Array, meaning that it behaves as an Array in every way, while also adding
+    whatever new characteristics we give it. In our case, the only new characteristic
+    is a new method called `select_fittest`, which uses `inject` to find the fittest
+    child within Children, defined by the `fitter_than?` method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CHILDREN DON’T LIE
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There’s one other way in which a child class (or subclass) differs from its
+    parent, and that’s the expression returned by the class method. It returns the
+    name of the subclass when called on an instance of the subclass:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Some people may think that’s obvious, but it’s worth noting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After defining Children, we open the String class at ❷. We add several Constants,
+    including an Array of letters that we’ll call the `ALPHABET`, and `LETTER_OFFSET`.
+    The `LETTER_OFFSET` Constant requires some explanation. It represents characters
+    as ASCII values to determine how closely certain Strings match each other. Converting
+    letters to numerical value is convenient, as it allows us to use basic mathematical
+    operations to find the “most fit” child string. Ruby converts characters to numerical
+    values by treating a String as an Array and reading values out with indices. Let’s
+    demonstrate in irb (the `chr` method converts from ASCII values back to a String):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can see that the ASCII value for the String `‘a’` (the character at index
+    `0` in String `s`) is `97`, that the `chr` method converts that ASCII value back
+    to `‘a’`, and that the ASCII value for `‘b’` is `98`. The number `97` is our `LETTER_OFFSET`.
+    Astute readers will notice that `LETTER_OFFSET` is the index at which `‘a’` appears
+    in our `ALPHABET`, as well. Observe the following in irb:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Calling `[0]` on a character and subtracting `LETTER_OFFSET` (`‘a’[0]`, or `97`)
+    gives us the index of that character within our `ALPHABET` Array. This will be
+    very handy in the `mutate_char` method at ❿, which we’ll discuss when we get there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our next two Constants are `PARAMS` and `TARGET`. Both of these establish defaults
+    for items that might be overridden by optional arguments. `PARAMS` is a now-familiar
+    Hash with Symbol keys, each value of which determines the specific behavior of
+    our mutations. The value for `:generation_size` is the number of children, `:mutation_rate`’s
+    is the percentage chance that a mutation will occur at all, `:display_filter`
+    just sets how often our program will give updates while it’s running, and `:mutation_amp`
+    determines how strong or divergent a given mutation can be—basically a numeric
+    measure of how different children can be from their parents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`TARGET` is our default final goal: `methinksitislikeaweasel`. Finally, after
+    the Constants, we have a single class variable called `@mutation_attempts`, which
+    is just a counter that increments every time we mutate. We’re ready to start defining
+    some methods.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our first new method to add to String is `deviance_from` (❸). It takes a mandatory
+    target argument (the default fallback to the `TARGET` Constant occurs in `mutate_until_matches!`
+    at ❺, which is later in the code but is called earlier). The `deviance_from` method
+    returns an Integer (`deviance`) which is a numeric measure of how different two
+    Strings are. Each character of difference at each point within the String increments
+    `deviance` by one. Here are some irb examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: This method is useful for our script, because if we are trying to model the
+    survival of the fittest, we need to be able to measure fitness. A low `deviance_from`
+    the `target` represents fitness. Just below `deviance_from` is `fitter_than?`,
+    a simple predicate that compares the `deviance_from` value for `self` and the
+    `deviance_from` value for the `other` String, both relative to the same `target`.
+    It only returns `true` when `self`’s `deviance_from` value is lower, making `self`
+    fitter. Take a look at [Hacking the Script](ch09s02.html#hacking_the_script-id023
+    "Hacking the Script") on page 175 for a way to eliminate this method entirely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next up is `mutate` (❹). It takes a mandatory `params` argument, which falls
+    back to the default `PARAMS` Constant in `mutate_until_matches!` (❺) earlier within
+    the script’s operation, if necessary. The `mutate` method is remarkably lazy,
+    in that it `split`s its calling object into individual characters, and calls `mutate_char`
+    (❿) on each of those characters via `map`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `mutate_char` method is a bit more complicated. It takes mandatory arguments
+    for the `original_char` and `params`, and it exits immediately if `params` says
+    that it should not mutate, which is determined by a random percentage being higher
+    than `params[:mutation_rate]`. Assuming it passed `params`’ test, `mutate_char`
+    will mutate the character. First, it declares a `variance`, which is just the
+    amount and direction of change based on the `:mutation_amp`. The values for `variance`
+    range from `+(:mutation_amp / 2)` to `-(:mutation_amp / 2)`, excluding zero. They
+    initially vary from `-(:mutation_amp / 2)` to one less than `+(:mutation_amp /
+    2)`, including zero, but the line that executes `variance +=1 if variance.zero?`
+    ensures that values of zero or higher are bumped up by one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It then creates an `alphabet_index` variable, which uses `LETTER_OFFSET` as
+    previously discussed to find that index within `ALPHABET` for our `original_char`,
+    plus any appropriate `variance`. It then limits `alphabet_index` with the `limit_index`
+    method (❾), which clips or truncates `alphabet_index` to a maximum of the last
+    index within `ALPHABET` and minimum of `0`, which is the first index within `ALPHABET`.
+    Since it then has a dependable index to read from `ALPHABET`, it does so, placing
+    that value within a variable called `mutated_char`, which it then `return`s.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Following `mutate` is `mutate_until_matches!` (❺), which is the public-facing
+    workhorse of the script. It takes optional arguments for `target` and `params`,
+    falling back to String’s `TARGET` and `PARAMS` Constants, as mentioned in earlier
+    discussions of other methods. If `self` matches the `target` exactly, we want
+    to `report_success`. Failing that, we want to `report_progress`. We can look at
+    both of those methods, which start at ❼. The `report_success` method uses `puts`
+    to show that it matches exactly after a certain number of attempts, and it returns
+    `@mutation_attempts` without incrementing it. (There’s no need to increment it,
+    since no new mutation occurred.) The `report_progress` method returns with no
+    value unless `@mutation_attempts` is a multiple of (i.e., has a modulus of 0 relative
+    to) `params[:display_filter]`. If we set a lower display filter, we have a chattier
+    mutation process. Assuming that it should output, it uses `puts` to show what
+    `self` is after however many `@mutation_attempts`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After reporting its progress, `mutate_until_matches!` should then actually do
+    some mutating. It increments `@mutation_attempts` and then creates a new variable
+    called `children`, which is the output of `propagate` (❻). The `propagate` method
+    takes some `params` and instantiates a new instance of Children (❶), meaning that
+    it has access to `select_fittest`, which is not available to Arrays. It appends
+    it `self` onto `children`, the effect of which is that if the parent (`self`)
+    is fitter than all of the `children`, the parent will again be the source of the
+    generation of `children` after this one. The `propagate` method then appends a
+    child (a mutated version of it `self`) onto `children`, doing so a number of times
+    equal to `params[:generation_size]`. Finally, it returns the `children`, who will
+    then try to make their way in the cruel world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The effect of the cruel world is accomplished via Children’s `select_fittest`
+    method. The world is cruel indeed, because only one child survives, as discussed
+    already. We call the fittest child `fittest`, appropriately, and `replace` the
+    parent with this fittest child. Then `mutate_until_matches!` recursively calls
+    itself, mutating until it finally matches the `target`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Two methods remain undescribed: `scramble` and `scramble!` (❽). Both of these
+    methods take an optional `target` argument that defaults to `TARGET`. Since `scramble!`
+    is destructive, it sets `self`’s `@mutation_attempts` to `0` and `replace`s it
+    `self` with the value returned by the non-destructive `scramble`. The `scramble`
+    method `split`s the `target` at each `char` and creates a new Array via `map`;
+    each member of the new Array is a random element from `ALPHABET`. Note that we
+    don’t even make any use of `char`—we just use `map` to make sure that the scrambled
+    String is the same `size` as the `target`. The `scramble` method then `join`s
+    that Array of random characters with the empty String and returns the resulting
+    String: a String of the same length as the target, consisting entirely of random
+    letters.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let’s try it out in irb.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Try it on your own machine, and notice that the results are random—sometimes
+    the script takes more generations, sometimes fewer. If you pass in different values,
+    you can get dramatically different results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: We’ll explore this program further in our next script, `methinks_meta.rb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `select_fittest` method could be expressed as follows in terms of `sort_by`,
+    rather than `inject`. The returned value is exactly the same, whether it’s the
+    memoization within `inject` or the member of the sorted `Children` at the zeroth
+    index. Using `sort_by` would also allow us to eliminate the `fitter_than?` method
+    entirely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `replace` in `mutate_until_matches!` is what makes it destructive, making
+    it appropriate for its name to end with a bang. The `mutate_until_matches!` method
+    could easily have been purely functional by replacing the last two lines of the
+    method with `return fittest.mutate_until_matches(target, params)`, although the
+    name would then have been misleading, even without the bang—perhaps simply `get_match`
+    would be a better name in this case. In addition, the `@mutation_attempts` variable
+    would not be retained from mutation to mutation. We would have to alter `mutate_until_matches!`
+    (or `get_match`, or whatever other new name it would have) to accept `mutation_attempts`
+    as an optional argument, defaulting to zero for the first call. Its treatment
+    would be very similar to how `els_parser.rb` updates `@search_params[:term]` with
+    the optional `term` argument.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What would stop us from implementing the `propagate` method (❻) with something
+    like the following code?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The main problem is that the returned value from `propagate` would be an `Array`,
+    not a `Children`, meaning that it would not have access to the `select_fittest`
+    method that we added to `Children`, our subclass of `Array`. We could use our
+    new definition of `propagate` by eliminating the subclassing of `Children < Array`
+    (❶) and simply adding the `select_fittest` method to all `Array`s.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You could also modify this program to be a more accurate model of a more complex
+    type of cumulative selection, such as real-world Darwinian selection. Such a program
+    would have multiple competing “species” of Strings, something to represent food
+    supplies (which would be in finite supply and be consumed by the reproduction
+    process), multiple potentially-successful targets not preset by the programmer,
+    and so on. The changes would allow some Strings’ descendants to be unable to produce
+    competitive children (and thus become extinct), while other Strings’ descendants
+    would flourish, just like organisms in the real world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#36 Mutating the Mutation of Strings into Weasels (methinks_meta.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This script uses the previous one, `methinks.rb`, so make sure you understand
+    how that one works before trying this one, `methinks_meta.rb`. This script uses
+    techniques similar to those used in `methinks.rb` to find the “best” input parameters
+    for `methinks.rb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The previous script’s performance (the number of generations it takes to match
+    the target) can vary greatly from one run to the next. Two major factors affect
+    that variation in our results: The first factor is the set of arbitrary starting
+    parameters. We saw that a target of `hello` was much easier to reach quickly than
+    a target of `methinksitislikeaweasel`. Using other values for `:mutation_rate`
+    or the other parameters also has an impact. The second factor is the unpredictable
+    nature of the random variations while the program runs. Over time, after many
+    runs, the laws of probability will cause this second factor to be less and less
+    important—and in any case, randomness is part of the given problem. Our arbitrary
+    starting parameters are crucial. How do we decide what they should be?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Varying the *`:display_filter`* has no impact on how many generations it takes
+    to reach the target, only how often the program reports on its own progress. Also,
+    genuine random number generation is possible with computers—often by measuring
+    the decay of radioactive elements or listening to noise from a microphone—but
+    our “random” number generation is actually only pseudo-random. Pseudo-random numbers
+    come from a process that has a pattern, making them unsuitable for use in heavy-duty
+    applications like stress testing or cryptography. They’re random enough for our
+    script’s purposes, though. This pseudo-random caveat applies to all random numbers
+    in this book*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The arbitrary set of input parameters is the major problem facing the efficiency
+    of our string’s mutations. Luckily, we’d recognize an ideal set of parameters
+    if we saw them, and we can easily rate parameter sets as better or worse in relation
+    to each other, because we have an easy way to measure success: A low number of
+    generations needed to reach the target String. We already have a way to process
+    candidates repeatedly to reach a given target—it’s called `methinks.rb`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just as we can create a Proc that returns another Proc (as shown in [#24 Nesting
+    lambdas](ch06s05.html "#24 Nesting lambdas") on page 111), we can create a mutator
+    that operates at a higher level of mutation—mutating not just Strings, but the
+    mutation of those Strings. We can define fitter as *requiring a lower number of
+    generations to reach the target*, plug in some parameters, and go. Our new script,
+    `methinks_meta.rb`, will (pseudo-)randomly vary arbitrary input parameters and
+    filter them by this fitness criterion to find ever-better input parameters for
+    us. Let’s see the code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Since we’re performing operations that use `methinks.rb`, we `require` that
+    file at ❶. We then immediately open the Hash class, adding a new method called
+    `get_child` at ❷. The `get_child` method, which could also have been named mutate
+    or reproduce, performs random variations on all of the values for the given Hash.
+    It assumes that those values are Integers, and can thereby be varied with the
+    `rand` method—in this case, from half the given value to 1.5 times the given value.
+    Since the `:display_filter` value has no impact on fitness, we just forcibly set
+    that to `5`. We accomplish the mutation through the construction of a `new_hash`
+    by iterating over `self` with the `each_pair` method and making the necessary
+    changes before writing to `new_hash`, which we then `return`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*We already noted how *`get_child`* makes the assumption that all of its Hash’s
+    values are Integers. It also assumes that the Hash has a key called *`:display_filter`*.
+    This assumption works fine for our script, but if the *`get_child`* method were
+    to become part of a commonly-used library, we would have to make it play nicely
+    with other programs. A programmer can avoid this method for inappropriate Hashes,
+    but a better solution would be for the programmer to take responsibility for making
+    new methods more robust when he or she opens an existing class and adds a new
+    method. A production-ready version of *`get_child`* would check that the Hash’s
+    values can implement numeric addition and also check for the presence of a *`:display_filter`*
+    key before performing the operations laid out in our example*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we create our `Meta_Mutator` class at ❸. It has several Constants. The
+    `NEW_TARGET` Constant defines a different target String. This was mainly for the
+    convenience of having a shorter target, so that runs of the program would take
+    a shorter time. The `MAX_ATTEMPTS` Constant defines the maximum number of attempts
+    we should make to beat our previously fittest mutation attempt before giving up
+    and trying a new set of parameters. `TARGET` is either our `NEW_TARGET` or the
+    familiar `String::TARGET` from `methinks.rb`. This definition allows us to override
+    the `TARGET` easily while still having a default value, and not having to constantly
+    change code later when we want different targets—we just always use `TARGET`.
+    The `Meta_Mutator` class also has the expected `initialize` method, which takes
+    no arguments and defines an empty Hash for `@params_by_number_of_mutations`. We’ll
+    see this instance variable in action later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next comes the public method `mutate_mutations!` at ❹. Note that it is destructive,
+    and it takes two arguments: a required `params` Hash, and an optional Integer
+    for the `did_no_better_count`, assumed to be zero, which makes sense for an initial
+    run. It has a return guard, which allows it to exit early if the `did_no_better_count`
+    is greater than the `MAX_ATTEMPTS` allowed. Assuming it should continue, it calls
+    `update_params_by_number_of_mutations!` (defined at ❿), passes in the `params`
+    argument, and places its returned value into the local `num` variable.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s jump down to ❿ to see what `update_params_by_number_of_mutations!` does.
+    It creates some children, using `get_children`, defined at ❽. Then `get_children`
+    creates an Array to be returned by `map` ping the operation of calling `get_child`
+    on the `params` Hash onto an Array with as many members as the requested `number_of_children`
+    (assumed to be `10`). The `update_params_by_number_of_mutations!` method then
+    loops through `each` of those `children`, calling each one `params`. It constructs
+    a new `candidate` and determines the `number_of_mutations` needed to reach the
+    `TARGET` by calling `mutate_until_matches!` (from `methinks.rb`) on that `candidate`.
+    We now have our measure of fitness and the `params` used to achieve that level
+    of fitness. We update `@params_by_number_of_mutations`, setting the value at the
+    `number_of_mutations` key to be `params`, as the name `@params_by_number_of_mutations`
+    suggests. It then returns the `number_of_mutations` required by this pass through
+    `mutate_until_matches!`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Back in `mutate_mutations!` (❹), we recursively call `mutate_mutations!` again,
+    this time with the “fittest” result in `@params_by_number_of_mutations` as the
+    first argument and the result of calling `get_no_better_count(num, did_no_better_count)`
+    as the second argument.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `best_num` method is defined at ❻, and it is straightforward. The keys of
+    `@params_by_number_of_mutations` are the number of mutations needed to reach the
+    target. Since they’re Integers, the lowest (and therefore “fittest”) value will
+    be the first element of the resulting Array when we `sort` them. We can get that
+    easily with `[0]`. The `get_no_better_count` method is defined at ❾; it takes
+    the existing `num` and `did_no_better_count` as its only arguments. It returns
+    `0` if this pass’ `num` is the `best_num`, resetting the `did_no_better_count`.
+    Otherwise, it returns `did_no_better_count + 1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That’s it for `mutate_mutations!`. There’s one other public method, `report`,
+    defined at ❺. It sorts through each pair within `@params_by_number_of_mutations`,
+    outputting results via `puts, inspect`, String interpolation, and the `digits_needed`
+    method, defined at ❼. It simply takes all the keys of `@params_by_number_of_mutations`,
+    finds the `max`, and converts that highest Integer to a String with `to_s`. That
+    String’s `size` method returns the number of characters, which is our desired
+    number of `digits_needed` for display purposes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can compute values as well as report them. We establish default `params`
+    near the bottom of `methinks_meta.rb`, instantiate a `Meta_Mutator`, and call
+    its `mutate_mutations!` and `report` methods. Let’s see the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*This script is not meant to demonstrate proper statistical analysis. Your
+    results could be highly variable based on initial conditions. To accurately measure
+    the improvement (or lack thereof) between variations, you should perform multiple
+    runs of each version and verify that the differences you’re seeing are statistically
+    significant. That’s beyond the scope of this book though. If this program inspires
+    you to write programs that manipulate other programs, it’s done its job*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our winner is `{:generation_size=>243, :mutation_rate=>25, :mutation_amp=>11,
+    :display_filter=>5}`, with a match after only four generations. Again, the `:display_filter`
+    doesn’t matter, it’s the other three parameters that really make a difference.
+    You can rerun `methinks_meta.rb` as many times as you like, seeing if your winning
+    values seem to hover around a given range of values for each important parameter.
+    You can then reset the default `params` at the bottom of `methinks_meta.rb` and
+    keep going as long as you want.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'If we want the results to always show the `params` keys in alphabetical order,
+    we could override the built-in `inspect` method of all Hashes with the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Chapter Recap
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter’s mandate was to use techniques you’ve already learned at some
+    broader levels. However, there were still a few new concepts or approaches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Equidistant Letter Sequences and larger-scale text searches
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Extracting single characters from Strings
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `chr` method
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Modeling natural selection with `methinks.rb`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Subclassing (`Children < Array`) and inheritance
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Calculating differences between Strings
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`select_fittest` : `inject` versus `sort_by`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Genuine random versus pseudo-random
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Meta-mutation with `methinks_meta.rb`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Alphabetizing `inspect` through overriding
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Our next chapter is the second of two chapters that consider more complex programs.
+    While this chapter mainly expanded upon concepts we’ve already learned, the next
+    one uses an exciting new type of abstraction, known as a *callback*. Let’s get
+    to it.
+  prefs: []
+  type: TYPE_NORMAL

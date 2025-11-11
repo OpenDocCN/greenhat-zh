@@ -1,0 +1,743 @@
+- en: Chapter 23. Customizing OpenBSD
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Customize installs*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*with files and DHCP,*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*then run without disk.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages1616079.png) This chapter covers
+    different ways to use OpenBSD to customize itself, as well as how to install OpenBSD
+    in nonstandard situations and debug problems with your system. The first task
+    we’ll address is diskless installation. Diskless systems are usually used to install
+    OpenBSD without attaching any installation media, but they can also be used to
+    run a system without a hard drive. Next, we’ll create a USB flash drive for use
+    as OpenBSD installation media. Finally, we’ll cover various ways to customize
+    the OpenBSD installation and upgrade processes.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: All of these tasks assume that you already have an OpenBSD machine running the
+    version you want to customize. You can accomplish some of these tasks using a
+    virtual machine, as long as the virtual machine software has the necessary support.
+    Because virtualization is such a common choice, let’s tackle it first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Virtualizing OpenBSD
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The OpenBSD developers are pretty clear on virtualization. OpenBSD is written
+    for real hardware. Virtual hardware is not real hardware. While it can be very
+    similar, it’s not exactly the same.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This approach has a number of implications, the most problematic of which is
+    that not all virtualization software can run OpenBSD. As I write this, Oracle’s
+    VirtualBox can’t cleanly run either i386 or amd64 OpenBSD. (Some people report
+    being able to boot some versions of VirtualBox and/or OpenBSD, but OpenBSD software
+    crashes all over the place.) This is not an OpenBSD bug. VirtualBox doesn’t sufficiently
+    emulate real hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That said, OpenBSD does run well on some virtual machines. VMware works well
+    enough that OpenBSD includes specific drivers for VMware integration, including
+    a VMware Tools driver in the kernel. KVM virtualization also works, although KVM
+    requires some tweaks depending on the exact combination of KVM and OpenBSD you’re
+    using. Microsoft’s virtualization mostly works, although Virtual PC has some commercially
+    motivated limitations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The main problem with virtualization is that a compromise of the virtualization
+    platform automatically gives an intruder hardware-level access to all virtual
+    machines, and OpenBSD cannot possibly secure you against that kind of attack.
+    In fact, no operating system can. And it does you no good to run your database
+    on OpenBSD when any script kiddie can compromise the underlying virtualization
+    server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In my experience, OpenBSD virtual machines are excellent for experimentation
+    and reference. I used them to document the installation process for this book,
+    and I always test software configurations on virtual machines before rolling them
+    out to production. (The real benefit of virtualization might be that there’s no
+    longer any excuse for not testing changes.) But when I want a server that’s actually
+    secure, I put OpenBSD on real hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you want to run virtual machines on OpenBSD, you can find `qemu`, `bochs`,
+    `dosbox`, and other packages in the packages collection. Check */usr/ports/emulators*
+    for other options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Diskless Installation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Booting a blank system into the OpenBSD installer without using local media
+    can save you time and energy. A lot of modern hardware doesn’t come with CD or
+    floppy drives. Of course, you could temporarily add a CD drive, but if you have
+    a whole bunch of OpenBSD machines to install, that’s just an annoyance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also use network booting to boot OpenBSD on hardware that lacks an installed
+    operating system, or with a different operating system that you plan to overwrite.
+    This process is called *pxebooting*, or *diskless*, operation. Diskless systems
+    can have disks—they just don’t use them to boot the operating system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you’ve never worked with diskless systems before, your first attempts will
+    probably give you a headache. Setting up your first diskless environment can be
+    tricky, and will teach you all sorts of things you didn’t know about your operating
+    system and hardware. But test everything along the way, read the error messages
+    carefully, and soon you’ll wonder why you thought this was hard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: I’ll cover diskless installations on amd64 and i386 hardware. Other platforms
+    have different requirements that may be very different. Read the `diskless(8)`
+    man page for your particular architecture to get an overview of your platform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Diskless systems work because a computer doesn’t need a hard disk to run. It
+    needs an operating system. The easiest way to store a computer’s operating system
+    is on the local hard drive, but a sufficiently smart network card can use information
+    provided by DHCP to find an initial boot loader.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All amd64 and modern i386 hardware use Intel’s Preboot Execution Environment
+    (PXE, pronounced “pixie”). The DHCP server tells the network card the name of
+    a file and the IP address where the file can be found, and the server fetches
+    the file via TFTP. This file is usually called *pxeboot*, but *pxeboot* files
+    can vary widely among operating systems. A *pxeboot* file for OpenBSD probably
+    won’t boot a FreeBSD system, let alone anything from Microsoft. It’s specific
+    to each operating system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once the computer has loaded *pxeboot*, it goes back to the TFTP server to look
+    for the appropriate kernel. An OpenBSD *pxeboot* looks for a file called *bsd*,
+    assumes that it’s a kernel, loads the kernel into memory, and boots it. To install
+    OpenBSD, you’ll load the install kernel file *bsd.rd* instead, which you can do
+    automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Diskless Hardware
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: OpenBSD systems installed over diskless systems must have enough smarts to find
+    their boot loader and operating system over the network or they won’t boot. Any
+    machine built in the past several years uses PXE.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You’ve probably seen a computer try to boot from the network more than once,
+    and for most people, those BIOS messages are just an annoyance that they keep
+    forgetting to disable. For diskless installation, you need to make sure that feature
+    is on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To enable PXE, boot the hardware and go into the BIOS setup. Somewhere in the
+    BIOS, you should find an option to set the device boot order. If the machine supports
+    PXE, one of those options will be to boot over a network. Enable that option and
+    see if it works. While you’re in the BIOS, make a note of the MAC address of your
+    network card. Your DHCP server will need it. If your BIOS uses the Unified Extensible
+    Firmware Interface (UEFI) by default, disable that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Save your changes and exit. Your hardware should now be prepared. Let’s ready
+    the server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DHCP Server Setup
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: DHCP is not just a way to hand out IP addresses and network configurations.
+    A DHCP server can tell network-aware phones where to find their configuration,
+    server hardware where to find its operating system, printers where to find their
+    print server, and so on. Diskless installations use DHCP to feed diskless servers
+    the location of the *pxeboot* file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Per-Host or Per-Network Configuration
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: DHCP expects to configure hosts either by the network or by the host. When a
+    DHCP server receives a DHCP request, it knows the address of the network that
+    the host is on and the host’s MAC address. The DHCP server must decide which configuration
+    to give the host based on this information. This means you can configure your
+    DHCP server so that any host on a given network is told to install OpenBSD, or
+    you can give it the MAC address of the machine you’re going to install and tell
+    the DHCP server to start the installation only on that machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because I install machines frequently, I usually set up a small VLAN where any
+    machine plugged onto the network is told to install OpenBSD. That way, workers
+    who plug their laptops into random Ethernet cables in my office get a free operating
+    system upgrade. If you only occasionally install machines, and have control over
+    the DHCP server, it’s pretty easy to configure the DHCP server to tell a host
+    with a specific MAC address to install OpenBSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The DHCP server needs to tell the client the location of a PXE boot file, which
+    gives the client just enough brains to find a bootable kernel. This is just like
+    the on-disk boot loader, except that the PXE boot file talks to the network. OpenBSD’s
+    i386 and amd64 platforms include the file */usr/mdec/pxeboot* for just this purpose.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Give the name of the PXE boot file with the `filename` option, and then use
+    the `next-server` option to specify the IP address of the TFTP server where the
+    client can get the file. This example tells DHCP clients to load the file *pxeboot*
+    from the server at 192.0.2.34:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Place these statements according to whether you have an installation network
+    or your DHCP server is set for a specific MAC address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Per-Network Configuration
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'If you want all the hosts on your network to receive the OpenBSD installation
+    PXE boot file, put the `filename` and `next-server` options in the `subnet` stanza,
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Any host on this network that makes a DHCP request at boot will learn where
+    to get the PXE boot file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Per-Machine Configuration
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: If you’ve hard-coded a machine’s MAC address into your DHCP configuration, as
+    discussed in [Chapter 16](ch16.html "Chapter 16. Network Servers"), you can feed
+    the PXE boot information to that host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Machines on this subnet that make a PXE request at boot will get the location
+    of the PXE boot file only if they have MAC address 02:03:04:05:06:07.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Decide how you want your DHCP server to behave and make similar configuration
+    changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now let’s look at the TFTP server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TFTP Server Setup
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The next task is to make the OpenBSD-specific boot files available on your TFTP
+    server. As a minimum, you need the *pxeboot* file and a kernel, but adding a *boot.conf*
+    file will simplify your life.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD includes an architecture-specific *pxeboot* file in */usr/mdec/*. If
+    you’re installing an i386 machine, grab this file and */bsd.rd* from an existing
+    i386 installation. If you’re installing amd64 hardware, get *pxeboot* and */bsd.rd*
+    from an existing amd64 system. Copy them to the TFTP server root directory, and
+    verify that they’re world-readable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*pxeboot* tells the machine to look for the standard kernel */bsd*, not the
+    installation kernel */bsd.rd*. When *pxeboot* finishes loading, it looks exactly
+    like the standard OpenBSD boot loader. You could interrupt the boot, as described
+    in [Chapter 5](ch05.html "Chapter 5. The Boot Process"), and choose a different
+    kernel, but *pxeboot* also recognizes */etc/boot.conf*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To tell *pxeboot* to load a different kernel, create an *etc* directory in
+    your TFTP server’s root directory, and then create the file *boot.conf* inside
+    that. This new *boot.conf* file has exactly the same syntax as */etc/boot.conf*,
+    so you can do a one-line entry like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can include additional boot options, such as setting a serial console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Completing Diskless Installation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Once you have DHCP and TFTP, power on the installation target. You should see
+    the network card make a DHCP request, get an IP address, and grab *pxeboot* via
+    TFTP. You should then see the OpenBSD boot loader load the installation *bsd.rd*.
+    Finally, you should get the OpenBSD install script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you don’t get the installer, take a step back. Does the network card get
+    an address from DHCP? If not, check your wiring and DHCP server configuration.
+    If you get an IP address, but can’t fetch *pxeboot*, check that you put the `filename`
+    and `next-server` statements in the correct part of your DHCP configuration, and
+    verify that you don’t have a packet filter blocking access to the TFTP server.
+    Try to fetch those files from a different TFTP client to make sure that the TFTP
+    server works. If the installation target partially boots OpenBSD, but doesn’t
+    activate the installer, make sure you have an *etc/boot.conf* entry pointing the
+    client at *bsd.rd* rather than *bsd*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, you should be able to install OpenBSD normally, as described
+    in [Chapter 2](ch02.html "Chapter 2. Installation Preparations") and [Chapter 3](ch03.html
+    "Chapter 3. Installation Walk-Through"). But what if you want to run a full OpenBSD
+    system without a hard drive? That’s where diskless operation comes in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running Diskless
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If you manage many computers, you probably understand that moving parts cause
+    trouble. Spinning hard drives, in particular, are just a very bad idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Try this: If you have a roomful of identical machines, try simplifying maintenance
+    by running them without hard drives. Each machine in this group will use a root
+    directory and filesystem mounted via NFS rather than stored locally. You’ll still
+    need data storage, but you can use a central high-availability disk array, flash
+    drives, or some other mechanism with better reliability than lowest-common-denominator
+    hard drives.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can extend the diskless installation process to run OpenBSD in full multiuser
+    mode without a local hard drive. Your server will need three additional services
+    to support fully diskless clients: `rarpd(8)`, `bootparamd(8)`, and NFS. (Only
+    diskless clients need `rarpd` and `bootparamd`.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using rarpd(8) for Reverse ARP
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In a standard ARP request, a client knows an IP address and wants to get the
+    corresponding MAC address. For reverse ARP, a client knows a MAC address and wants
+    to know the corresponding IP address. OpenBSD needs to get reverse ARP during
+    the diskless boot process, and it uses `rarpd(8)` to provide reverse ARP services
+    to other hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`rarpd` uses */etc/ethers* as a table of Ethernet addresses and hostnames.
+    Each diskless client needs an */etc/ethers* entry much like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This entry means that the host with MAC address 00:50:56:00:01:01 has the hostname
+    *gill.blackhelicopters.org*. The `rarpd` server must be able to resolve the hostname
+    to an IP address, either in DNS or in */etc/hosts*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now decide which network interfaces you want to run `rarpd` on. If your server
+    has only one network interface, that’s the one to use. If you have multiple network
+    interfaces, however, it might make sense to listen on only a single interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To use a specific interface, use the interface name as a command-line argument;
+    otherwise, use `-a` to listen on all network interfaces. For example, this *rc.conf.local*
+    entry tells `rarpd` to listen on only interface `em0`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Start `rarpd` with */etc/rc.d/rarpd*, and go on to `bootparamd`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running bootparamd(8)
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The boot parameter daemon `bootparamd` tells a diskless OpenBSD machine where
+    to find its root filesystem. When a boot parameter request arrives at the server,
+    `bootparamd` checks the file */etc/bootparams* for a matching configuration and
+    returns that to the client.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Entries in */etc/bootparams* give a hostname, followed by the string `root=`,
+    an NFS server, and the directory where the client’s root directory is stored.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, the host *gill.blackhelicopters.org* will use an NFS root directory
+    from a server at 192.0.2.34, in the directory */var/diskless/client1*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For almost all environments, you can run `bootparamd` without any command-line
+    options. Enable it in *rc.conf.local* like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Start `bootparamd`. Now it’s time to deal with your NFS server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting Up the NFS Root Directory
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A multiuser OpenBSD system needs a userland. Without a local disk, you’ll need
+    to create an OpenBSD userland. It is possible to export the NFS server’s root
+    directory for use as the diskless client’s root directory, but this isn’t merely
+    insecure, it’s also a good way to damage the NFS server itself. Create a separate
+    userland for your diskless machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exporting the Root Directory
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'You must export the userland’s root directory to the diskless machine. For
+    example, here’s an */etc/exports* line that shares the directory */var/diskless/client1*
+    to the IP address 192.0.2.37:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note the `-maproot` option here. The diskless client will expect to be able
+    to write and own files as the root user. This `-maproot` entry maps UID 0 (root)
+    on the client to the root account on the NFS server. You can also set up a separate
+    user for the diskless client’s root account, map the client’s root account to
+    that new account, and change the ownership of all files in the diskless userland
+    to that root account. As this is your first diskless host, however, we’ll start
+    off basic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Populating the Diskless Userland
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: The easy way to install a minimal userland is to extract the *etcXX.tgz* and
+    *baseXX.tgz* file sets from your chosen OpenBSD release into the NFS root directory.
+    In the following example, I’ve copied these file sets into */tmp*, and I’m using
+    them to create a userland in */var/diskless/client1*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note the use of the `-p` flag in the `tar` command, preserving the original
+    permissions on extracted files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The diskless client also needs device nodes. Go into the new userland’s *dev*
+    directory and create them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: While `bootparamd` told the kernel where to find the root of the filesystem,
+    userland programs expect to read */etc/fstab* for that information. Create an
+    */etc/fstab* file that points the root directory to your NFS share.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can also add any other NFS-mounted directories you desire here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This should be everything you need.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Power On!
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Once you have a basic userland, device nodes, and a filesystem table, you can
+    power on your diskless node, and it should boot. If it doesn’t boot to a login
+    prompt, read the console error messages. Usually, they’re pretty clear.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because you’ve bypassed the OpenBSD installer, there are no root password or
+    user accounts yet. Immediately, log in as root and change the root password, and
+    then set up a regular user account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For your first diskless setup, once you have a working userland, back it up
+    right away. Even a tar file containing the entire userland will prove useful.
+    You’ll muck up the diskless userland more than once as you’re trying to get things
+    working exactly as you wish, and being able to blow the entire userland away and
+    restore it from the backup file is invaluable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you have a basic system working, expand it. Add additional file sets as
+    needed, set up more users, add packages, and deploy for your users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Congratulations, you’re now on the cutting edge of OpenBSD users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: USB Installation Media
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For many people, burning a CD to install an operating system seems like a waste.
+    They prefer to write an image to a USB flash drive and install from that. OpenBSD
+    doesn’t provide such an image, but if you’re willing to do some extra work, you
+    can create a bootable USB device that you can use to install on your target hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The official recommendation is to install OpenBSD on the USB device, copy *bsd.rd*
+    and the file sets to that device, and use that to install your new hardware. The
+    OpenBSD installer lets you choose the target hard drive. You select the USB device
+    in the installer, and OpenBSD installs to the USB just as it would any other data-storage
+    device. But how do you install OpenBSD on the USB device without burning a CD
+    in the first place? There are a few ways around this, including a couple of approaches
+    already covered in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a Virtual Machine
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Your first choice is to perform the USB installation in a virtual machine. Many
+    desktop virtual machine software packages let you attach a physical USB port to
+    a guest virtual machine. (OpenBSD’s virtualization options are discussed in [Virtualizing
+    OpenBSD](ch23.html#virtualizing_openbsd "Virtualizing OpenBSD").)
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you have virtualization software that runs OpenBSD and supports USB, choose
+    this option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running a Diskless Installation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Your second choice is to run a diskless installation. Most DHCP servers embedded
+    in cheap home hardware will let you send a filename and a TFTP server address
+    to a client. If yours won’t, you can get suitable DHCP servers for any platform.
+    You can find freely available TFTP servers for just about any operating system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Boot your install target with the USB drive, but load the *bsd.rd* kernel.
+    You now have the OpenBSD installer running on the target system, and an OpenBSD
+    system that fits in your pocket and that you can run almost anywhere. If you’re
+    already running OpenBSD on something with the right architecture and a USB socket,
+    it’s even easier: You boot the system from the appropriate *bsd.rd*, choose the
+    `disk` option, and point the installer to sets in a local directory.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Converting ISO Images
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As a less official method, you can find software to convert ISO images to bootable
+    USB images. I’ve used Rufus (*[http://rufus.akeo.ie/](http://rufus.akeo.ie/)*)
+    on Windows and UNetbootin (*[http://unetbootin.sourceforge.net/](http://unetbootin.sourceforge.net/)*)
+    on other Unix-like systems. This approach might work, but it’s certainly not OpenBSD-approved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Customizing OpenBSD Installations
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Many of us follow a set of steps when installing a machine. All freshly installed
+    hosts of a specific operating system revision have a common SSH server configuration.
+    My machines all have `tcsh` installed and attach to the central authentication
+    system. You probably have your own list. These tasks can be done by hand after
+    installation, but it’s much easier to let OpenBSD do them for you during the installation
+    process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installations can be customized by adding files during installation or by running
+    commands after the installation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Custom File Sets
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A custom file set includes files that you want copied to your new installation.
+    I use custom file sets to install the default */etc/sudoers*, a SSH server configuration,
+    my company’s default *pf.conf*, and similar files. As I’m the lead sysadmin, I
+    also include dotfiles in my home directory and other personal touches to make
+    my life easier. Some people include several home directories, including *authorized_keys*
+    files for SSH.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Bundle these files together as a *siteXX.tgz* file, which the installer can
+    extract in the root directory of the new installation. (Be sure to replace the
+    *XX* with the OpenBSD version you’re installing on; for example, name a *siteXX.tgz*
+    file for OpenBSD 5.4 *site54.tgz*.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start by installing an OpenBSD machine of the exact same version and platform
+    that you want to customize. Make your changes and add your files to this system,
+    verify that this template system works exactly as you desire, and then copy the
+    changed files to a tar file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You could make a directory hierarchy and copy the files you want to it, but
+    I find that to be more error-prone. A small virtual machine will let you build
+    a *siteXX.tgz* file more reliably.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following example creates a *site54.tar* file containing one file, */etc/ssh/sshd_config*.
+    Note that I start by creating a plain tar file. Since I can’t easily add files
+    to a compressed tar file, I’ll need to compress the file after it’s complete.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that I have the initial file, I can add additional files. I’ve customized
+    a few files on the system, as well as added new ones, all of which I add to the
+    *site54.tar* file. The `-r` flag tells `tar` to add a file to an archive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s how to compress the tar file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: I’ve built my own custom release of OpenBSD, so I have a local FTP server that
+    contains all of the release files. If you’re using the official OpenBSD release,
+    but you’re installing enough OpenBSD machines to warrant making a *siteXX.tgz*
+    file, you can copy the official release to a local FTP or HTTP mirror. Copy your
+    *siteXX.tgz* file to this directory and update the *index.txt* file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now start your installation. Tell the installer to use your local release mirror
+    rather than an official OpenBSD mirror. You should see the following sets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Your *site54.tgz* file should now be available as a file set. Add it because
+    the installer won’t automatically include it. Once the installation finishes,
+    you should find your customized and added files on the new system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Post-Install Shell Scripts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Some tasks can be accomplished by copying files, but that’s annoying. For example,
+    I want the shell `tcsh` installed on all of my OpenBSD servers. I could put all
+    the files in the `tcsh` package, as well as the contents of */var/db/pkg/tcsh*,
+    in *siteXX.tgz*, but I know I’m likely to mess that up somehow. It would be much
+    easier to run `pkg_add tcsh` after the installation, and let OpenBSD do what it’s
+    supposed to do. That’s where the `install.site` script comes in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After completing the installation, but before giving you the final command prompt,
+    OpenBSD checks for */install.site*. If this file exists, the installer runs it.
+    The script is run `chroot`ed into the new installed system, so you don’t need
+    to worry about changing any paths. The script does need to run on a minimal kernel,
+    however, so it’s best to wait for low-level kernel twiddling until the first real
+    boot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a sample `install.site` script that installs the two packages `tcsh`
+    and `python`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: When working with `install.site` scripts, if a package’s name could be ambiguous,
+    be sure to give the full package name. There’s only one `tcsh` package, but Python
+    comes in several versions. I specify the full package name, rather than using
+    plain `python`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also note that while you’re running in a `chroot` that contains a full userland,
+    that userland isn’t fully initialized. When dropping into the `chroot`, OpenBSD
+    doesn’t do a full multiuser startup of that `chroot`. The environment is roughly
+    equivalent to single-user mode. The `install.site` script is not where you initialize
+    your database.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you have a real userland ready to go, to automatically run commands on
+    the system’s first real boot, append the commands to */etc/rc.firsttime*. This
+    file runs once, at the system’s first boot after installation, and then deletes
+    itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Customizing Upgrades
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: OpenBSD lets you use custom file sets and shell scripts during binary upgrades.
+    If you have a lot of machines to upgrade, run these to ensure that your systems
+    are as identical after the upgrade as they were before. I highly recommend automating
+    known changes during an upgrade.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The *siteXX.tgz* file works for upgrades exactly as for installations. Put the
+    files you want on this system in *siteXX.tgz*, and the install program should
+    copy those files to the system as it installs the upgraded files. Rather than
+    `install.site`, however, the upgrade software looks for the script `upgrade.site`.
+    Any *install.site* file is ignored during an upgrade, so you can use the same
+    *siteXX.tgz* for upgrades and for new installations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I find the `upgrade.site` script especially useful in conjunction with the *OpenBSD
+    Upgrade Guide* for that release. The *Upgrade Guide* includes tasks that must
+    be performed during an upgrade, many of which are very suitable for scripting.
+    For example, the common tasks of deleting files, programs, and libraries removed
+    from the new OpenBSD release are easily added to `upgrade.site`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One convenient thing about `upgrade.site` is that you can copy the script to
+    the target machine before running the upgrade. It doesn’t need to be part of *siteXX.tgz*.
+    That said, I don’t recommend running `pkg_add -u` in `upgrade.site`. While the
+    idea of automatically upgrading all your packages sounds good, remember that you’re
+    running on a limited kernel with a less than completely initialized userland.
+    Have your `upgrade.site` script add any commands that need to run on a fully multiuser
+    system to */etc/rc.firsttime*, so that they run when the system boots the first
+    time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the hints in this chapter, you can customize OpenBSD any way you need.
+    And with the information throughout this book, you should know where OpenBSD fits
+    into your network. Remember that they really are out to get you, and you’ll achieve
+    practical paranoia.
+  prefs: []
+  type: TYPE_NORMAL

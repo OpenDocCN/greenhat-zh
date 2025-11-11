@@ -1,0 +1,392 @@
+- en: Chapter 15. Marshal
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages860138.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: An alternative way of saving and loading data is provided by Ruby’s Marshal
+    library. This has a similar set of methods to YAML to enable you to save and load
+    data to and from disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Saving and Loading Data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Compare the following program with *yaml_dump2.rb* from the previous chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*marshal1.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The two programs are pretty much identical except that each occurrence of `YAML`
+    (as in `YAML.dump` and `YAML.load`) has been replaced with `Marshal`. Moreover,
+    Marshal is “built in” to Ruby as standard, so you don’t have to `require` any
+    extra files in order to use it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you look at the data files produced (such as *friends.sav*), you will immediately
+    see that there is a major difference, however. Whereas YAML files are in plaintext
+    format, Marshal files are in binary format. So although you may be able to read
+    *some* characters, such as those in the strings, you won’t simply be able to load
+    the saved data and modify it in a text editor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As with YAML, most data structures can be automatically serialized using Marshal
+    just by dumping the top-level object and loading it when you want to reconstruct
+    all the objects beneath it. For an example, take a look at my little adventure
+    game program. In the previous chapter, I explained how to save and restore a Map
+    containing Rooms containing Treasures just by dumping and loading the Map object,
+    `mymap` (see *gamesave_y.rb* in [Adventures in YAML](ch14s07.html "Adventures
+    in YAML")). You can do the same using Marshal instead of YAML:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*gamesave_m.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Objects cannot be so easily serialized in a few special circumstances. These
+    exceptions are documented in the code of Ruby’s `Marshal` module (*marshal.c*),
+    which states, “If the objects to be dumped include bindings, procedure or method
+    objects, instances of class IO, or singleton objects, a TypeError will be raised.”
+    I’ll show an example of this while discussing how you might go about saving singletons
+    with marshaling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Omitting Variables on Saving
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As with YAML serialization, it is possible to limit the variables that are saved
+    when serializing using Marshal. In YAML, you did this by writing a method called
+    `to_yaml_properties`. With Marshal, you need to write a method named `marshal_dump`.
+    In the code of this method you should create an array containing the *actual variables*
+    to be saved (in YAML, you created an array of *strings* containing the variable
+    *names*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Another difference is that, with YAML, you were able simply to load the data
+    in order to re-create an object. With Marshal, you need to add a special method
+    called `marshal_load` to which any loaded data is passed as an argument. This
+    will be invoked automatically when you call `Marshal.load`, and it will be passed
+    the data in the form of an array. The previously saved objects can be parsed from
+    this array. You can also assign values to any variables that were omitted (such
+    as `@some_other_variable` here) when the data was saved:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is a complete program that saves and restores the variables `@num` and
+    `@arr` but omits `@str`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*limit_m.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that although the serialization is done here in memory, the same techniques
+    can be used when using Marshal to save and load objects to and from disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Saving Singletons
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let’s take a look at a concrete example of a problem mentioned earlier, namely,
+    the inability to use marshaling to save and load a singleton. In *singleton_m.rb*
+    I have created an instance of Object, `ob`, and then extended it in the form of
+    a singleton class that is given the additional method, `xxx`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*singleton_m.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The problem arises when I try to save this data to disk using `Marshal.dump`.
+    Ruby displays an error message: “singleton can’t be dumped (TypeError).”'
+  prefs: []
+  type: TYPE_NORMAL
+- en: YAML and Singletons
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Before considering how you might deal with this, let’s briefly take a look
+    at how YAML would cope in this situation. The program *singleton_y.rb* tries to
+    save the singleton that I created a moment ago using `YAML.dump`, and, unlike
+    `Marshal.dump`, it succeeds—well, sort of:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*singleton_y.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you look at the YAML file that is saved, *test.yml*, you’ll find that it
+    defines an instance of a plain-vanilla Object to which a variable named `x` is
+    appended that has the string value `hello world`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: That’s all well and good. However, when you reconstruct the object by loading
+    the saved data, the new `ob` will be a standard instance of Object, which happens
+    to contain an additional instance variable, `@x`. Since it is no longer the original
+    singleton, this `ob` will not have access to any of the methods (here the `xxx`
+    method) defined in that singleton. So, although YAML serialization is more permissive
+    about saving and loading data items that were created in a singleton, it does
+    not automatically re-create the singleton itself when the saved data is reloaded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Marshal and Singletons
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let’s now return to the Marshal version of this program. The first thing I need
+    to do is find a way of at least making it save and load data items. Once I’ve
+    done that, I’ll try to figure out how to reconstruct singletons on reloading.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To save specific data items, I can define the `marshal_dump` and `marshal_load`
+    methods as explained earlier (see *limit_m.rb*). These should normally be defined
+    in a class from which the singleton derives, *not* in the singleton itself. This
+    is because, as already explained, when the data is saved, it will be stored as
+    a representation of the class from which the singleton derives. This means that
+    although you could indeed add `marshal_dump` to a singleton derived from class
+    X, when you reconstruct the object, you will be loading data for an object of
+    the generic type X, not of the specific singleton instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This code creates a singleton, `ob`, of class X, saves its data, and then re-creates
+    a generic object of class X:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*singleton_m2.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The code here uses `Marshal.dump` to save an object, `ob`, of class X and then
+    calls the singleton method, `xxx`, to assign a different string to the `@x` variable
+    before reloading the saved data using `Marshal.load` and using this data to re-create
+    the object. The contents of `ob` are displayed using `p()` before it is saved,
+    then again after a new string is assigned to it, and finally once again when it
+    is reloaded. This lets you verify that `@x` is assigned the value that was saved
+    when the reloaded object is reconstructed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In terms of the data it contains, the object saved and the object reloaded
+    are identical. However, the object that is reloaded knows nothing about the singleton
+    class. The method `xxx` that the singleton class contains forms no part of the
+    reconstructed object. The following, then, would fail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This Marshal version of the code is equivalent to the YAML version given earlier.
+    It saves and restores the data correctly, but it does not reconstruct the singleton.
+    How, then, is it possible to reconstruct a singleton from saved data? There are,
+    no doubt, many clever and subtle ways in which this might be accomplished. I shall,
+    however, opt for a very simple technique:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*singleton_m3.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: This code first checks whether a file containing the saved data can be found.
+    (This sample has been kept deliberately simple—in a real application you would
+    of course need to write some exception-handling code to deal with the possibility
+    of reading in invalid data.) If the file is found, the data is loaded into an
+    object of the generic `X` type.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Only when this has been done is this object “transformed” into a singleton
+    in the usual way. In other words, the object is loaded, and then the code beginning
+    `class << ob` executes (simply because the singleton-creation code occurs after
+    the loading code and so is executed in sequence by the Ruby interpreter). This
+    provides the object with the additional `xxx` singleton method. You can then save
+    the new data back to disk and reload and re-create the modified singleton, as
+    explained earlier, at a later stage:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you wanted to save and load singletons in a real application, the singleton
+    “reconstruction” code could, naturally, be given its own method so that you don’t
+    have to rely upon its position in your code as in the previous example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*singleton_m4.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Digging Deeper
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you attempt to load data that was saved with a different version of the Marshal
+    library you may run into problems. Here you will learn how to verify the version
+    of Marshal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Marshal Version Numbers
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The embedded documentation of the Marshal library (a C language file named
+    *marshal.c*) states the following: “Marshaled data has major and minor version
+    numbers stored along with the object information. In normal use, marshaling can
+    only load data written with the same major version number and an equal or lower
+    minor version number.”'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This clearly raises the potential problem that the format of data files created
+    by marshaling may be incompatible with the current Ruby application. The Marshal
+    version number, incidentally, is not dependent on the Ruby version number, so
+    it is not safe to make assumptions of compatibility based solely on the Ruby version.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This possibility of incompatibility means you should always check the version
+    number of the saved data before attempting to load it. But how do you get hold
+    of the version number? Once again, the embedded documentation provides a clue.
+    It states, “You can extract the version by reading the first two bytes of marshaled
+    data.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Ruby 1.8 provides this example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Okay, so let’s try this in a fully worked piece of code. Here goes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*version_m.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the previous code, `x` is a string, and its first two bytes are the major
+    and minor version numbers. In Ruby 1.8, this prints out the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In Ruby 1.9, however, no numbers are displayed. This is because the first two
+    bytes are returned as integers in Ruby 1.8 but as strings in Ruby 1.9\. These
+    strings are not necessarily printable. You can see this quite simply by using
+    the `p()` method to display the elements at index 0 and index 1 of the array `x`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The strings returned by Ruby 1.9 may be shown either as hexadecimal values
+    or as escape characters. Here you can see that, for Marshal version 4.8, the first
+    value is \x04, which is the hexadecimal representation of 4, while the second
+    value is \b, which is the escape character for the backspace that happens to have
+    the ASCII value of 8\. The `ord` method can be used to do the necessary conversion
+    from string to integer. This is the Ruby 1.9 version:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This now correctly displays the version number: `4:8`. Of course, if you are
+    using a different version of the Marshal library, the numbers displayed will be
+    different. The Marshal library also declares two constants, `MAJOR_VERSION` and
+    `MINOR_VERSION`, which store the version numbers of the Marshal library currently
+    in use. So, at first sight, it looks as though it should be easy to compare the
+    version number of saved data with the current version number.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There is just one problem: When you save data to a file on disk, the `dump`
+    method takes an IO or File object, and it returns an IO (or File) object rather
+    than a string:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*version_error.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you now try to get the values of `x[0]` and `x[1]`, you will receive an
+    error message:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Loading the data back from the file is no more instructive:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: The two `puts` statements here don’t (as I was naively hoping) print out the
+    major and minor version numbers of the marshaled data; in fact, they print out
+    the names “fred” and “bert”—that is, the two first items loaded into the array,
+    `x`, from the data file, *friends.sav*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, how the heck can you get the version number from the saved data? I have
+    to admit that I was forced to read my way through the C code (not my favorite
+    activity!) in *marshal.c* and examine the hexadecimal data in a saved file to
+    figure this out. It turns out that, just as the documentation says, “You can extract
+    the version by reading the first two bytes of marshaled data.” However, this isn’t
+    done for you. You have to read this data explicitly, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*version_m2.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here the `getc` method reads the next 8-bit byte from the input stream. Notice
+    that I have once again written a test to make this compatible both with Ruby 1.8,
+    in which `getc` returns a numeric character value, and with Ruby 1.9, in which
+    `getc` returns a one-character string that has to be converted to an integer using
+    `ord`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: My sample project, *version_m2.rb*, shows a simple way of comparing the version
+    number of the saved data with that of the current Marshal library in order to
+    establish whether the data formats are likely to be compatible before attempting
+    to reload the data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE

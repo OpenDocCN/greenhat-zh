@@ -1,0 +1,1382 @@
+- en: '![](../images/193-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[**DESIGNING A FRAMEBUFFER INTERFACE**](toc.html#chapter11)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/as.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: If you decide to add a graphical user interface (GUI) to your appliance, you
+    will be faced with the following challenge. On one hand, your appliance’s graphics
+    hardware is controlled by low-level commands that manipulate video memory. On
+    the other hand, your users don’t want to manipulate video memory; they want to
+    manipulate high-level objects like menus and buttons. In order to build the kind
+    of interface your users want, you will use a set of software layers known collectively
+    as the *graphics stack*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The graphics stack, as used for the Laddie appliance, is illustrated in Figure
+    11-1\. The Linux framebuffer device driver provides a low-level but uniform interface
+    to the graphics hardware’s video memory. The graphics library provides support
+    for manipulating points, lines, images, and text. The GUI toolkit provides widgets
+    and manages user input for the appliance GUI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, we will present the graphics stack layers we used to design the Laddie
+    framebuffer UI. But first, we will provide a brief review of how video memory
+    works, since this will make the remainder of the chapter easier to understand.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/194-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-1: The graphics stack*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How video memory works
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Linux framebuffer device driver
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Graphics libraries
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: “Hello, world!” with Simple DirectMedia Layer
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Graphical UI toolkits
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Laddie framebuffer UI
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[**How Video Memory Works**](toc.html#chapter11.1)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From a programming point of view, the most important part of the graphics hardware
+    is the video memory. Software creates graphical images by manipulating this video
+    memory, and hardware interprets this memory to render images on the display. Before
+    we can effectively display text or graphics, we need to understand how bytes in
+    video memory are interpreted, and in what order they are mapped onto the display.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***How Bytes in Video Memory are Interpreted***](toc.html#chapter11.2)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To understand the different ways in which hardware can interpret video memory,
+    it’s useful to remember that memory has historically been an expensive resource.
+    Many of the earliest computers didn’t display arbitrary graphics; instead, they
+    interpreted each byte of video memory as a single character (see Figure 11-2).
+    A character might be drawn as a 7-by-9-pixel image, which would be quite efficient—a
+    single byte would represent 63 pixels, and 2KB of memory could support a display
+    of 32 lines with 64 characters each. However, only text could be rendered, and
+    only 256 different characters could be displayed at a time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Incidentally, we can think of character graphics as a form of image compression.
+    The number of repeating pixel patterns that occur in a displayable text “image”
+    are fewer than 256, so we can use a single byte to encode each one. All other
+    pixel patterns occur with frequency zero, and therefore, are not encoded at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/195-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-2: Character graphics*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With additional memory, graphics cards can dedicate one bit to every pixel.
+    This creates *monochrome* graphics, which are illustrated in Figure 11-3\. Although
+    this approach requires roughly an eight-fold increase in memory over using character
+    graphics, it removes all limitations on the character set. It supports all typefaces,
+    styles, and sizes, and even Kanji can be displayed as easily as Roman characters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/195-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-3: Monochrome graphics*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we dedicate an entire byte to each pixel, we have a few options. For single-color
+    displays, the graphics hardware could be designed to produce 256 different intensity
+    (*grayscale*) levels. This would be appropriate for rendering text with *anti-aliasing*,
+    in which shades of gray are used to soften jagged edges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alternatively, we could use each pixel’s byte to signify one of 256 different
+    colors. In this approach, known as *pseudocolor*, the graphics hardware maintains
+    a 256-entry table of colors, known as a *palette* or *colormap*. Each color in
+    the palette is typically represented by three bytes, one each for the red, green,
+    and blue intensity levels. This approach is illustrated in Figure 11-4\. In this
+    example, the first pixel in the displayed image is represented by the value 0x3F,
+    which indexes a 3-byte entry with red, green, and blue intensity levels that correspond
+    to a light blue pixel, with a touch of green.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As in the character graphics case, we can think of pseudocolor as a form of
+    compression, driven by the need to conserve memory. To display an image in pseudocolor,
+    we choose the 256 most important colors and represent each with one byte, neglecting
+    all other colors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using even more memory, we can dedicate two or three bytes to each pixel and
+    directly represent the red, green, and blue intensity levels, without the use
+    of a look-up table. With two bytes (*highcolor*), we might, for example, use 5
+    bits for red, 6 for green, and 5 for blue. This supports over 65 thousand colors
+    in an image, but it is still limited. For example, it only supports 2⁵ = 32 different
+    shades of gray.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/196-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-4: Pseudocolor graphics*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The three-byte case, with one byte each for red, green, and blue, is illustrated
+    in Figure 11-5\. This is referred to as *truecolor*, since it is capable of representing
+    images with near-photographic quality.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/196-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-5: Truecolor graphics*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***How Video Memory Is Mapped to the Display***](toc.html#chapter11.3)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the video memory provided by a graphics card is the same size (in pixels)
+    as the display, then the mapping between video memory pixels and display pixels
+    is straightforward: The first pixel of video memory corresponds to the pixel at
+    the top left of the display, and the following pixels are mapped from left to
+    right and top to bottom, the same way we read a page in English. To state this
+    mathematically:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*address of pixel at (x, y) = address of video memory + (y*xres + x)*pix_width*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: where *xres* (the *x* resolution) is the number of pixels in a row, and *pix_width*
+    is the number of bytes in a pixel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But memory is no longer the critical resource it once was, and it is now common
+    for graphics hardware to provide more video memory than necessary to fill the
+    display. In one approach to using this extra memory, we can think of the available
+    video memory as corresponding to a virtual display. The visible display is too
+    small to show us all the virtual pixels at once, but we can pan the visible display
+    left and right or up and down in order to expose any portion of the virtual display
+    we are interested in. This situation is illustrated in Figure 11-6\. If we want
+    to find the memory address of a pixel at position (*x*, *y*) in the visible display,
+    we have to consider where the pixel resides in the virtual display. If the visible
+    display is panned *xoffset* pixels to the right and *yoffset* pixels down, then
+    the virtual position of our pixel is (*x*+*xoffset*, *y*+*yoffset*). If *line_length*
+    is the length of a virtual row, then, applying the earlier formula, we have a
+    memory address of:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/197-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-6: Virtual and visible displays*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we have an object that we want to render on the visible display, we can use
+    this formula to determine which bytes to manipulate in video memory. In the remainder
+    of the chapter, we will look at the layers that allow us to effectively manipulate
+    video memory in software.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**The Linux Framebuffer Device Driver**](toc.html#chapter11.4)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Linux provides access to video memory (also known as the *framebuffer*) the
+    same way it provides access to most other devices—via a device file. The frame-buffer
+    device file is /dev/fb0, and as with other files, we can access the data in the
+    file using the system calls open, read, write, and close. You can learn more about
+    these system calls from their man pages (e.g., execute man 2 write). Most system
+    calls that access files do so using a small integer called a *file descriptor*.
+    The system call open is an exception; it returns a file descriptor using a path
+    to a file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Manipulating the Framebuffer with open, read, write, and close***](toc.html#chapter11.5)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because of this device file interface, it is easy to exercise the framebuffer
+    with some simple Unix commands. At this point, we recommend you boot the Laddie
+    CD and try these commands yourself. (You could also try these examples on your
+    own system. See Appendix C if you need help setting up your framebuffer.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once you’ve booted the Laddie CD, wait for the framebuffer UI to load, then
+    press ESC to get a login prompt. Log in as root with an empty password. Now execute
+    the following commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/198-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The cat command, as used in the first line, invokes the open, read, and close
+    system calls to make a copy of the framebuffer in a separate file. The second
+    line clears the console display. In the third line, the redirection invokes the
+    open, write, and close system calls to replace the contents of the console display
+    with what was originally there. The result may be confusing, since the cursor
+    position will no longer match the display (you can clean up the display with another
+    clear command). However, this experiment illustrates that, to the cat command,
+    the framebuffer is just another file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your graphics adapter has a large amount of video memory, the first cat command
+    may take a while (and produce a large file in /tmp). If the first command (cat
+    /dev/fb0 > /tmp/screen) returns immediately with
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'cat: /dev/fb0: No such file or directory'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'you need to use mknod to create the /dev/fb0 device file. Do so by running:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: laddie:~# mknod /dev/fb0 c 29 0
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the command cat /dev/fb0 > /tmp/screen produces the error
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'cat: /dev/fb0: No such device'
+  prefs: []
+  type: TYPE_NORMAL
+- en: the framebuffer device driver has not been loaded successfully. Again, see Appendix
+    C if you need help setting up the framebuffer device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*For the remainder of this chapter, we will assume that you have a working
+    framebuffer.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To experiment with the relationship between pixel data and what is displayed
+    on the screen, try any of the following commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/198-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'On successful completion of each command (which may take a while for large
+    framebuffers) you should see the error:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'cat: write error: No space left on device'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You see this error because you are attempting to cat an infinite supply of bits
+    into a finite supply of memory. After each experiment, type the command clear
+    to restore the console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Configuring the Framebuffer with the ioctl Command***](toc.html#chapter11.6)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our experiments so far, we have manipulated video memory without any regard
+    to the way pixel data is interpreted. The way that graphics hardware interprets
+    video memory is determined by the framebuffer configuration data, which also includes
+    the physical address of video memory, the screen resolution (virtual and visible),
+    the placement of the visible screen relative to the virtual one, as well as timing
+    and other information that is outside the scope of this chapter. To access the
+    video mode, we need an additional system call, ioctl, which allows us to access
+    or modify parameters for devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The ioctl system call takes a file descriptor for a device and an integer representing
+    a request (see the ioctl man page for details). In the case of the framebuffer,
+    the possible ioctl commands are listed in the /usr/include/ linux/fb.h header
+    file and include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/199-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The first two ioctl requests allow us to retrieve or update variable framebuffer
+    parameters, and the third allows us to retrieve fixed frame-buffer parameters.
+    The variable parameters are summarized in the following data structure (with some
+    fields omitted), taken from fb.h:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/199-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: For the most part, it should be clear from the identifiers how the fields in
+    this data structure correspond to the notions we discussed in the section “How
+    Video Memory Works” on page 170\. The fb_bitfield structs characterize the way
+    pixel bits are interpreted when they are used to specify color intensities directly
+    (as in truecolor mode).
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the Laddie appliance, we had no need to modify the variable frame-buffer
+    data. In fact, the VESA framebuffer driver that we used does not easily support
+    modification after system startup. If you are using a non-VESA frame-buffer and
+    you need to modify its configuration at run time, consult the documentation for
+    the fbset utility.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The fixed framebuffer configuration parameters are provided by the following
+    data structure (with some fields omitted), also in fb.h:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/200-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The main fields we will use here are visual, which specifies how pixels are
+    interpreted (e.g., monochromatic, pseudocolor, or truecolor), and line_length,
+    which we need when computing the mapping between video memory and the display.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, the following ioctl requests allow us to retrieve or update the palette
+    (colormap) for video modes that use one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/200-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: We will show an example of how to update colormaps in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At this point, we can determine the way pixel data is interpreted, so we can
+    also update framebuffer memory in a meaningful way. We could use the write system
+    call, just as the cat utility does, but making system calls with every framebuffer
+    update is too expensive. A better approach is provided by a different system call:
+    mmap. The mmap system call takes the file descriptor for our framebuffer, maps
+    the framebuffer memory into the virtual address space of our process, and returns
+    a pointer to the beginning of that memory. With this mapping in place, updating
+    the framebuffer becomes as simple as writing to memory.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In summary, to efficiently manipulate the framebuffer, we open the appropriate
+    device file, use ioctl commands to establish the graphics hardware configuration,
+    use mmap to provide simple access to pixel data, and write the appropriate pixel
+    data for our application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***A Simple Graphics Program for the Framebuffer***](toc.html#chapter11.7)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the remainder of this section, we’ll illustrate the Linux framebuffer interface
+    by writing a simple graphics program. Our program, hazy_moon, will display a disk,
+    240 pixels in diameter, that fades from bright cyan at the top to a hazy red at
+    the bottom. The picture we have in mind, rendered in grayscale, is shown in Figure
+    11-7\. Our program will illustrate the use of a colormap and will provide a quick,
+    visual indication of whether or not we have configured the framebuffer correctly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/201-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-7: A hazy moon*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The complete source for this program is on the Laddie CD in the directory /Code/src/examples/hazy_moon.
+    Before working through the rest of this section, we recommend building and running
+    the program. After booting the CD and logging in, change to the program’s directory,
+    type **make**, and then type **./hazy_moon**. You should see the disk in the middle
+    and a thin cyan border around the visible screen. If you don’t see all of the
+    border lines, try adjusting the width and height of the image on your monitor.
+    To return to the original virtual terminal, use ctrl-alt-F1\. If the dimensions
+    of the graphics virtual terminal are not what you expected, try the command deallocvt
+    at the bash prompt to deallocate resources for the unused terminals, and then
+    run the test program again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*When using the Laddie CD, you can view source files using vim or less. Use
+    the commands* man vim *or* vimtutor *if you’re not familiar with the vim editor.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we’ll discuss the details of the hazy_moon program. The first detail requires
+    a little working knowledge of virtual terminals.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**A Virtual Terminal for Graphics**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the advantages and challenges of Linux is that it uses framebuffers for
+    text consoles. This use of framebuffers is an advantage because it supports colored
+    text and a wide range of fonts and character sets. However, using framebuffers
+    in this way also presents a challenge, because while developing a framebuffer
+    application, it’s easy to trip over Linux’s machinery for managing consoles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, a program that prints a one-line message to the console can modify
+    the position of the visible display relative to the virtual display; the result
+    is that a displayed graphic is misplaced by the width of that line. Or, if the
+    graphics hardware is configured to use a palette, and if a program modifies the
+    colors used to display text in the console, printed messages may become hard to
+    read or even invisible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For these reasons, it’s best to use a separate virtual terminal for graphical
+    displays. We accomplish this in the hazy_moon program with the following lines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/202-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note that we’re using the familiar open and ioctl system calls, though in this
+    case, it’s not with the framebuffer. The first call (console_fd = open("/dev/
+    tty", O_RDWR);) opens the console device; the second (ioctl(console_fd, VT_ACTIVATE,
+    7);) requests a switch to virtual terminal 7; and the third (ioctl(console_fd,
+    VT_WAITACTIVE, 7);) waits until the switch is complete. (We chose virtual terminal
+    7 because our system uses terminals 1 through 6 for consoles.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**open**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we use the open system call on the framebuffer device file, specifying the
+    device file as read/write.
+  prefs: []
+  type: TYPE_NORMAL
+- en: fb_fd = open("/dev/fb0", O_RDWR);
+  prefs: []
+  type: TYPE_NORMAL
+- en: The function open returns -1 on error; otherwise, it returns an integer file
+    descriptor that we will use in making subsequent system calls for this device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*The* open *system call returns an error value that should be handled. We won’t
+    discuss error handling here, but you can see how we handled errors by looking
+    at the full source in the hazy_moon.c file.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**ioctl**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the framebuffer’s file descriptor, we can make the ioctl calls to retrieve
+    the fixed and variable configuration data for a framebuffer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/202-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Before updating the display, hazy_moon calls two helper routines to display
+    the fixed and variable data. This information can be useful when you’re trying
+    to debug—or simply understand—a framebuffer application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: display_fb_fixed_info(&fixed_info);
+  prefs: []
+  type: TYPE_NORMAL
+- en: display_fb_var_info(&var_info);
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you ran the program earlier, you saw this output after returning to the virtual
+    terminal from which you launched the program. The output would have shown, in
+    particular, that our display screen is 640 by 480, that we have 8 bits per pixel,
+    and that our visual type is pseudocolor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following code first ![](../images/1.jpg) creates a new colormap using a
+    helper function new_fb_cmap. This function is defined in the accompanying file
+    colormap.c. The program then ![](../images/2.jpg) copies the current values from
+    the framebuffer using an ioctl call and ![](../images/3.jpg) updates the entries
+    to provide a gradient from cyan to dark red. Finally, the program ![](../images/4.jpg)
+    updates the framebuffer with the new colormap using a second ioctl call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/203-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The first argument to mmap is 0, indicating that mmap will choose where the
+    framebuffer is mapped. The value fixed_info.smem_len is the length of the framebuffer.
+    We specify that the framebuffer can be read or written with PROT_READ|PROT_WRITE,
+    and we use MAP_SHARED to indicate that changes to this memory region will propagate
+    to the actual framebuffer. The file descriptor for the opened framebuffer device
+    is fb_fd, and we specify an offset of 0, since we want to map the entire framebuffer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If this call succeeds (again, see the source on the CD for error handling),
+    frame will point to the start of framebuffer memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Writing Pixel Data**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have a colormap and a way to place pixels on the screen, we can
+    write a simple graphics program. The following code will create the promised 240-by-240–pixel
+    hazy moon, as well as the single-pixel border around the perimeter of the display.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/204-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: As we illustrated in Figure 11-6, the visible display might be a subset of the
+    available framebuffer memory. We first find the beginning of displayed memory,
+    ![](../images/1.jpg) visible_frame, using the xoffset, yoffset, and line_length
+    values from the framebuffer device’s variable information. In the rest of this
+    code, we compute memory offsets relative to visible_frame, and therefore have
+    no further need for xoffset or yoffset. However, we have to use ![](../images/2.jpg)
+    line_length consistently whenever we compute an offset for a number of rows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Cleaning Up**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, we can clean up and exit the program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: munmap(frame, fixed_info.smem_len);
+  prefs: []
+  type: TYPE_NORMAL
+- en: free_fb_cmap(new_cmap);
+  prefs: []
+  type: TYPE_NORMAL
+- en: This program is meant to be a simple demonstration; to build a useful framebuffer
+    interface would require a good deal more work. For example, we haven’t discussed
+    displaying text or responding to keyboard input, and we haven’t written code to
+    recover the screen after blanking out or to get rid of the cursor in the upper-left
+    corner. We could write code to address these problems, but in fact, they have
+    already been solved by graphics libraries that work on top of the framebuffer
+    interface. In the next section, we’ll consider two choices for graphics libraries
+    and work through an example with one of them, the Simple DirectMedia Library.
+    If you would still like to spend more time mastering the framebuffer interface,
+    see the header file /usr/src/linux/include/linux/fb.h and the documentation files
+    in the directory /usr/src/linux/Documentation/fb.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Graphics Libraries**](toc.html#chapter11.8)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using the Linux framebuffer interface, we have reduced the problem of manipulating
+    pixels on the display to the problem of writing bytes to memory. But think of
+    some of the ways in which we would like to manipulate display pixels: drawing
+    lines of a specified thickness, drawing windows with rounded edges and a three-dimensional
+    look, transferring images, or drawing text with a given font and size. These are
+    nontrivial problems; that’s why we need a graphics library. With an appropriate
+    graphics library, we can write programs that manipulate lines, windows, images,
+    and text, and let the underlying library decide what to do with the pixels.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The most common library for manipulating graphics objects in Linux is Xlib.
+    Xlib is actually more than a graphics library; it is the interface by which clients
+    access an X Window display server. In particular, it also manages user input events.
+    Because of its popularity, building a Linux appliance on top of X can be a good
+    choice. Xlib is cumbersome to program directly, but with an X system, a UI developer
+    can choose among several competing GUI toolkits (for example, Qt, which is used
+    by the KDE desktop, or GTK+, which is used by the Gnome desktop). Alternatively,
+    UI developers can include an X-based web browser on the appliance and provide
+    the UI as a set of web pages. In any of these cases, UI development for the appliance
+    would be little different from UI development on a Linux desktop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, the X Window system is complex and provides features that
+    will often not be needed on an appliance. Because X is network-oriented, it involves
+    an additional network layer between Xlib and the Xserver. X incorporates support
+    for multiscreen displays and multiple clients, and it also provides for window
+    management that is not controlled by the client application. These are nice features
+    for a distributed networking environment, but their complexity makes X an expensive
+    option for appliances with tight memory and storage budgets. If you have resource
+    constraints but would still like to use X, you may want to investigate TinyX,
+    described at [http://XFree86.org](http://XFree86.org) as “a family of X servers
+    designed to be particularly small.” For more information on Xlib, see the *Xlib
+    Programming Manual* by Adrian Nye, (O’Reilly, 1994). There are also several articles
+    about X on Wikipedia, such as [http://en.wikipedia.org/wiki/Xlib](http://en.wikipedia.org/wiki/Xlib).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another option for a graphics library is the *Simple DirectMedia Layer (SDL)*,
+    a multimedia library originally designed for developing and porting games. Like
+    Xlib, SDL is cross-platform and manages user input as well as graphics. Unlike
+    Xlib, SDL provides only minimal support for managing windows. It has a small footprint;
+    the libraries for SDL (including SDL_ttf for TrueType fonts) take up about 330KB,
+    stripped.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because of its simplicity (we didn’t need windowing support), we chose SDL as
+    the graphics library for the Laddie appliance, and we will demonstrate this library
+    with a simple example in the next section. For more details on SDL, especially
+    on multimedia support, see *Programming Linux Games* by John R. Hall, (No Starch
+    Press, 2001). The SDL website ([http://www.libsdl.org](http://www.libsdl.org/))
+    also provides good documentation on the SDL API. We used the SDL_ttf library as
+    a wrapper for TrueType fonts, which in turn required the FreeType package from
+    [http://www.freetype.org](http://www.freetype.org/). See [http://www.libsdl.org/projects/SDL_ttf](http://www.libsdl.org/projects/SDL_ttf)
+    for links to documentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**“Hello, world!” with SDL**](toc.html#chapter11.9)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To introduce SDL, let’s work through a simple program to display *Hello, world!*,
+    monitor the keyboard, and exit gracefully when the spacebar is pressed (see Figure
+    11-8).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This program is on the Laddie CD; before looking at the details, we recommend
+    building and running the program. Boot the Laddie CD and, after the framebuffer
+    UI loads, exit by pressing ESC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/206-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-8: “Hello, world!” with SDL*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*It’s important that the framebuffer isn’t running, because it would interfere
+    with our current example. Incidentally, if the framebuffer UI didn’t start automatically
+    when you booted the CD, you may have problems with your framebuffer. In this case,
+    see Appendix C for help. The framebuffer UI display is shown in Figure 11-10.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in as root with an empty password, change to the sdl_hello directory, then
+    build and run the program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: laddie:~# cd /Code/src/examples/sdl_hello
+  prefs: []
+  type: TYPE_NORMAL
+- en: laddie:~# make
+  prefs: []
+  type: TYPE_NORMAL
+- en: laddie:~# ./sdl_hello
+  prefs: []
+  type: TYPE_NORMAL
+- en: You should see the display shown in Figure 11-8\. When you press the spacebar,
+    the display will disappear and you will be back at the command prompt. In the
+    remainder of this section we’ll show how we implemented the sdl_hello program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our program uses a single main function and includes five steps: initialize
+    the libraries, initialize the framebuffer, create a *surface* (SDL’s term for
+    a rectangular area of pixels), display the surface, and handle events. As in our
+    earlier example, we will not show error handling here. Please see the source for
+    the sdl_hello program on the CD in the /Code/src/examples/sdl_hello directory
+    for example error-handling code.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Initialize the Libraries***](toc.html#chapter11.10)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following lines from our example program initialize the SDL and SDL_ttf
+    libraries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/207-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: SDL supports several subsystems, including TIMER, AUDIO, VIDEO, CDROM, and JOYSTICK,
+    and we ![](../images/1.jpg) select these when calling SDL_Init(). (We will only
+    use the VIDEO subsystem in this chapter.) In order to display text, we ![](../images/2.jpg)
+    initialize SDL’s support for TrueType fonts. The calls to ![](../images/3.jpg)
+    atexit() provide functions (SDL_Quit and TTF_Quit) to be invoked at program exit;
+    they ensure that SDL quits cleanly at the end of the program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Initialize the Framebuffer***](toc.html#chapter11.11)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To configure the framebuffer’s resolution and bits per pixel, we use the function
+    SDL_SetVideoMode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/207-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When a desired video mode is unavailable, SDL will emulate it; however, we
+    will keep things simple and choose a mode that works natively with most graphics
+    adapters: 640 by 480, with 8 bits per pixel. The final argument to SDL_SetVideoMode
+    provides flags for features such as whether to use video memory or system memory,
+    whether to support double buffering, and whether to support OpenGL. For our purposes,
+    the defaults are fine. The return value, ![](../images/1.jpg) Screen, has type
+    SDL_Surface. These surfaces represent rectangular collections of pixels and are
+    characterized by height, width, pixel format, scanline length, a clipping rectangle,
+    and, of course, the actual pixel data. The Screen surface is special, since it
+    corresponds directly to the displayed memory. But surfaces can also represent
+    any graphical object, such as an image or a piece of text. For the examples in
+    this chapter, we will create graphical objects from bitmaps or by rendering text,
+    but it is also possible to create an empty surface and then manipulate its pixel
+    data directly.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After setting the video mode, we ![](../images/2.jpg) call the function SDL_ShowCursor
+    to hide the cursor, since we are not using a mouse for input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Create a Surface***](toc.html#chapter11.12)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To create a text object, we need to open a font and then render the text to
+    create a surface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/208-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The ![](../images/2.jpg) TTF_OpenFont() function requires a pathname to a TrueType
+    font file and a font size. The ![](../images/3.jpg) TTF_RenderText_Solid() function
+    uses a font, a string of text, and a color to create a surface. An ![](../images/1.jpg)
+    SDL color consists of four 16-bit values for red, green, blue, and an alpha channel.
+    The alpha channel value is used for blending translucent surfaces and is not practical
+    when using pseudocolor graphics; we won’t consider it further in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since fonts are subject to copyright, you will need to put some thought into
+    the fonts you choose for your application. For the Laddie CD, we chose the liberally
+    licensed Bitstream Vera fonts, associated with the GNOME foundation (available
+    from [http://www.gnome.org/fonts](http://www.gnome.org/fonts)). These include
+    monospace and proportionally spaced fonts, serif and sans-serif, normal, italicized,
+    bold, and bold-italicized. These may already be installed on your system in /usr/X11R6/lib/X11/fonts/truetype.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Display the Surface***](toc.html#chapter11.13)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Displaying rendered text is no different than displaying any other object in
+    SDL: We just blit (transfer) the surface onto the screen (i.e., the Screen surface).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/209-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The ![](../images/1.jpg) SDL_BlitSurface function takes a source surface, a
+    rectangle specifying a subset of this surface (NULL for the entire surface), a
+    destination surface, and a rectangle whose *x* and *y* values indicate the position
+    where the source is to be placed. The SDL_BlitSurface function fills out the width
+    and height values for the destination rectangle based on the portion of the destination
+    that was updated. We use this rectangle to update the Screen surface with ![](../images/2.jpg)
+    the SDL_UpdateRects function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Handle Events***](toc.html#chapter11.14)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, we have displayed the *Hello, world!* message. Now we need to
+    monitor the keyboard and exit when the spacebar is pressed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/209-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This code could be simplified for the “Hello, world!” application, but in this
+    form it represents a general approach to event handling with SDL. The ![](../images/1.jpg)
+    SDL_WaitEvent function suspends the main thread until an event occurs. The event
+    variable has a union type corresponding to more than a dozen SDL events, including
+    keyboard, mouse, and user-defined events. SDL also distinguishes keypresses from
+    key releases. In the case of a keyboard event, we can check the particular key
+    using ![](../images/2.jpg) the event.key.keysym.sym field, which can take on values
+    such as ![](../images/3.jpg) SDLK_SPACE, SDL_TAB, SDLK_0, SDLK_a, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Graphical UI Toolkits**](toc.html#chapter11.15)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: While the SDL API is easier to use than the framebuffer interface, it is not,
+    in itself, a convenient library for developing a GUI. SDL supports event handling
+    and graphics, but the two are only loosely coupled. When building a GUI, we use
+    objects for which the display and the input mechanism are inherently connected.
+    Examples include scroll bars, drop-down menus, and text-entry forms. GUI toolkits
+    support GUI development by providing a collection of these objects (*widgets*).
+    Figure 11-9 illustrates the relationships between a widget, a user, and the underlying
+    application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/210-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-9: A typical, full-featured widget*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: User input events (e.g., mouse movements or keypresses), update the widget and
+    control the underlying application by initiating callbacks. The application can
+    control the widget or exchange data with it by calling the widget’s functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition to providing widgets, a GUI toolkit also provides a framework for
+    managing them. The framework is typically built on top of a window manager. It
+    routes events, determines which widget has focus, and ensures that overlapping
+    widgets are displayed appropriately.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The two most popular GUI toolkits for Linux are GTK+ ([www.gtk.org](http://www.gtk.org/))
+    and Qt ([http://www.trolltech.com](http://www.trolltech.com/)); if you choose
+    one of these, your decision will probably come down to cost and licensing. GTK+
+    is released under the more liberal LGPL license, allowing you to link your proprietary
+    software to GTK+ libraries. Qt may be licensed under the GPL, but this requires
+    that your GUI application also be released under the GPL. To build a proprietary
+    application on top of Qt, you will need to pay Trolltech for the commercial license.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If your application will be licensed under GPL or if money is not an object,
+    there are other differences to consider. GTK+ is written in C, though it does
+    have many object-oriented features. Qt is written in C++. Both have a broad user
+    base: GTK+ is the basis for the Gnome desktop, and Qt is the basis for the KDE
+    desktop.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In case you are not using X on your appliance, Qt also has support for the Linux
+    framebuffer. Some work has been done on a framebuffer back end for GTK+ using
+    DirectFB, which is also released under the LGPL. See [http://www.directfb.org/wiki/index.php/Projects:GTK_on_DirectFB](http://www.directfb.org/wiki/index.php/Projects:GTK_on_DirectFB)
+    for more information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Fast Light Toolkit (FLTK; [http://www.fltk.org](http://www.fltk.org/)) is
+    a promising choice for a free GUI toolkit if you would like a smaller footprint
+    than GTK+ but are still willing to adopt X. FLTK is designed for tight, statically
+    linked applications, and its modified LGPL license allows static linking in proprietary
+    applications. It is written in C++ and supports Windows in addition to Linux.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We won’t discuss the popular GUI toolkits any further here; they are documented
+    well elsewhere.¹ In fact, for the Laddie appliance, we found that these toolkits
+    provided a good deal of functionality that we didn’t need, and, because of their
+    orientation toward the mouse and keyboard, they didn’t cleanly match our approach
+    of using a simple, handheld remote control. In the remainder of this section,
+    we will describe STBmenu, a thin layer built on SDL that we developed with set-top
+    box interfaces in mind.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Building Simple UIs with STBmenu***](toc.html#chapter11.16)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Besides having a framework that functioned naturally with remotes, we saw two
+    other advantages of writing our own GUI toolkit. We thought it would be useful
+    for illustrating how GUI toolkits work (at about 1,300 lines including comments,
+    it doesn’t take long to read), and, in keeping with the philosophy of this book,
+    we wanted to see how clean a separation we could make between the UI and the underlying
+    application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, we recommend taking a quick tour of the Laddie frame-buffer UI
+    in order to see the kind of GUI STBmenu can support. As we noted in the section
+    “‘Hello, world!’ with SDL” on page 182, when you boot the Laddie CD, it will attempt
+    to launch the Laddie framebuffer UI automatically. (If it doesn’t, see Appendix
+    C for help on setting up your framebuffer.) If you are already running the CD
+    and have a command prompt, start the frame-buffer UI with the fbmenuctl start
+    command. If the UI is already running, but isn’t visible, use ctrl-alt-F7 to switch
+    to the appropriate virtual terminal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Laddie framebuffer UI consists of two pages, as illustrated in Figure 11-10\.
+    We will discuss remote control in the next chapter; for now, use the arrow keys
+    to navigate the UI and the enter key to activate a selection. Use the Setup and
+    Status buttons to switch between pages. As you make changes, use ctrl-alt-F1 to
+    switch to a command prompt and check the results with the cli utility described
+    in Chapter 9\. Make changes using the cli utility, and confirm these by returning
+    to the framebuffer UI with ctrl-alt-F7\. (Alternatively, you could use another
+    machine on the network to check results using the web interface described in Chapter
+    8.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/211-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-10: The Laddie framebuffer UI*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The STBmenu Framework**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Having experimented a bit with the Laddie framebuffer UI, you will have noticed
+    some differences between it and a fully featured GUI. The Laddie framebuffer UI
+    does not have windows that can be moved around the screen; it consists, instead,
+    of a series of full-screen pages. There is no free-floating cursor that can select
+    any point on the screen; instead, it is the two-dimensional geometry of the input
+    widgets that determines how the arrow keys shift focus. And finally, the input
+    options for widgets are minimal: There is only one, and it corresponds with pressing
+    ENTER.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*When experimenting with DVD interfaces, we’ve been surprised that pressing
+    arrow keys to get to the icon you want can be like solving a puzzle. One attribute
+    of the STBmenu framework is that each of the arrow keys is guaranteed to traverse
+    all input widgets. It may seem like a trivial point, but when you’re trying to
+    disable a home alarm that is unnecessarily waking up the neighbors, you don’t
+    want to be tripped up by a challenging UI.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The STBmenu Widgets**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Status page, shown on the left of Figure 11-10, contains 25 visible widgets.
+    Eight of these are static displays (the title, the column headings, and the zone
+    numbers); five present variable text (the zone descriptions); five display the
+    state of the alarm; and the remaining seven are buttons. (The background screen
+    is not a widget.) Figure 11-11 illustrates the relationships between an STBmenu
+    widget, a user, and the underlying application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/212-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-11: An STBmenu widget*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Comparing the STBmenu widget to the full-featured widget of Figure 11-9, we
+    notice several simplifications. The STBmenu widget responds to only two kinds
+    of events: Activate, and Update. The *Activate* event invokes the widget’s single
+    callback, and the *Update* event tells the widget to redraw itself, since the
+    data it represents may have changed. With full-featured widgets, the application
+    can call functions to configure the widget (e.g., change its size or position)
+    and retrieve its input data (e.g., its entered text or its scrollbar position).
+    However, STBmenu widgets are fully configured when they are constructed, and data
+    is only passed to the application when the Activate callback is invoked. With
+    full-featured widgets, the application can call functions to change the widget’s
+    output data (e.g., status text or meter position), but STBmenu widgets use static
+    pointers into application data structures to retrieve the data they display. Finally,
+    the type of data displayed by STBmenu widgets is limited to integers and strings.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because there are no functions for configuring STBmenu widgets or setting their
+    displayed data, the developers of the underlying application don’t have to be
+    familiar with the toolkit. All they are required to do is expose the displayed
+    application data and provide appropriate callbacks for user input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We summarize the STBmenu API below. Class constructors are in bold, and methods
+    are in italics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Menu(nPages, width, height, bpp);**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*AttachPage(n, page);'
+  prefs: []
+  type: TYPE_NORMAL
+- en: SetCursor(page,row,col);
+  prefs: []
+  type: TYPE_NORMAL
+- en: DisplayCurrentPage();
+  prefs: []
+  type: TYPE_NORMAL
+- en: CursorLeft();
+  prefs: []
+  type: TYPE_NORMAL
+- en: CursorRight();
+  prefs: []
+  type: TYPE_NORMAL
+- en: CursorUp();
+  prefs: []
+  type: TYPE_NORMAL
+- en: CursorDown();
+  prefs: []
+  type: TYPE_NORMAL
+- en: Activate();
+  prefs: []
+  type: TYPE_NORMAL
+- en: Update();*
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Page(nRows, nCols, background);**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*AttachWidget(row, col, xPos, yPos, widget);*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Font(fontPath, fontSize);'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Surface(width, height, color);
+  prefs: []
+  type: TYPE_NORMAL
+- en: Surface(font, color, text);
+  prefs: []
+  type: TYPE_NORMAL
+- en: Surface(imagePath);
+  prefs: []
+  type: TYPE_NORMAL
+- en: SurfaceArray(n, &surface,...);
+  prefs: []
+  type: TYPE_NORMAL
+- en: Button(nfSurface, fSurface);
+  prefs: []
+  type: TYPE_NORMAL
+- en: ButtonArray(n, &button,...);**
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the STBmenu Widgets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**WIcon(font, color, text) and WIcon(imagePath)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Display a static image created from a constant text string or an image file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**WText(font, color, text)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Displays a variable text string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**WIconArray(surfaceArray, trackedIndex)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Displays one of an array of static images, depending on an application index
+    variable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**WButton(button, callback, data)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Displays a button consisting of one static image when highlighted, and another
+    when not highlighted. When activated, invokes an application callback with specified
+    data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**WButtonArray(buttonArray, trackedIndex, callback, data)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Displays one of an array of buttons, depending on an application index variable.
+    When activated, invokes an application callback with specified data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***“Hello, world!” with STBmenu***](toc.html#chapter11.17)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the remainder of this section, we will demonstrate the STBmenu toolkit by
+    working through a simple example. This example is on the Laddie CD in the directory
+    /Code/src/examples/stb_hello. At this point, we recommend you return to the Laddie
+    CD and exit the Laddie framebuffer UI, if it’s still running (remember to switch
+    between consoles with ctrl-alt-F1 or ctrl-alt-F7, and use the arrow keys and enter
+    to navigate the framebuffer menu). Then change to the stb_hello directory, make
+    and run the example using the following commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: laddie:~# cd /Code/src/examples/stb_hello
+  prefs: []
+  type: TYPE_NORMAL
+- en: laddie:~# make
+  prefs: []
+  type: TYPE_NORMAL
+- en: laddie:~# ./stb_hello
+  prefs: []
+  type: TYPE_NORMAL
+- en: You should see the display illustrated in Figure 11-12.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/214-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-12: “Hello, world!” with STBmenu*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This example implements two button widgets. You can select the buttons by pressing
+    the arrow keys on your keyboard, and you can activate them with the ENTER key.
+    When you activate the Hello button, it prints *Hello, world!* to the standard
+    output, which you can verify after closing the UI by activating the Exit button.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the remainder of this section, we will work through the implementation of
+    the stb_hello example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Building a UI with STBmenu involves three steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Define any data structures and callbacks required for monitoring and controlling
+    the application.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Build the UI with widgets that point to these data structures and callbacks.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Handle events using the STBmenu framework’s methods.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We’ll demonstrate these steps for the two-button example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Define Data Structures and Callbacks**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this simple example, there is no data to monitor. Control consists of printing
+    a message or exiting the program, and it requires a single piece of data and two
+    callbacks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/215-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The ![](../images/1.jpg) Hello() callback (invoked by the Hello button) will
+    print a message to the console. The ![](../images/2.jpg) QuitApplication() callback
+    (invoked by the Exit button) will set ![](../images/3.jpg) the enableQuit variable
+    to 1\. All widget callbacks take a pointer to the widget that invoked them as
+    an argument. All such widgets will have the STBmenu type InputClass and may provide
+    additional data useful to the callback; however, we don’t use that capability
+    here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Build the UI**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first step in building a UI is to declare a menu object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#include "STBmenu.h"'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Menu* menu = new Menu(1, 640, 480, 8);
+  prefs: []
+  type: TYPE_NORMAL
+- en: This has to be done before any other UI objects are declared, since it initializes
+    the underlying SDL video context. We specify the number of pages (1), the width
+    (640) and height (480)of the UI’s screen (in pixels), and the number of bits per
+    pixel (8).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we declare and attach the single page for the menu object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#define BLACK 0x000000'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Surface background(640,480,BLACK);
+  prefs: []
+  type: TYPE_NORMAL
+- en: Page page(2, 1, background);
+  prefs: []
+  type: TYPE_NORMAL
+- en: menu->AttachPage(0, page);
+  prefs: []
+  type: TYPE_NORMAL
+- en: For a real UI, we would want a more interesting background, but for a quick
+    example, we specify a black, 640-by-480-pixel surface. Then we declare the page,
+    providing the number of rows (2), number of columns (1), and background. We attach
+    the page to the menu object using AttachPage(), specifying a page number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can now specify the button widgets. Here is the code for the Test button.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/216-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: We declare a TrueType font by ![](../images/1.jpg) specifying a pathname and
+    a font size. We use that font to construct two surfaces, ![](../images/2.jpg)
+    one with cyan text for the button when it isn’t selected (i.e., doesn’t have focus),
+    and ![](../images/3.jpg) one with yellow text and a *<* symbol for the button
+    when it is selected. We ![](../images/4.jpg) construct a button from the two surfaces,
+    specifying the surface without focus first. Finally, we ![](../images/5.jpg) construct
+    a button widget, specifying the button, the callback, and any data that callback
+    might require (NULL, in this case).
+  prefs: []
+  type: TYPE_NORMAL
+- en: After constructing the button widget, we attach it to the page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: page.AttachWidget(0, 0, 250, 200, wHello);
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recall that we declared this page to have two rows and one column. When attaching
+    the widgets, we specify their row (0) and column (0) within the page, as well
+    as their absolute *x* (250) and *y* (200) pixel positions. The row and column
+    will determine how the Up, Down, Left, and Right cursor inputs will select the
+    various button widgets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Exit button is constructed and attached analogously to the Hello widget.
+    You can see the example code on the CD in /Code/src/examples/ stb_hello.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the menu, pages, and widgets constructed, we can now display the menu.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/216-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, the ![](../images/1.jpg) SetCursor() method specifies a page, row, and
+    column for the initially highlighted widget. In the current case, this is the
+    Hello button. The ![](../images/2.jpg) DisplayCurrentPage() method produces the
+    screen shown in Figure 11-12.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Handle Events**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The rest of our program includes a simple event loop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/216-3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](../images/217-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: When arrow key events are received, the menu’s four navigation methods (![](../images/1.jpg)
+    CursorLeft(), CursorRight(), etc.) are used to update the highlighted button.
+    The ENTER key invokes ![](../images/2.jpg) the Activate() method, which invokes
+    the callback for the currently highlighted button. We’ll learn in the next chapter
+    how to use an infrared remote control in place of the keyboard, but this segment
+    of code won’t have to change, since we will use the IR interface to produce SDL
+    keyboard events.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each time an event occurs, we use ![](../images/3.jpg) the Update() method to
+    redraw any widgets that have changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**The Laddie Framebuffer UI**](toc.html#chapter11.18)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we saw in the previous section, an application that uses STBmenu has two
+    obligations: provide pointers to data to be displayed, and provide callbacks for
+    UI inputs. Figure 11-13 illustrates how the Laddie framebuffer UI meets these
+    two obligations.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the user side, keyboard or remote control events select a widget and then
+    invoke that widget’s Activate method. This action invokes a callback in the application
+    interface, which controls the alarm daemon via the RTA/ PostgreSQL protocol. On
+    the application side, logmuxd relays events indicating that the Laddie alarm daemon’s
+    status has changed. Responding to these events, the UpdateZoneData code uses the
+    RTA/PostgreSQL protocol to update a local copy of the alarm daemon’s Zone data
+    and invoke the menu’s Update method. This action prompts the menu’s widgets to
+    redraw themselves, based on the new Zone data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/218-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-13: Using STBmenu for the Laddie framebuffer UI*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*If you’re reading this book’s chapters out of order, please refer to Chapter
+    3 for a description of the RTA/PostrgeSQL protocol, Chapter 5 to learn about the
+    alarm daemon ladd, and Chapter 6 for an introduction to logmuxd.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the “Hello, world!” example, we saw how to build widgets with callbacks.
+    Now, using the Laddie framebuffer UI as an example, we’ll demonstrate how to build
+    widgets that display application data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We start by providing data structures that capture the state of the Laddie alarm
+    daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/218-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The fields in ![](../images/1.jpg) the LaddZone data structure correspond directly
+    to the fields that are displayed on the two menu pages. The ![](../images/2.jpg)
+    laddAlarm variable is nonzero when at least one zone is in alarm, and it is used
+    to enable the Clear All button.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recall from Chapter 6 that the event handler logmuxd can be configured to route
+    events through pipes. We configure logmuxd (using the files Filters.sql and FileDest.sql
+    in the directory /opt/laddie/logmuxd) to route all Laddie Alarm events to the
+    pipe /opt/laddie/fbmenu/laddevents. The framebuffer UI’s main thread uses a select()
+    system call to wait on messages received via this pipe, then uses the alarm daemon’s
+    RTA interface to update the array of LaddZone structures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For our UI, we will provide several columns of widgets to display the laddZones
+    alarm data. Let’s just consider the State column from the Status page. As we saw
+    in Figure 11-10, these widgets display an *Inactive*, *Safe*, or *Alarm* indication,
+    depending on the state of each zone. We use a WIconArray widget, as demonstrated
+    in the following code, to display the alarm states.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/219-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here we ![](../images/1.jpg) declare three surfaces, corresponding to the three
+    alarm states, with appropriate colors. We form ![](../images/2.jpg) a SurfaceArray
+    from these surfaces and use it to build the alarm state widgets. In declaring
+    ![](../images/3.jpg) a WIconArray widget, we provide a pointer to an integer value
+    in the application interface’s local data structures. Note that the order of the
+    alarmState surfaces corresponds to the possible values for laddZones[W].state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To complete this UI, we have to define additional widgets to display the remaining
+    data in the laddZones array and, where appropriate, to update the Laddie alarm
+    daemon with callbacks. As in the “Hello, world!” example, we also have to attach
+    the widgets to pages and the pages to the main menu. One item we haven’t discussed
+    yet is how to switch between pages. Fortunately, this is straightforward. The
+    STBmenu framework provides a SetCursor function for selecting a page and cursor
+    position. Therefore, we switch pages by providing button widgets on each page
+    with callbacks to set the cursor to the opposite page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The event handler for the Laddie framebuffer UI is a little different than that
+    of the stb_hello example. Instead of waiting on SDL events, it uses a select system
+    call to wait on Laddie alarm daemon events from logmuxd. It uses a time-out of
+    100 milliseconds, and when it completes or times out, it uses the function SDL_PollEvent
+    to check for keypresses. As in the stb_hello example, we only need five inputs,
+    so we monitor and respond to the arrow keys and ENTER key. In the next chapter
+    we’ll see how to control this UI using a handheld remote.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the details we’ve omitted, please see the code on the Laddie CD in the directory
+    /Code/src/fbmenu. The code for STBmenu is included in /Code/src/stbmenu.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Summary**](toc.html#chapter11.19)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As illustrated in Figure 11-14, building an appliance’s GUI requires the use
+    of several layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/220-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 11-14: The Laddie framebuffer UI and graphics stack*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Linux framebuffer device driver provides an abstraction of video hardware
+    that facilitates configuring the video mode and manipulating pixel memory. Various
+    graphics libraries are available that use this device driver, and these libraries
+    provide support for manipulating graphical objects and text. These libraries typically
+    provide support for event handling, as well. We chose to use the Simple DirectMedia
+    Layer for the Laddie appliance because it is well supported, well documented,
+    and lightweight. GUI toolkits supply the next layer; they provide and manage widgets,
+    objects for which the input events and the graphical display are tightly coupled.
+    For the Laddie appliance, we developed a thin GUI toolkit, STBmenu, which is intended
+    for use with simple, handheld remotes, and which facilitates adding a GUI layer
+    to an existing application with little additional effort. In support of this last
+    point, we also showed how we connected the Laddie framebuffer UI to the Laddie
+    alarm daemon using the RTA/PostgreSQL protocol and the logmuxd event handler.
+    In the next chapter, we will complete the Laddie framebuffer UI by adding support
+    for remote control.
+  prefs: []
+  type: TYPE_NORMAL
+- en: __________________
+  prefs: []
+  type: TYPE_NORMAL
+- en: ¹ For example, *Beginning Linux Programming*, 3rd ed., by Richard Stones, Neil
+    Matthew, and Alan Cox (Wrox, 2004) includes one chapter each on GTK+ and Qt.
+  prefs: []
+  type: TYPE_NORMAL

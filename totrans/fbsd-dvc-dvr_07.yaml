@@ -1,0 +1,526 @@
+- en: Chapter 7. Newbus and Resource Allocation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Until now, we’ve examined only pseudo-devices, which provide a superb introduction
+    to driver writing. However, most drivers need to interact with real hardware.
+    This chapter shows you how to write drivers that do just that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I’ll start by introducing *Newbus*, which is the infrastructure used in FreeBSD
+    to manage the hardware devices on the system (McKusick and Neville-Neil, 2005).
+    I’ll then describe the basics of a Newbus driver, and I’ll conclude this chapter
+    by talking about hardware resource allocation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Autoconfiguration and Newbus Drivers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Autoconfiguration* is the procedure carried out by FreeBSD to enable the hardware
+    devices on a machine (McKusick and Neville-Neil, 2005). It works by systematically
+    probing a machine’s I/O buses in order to identify their child devices. For each
+    identified device, an appropriate Newbus driver is assigned to configure and initialize
+    it. Note that it’s possible for a device to be unidentifiable or unsupported.
+    As a result, no Newbus driver will be assigned.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A *Newbus driver* is any driver in FreeBSD that controls a device that is bound
+    to an I/O bus (that is, roughly every driver that is not a pseudo-device driver).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In general, three components are common to all Newbus drivers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `device_foo` functions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A device method table
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A `DRIVER_MODULE` macro call
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: device_foo Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `device_foo` functions are, more or less, the operations executed by a Newbus
+    driver during autoconfiguration. [Table 7-1](ch07.html#device_underscore_foo_functions-id1
+    "Table 7-1. device_foo Functions") briefly introduces each `device_foo` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 7-1. device_foo Functions
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Function | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `device_identify` | Add new device to I/O bus |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `device_probe` | Probe for specific device(s) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `device_attach` | Attach to device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `device_detach` | Detach from device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `device_shutdown` | Shut down device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `device_suspend` | Device suspend requested |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `device_resume` | Resume has occurred |'
+  prefs: []
+  type: TYPE_TB
+- en: The `device_identify` function adds a new device (instance) to an I/O bus. This
+    function is used only by buses that cannot directly identify their children. Recall
+    that autoconfiguration begins by identifying the child devices on each I/O bus.
+    Modern buses can directly identify the devices that are connected to them. Older
+    buses, such as ISA, have to use the `device_identify` routine provided by their
+    associated drivers to identify their child devices (McKusick and Neville-Neil,
+    2005). You’ll learn how to associate a driver with an I/O bus shortly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All identified child devices are passed to every Newbus driver’s `device_probe`
+    function. A `device_probe` function tells the kernel whether its driver can handle
+    the identified device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that there may be more than one driver that can handle an identified child
+    device. Thus, `device_probe`’s return value is used to specify how well its driver
+    matches the identified device. The `device_probe` function that returns the highest
+    value denotes the best Newbus driver for the identified device. The following
+    excerpt from `<sys/bus.h>` shows the constants used to indicate success (that
+    is, a match):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, success codes are values less than or equal to zero. The standard
+    UNIX error codes (that is, positive values) are used as failure codes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once the best driver has been found to handle a device, its `device_attach`
+    function is called. A `device_attach` function initializes a device and any essential
+    software (for example, device nodes).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `device_detach` function disconnects a driver from a device. This function
+    should set the device to a sane state and release any resources that were allocated
+    during `device_attach`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Newbus driver’s `device_shutdown`, `device_suspend`, and `device_resume` functions
+    are called when the system is shut down, when its device is suspended, or when
+    its device returns from suspension, respectively. These functions let a driver
+    manage its device as these events occur.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Device Method Table
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A device method table, `device_method_t`, specifies which `device_foo` functions
+    a Newbus driver implements. It is defined in the `<sys/bus.h>` header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is an example device method table for a fictitious PCI device:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, not every `device_foo` function has to be defined. If a `device_foo`
+    function is undefined, the corresponding operation is unsupported.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unsurprisingly, the `device_probe` and `device_attach` functions must be defined
+    for every Newbus driver. For drivers on older buses, the `device_identify` function
+    must also be defined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DRIVER_MODULE Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `DRIVER_MODULE` macro registers a Newbus driver with the system. This macro
+    is defined in the `<sys/bus.h>` header. Here is its function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The arguments expected by this macro are as follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: name
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `name` argument is used to identify the driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: busname
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `busname` argument specifies the driver’s I/O bus (for example, `isa`, `pci`,
+    `usb`, and so on).
+  prefs: []
+  type: TYPE_NORMAL
+- en: driver
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The `driver` argument expects a filled-out `driver_t` structure. This argument
+    is best understood with an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `"foo_pci"` is
+    this example driver’s official name, ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `foo_pci_methods` is its device method table, and ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `sizeof(struct foo_pci_softc)` is the size of its software context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: devclass
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `devclass` argument expects an uninitialized `devclass_t` variable, which
+    will be used by the kernel for internal bookkeeping.
+  prefs: []
+  type: TYPE_NORMAL
+- en: evh
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `evh` argument denotes an optional module event handler. Generally, we’ll
+    always set `evh` to `0`, because `DRIVER_MODULE` supplies its own module event
+    handler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: arg
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `arg` argument is the `void *` argument for the module event handler specified
+    by `evh`. If `evh` is set to `0`, `arg` must be too.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tying Everything Together
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You now know enough to write your first Newbus driver. [Example 7-1](ch07s02.html#foo_underscore_pci.c
+    "Example 7-1. foo_pci.c") is a simple Newbus driver (based on code written by
+    Murray Stokely) for a fictitious PCI device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take a quick look at this code and try to discern some of its structure. If
+    you don’t understand all of it, don’t worry; an explanation follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 7-1. foo_pci.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This driver begins by defining its ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    software context, which will maintain a ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    pointer to its device and the ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `cdev` returned by the ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `make_dev` call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, its ![](httpatomoreillycomsourcenostarchimages1137505.png) character device
+    switch table is defined. This table contains four `d_foo` functions named `foo_pci_open`,
+    `foo_pci_close`, `foo_pci_read`, and `foo_pci_write`. I’ll describe these functions
+    in [d_foo Functions](ch01s05.html#d_underscore_foo_functions "d_foo Functions")
+    in [d_foo Functions](ch07s02.html#d_underscore_foo_functions-id2 "d_foo Functions").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then a ![](httpatomoreillycomsourcenostarchimages1137507.png) `devclass_t` variable
+    is declared. This variable is passed to the ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `DRIVER_MODULE` macro as its ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `devclass` argument.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, the `d_foo` and `device_foo` functions are defined. These functions
+    are described in the order they would execute.
+  prefs: []
+  type: TYPE_NORMAL
+- en: foo_pci_probe Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `foo_pci_probe` function is the `device_probe` implementation for this driver.
+    Before I walk through this function, a description of the `pci_ids` array (found
+    around the middle of [Example 7-1](ch07s02.html#foo_underscore_pci.c "Example 7-1. foo_pci.c"))
+    is needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This array is composed of three `_pcsid` structures. Each `_pcsid` structure
+    contains a ![](httpatomoreillycomsourcenostarchimages1137499.png) PCI ID and a
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) description of the PCI
+    device. As you might have guessed, `pci_ids` lists the devices that [Example 7-1](ch07s02.html#foo_underscore_pci.c
+    "Example 7-1. foo_pci.c") supports.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that I’ve described `pci_ids`, let’s walk through `foo_pci_probe`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `dev` describes
+    an identified device found on the PCI bus. So this function begins by ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    obtaining the PCI ID of `dev`. Then it ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    determines if `dev`’s PCI ID is listed in ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `pci_ids`. If it is, `dev`’s verbose description is ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    set and the success code `BUS_PROBE_DEFAULT` is ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The verbose description is printed to the system console when `foo_pci_attach`
+    executes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: foo_pci_attach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `foo_pci_attach` function is the `device_attach` implementation for this
+    driver. Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `dev` describes
+    a device under this driver’s control. Thus, this function starts by getting `dev`’s
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) software context and ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    unit number. Then a character device node is ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    created and the variables `sc->device` and `sc->cdev->si_drv1` are set to ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `dev` and ![](httpatomoreillycomsourcenostarchimages1137509.png) `sc`, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `d_foo` functions (described next) use `sc->device` and `cdev->si_drv1`
+    to gain access to `dev` and `sc`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: d_foo Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Because every `d_foo` function in [Example 7-1](ch07s02.html#foo_underscore_pci.c
+    "Example 7-1. foo_pci.c") just prints a debug message (that is to say, they’re
+    all basically the same), I’m only going to walk through one of them: `foo_pci_open`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `dev` is the `cdev`
+    returned by the `make_dev` call in `foo_pci_attach`. So, this function first ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    obtains its software context. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    prints a debug message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: foo_pci_detach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `foo_pci_detach` function is the `device_detach` implementation for this
+    driver. Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `dev` describes
+    a device under this driver’s control. Thus, this function simply obtains `dev`’s
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) software context to ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    destroy its device node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t Panic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now that we’ve discussed [Example 7-1](ch07s02.html#foo_underscore_pci.c "Example 7-1. foo_pci.c"),
+    let’s give it a try:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Of course, it ![](httpatomoreillycomsourcenostarchimages1137499.png) fails miserably,
+    because `foo_pci_probe` is probing for fictitious PCI devices. Before concluding
+    this chapter, one additional topic bears mentioning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hardware Resource Management
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As part of configuring and operating devices, a driver might need to manage
+    hardware resources, such as interrupt-request lines (IRQs), I/O ports, or I/O
+    memory (McKusick and Neville-Neil, 2005). Naturally, Newbus includes several functions
+    for doing just that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `bus_alloc_resource` function allocates hardware resources for a specific
+    device to use. If successful, a `struct resource` pointer is returned; otherwise,
+    `NULL` is returned. This function is normally called during `device_attach`. If
+    it is called during `device_probe`, all allocated resources must be released (via
+    `bus_release_resource`) before returning. Most of the arguments for `bus_alloc_resource`
+    are common to the other hardware resource management functions. These arguments
+    are described in the next few paragraphs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `dev` argument is the device that requires ownership of the hardware resource(s).
+    Before allocation, resources are owned by the parent bus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `type` argument represents the type of resource `dev` wants allocated. Valid
+    values for this argument are listed in [Table 7-2](ch07s03.html#symbolic_constants_for_hardware_resource
+    "Table 7-2. Symbolic Constants for Hardware Resources").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 7-2. Symbolic Constants for Hardware Resources
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYS_RES_IRQ` | Interrupt-request line |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYS_RES_IOPORT` | I/O port |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SYS_RES_MEMORY` | I/O memory |'
+  prefs: []
+  type: TYPE_TB
+- en: The `rid` argument expects a resource ID (RID). If `bus_alloc_resource` is successful,
+    a RID is returned in `rid` that may differ from what you passed. You’ll learn
+    more about RIDs later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `start` and `end` arguments are the start and end addresses of the hardware
+    resource(s). To employ the default bus values, simply pass `0ul` as `start` and
+    `˜0ul` as `end`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `count` argument denotes the size of the hardware resource(s). If you used
+    the default bus values for `start` and `end`, `count` is used only if it is larger
+    than the default bus value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `flags` argument details the characteristics of the hardware resource. Valid
+    values for this argument are listed in [Table 7-3](ch07s03.html#bus_underscore_alloc_underscore_resource
+    "Table 7-3. bus_alloc_resource Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 7-3. bus_alloc_resource Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RF_ALLOCATED` | Allocate hardware resource, but don’t activate it |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RF_ACTIVE` | Allocate hardware resource and activate resource automatically
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RF_SHAREABLE` | Hardware resource permits contemporaneous sharing; you should
+    always set this flag, unless the resource cannot be shared |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RF_TIMESHARE` | Hardware resource permits time-division sharing |'
+  prefs: []
+  type: TYPE_TB
+- en: The `bus_alloc_resource_any` function is a convenience wrapper for `bus_alloc_resource`
+    that sets `start`, `end`, and `count` to their default bus values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_activate_resource` function activates a previously allocated hardware
+    resource. Naturally, resources must be activated before they can be used. Most
+    drivers simply pass `RF_ACTIVE` to `bus_alloc_resource` or `bus_alloc_resource_any`
+    to avoid calling `bus_activate_resource`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_deactivate_resource` function deactivates a hardware resource. This
+    function is primarily used in bus drivers (so we’ll never call it).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_release_resource` function releases a previously allocated hardware
+    resource. Of course, the resource cannot be in use on release. If successful,
+    `0` is returned; otherwise, the kernel panics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We’ll cover an example that employs IRQs in [Chapter 8](ch08.html "Chapter 8. Interrupt
+    Handling") and [Chapter 9](ch09.html "Chapter 9. Case Study: Parallel Port Printer
+    Driver"), and I’ll go over an example that requires I/O ports and I/O memory in
+    [Chapter 10](ch10.html "Chapter 10. Managing and Using Resources") and [Chapter 11](ch11.html
+    "Chapter 11. Case Study: Intelligent Platform Management Interface Driver").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter introduced you to the basics of Newbus driver development— working
+    with real hardware. The remainder of this book builds upon the concepts described
+    here to complete your understanding of Newbus.
+  prefs: []
+  type: TYPE_NORMAL

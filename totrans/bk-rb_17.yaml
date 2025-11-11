@@ -1,0 +1,836 @@
+- en: Chapter 17. Threads
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages860138.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: There may be times when your programs need to perform more than one action at
+    a time. For example, maybe you want to do some disk operations and simultaneously
+    display some feedback to the user. Or you might want to copy or upload some files
+    “in the background” while still allowing the user to carry on with some other
+    task “in the foreground.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: In Ruby, if you want to do more than one task at a time, you can run each task
+    in its own *thread*. A thread is like a program within a program. It runs some
+    particular piece of code independently of any other threads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, as you will see shortly, multiple threads may need to find ways of
+    cooperating with each other so that, for example, they can share the same data
+    and they don’t hog all the processing time available, thereby preventing other
+    threads from running. When reading this chapter, you need to be aware that the
+    behavior of threads in Ruby 1.9 and newer is substantially different from threads
+    in 1.8 and older. I’ll explain why that is shortly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating Threads
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Threads can be created like any other object, using the `new` method. When you
+    do this, you must pass to the thread a block containing the code you want the
+    thread to run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'What follows is my first attempt at creating two threads, one of which should
+    print four strings while the other prints ten numbers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*threads1.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: In all probability, when you run this, you may see nothing or, anyway, very
+    little. It may display some strings and some numbers but not all of them and not
+    in any easily predictable order. In the sample code in the archive, I’ve added
+    a report of the time taken for the program to execute, which shows that the darn
+    thing finishes before it has time to get started!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running Threads
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Here is a simple fix to the thread-running problem. Right at the end of the
+    code, add this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*threads2.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This inserts a five-second delay. Now when you run the code again, you should
+    see all the strings and all the numbers, albeit a bit jumbled up, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is, in fact, exactly what you want since it shows that time is now being
+    divided between the two threads. That’s why the words and numbers are jumbled,
+    sometimes with even the carriage returns printed by the `puts` statements being
+    mixed up, with either no carriage return or two at once being displayed. This
+    happens because the threads are madly competing with one another for the available
+    time—first one thread executes and displays a word, then the next thread executes
+    and displays a number, then execution returns to the first thread, and so on,
+    until the first thread ends (when all four words have been displayed), at which
+    point the second thread can run without interruption.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now compare this with the first version of the program. In that program, I created
+    two threads, but just as Ruby was getting itself ready to run the code inside
+    each thread—*bam!*—it arrived at the end of the program and shut everything down,
+    including my two threads. So, in effect, the threads were killed off before they
+    had time to do anything of any interest.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But when I add a call to `sleep( 5 )` to insert a five-second delay, Ruby has
+    plenty of time to run the threads before the program exits. There is just one
+    problem with this technique—and it’s a *big* problem. Adding unnecessary delays
+    to your programs in order to let threads run defeats the object of the exercise.
+    The timer display now shows that the program takes all of five whole seconds to
+    run, which is about 4.99 seconds or so longer than is strictly necessary! You’ll
+    be learning more civilized ways of handling threads shortly. First, however, I
+    need to say a few words about an important difference between threads in Ruby
+    1.8 and threads in Ruby 1.9.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Going Native
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In all versions of Ruby up to and including Ruby 1.8.*x*, there was no access
+    to “native” threads (that is, threads handled by the operating system). In effect,
+    Ruby 1.8 threads exist inside the closed world of a Ruby program, with multiple
+    threads each being allocated time, using a procedure called *time-slicing*, within
+    a single process. Ruby 1.9 (and newer) uses a new interpreter, YARV (Yet Another
+    Ruby Virtual-machine). This allows Ruby 1.9 to make use of native threads, albeit
+    with some limitations that I’ll explain shortly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In principle, native threads allow more efficient execution (using *preemptive
+    multitasking*) whereby the operating system takes care of the execution of threads
+    on one or more processors. Even though Ruby 1.9 uses native threads, it does not
+    perform preemptive multitasking. For reasons of compatibility with existing Ruby
+    programs, Ruby 1.9 native threads work in a similar fashion to Ruby 1.8 non-native
+    (or *green*) threads. In other words, although Ruby 1.9 may in fact run a native
+    thread, it is the Ruby virtual machine, rather than the operating system, that
+    schedules the execution of threads. This means Ruby threads sacrifice efficiency;
+    however, they do at least benefit from portability: Threads written on one operating
+    system will also run on a different operating system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Main Thread
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Even if you don’t explicitly create any threads, there is always at least one
+    thread executing—the main thread in which your Ruby program is running. You can
+    verify this by entering the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*thread_main.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will display something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, Thread is the thread’s class, `0x28955c8` (or some other number) is its
+    hexadecimal object identifier, and `run` is the thread’s current status.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thread Status
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Each thread has a status that may be one of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| `run` | When the thread is executing |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `sleep` | When the thread is sleeping or waiting on I/O |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `aborting` | When the thread is aborting |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `false` | When the thread terminated normally |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `nil` | When the thread terminated with an exception |'
+  prefs: []
+  type: TYPE_TB
+- en: You can obtain the status of a thread using the `status` method. The status
+    is also shown when you inspect a thread, in which case either a `nil` or a `false`
+    status is shown as `dead`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*thread_status.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that the status shown may differ according to the version of Ruby being
+    used and also when the program is run at different times. This is because actions
+    on threads may not occur instantly, and the timing of a change in status may vary
+    with each execution. For example, sometimes you may see the status of a killed
+    thread shown as “aborting” and at other times as “dead.” The thread aborts before
+    it dies, and its change in status may happen in milliseconds. Here is an example
+    taken from the Ruby class library documentation. The documented status of each
+    thread is shown in the comments:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*thread_status2.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'But when I run this code with Ruby 1.9, the status varies greatly, and it does
+    not always match the status shown in the documented example shown earlier. At
+    one moment, this is what I see:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'But when I run it again, this is what I see:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now look at this program:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*thread_status3.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once again the output varies each time it is run. I often see the following,
+    which shows that even after I have “killed” the thread, it may still be “aborting”
+    when I test its status:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now I force a time delay by calling `sleep` for one second:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This time the thread has time to be terminated, and this is displayed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: These timing issues are more likely to arise in Ruby 1.9 than in older versions.
+    You need to be aware of them and, if necessary, check a thread’s status repeatedly
+    in order to verify that it is in the state expected at any given moment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ensuring That a Thread Executes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let’s return to the problem I had in the previous programs. Recall that I created
+    two threads, but the program finished before either of them had a chance to run
+    fully. I fixed this by inserting a fixed-length delay using the `sleep` method.
+    Deliberately introducing gratuitous delays into your programs is not something
+    you would want to do as a general rule. Fortunately, Ruby has a more civilized
+    way of ensuring that a thread has time to execute. The `join` method forces the
+    calling thread (for example, the *main* thread) to suspend its own execution (so
+    it doesn’t just terminate the program) until the thread that calls `join` has
+    completed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*join.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: At first sight, this looks like progress since both threads get the time they
+    need to execute and you haven’t had to introduce any unnecessary delays. However,
+    when you take a look at the output, you will see that the threads run in sequence—*the
+    second thread starts to run after the first thread has finished*. This is why
+    the output shows first all the words, displayed in the first Thread, and then
+    all the numbers, displayed in the second Thread. But what you really want to do
+    is get the two threads to run simultaneously, with Ruby switching from one to
+    the next to give each thread a slice of the available processing time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next program, *threads3.rb*, shows one way of achieving this. It creates
+    two threads, as before; however, this time it assigns each thread to a variable,
+    namely, `wordsThread` and `numbersThread`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*threads3.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now it puts these threads into an array and calls the `each` method to pass
+    them into a block where they are received by the block variable, `t`, which simply
+    calls the `join` method on each thread:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you will see from the output, the two threads now run “in parallel,” so their
+    output is jumbled up, but there is no artificial delay, and the total execution
+    time is negligible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thread Priorities
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So far, I’ve given Ruby total freedom in slicing up the time between threads
+    in any way it wants. But sometimes one thread is more important than the others.
+    For example, if you are writing a file-copying program with one thread to do the
+    actual copying and another thread to display the progress bar, it would make sense
+    to give the file-copying thread most of the time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: There may be times when the currently executing thread specifically wants to
+    give execution time to other threads. This is done by calling the `Thread.pass`
+    method. However, this may not produce quite the results you expect. The `pass`
+    method is discussed in more detail in [Digging Deeper](ch17s10.html#digging_deeper-id16
+    "Digging Deeper") in [Digging Deeper](ch17s10.html#digging_deeper-id16 "Digging
+    Deeper").
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Ruby lets you assign integer values to indicate the priority of each thread.
+    In theory, threads with higher priorities are allocated more execution time than
+    threads with lower priorities. In practice, things aren’t that simple since other
+    factors (such as the order in which threads are run) may affect the amount of
+    time given to each thread. Moreover, in very short programs, the effects of varying
+    the priorities may be impossible to determine. The little words-and-numbers thread
+    example you’ve used up to now is far too short to show any clear differences.
+    So, let’s take a look at a slightly more labor-intensive program—one that runs
+    three threads, each of which calls a method fifty times in order to compute the
+    factorial of 50\. For our purposes, it’s not important to understand how the code
+    calculates factorials. Bear in mind, though, that it uses the shorthand (ternary
+    operator) *if..else* notation (*`< Test Condition >`* `?` *`<if true do this>
+    : <else do this>`*) explained in [Chapter 6](ch06.html "Chapter 6. Conditional
+    Statements"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*threads4.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can now set specific priorities for each thread:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this case, the priorities are the same for each thread, so, in principle,
+    no thread will be given the biggest slice of the action, and the results from
+    all three threads should appear in the usual jumble. This is indeed the case in
+    Ruby 1.8, but be aware that thread priorities may not always produce the expected
+    results in some versions of Ruby 1.9.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thread Priority Problems in Ruby 1.9
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In Ruby 1.9, thread priorities do not always work as documented. Here is an
+    example taken from the Ruby class library documentation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*priority_test.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In principle, `count1` is incremented on a higher-priority thread (`b`) than
+    `count2` (on thread `a`), and it should, therefore, always result in a higher
+    value number as indicated in the comments in this example. In practice (at least
+    when running this program using Ruby 1.9.2 on Windows), `count1` is sometimes
+    higher and sometimes lower than `count2`. This behavior has been reported and
+    documented, and its status as either a “bug” or a “feature” is open to debate.
+    I personally regard it as undesirable and still hope that it will be remedied.
+    However, you must be sure to verify the effect of thread priorities before using
+    them in your own programs. Most of the discussion of thread priorities in this
+    chapter assumes you are using a version of Ruby in which priorities work as documented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, in *threads4.rb* try changing the priority of `t3`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: This time when you run the code, `t3` will (at least in Ruby 1.8) grab most
+    of the time and execute (mostly) before the other threads. The other threads may
+    get a look in at the outset because they are created with equal priorities and
+    the priority is changed only after they have started running. When `t3` has finished,
+    `t1` and `t2` should share the time more or less equally.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, let’s suppose you want `t1` and `t2` to run first, sharing time more or
+    less equally and running `t3` only after those two threads have finished. Here’s
+    my first attempt; you may want to try it yourself:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Hmm, the end result is not what I wanted! It seems that the threads are run
+    in sequence with no time-slicing at all! Okay, just for the heck of it, let’s
+    try some negative numbers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Hurrah! That’s more like it. This time (at least in Ruby 1.8), `t1` and `t2`
+    run concurrently though you may also see `t3` executing briefly before the thread
+    priorities are set; then `t3` runs. So, why do negative values work but positive
+    values don’t?
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is nothing special about negative values *per se*. However, you need to
+    bear in mind that every process has at least one thread running—the *main* thread—and
+    this too has a priority. Its priority happens to be 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Main Thread Priority
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'You can easily verify the priority of the main thread:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*main_thread.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'So, in the previous program (*threads4.rb*), if you set the priority of `t1`
+    to 2, it will “outrank” the main thread itself and will then be given all the
+    execution time it needs until the next thread, `t2`, comes along, and so on. By
+    setting the priorities lower than that of the main thread, you can force the three
+    threads to compete only with themselves since the main thread will always outrank
+    them. If you prefer working with positive numbers, you can specifically set the
+    priority of the main thread to a higher value than all other threads:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Ruby 1.9 may not respect all values assigned in this way. For example, when
+    I display that the priority of a thread to 100 has been assigned, Ruby 1.9 shows
+    3, whereas Ruby 1.8 shows 100.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you want `t2` and `t3` to have the same priority and `t1` to have a lower
+    one, you need to set the priorities for those three threads plus the main thread:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*threads5.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once again, this assumes you are using a version of Ruby (such as Ruby 1.8)
+    in which thread priorities are respected. If you look closely at the output, you
+    may spot one tiny but undesirable side effect. It is possible (not *certain*,
+    but *possible*) that you will see some output from the `t1` thread right at the
+    outset, just before `t2` and `t3` kick in and assert their priorities. This is
+    the same problem noted earlier: Each of the threads tries to start running as
+    soon as it is created, and `t1` may get its own slice of the action before the
+    priorities of the other threads are “upgraded.” To prevent this, you can specifically
+    suspend the thread at the time of creation using `Thread.stop` like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*stop_run.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, when you want to start the thread running (in this case, after setting
+    the thread priorities), you call its `run` method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the use of some Thread methods may cause *deadlocks* in Ruby 1.9\.
+    A deadlock occurs when two or more threads are waiting for one another to release
+    a resource. To avoid deadlocks, you may prefer to use mutexes, as I’ll explain
+    next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mutexes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There may be occasions when multiple threads each need to access some kind
+    of global resource. This has the potential of producing erroneous results because
+    the current state of the global resource may be modified by one thread and this
+    modified value may be unpredictable when it is used by some other thread. For
+    a simple example, look at this code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*no_mutex.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: My intention here is to create and run three threads, each of which increments
+    the global variable, `$i`, 1 million times. I do this by enumerating from 1 to
+    3 and creating an array using the `collect` method (the `map` method is synonymous
+    with `collect` so could also be used) from the results returned by the block.
+    This array of threads, `somethreads`, subsequently passes each thread, `t`, into
+    a block to be executed using `join`, as explained earlier. Each thread calls the
+    `addNum` method to increment the value of `$i`. The expected result of `$i` at
+    the end of this would (naturally) be 3 million. But, in fact, when I run this,
+    the end value of `$i` is 1,068,786 (though you may see a different result).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The explanation of this is that the three threads are, in effect, competing
+    for access to the global variable, `$i`. This means, at certain times, thread
+    `a` may get the current value of `$i` (let’s suppose it happens to be 100), and
+    simultaneously thread `b` gets the current value of `$i` (still 100). Now, `a`
+    increments the value it just got (`$i` becomes 101), and `b` increments the value
+    *it* just got, which was 100 (so `$i` becomes 101 once again). In other words,
+    when multiple threads simultaneously access a shared resource, some of them may
+    be working with out-of-date values, that is, values that do not take into account
+    any modifications that have been made by other threads. Over time, errors resulting
+    from these operations accumulate until you end up with results that differ substantially
+    from those you might have anticipated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To deal with this problem, you need to ensure that when one thread has access
+    to a global resource, it blocks the access of other threads. This is another way
+    of saying that the access to global resources granted to multiple threads should
+    be “mutually exclusive.” You can implement this using Ruby’s Mutex class, which
+    uses a semaphore to indicate whether a resource is currently being accessed and
+    provides the `synchronize` method to prevent access to resources inside a block.
+    Note that you must, in principle, `require ''thread''` to use the Mutex class,
+    but in some versions of Ruby this is provided automatically. Here is my rewritten
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*mutex.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: This time, the end result of `$i` is 3,000,000.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, for a slightly more useful example of using threads, take a look at
+    *file_find2.rb*. This sample program uses Ruby’s `Find` class to traverse directories
+    on disk. For a nonthreaded example, see *file_find.rb*. Compare this with the
+    *file_info3.rb* program in [Sorting by Size](ch13s07.html "Sorting by Size"),
+    which uses the `Dir` class.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This program sets two threads running. The first, `t1`, calls the `processFiles`
+    method to find and display file information (you will need to edit the call to
+    `processFiles` to pass to it a directory name on your system). The second thread,
+    `t2`, simply prints out a message, and this thread runs while `t1` is “alive”
+    (that is, running or sleeping):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*file_find2.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: In a real application, you could adapt this technique to provide user feedback
+    of some kind while some intensive process (such as directory walking) is taking
+    place.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fibers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Ruby 1.9 introduces a new class called a Fiber, which is a bit like a thread
+    and a bit like a block. Fibers are intended for the implementation of “lightweight
+    concurrency.” This broadly means they operate like blocks (see [Chapter 10](ch10.html
+    "Chapter 10. Blocks, Procs, and Lambdas")) whose execution can be paused and restarted
+    just as you can with threads. Unlike threads, however, the execution of fibers
+    is not scheduled by the Ruby virtual machine; it has to be controlled explicitly
+    by the programmer. Another difference between threads and fibers is that threads
+    run automatically when they are created; fibers do not. To start a fiber, you
+    must call its `resume` method. To yield control to code outside the fiber, you
+    must call the `yield` method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s look at some simple examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*fiber_test.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here I create a new fiber, `f`, but don’t immediately start it running. First
+    I display “a”, `puts( "a" )`, and then I start the fiber, `f.resume`. The fiber
+    starts executing and displays the “In fiber” message. But then it calls `yield`
+    with the “yielding” string. This suspends the execution of the fiber and allows
+    the code outside the fiber to continue. The code that called `f.resume` now puts
+    the string that’s been yielded, so “yielding” is displayed. Another call to `f.resume`
+    restarts the fiber where you left off, so “Still in fiber” is displayed, and so
+    on. With each call to `yield`, execution returns to code outside the fiber. And,
+    when that code calls `f.resume`, the remaining code in the fiber is executed.
+    Once there is no more code left to be executed, the fiber terminates. When an
+    inactive (or *dead*) fiber is called by `f.resume`, a FiberError occurs. This
+    is the output from the program shown earlier:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can avoid “dead fiber” errors by testing the state of a fiber using the
+    `alive?` method. This returns true if the fiber is active and returns false if
+    inactive. You must `require ''fiber''` in order to use this method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*fiber_alive.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `resume` method accepts an arbitrary number of parameters. On the first
+    call to `resume`, they are passed as block arguments. Otherwise, they become the
+    return value of the call to `yield`. The following example is taken from the documentation
+    in the Ruby class library:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*fiber_test2.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s a simple example illustrating the use of two fibers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This starts the first fiber, `f`, which runs until the call to `yield`. Then
+    it starts the second fiber, `f2`, which runs until it too calls `yield`. Then
+    the main program displays the string “world,” and finally `f2` and `f` are resumed.
+    This is the output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: Digging Deeper
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here you will learn how to pass execution from one thread to another. You will
+    discover some things that the Ruby documentation doesn’t tell you and some oddities
+    about different versions of Ruby.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Passing Execution to Other Threads
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sometimes you might specifically want a certain thread to yield execution to
+    any other threads that happen to be running. For example, if you have multiple
+    threads doing steadily updated graphics operations or displaying various bits
+    of “as it happens” statistical information, you may want to ensure that once one
+    thread has drawn X number of pixels or displayed Y number of statistics, the other
+    threads are guaranteed to get their chances to do something.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In theory, the `Thread.pass` method takes care of this. Ruby’s source code
+    documentation states that `Thread.pass` “invokes the thread scheduler to pass
+    execution to another thread.” This is the example provided by the Ruby documentation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*pass0.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: According to the documentation, this code, when run, produces the output `axbycz`.
+    And, sure enough, it does. In theory, then, this seems to show that by calling
+    `Thread.pass` after each call to `print`, these threads pass execution to another
+    thread, which is why the output from the two threads alternates.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Being of a suspicious turn of mind, I wondered what the effect would be with
+    the calls to `Thread.pass` removed. Would the first thread hog all the time, yielding
+    to the second thread only when it has finished? The best way to find out is to
+    try it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*pass1.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If my theory is correct (that thread `a` will hog all the time until it’s finished),
+    this would be the expected output: `abcdef`. In fact (to my surprise!), the output
+    actually produced was `axbycz`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In other words, the result was the *same* with or without all those calls to
+    `Thread.pass`. So what, if anything, is `Thread.pass` doing? And is the documentation
+    wrong when it claims that the `pass` method invokes the thread scheduler to pass
+    execution to another thread?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a brief and cynical moment I confess that I toyed with the possibility
+    that the documentation was simply incorrect and that `Thread.pass` didn’t do anything
+    at all. A look into Ruby’s C-language source code soon dispelled my doubts; `Thread.pass`
+    certainly does something, but its behavior is not quite as predictable as the
+    Ruby documentation seems to suggest. Before explaining why this is, let’s try
+    an example of my own:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*pass2.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At first sight, this may look very similar to the previous example. It sets
+    two threads running, but instead of printing out something repeatedly, these threads
+    repeatedly add a character to a string—“a” being added by the `a` thread and “b”
+    by the `b` thread. After each operation, `Thread.pass` passes execution to the
+    other thread. At the end, the entire string is displayed. When run with Ruby 1.8,
+    it comes as no surprise that the string contains an alternating sequence of “a”
+    and “b” characters: `abababababababababab`. However, in Ruby 1.9, the characters
+    do not alternate, and this is what I see: `aaaaaaaaaabbbbbbbbbb`. In my view,
+    the `pass` method is not to be trusted with Ruby 1.9, and the remaining discussion
+    applies to Ruby 1.8 only.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, remember that in the previous program, I obtained the same alternating
+    output even when I removed the calls to `Thread.pass`. Based on that experience,
+    I guess I should expect similar results if I delete `Thread.pass` in this program.
+    Let’s try it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*pass3.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This time, this is the output: `aaaaaaaaaabbbbbbbbbb`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In other words, this program shows the kind of differing behavior that I had
+    originally anticipated in the first program (the one I copied out of Ruby’s embedded
+    documentation), which is to say that when the two threads are left to run under
+    their own steam, the first thread, `a`, grabs all the time for itself and only
+    when it’s finished does the second thread, `b`, get a look in. But by explicitly
+    adding calls to `Thread.pass` in Ruby 1.8, you can force each thread to pass execution
+    to any other threads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, how can you explain this difference in behavior? In essence, *pass0.rb*
+    and *pass3.rb* are doing the same things—running two threads and displaying strings
+    from each. The only real difference is that, in *pass3.rb*, the strings are concatenated
+    inside the threads rather than printed. This might not seem like a big deal, but
+    it turns out that printing a string takes a bit more time than concatenating one.
+    In effect, then, a call to `print` introduces a time delay. And as you found out
+    earlier (when I deliberately introduced a delay using `sleep`), time delays have
+    profound effects on threads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you still aren’t convinced, try my rewritten version of *pass0.rb*, which
+    I have creatively named *pass0_new.rb*. This simply replaces the prints with concatenations.
+    Now if you comment and uncomment the calls to `Thread.pass`, you will indeed,
+    in Ruby 1.8, see differing results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*pass0_new.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With `Thread.pass`, Ruby 1.8 displays the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Without `Thread.pass`, Ruby 1.8 displays the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In Ruby 1.9, the presence or absence of `Thread.pass` has no obvious effect.
+    And, with or without it, this is displayed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: Incidentally, my tests were conducted on a PC running Windows. It is quite possible
+    that different results will be seen on other operating systems. This is because
+    the implementation of the Ruby scheduler, which controls the amount of time allocated
+    to threads, is different on Windows and other operating systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a final example, you may want to take a look at the *pass4.rb* program,
+    which is intended for Ruby 1.8 only. This creates two threads and immediately
+    suspends them (`Thread.stop`). In the body of each thread the thread’s information,
+    including its `object_id` is appended to an array, `arr`, and then `Thread.pass`
+    is called. Finally, the two threads are run and joined, and the array, `arr`,
+    is displayed. Try experimenting by uncommenting `Thread.pass` to verify its effect
+    (pay close attention to the execution order of the threads as indicated by their
+    `object_id` identifiers):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*pass4.rb*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE

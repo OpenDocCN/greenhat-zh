@@ -1,0 +1,993 @@
+- en: Chapter 18. Kernel Configuration
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Kernel, not colonel!*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*This is blowfish, not chicken.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Less grease, more function.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages1616079.png) Depending on your systems
+    administration experience and background, the kernel is a subject of great mystery
+    and speculation. It might be something you reconfigure when the whim strikes you,
+    or something you know to leave alone.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most commercial operating systems provide only a few basic hooks for configuring
+    the kernel. Many open source operating systems tell you to rebuild the kernel
+    from source code whenever you change anything.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD falls somewhere in the middle.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The standard OpenBSD kernel is intended to be perfectly usable without modifications,
+    but you have the tools to perform any tweaks or adjustments necessary for your
+    environment. Additionally, you have the complete source code and kernel-building
+    tools in case you decide to perform wholesale kernel surgery.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD lets you adjust kernel behavior even as the system is running, via `sysctl(8)`.
+    Some hardware or protocols require special OpenBSD kernel tweaks to run in specific
+    environments. This chapter will cover both kinds of changes, but first, let’s
+    talk about the kernel in general.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What Is the Kernel?
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: “The file */bsd* is OpenBSD’s kernel. Next question?”
+  prefs: []
+  type: TYPE_NORMAL
+- en: That’s technically correct, but not exactly useful. A more general description
+    is that “The kernel is the interface that links applications and the hardware.”
+    That’s not a complete definition, but it’s good enough.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The kernel allows programs to write data to disk drives and to the network,
+    and it gives instructions to the CPU and shuffles bits into memory. When you open
+    a web page, the browser application asks the kernel to fetch the data it displays.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some kernel responsibilities exceed this definition. For example, the kernel
+    handles network connectivity, including forwarding packets from one interface
+    to another if needed. The packet-filtering rules run in the kernel (although the
+    rules are managed by applications). The kernel handles disk redundancy. And the
+    kernel also handles all sorts of things that don’t impact applications but are
+    integral to a functioning system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A simplified view is to think of the kernel as the program that handles all
+    the low-level functions, which is close enough to give you an idea of what the
+    kernel does.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Along with *kernel*, you’ll also hear the term *userland*. Userland is everything
+    in the system that isn’t the kernel. Your shells, libraries, and applications
+    are all part of userland.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kernel Messages
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The kernel issues messages to userland. These include hardware attaching and
+    detaching alerts, warnings from device drivers, and system boot messages. If you’re
+    logged on to the system console in text mode, you might notice these messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To review kernel messages, you can watch the console, check the system logs
+    (as discussed in [Chapter 15](ch15.html "Chapter 15. System Maintenance")), or
+    use `dmesg(8)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD has a system message buffer, where it sends messages from the kernel.
+    These messages are usually copied to the system logger, but they’re also accessible
+    via `dmesg`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The system message buffer is circular. As it fills up, the oldest messages are
+    deleted to make room for new ones. Run `dmesg` to view it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Startup Messages
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: One common question is “What hardware did your kernel find?” If the kernel handles
+    all the device drivers and other hardware support, the list of devices found should
+    include all the supported hardware in the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While the system message buffer is circular, OpenBSD copies the boot-time system
+    messages into */var/run/dmesg.boot*. Here are the boot messages from one of my
+    test systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first line lists the version of OpenBSD, the kernel name and version, the
+    date the kernel was built, as well as the machine and directory where the kernel
+    was built and who built it. This machine runs an official OpenBSD i386 snapshot,
+    built by Theo de Raadt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We then see some specifics on the processor. Those familiar with AMD will note
+    that this is a 64-bit amd64 processor. I chose to run the 32-bit i386 version
+    of OpenBSD, because that’s the installation disk I had handy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This system came with 256MB of RAM, but 1MB is lost due to hardware-level weirdness.
+    OpenBSD sees 255MB, and 240MB are available to programs other than the kernel
+    at this moment. The kernel might use some of that memory later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Device Attachments
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The kernel then explores the hardware. When it finds hardware that matches a
+    device driver, it attaches the device driver to the hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: OpenBSD found the main system bus, `mainbus0`, which is a bit odd because it’s
+    not actually a piece of hardware. The kernel creates this logical device as a
+    point for all other devices to attach to. It’s not the only logical device driver,
+    but it’s present on every machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bios0` device, for the hardware BIOS, isn’t terribly interesting either.
+    You know the hardware has some kind of BIOS. We covered configuring your system
+    BIOS back in [Chapter 3](ch03.html "Chapter 3. Installation Walk-Through"), and
+    you haven’t needed to look at it since. Similarly, the `acpi0` device represents
+    the Advanced Configuration and Power Interface (ACPI). If it needed any configuration,
+    you took care of that after unpacking the system from the shipping box.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Connections and Numbering
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now we get into real hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first PCI bus, device `pci0`, is attached to `mainbus0` in the slot bus
+    0\. The kernel then finds a device it identifies as `pchb0`, and attaches it to
+    the PCI bus as device 0\. Don’t know what `pchb0` is? Use `man pchb` to identify
+    this as a PCI host bridge. `dmesg` gives you the part number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next is the device `ppb0` (a PCI/PCI bridge, per `ppb(4)`), attached to PCI
+    bus 0 as device 1\. This is followed by another PCI bus, `pci1`, attached to the
+    `ppb` device. Each instance of a device is assigned a number, starting with zero.
+    Our tenth PCI bus would be device `pci9`. (There’s no technical requirement for
+    sequential numbering, but the kernel follows this rule unless you tell it otherwise.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you dig through *dmesg.boot*, you’ll see that every device is plugged into
+    another device somewhere. For example, here’s my keyboard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The keyboard `wskbd0` is attached to device `pckbd0`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Device `pckbd0` is attached to device `pckbc0`, which, in turn, is plugged into
+    the `isa0` device, which is the ISA bus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The ISA bus is connected to the Intel PIIX4 ISA bridge.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: And this bridge is then hooked to PCI bus 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD finds devices from the root outward, which means that everything is
+    listed in the reverse order from what you’ve just seen. You get a list of which
+    devices are attached to a device, and then the devices attached to those devices.
+    You can backtrack starting with the end device, but that’s kind of annoying.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using dmassage to View Installed Devices
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'I find the `dmassage` package most useful for identifying exactly what’s attached
+    to what devices, although that’s not its only function. Install `dmassage` like
+    any other package, and then run it with `-t` to display installed devices as a
+    tree, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: While this information may not be immediately useful, `dmassage` illustrates
+    how devices are interconnected on your system, which may become important later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Viewing and Adjusting Sysctls
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As noted in earlier chapters, the OpenBSD kernel includes a variety of parameters
+    known as *system controls*, or *sysctls*. Some sysctls are static and can be viewed
+    but not changed. The root account can change others, either at runtime or at boot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sysctls allow an application to retrieve information from the kernel. They also
+    let a sysadmin change system behavior without reconfiguring applications, recompiling
+    the kernel, or rebooting. You can view sysctl values and adjust those that can
+    be changed with `sysctl(8)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That said, just because you *can* change sysctls doesn’t mean you *should* change
+    them. The OpenBSD developers set the sysctls to default values that work well
+    for most environments. You might need to change one or two for your system, but
+    if you find yourself changing sysctls all over the place, you’re probably sending
+    yourself down the sysadmin rabbit hole.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sysctl MIBs
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The kernel presents sysctls in a MIB tree. As you learned in [Chapter 16](ch16.html
+    "Chapter 16. Network Servers"), MIB trees organize information into hierarchical
+    categories. The top-level categories include `kern` (kernel), `vm` (virtual memory),
+    `net` (networking), `hw` (hardware), `machdep` (machine-dependent values), and
+    so on. Each of these categories has additional subcategories. For example, `net`
+    has the categories `inet` (IPv4) and `inet6` (IPv6). The `inet6` MIBs have subcategories
+    `ip6` (general IPv6 characteristics) and `icmp6` (ICMP for IPv6). When you reach
+    the end of categories, you’ll find individual MIBs like these:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: This MIB configures forwarding IPv6 packets between interfaces, turning the
+    host into the router. How do I know? I’ve read it in the documentation, and it’s
+    a commented example in */etc/sysctl.conf*. OpenBSD doesn’t maintain a central
+    list of sysctl values, but the man pages refer to any related sysctls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you want to explore sysctls, get a list from your system, as described next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Viewing Sysctls
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Use `sysctl(8)` to view the sysctls available on a system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: This particular system has more than 400 sysctls. Interpreting the `kern.ostype`
+    and `kern.osrelease` sysctls is fairly straightforward, but why would an OpenBSD
+    system have a sysctl to report the operating system?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `sysctl(3)` interface appears in all BSD-derived operating systems and
+    even in Linux, so checking the `kern.ostype` sysctl, or checking for its existence,
+    is a good way for third-party software to identify the operating system. `kern.osrevision`
+    is just the year and month this particular snapshot was built. `kern.version`
+    is the kernel compilation information displayed at boot. That’s not hard, is it?
+    Let’s look at the next few sysctls:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Figuring out what these do is a little harder than interpreting the previous
+    sysctl names. An experienced sysadmin could make really good guesses about these,
+    but guessing isn’t system administration. Always research sysctls before changing
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you know the name of a sysctl and you want to view its current value, give
+    the sysctl name as an argument to `sysctl`. For example, to view the current securelevel
+    (discussed in [Chapter 10](ch10.html "Chapter 10. Securing Your System")), check
+    the `kern.securelevel` sysctl.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: The current value of `kern.securelevel` is 1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can view subsets of the sysctl tree by giving just the part of the tree
+    you’re interested in. For example, to view only the sysctls related to ICMP, check
+    the `sysctl net.inet.icmp` subcategory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: OpenBSD has six sysctls for IPv4 ICMP networking. You can view any portion of
+    the sysctl tree this way, going as deep or as shallow as you like.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changing Sysctl Values
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Some sysctls are read-only. For example, the `hw.ncpufound` sysctl shows how
+    many processors the system has.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This system has one processor. You cannot change the number of hardware processors
+    through software (duh).
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, a system decides whether or not to forward packets in software.
+    OpenBSD performs packet forwarding entirely in the kernel, like embedded firewalls
+    and routers. The sysctl `net.inet.ip.forwarding` controls this feature. If this
+    is set to `0`, packets are not forwarded. If it’s set to 1, the system routes
+    packets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: To change this, use the equal sign to assign a new value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you need to stop forwarding packets, set this sysctl to `0`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changes take effect immediately. Remember that only root can change sysctl values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Types of Sysctl Values
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Most sysctls have a numerical value, but the interpretation of that number depends
+    on the sysctl. A few sysctls are words, and some generate tables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Numerical Sysctls
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Some sysctls are Boolean—either on or off. For example, IP forwarding is either
+    on or off. You can’t have 50 percent packet forwarding on a properly functioning
+    system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other numerical sysctls have a range of valid numbers. For example the `kern.securelevel`
+    sysctl can range from `-1` to `2`, as discussed in [Chapter 10](ch10.html "Chapter 10. Securing
+    Your System"). While you could assign a value outside this range, it wouldn’t
+    have any effect beyond the closest valid value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some sysctls have numerical values that map directly to some kernel value. For
+    example, the `kern.maxproc` sysctl gives the maximum number of processes that
+    the system can run. You can adjust this value as needed to support your applications.
+    While there’s no maximum value, increasing `kern.maxproc` increases the memory
+    used by various in-kernel tables. By the same token, there’s no minimum size,
+    but if you reduce this setting too far, the system won’t run correctly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Word Sysctls
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: A few sysctls are words, such as the `kern.ostype` sysctl examined earlier.
+    Most of these sysctls cannot be changed with `sysctl`, but some can be changed
+    with other programs. For example, the sysctl `kern.hostname` gives the system’s
+    hostname. You cannot change `kern.hostname` with `sysctl`, but you can change
+    it with `hostname(8)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table Sysctls
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: In addition to words and numbers, some sysctls generate output in the form of
+    tables. These sysctls are not intended for direct human consumption, but are meant
+    for processing by dedicated userland programs. For example, `netstat(1)` reads
+    table sysctls to create its output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To view all sysctls, including tables, pass the `-A` option to `sysctl`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Many table sysctls still won’t print (they will generate warnings that you should
+    use program such-and-such to view that data), but you’ll get a few tables amid
+    the regular output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: And by the way, tabular sysctls are read-only.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting Sysctls at Boot
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Sysctl changes are not permanent; they revert when you reboot. To make sysctl
+    changes permanent, set them in */etc/sysctl.conf*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changes specified in *sysctl.conf* take place early in the booting process,
+    before any server software starts. For example, if you need to customize the network
+    stack, those changes should take place before the system opens any network connections.
+    List the sysctls you need to change, an equal sign, and the desired value in *sysctl.conf*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The default *sysctl.conf* contains commonly changed sysctls (those that the
+    OpenBSD team expects you might reasonably want to change). Each is commented out
+    with a pound sign (`#`) and set to the most common nondefault setting. If you
+    want to change the sysctl, uncomment the entry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following are some commonly changed entries from *sysctl.conf*. (You might
+    have different entries in your system, depending on your OpenBSD version.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`net.inet.ip.forwarding`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: This controls forwarding of IPv4 packets between interfaces. When set to `1`,
+    the system forwards packets received on any interface according to the internal
+    routing table. When set to `0` (the default), packets are not forwarded.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`net.inet.icmp.rediraccept`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: This determines whether the host will accept ICMP redirects. Routers send ICMP
+    redirects to direct hosts to use different local gateways for more specific routes.
+    While the router can forward the packets for the clients, using redirects reduces
+    network load. Accepting ICMP redirects means the host could be redirected to an
+    invalid gateway, however, so they can be a security issue. Set this to `1` to
+    accept ICMP redirects. The default of `0` ignores ICMP redirects.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`net.inet6.ip6.forwarding`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: This controls the forwarding of IPv6 packets, much like `net.inet.ip.forwarding`
+    does for IPv4 packets. You can control IPv4 and IPv6 forwarding separately. Set
+    this to `1` to forward IPv6 packets.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`net.inet6.icmp6.rediraccept`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: By default, OpenBSD ICMPv6 ignores redirects, just as it ignores IPv4 ICMP redirects.
+    Set this to `1` to accept ICMPv6 redirects.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`net.inet6.ip6.accept_rtadv`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: IPv6 autoconfiguration listens for router advertisements, much as IPv4 autoconfiguration
+    listens for configurations from DHCP servers. To autoconfigure IPv6, a host must
+    accept router advertisements. Set this to `0` to disable accepting router advertisements.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`net.inet.tcp.always_keepalive`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: The TCP keep-alive feature sends packets over otherwise idle connections so
+    that intermediate devices will recognize that a connection is still in use. Proper
+    firewalls recognize live but idle TCP connections even without keep-alives. If
+    you have a broken firewall or NAT device, TCP keep-alives can help hold a connection
+    alive. Set this to `1` to enable keep-alives.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`net.inet.tcp.ecn`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: By default, OpenBSD’s TCP stack does not use Explicit Congestion Notification
+    (ECN). Set this to `1` to enable ECN.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`ddb.panic`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: OpenBSD uses the `ddb(4)` kernel debugger. If you want the system to drop into
+    the debugger in the unlikely event of a kernel panic, leave this at `1`. If you
+    want the system to reboot as soon as possible, set this to `0`.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`ddb.console`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: When set to `1`, this enables entering the `ddb(4)` debugger from the console
+    when someone presses CTRL-ALT-ESC. This option is primarily of interest to developers.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`vm.swapencrypt.enable`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: By default, OpenBSD encrypts all data written to swap. To disable encrypting
+    swap, set this to `0`. There’s really no reason to disable swap encryption, because
+    encrypting swap space induces minimal system load.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`machdep.allowaperture`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: This controls userland program access to the memory that userland really shouldn’t
+    be able to access. The X Windows System needs access to this memory to display
+    a graphical console. ([Chapter 17](ch17.html "Chapter 17. Desktop OpenBSD") covers
+    this sysctl and X.)
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**`machdep.kbdreset`**'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: On amd64 and i386 systems, setting this to `1` allows you to press CTRL-ALT-DEL
+    on the console to do a clean shutdown and reboot. When set to `0` (the default),
+    pressing CTRL-ALT-DEL has no effect.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: As a rule, if you don’t understand the thing that a sysctl affects, don’t change
+    it. You won’t learn about RFC 3390 by playing with a sysctl related to it; you’ll
+    learn about RFC 3390 by actually *reading* RFC 3390 and spending quality time
+    with a packet sniffer watching traffic with RFC 3390 disabled and enabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: And if you want to change a sysctl that’s not listed here, think twice. If the
+    OpenBSD guys wanted you to change it, they would list it in *sysctl.conf*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Altering the Kernel with config(8)
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: While `sysctl` lets you tweak the kernel, it won’t let you change values that
+    are hard-coded into the kernel binary. Some of these values are used to initialize
+    kernel data structures, and they can’t be changed once the kernel is running.
+    Others relate to device drivers. Once the kernel has finished probing devices,
+    it won’t go back and reprobe just because you change where a device driver checks
+    for its hardware. To change hard-coded values like these, you must edit the existing
+    kernel file and reboot, allowing the system to set things as you like from initialization.
+    That’s where `config(8)` comes in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `config` command has two completely separate functions. The first creates
+    a kernel compilation directory from a text configuration file, as discussed in
+    [Chapter 19](ch19.html "Chapter 19. Building Custom Kernels"). The function we’re
+    most interested in now is editing an existing kernel binary, which lets you tweak
+    a kernel to better suit your needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The modern OpenBSD kernel is largely dynamic. If you call for additional virtual
+    interfaces, the kernel creates them. If you need to change the amount of memory
+    for the buffer cache, use a sysctl. Editing the kernel is rarely necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Making a Backup of the Default Kernel
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Before making any changes to a working kernel, no matter how minor, back up
+    the original kernel! If your minor changes make your machine unbootable, you want
+    to be able to easily fall back to a working kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The kernel is just a file, */bsd*. To back it up, copy it to another file. I
+    recommend naming your backup of the default kernel */bsd.GENERIC*, for reasons
+    that will become apparent in [Chapter 19](ch19.html "Chapter 19. Building Custom
+    Kernels").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Always keep a known-good kernel on your system. A bad kernel can prevent a computer
+    from booting, and if you don’t have a reliable kernel that’s easily bootable,
+    you will need to boot from installation media. (Boot your backup kernel using
+    the instructions in [Chapter 5](ch05.html "Chapter 5. The Boot Process").) And
+    remember that subtle kernel bugs can take weeks or months to show up, so plan
+    to keep your backup kernel forever.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Device Drivers and the Kernel
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Much of the hard-coded information in the kernel relates to device drivers,
+    especially drivers for ancient ISA cards.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some of you may remember manually configuring the interrupt request (IRQ) and
+    memory port addresses on a network or SCSI card. The kernel uses the IRQ to identify
+    cards. Essentially, it consults an internal list of IRQs and port numbers, compares
+    it to what it finds on the hardware probe, and assigns the drivers appropriately.
+    “This card answers at IRQ 10 and memory port 0x300? It must be a NE2000-compatible
+    network card. I will assign that driver to it.” The process is more complicated
+    than this, of course, but this probe is a vital part of the process. If you want
+    OpenBSD to recognize such a card, and the card is set to an IRQ and memory port
+    other than what OpenBSD expects, you must tell the kernel the IRQ and memory port
+    the card is using.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Realistically, the best way to deal with ISA cards is to feed them to the recycling
+    plant. Running OpenBSD on a 25-year-old VAX is interesting and educational. Running
+    OpenBSD on 15-year-old Sparc hardware is realistic for very specific applications,
+    and can also be educational and interesting. Running OpenBSD on 10-year-old consumer-grade
+    i386 hardware is either a waste of time or an exercise in masochism—probably both.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Modern PCI-descended hardware includes hooks for the kernel to identify the
+    hardware and assign the proper device driver. You shouldn’t need to edit the kernel
+    to support hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enabling Drivers
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Rather than changing driver IRQs, more realistically, you might need to enable
+    a device driver that’s disabled by default or disable a device that’s on by default.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The kernel includes some device drivers that are disabled because they react
+    badly with certain hardware, such as the IPMI driver. The `ipmi(4)` driver is
+    known to be buggy, and as I write this, it is badly broken in some use cases.
+    It’s included in the default kernel, but disabled by default.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can choose to enable `ipmi(4)`. If it works for you, great. If it doesn’t,
+    feel free to submit bug reports, preferably with patches, or at least proper `dmesg`
+    output and crash dumps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Editing the Kernel with config
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When using `config` as a kernel editor, use the command-line options `-e` and
+    `-o`. The `-e` flag tells `config` you’re editing a kernel binary. The `-o` flag
+    lets you specify a new file for the edited version of the kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Give the original kernel file path as an argument. For example, here’s how
+    to edit */bsd* and write the result to the file */bsd.test*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: You could use the `-f` flag instead of `-o` and a filename. The `-f` flag tells
+    `config` to edit the kernel file in place, not to create a new file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you’re editing */bsd* and you specified the `-f` option, your changes are
+    written directly to */bsd*. I recommend *not* doing this. (Unless, of course,
+    you’re absolutely certain you know what you’re doing. You get to keep all the
+    parts.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Running `config` will open the kernel editor, which should look much like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: At this point, you need to use kernel editor commands to make changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the help and list Commands
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Start with the two editor commands `help` and `list`. The `help` command shows
+    all the commands available within `config` and comes in particularly handy at
+    stupid-o’clock AM to remind you of the necessary syntax.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `list` command displays a complete list of all the devices the kernel supports,
+    one screen at a time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: On an OpenBSD 5.2 system, the default kernel has 538 entries, most for hardware
+    that isn’t on any particular system but that OpenBSD supports out of the box.
+    Let’s take a closer look at the devices shown.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Line 0 says that this kernel supports the `video` device. The kernel will look
+    for a video device attached to the `uvideo` device. The `uvideo(4)` man page tells
+    us that `uvideo` is USB video, mainly for webcams and the like, and `video(4)`
+    says that the `video` driver is a device-independent video driver. The `flags`
+    statement gives settings to feed to this device driver. (This kernel supports
+    webcams.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Line 1 says that this kernel supports an `audio` device, and it can be attached
+    to any of a long list of device drivers. The online manual says that `uaudio`,
+    `sb0`, `gus0`, and so on are sound cards. We get sound with our video? Truly we
+    live in an age of wonders.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Entries for older ISA gear are more complex.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: This entry for supporting the old-fashioned NE2000 ISA network card includes
+    an IRQ, DRQ, memory port, and a few other settings that I’ve (thankfully) forgotten
+    about. The kernel will check ISA bus number 0 at the stated port and IRQ, in the
+    hope of finding such a device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is a *pseudo-device*—a software creation that acts much like an actual
+    device but has no underlying hardware. The `pflog(4)` pseudo-device is where the
+    packet filter dumps its logs. This kernel creates one instance of the `pflog`
+    device at boot, but thanks to OpenBSD’s cloneable interfaces, the kernel can create
+    more `pflog` interfaces as needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, notice that several lines declare themselves “free.” You can copy an
+    existing device and add it to the kernel. For example, if you wanted a kernel
+    that supported 10 NE2000 cards, and needed 10 instances of the device driver in
+    the kernel, you could copy and add the devices here. The kernel will autoconfigure
+    any number of device driver instances for modern hardware; it will find 10 PCI
+    Express network cards and give them their own instances of the device without
+    any prodding from you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding and Enabling Devices
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: One of the disadvantages to the `list` command is that it shows everything in
+    the kernel. You can’t interrupt it; you must scroll through to the end. It’s also
+    difficult to search through several hundred devices by eye. If you know the device
+    you want, use `find` to search for it. Here, we’ll use `ipmi` as an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: The IPMI device is device number 493, and it is attached to the device `mainbus0`.
+    But note the word `disable` in the device entry. The `ipmi` device is disabled.
+    Let’s turn it on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: The kernel now has an active IPMI driver. Yippee!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changing Kernel Constants
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: In addition to the device drivers, the kernel has a few hard-coded values for
+    internal data structures. If you run `help` in the kernel editor, you’ll see these
+    values as options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see there are only two values: `BUFCACHEPERCENT` and `NKMEMPAGES`.
+    Unless you have a compelling reason to touch these values, leave them alone.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`NKMEMPAGES` is the number of pages of memory dedicated to the kernel.If your
+    machine starts panicking with error messages of `out of space in kmem_map`, you
+    can increase this value. If the system boots successfully, however, you’re better
+    off setting the `vm.nkmempages` sysctl rather than editing the kernel.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`BUFCACHEPERCENT` is the percentage of physical memory dedicated to the buffer
+    cache. In some fairly rare circumstances, increasing the size of the buffer cache
+    can improve filesystem performance. You could set the sysctl `kern.bufcachepercent`
+    instead of editing this kernel value, however.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To view a current value, enter its name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: To change the value, enter its name and the desired value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, don’t muck with these numbers arbitrarily. The OpenBSD developers set
+    them to the default values for very good reasons.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Completing Configuration
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Once you’ve made all of your changes, enter **`quit`** to save your changes
+    and write them to a kernel file. The `exit` command discards all changes and leaves
+    the editor, making it easy to start over. Do not mix `quit` and `exit` unless
+    you like being annoyed and confused.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Your Edited Kernel
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Your edited kernel is just a file. Verify that you have a backup of your working
+    kernel, copy your new kernel to */bsd*, and reboot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Boot-Time Kernel Configuration
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `config` kernel editor is great when you know what you’re doing, but many
+    of us aren’t that lucky or educated. When I’m trying to figure out how to fix
+    a problem, I’ll frequently make a change, reboot to test the change, and see if
+    things work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD lets you edit the kernel at boot time. You can try one boot with a kernel
+    change, see if it works, and write your changes to the kernel. At the boot loader
+    prompt, run **`boot -c`**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: You’ll get a couple lines of boot output, and then the kernel editor prompt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: This works just like the `config` kernel configuration editor. Make any changes
+    you want here, exactly as you would with `config`. When you `quit` the editor,
+    the kernel should boot with the changes you’ve chosen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The nice thing about boot-time edits is that they’re not permanent unless you
+    later declare them so. If your changes don’t result in the desired behavior, reboot
+    and try again. If your changes do solve your issue, however, you can write them
+    to a kernel file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The kernel remembers the changes you made in it. You can “replay” those changes
+    in `config` by using the `-u` flag. Run `config` as if you were editing the kernel,
+    but add the `-u` flag to replicate your boot-time changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: When you get your command prompt, enter **`quit`** to save your changes to your
+    new kernel file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Between `sysctl` and `config`, you should be able to make any OpenBSD-supported
+    changes to the kernel. In the next chapter, we’ll cover how to make wildly unsupported
+    kernel changes by rebuilding the kernel from source.
+  prefs: []
+  type: TYPE_NORMAL

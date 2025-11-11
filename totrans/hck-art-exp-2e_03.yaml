@@ -1,0 +1,2143 @@
+- en: Chapter 0x300. EXPLOITATION
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Program exploitation is a staple of hacking. As demonstrated in the previous
+    chapter, a program is made up of a complex set of rules following a certain execution
+    flow that ultimately tells the computer what to do. Exploiting a program is simply
+    a clever way of getting the computer to do what you want it to do, even if the
+    currently running program was designed to prevent that action. Since a program
+    can really only do what it's designed to do, the security holes are actually flaws
+    or oversights in the design of the program or the environment the program is running
+    in. It takes a creative mind to find these holes and to write programs that compensate
+    for them. Sometimes these holes are the products of relatively obvious programmer
+    errors, but there are some less obvious errors that have given birth to more complex
+    exploit techniques that can be applied in many different places.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A program can only do what it''s programmed to do, to the letter of the law.
+    Unfortunately, what''s written doesn''t always coincide with what the programmer
+    intended the program to do. This principle can be explained with a joke:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A man is walking through the woods, and he finds a magic lamp on the ground.
+    Instinctively, he picks the lamp up, rubs the side of it with his sleeve, and
+    out pops a genie. The genie thanks the man for freeing him, and offers to grant
+    him three wishes. The man is ecstatic and knows exactly what he wants.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '"First," says the man, "I want a billion dollars."'
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: The genie snaps his fingers and a briefcase full of money materializes out of
+    thin air.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: The man is wide eyed in amazement and continues, "Next, I want a Ferrari."
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: The genie snaps his fingers and a Ferrari appears from a puff of smoke.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: The man continues, "Finally, I want to be irresistible to women."
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: The genie snaps his fingers and the man turns into a box of chocolates.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Just as the man's final wish was granted based on what he said, rather than
+    what he was thinking, a program will follow its instructions exactly, and the
+    results aren't always what the programmer intended. Sometimes the repercussions
+    can be catastrophic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Programmers are human, and sometimes what they write isn''t exactly what they
+    mean. For example, one common programming error is called an *off-by-one* error.
+    As the name implies, it''s an error where the programmer has miscounted by one.
+    This happens more often than you might think, and it is best illustrated with
+    a question: If you''re building a 100-foot fence, with fence posts spaced 10 feet
+    apart, how many fence posts do you need? The obvious answer is 10 fence posts,
+    but this is incorrect, since you actually need 11\. This type of off-by-one error
+    is commonly called a *fencepost error*, and it occurs when a programmer mistakenly
+    counts items instead of spaces between items, or vice versa. Another example is
+    when a programmer is trying to select a range of numbers or items for processing,
+    such as items *`N`* through *`M`*. If `N = 5` and `M = 17`, how many items are
+    there to process? The obvious answer is `M - N`, or `17 - 5 = 12` items. But this
+    is incorrect, since there are actually `M - N + 1` items, for a total of `13`
+    items. This may seem counterintuitive at first glance, because it is, and that''s
+    exactly why these errors happen.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Often, fencepost errors go unnoticed because programs aren't tested for every
+    single possibility, and the effects of a fencepost error don't generally occur
+    during normal program execution. However, when the program is fed the input that
+    makes the effects of the error manifest, the consequences of the error can have
+    an avalanche effect on the rest of the program logic. When properly exploited,
+    an off-by-one error can cause a seemingly secure program to become a security
+    vulnerability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One classic example of this is OpenSSH, which is meant to be a secure terminal
+    communication program suite, designed to replace insecure and unencrypted services
+    such as telnet, rsh, and rcp. However, there was an off-by-one error in the channel-allocation
+    code that was heavily exploited. Specifically, the code included an if statement
+    that read:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: It should have been
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: In plain English, the code reads *If the ID is less than 0 or the ID is greater
+    than the channels allocated, do the following stuff*, when it should have been
+    *If the ID is less than 0 or the ID is greater than* or equal to *the channels
+    allocated, do the following stuff*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This simple off-by-one error allowed further exploitation of the program, so
+    that a normal user authenticating and logging in could gain full administrative
+    rights to the system. This type of functionality certainly wasn't what the programmers
+    had intended for a secure program like OpenSSH, but a computer can only do what
+    it's told.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another situation that seems to breed exploitable programmer errors is when
+    a program is quickly modified to expand its functionality. While this increase
+    in functionality makes the program more marketable and increases its value, it
+    also increases the program's complexity, which increases the chances of an oversight.
+    Microsoft's IIS webserver program is designed to serve static and interactive
+    web content to users. In order to accomplish this, the program must allow users
+    to read, write, and execute programs and files within certain directories; however,
+    this functionality must be limited to those particular directories. Without this
+    limitation, users would have full control of the system, which is obviously undesirable
+    from a security perspective. To prevent this situation, the program has path-checking
+    code designed to prevent users from using the backslash character to traverse
+    backward through the directory tree and enter other directories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the addition of support for the Unicode character set, though, the complexity
+    of the program continued to increase. *Unicode* is a double-byte character set
+    designed to provide characters for every language, including Chinese and Arabic.
+    By using two bytes for each character instead of just one, Unicode allows for
+    tens of thousands of possible characters, as opposed to the few hundred allowed
+    by single-byte characters. This additional complexity means that there are now
+    multiple representations of the backslash character. For example, `%5c` in Unicode
+    translates to the backslash character, but this translation was done *after* the
+    path-checking code had run. So by using `%5c` instead of \, it was indeed possible
+    to traverse directories, allowing the aforementioned security dangers. Both the
+    Sadmind worm and the CodeRed worm used this type of Unicode conversion oversight
+    to deface web pages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A related example of this letter-of-the-law principle used outside the realm
+    of computer programming is the LaMacchia Loophole. Just like the rules of a computer
+    program, the US legal system sometimes has rules that don't say exactly what their
+    creators intended, and like a computer program exploit, these legal loopholes
+    can be used to sidestep the intent of the law. Near the end of 1993, a 21-year-old
+    computer hacker and student at MIT named David LaMacchia set up a bulletin board
+    system called Cynosure for the purposes of software piracy. Those who had software
+    to give would upload it, and those who wanted software would download it. The
+    service was only online for about six weeks, but it generated heavy network traffic
+    worldwide, which eventually attracted the attention of university and federal
+    authorities. Software companies claimed that they lost one million dollars as
+    a result of Cynosure, and a federal grand jury charged LaMacchia with one count
+    of conspiring with unknown persons to violate the wire fraud statue. However,
+    the charge was dismissed because what LaMacchia was alleged to have done wasn't
+    criminal conduct under the Copyright Act, since the infringement was not for the
+    purpose of commercial advantage or private financial gain. Apparently, the lawmakers
+    had never anticipated that someone might engage in these types of activities with
+    a motive other than personal financial gain. (Congress closed this loophole in
+    1997 with the No Electronic Theft Act.) Even though this example doesn't involve
+    the exploiting of a computer program, the judges and courts can be thought of
+    as computers executing the program of the legal system as it was written. The
+    abstract concepts of hacking transcend computing and can be applied to many other
+    aspects of life that involve complex systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generalized Exploit Techniques
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Off-by-one errors and improper Unicode expansion are all mistakes that can be
+    hard to see at the time but are glaringly obvious to any programmer in hindsight.
+    However, there are some common mistakes that can be exploited in ways that aren't
+    so obvious. The impact of these mistakes on security isn't always apparent, and
+    these security problems are found in code everywhere. Because the same type of
+    mistake is made in many different places, generalized exploit techniques have
+    evolved to take advantage of these mistakes, and they can be used in a variety
+    of situations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most program exploits have to do with memory corruption. These include common
+    exploit techniques like buffer overflows as well as less-common methods like format
+    string exploits. With these techniques, the ultimate goal is to take control of
+    the target program's execution flow by tricking it into running a piece of malicious
+    code that has been smuggled into memory. This type of process hijacking is known
+    as *execution of arbitrary code*, since the hacker can cause a program to do pretty
+    much anything he or she wants it to. Like the LaMacchia Loophole, these types
+    of vulnerabilities exist because there are specific unexpected cases that the
+    program can't handle. Under normal conditions, these unexpected cases cause the
+    program to crash— metaphorically driving the execution flow off a cliff. But if
+    the environment is carefully controlled, the execution flow can be controlled—preventing
+    the crash and reprogramming the process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Buffer Overflows
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Buffer overflow vulnerabilities have been around since the early days of computers
+    and still exist today. Most Internet worms use buffer overflow vulnerabilities
+    to propagate, and even the most recent zero-day VML vulnerability in Internet
+    Explorer is due to a buffer overflow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: C is a high-level programming language, but it assumes that the programmer is
+    responsible for data integrity. If this responsibility were shifted over to the
+    compiler, the resulting binaries would be significantly slower, due to integrity
+    checks on every variable. Also, this would remove a significant level of control
+    from the programmer and complicate the language.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While C's simplicity increases the programmer's control and the efficiency of
+    the resulting programs, it can also result in programs that are vulnerable to
+    buffer overflows and memory leaks if the programmer isn't careful. This means
+    that once a variable is allocated memory, there are no built-in safeguards to
+    ensure that the contents of a variable fit into the allocated memory space. If
+    a programmer wants to put ten bytes of data into a buffer that had only been allocated
+    eight bytes of space, that type of action is allowed, even though it will most
+    likely cause the program to crash. This is known as a *buffer overrun* or *buffer
+    overflow*, since the extra two bytes of data will overflow and spill out of the
+    allocated memory, overwriting whatever happens to come next. If a critical piece
+    of data is overwritten, the program will crash. The overflow_example.c code offers
+    an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Buffer Overflows
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: overflow_example.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: By now, you should be able to read the source code above and figure out what
+    the program does. After compilation in the sample output below, we try to copy
+    ten bytes from the first command-line argument into `buffer_two`, which only has
+    eight bytes allocated for it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that `buffer_one` is located directly after `buffer_two` in memory, so
+    when ten bytes are copied into `buffer_two`, the last two bytes of `90` overflow
+    into `buffer_one` and overwrite whatever was there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A larger buffer will naturally overflow into the other variables, but if a large
+    enough buffer is used, the program will crash and die.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: These types of program crashes are fairly common—think of all of the times a
+    program has crashed or blue-screened on you. The programmer's mistake is one of
+    omission—there should be a length check or restriction on the user-supplied input.
+    These kinds of mistakes are easy to make and can be difficult to spot. In fact,
+    the notesearch.c program on [notesearch.c](ch02s08.html#notesearchc "notesearch.c")
+    contains a buffer overflow bug. You might not have noticed this until right now,
+    even if you were already familiar with C.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Program crashes are annoying, but in the hands of a hacker they can become downright
+    dangerous. A knowledgeable hacker can take control of a program as it crashes,
+    with some surprising results. The exploit_notesearch.c code demonstrates the danger.
+  prefs: []
+  type: TYPE_NORMAL
+- en: exploit_notesearch.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This exploit''s source code will be explained in depth later, but in general,
+    it''s just generating a command string that will execute the notesearch program
+    with a command-line argument between single quotes. It uses string functions to
+    do this: `strlen()` to get the current length of the string (to position the buffer
+    pointer) and `strcat()` to concatenate the closing single quote to the end. Finally,
+    the system function is used to execute the command string. The buffer that is
+    generated between the single quotes is the real meat of the exploit. The rest
+    is just a delivery method for this poison pill of data. Watch what a controlled
+    crash can do.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The exploit is able to use the overflow to serve up a root shell—providing full
+    control over the computer. This is an example of a stack-based buffer overflow
+    exploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stack-Based Buffer Overflow Vulnerabilities
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The notesearch exploit works by corrupting memory to control execution flow.
+    The auth_overflow.c program demonstrates this concept.
+  prefs: []
+  type: TYPE_NORMAL
+- en: auth_overflow.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: This example program accepts a password as its only command-line argument and
+    then calls a `check_authentication()` function. This function allows two passwords,
+    meant to be representative of multiple authentication methods. If either of these
+    passwords is used, the function returns 1, which grants access. You should be
+    able to figure most of that out just by looking at the source code before compiling
+    it. Use the `-g` option when you do compile it, though, since we will be debugging
+    this later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: So far, everything works as the source code says it should. This is to be expected
+    from something as deterministic as a computer program. But an overflow can lead
+    to unexpected and even contradictory behavior, allowing access without a proper
+    password.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: You may have already figured out what happened, but let's look at this with
+    a debugger to see the specifics of it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: The GDB debugger is started with the `-q` option to suppress the welcome banner,
+    and breakpoints are set on lines 9 and 16\. When the program is run, execution
+    will pause at these breakpoints and give us a chance to examine memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first breakpoint is before the `strcpy()` happens. By examining the `password_buffer`
+    pointer, the debugger shows it is filled with random uninitialized data and is
+    located at `0xbffff7a0` in memory. By examining the address of the `auth_flag`
+    variable, we can see both its location at `0xbffff7bc` and its value of 0\. The
+    print command can be used to do arithmetic and shows that `auth_flag` is 28 bytes
+    past the start of `password_buffer`. This relationship can also be seen in a block
+    of memory starting at `password_buffer`. The location of `auth_flag` is shown
+    in bold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Continuing to the next breakpoint found after the `strcpy()`, these memory locations
+    are examined again. The `password_buffer` overflowed into the `auth_flag`, changing
+    its first two bytes to `0x41`. The value of `0x00004141` might look backward again,
+    but remember that *x*86 has little-endian architecture, so it's supposed to look
+    that way. If you examine each of these four bytes individually, you can see how
+    the memory is actually laid out. Ultimately, the program will treat this value
+    as an integer, with a value of 16705.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: After the overflow, the `check_authentication()` function will return 16705
+    instead of 0\. Since the if statement considers any nonzero value to be authenticated,
+    the program's execution flow is controlled into the authenticated section. In
+    this example, the `auth_flag` variable is the execution control point, since overwriting
+    this value is the source of the control.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But this is a very contrived example that depends on memory layout of the variables.
+    In auth_overflow2.c, the variables are declared in reverse order. (Changes to
+    auth_overflow.c are shown in bold.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: auth_overflow2.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: This simple change puts the `auth_flag` variable before the `password_buffer`
+    in memory. This eliminates the use of the return_value variable as an execution
+    control point, since it can no longer be corrupted by an overflow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Similar breakpoints are set, and an examination of memory shows that `auth_flag`
+    (shown in bold above and below) is located before `password_buffer` in memory.
+    This means `auth_flag` can never be overwritten by an overflow in `password_buffer`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, the overflow cannot disturb the `auth_flag` variable, since it's
+    located before the buffer. But another execution control point does exist, even
+    though you can't see it in the C code. It's conveniently located after all the
+    stack variables, so it can easily be overwritten. This memory is integral to the
+    operation of all programs, so it exists in all programs, and when it's overwritten,
+    it usually results in a program crash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Recall from the previous chapter that the stack is one of five memory segments
+    used by programs. The stack is a FILO data structure used to maintain execution
+    flow and context for local variables during function calls. When a function is
+    called, a structure called a *stack frame* is pushed onto the stack, and the EIP
+    register jumps to the first instruction of the function. Each stack frame contains
+    the local variables for that function and a return address so EIP can be restored.
+    When the function is done, the stack frame is popped off the stack and the return
+    address is used to restore EIP. All of this is built in to the architecture and
+    is usually handled by the compiler, not the programmer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the `check_authentication()` function is called, a new stack frame is pushed
+    onto the stack above `main()`'s stack frame. In this frame are the local variables,
+    a return address, and the function's arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can see all these elements in the debugger.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254428.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x300-1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first breakpoint is right before the call to `check_authentication()`in
+    `main()`. At this point, the stack pointer register (ESP) is `0xbffff7e0`, and
+    the top of the stack is shown. This is all part of `main()`'s stack frame. Continuing
+    to the next breakpoint inside `check_authentication()`, the output below shows
+    ESP is smaller as it moves up the list of memory to make room for `check_authentication()`'s
+    stack frame (shown in bold), which is now on the stack. After finding the addresses
+    of the `auth_flag` variable (![](httpatomoreillycomsourcenostarchimages254488.png))
+    and the variable `password_buffer` (![](httpatomoreillycomsourcenostarchimages254530.png)),
+    their locations can be seen within the stack frame.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Continuing to the second breakpoint in `check_authentication()`, a stack frame
+    (shown in bold) is pushed onto the stack when the function is called. Since the
+    stack grows upward toward lower memory addresses, the stack pointer is now 64
+    bytes less at `0xbffff7a0`. The size and structure of a stack frame can vary greatly,
+    depending on the function and certain compiler optimizations. For example, the
+    first 24 bytes of this stack frame are just padding put there by the compiler.
+    The local stack variables, `auth_flag` and `password_buffer`, are shown at their
+    respective memory locations in the stack frame. The `auth_flag` ![](httpatomoreillycomsourcenostarchimages254488.png)
+    is shown at `0xbffff7bc`, and the 16 bytes of the password buffer ![](httpatomoreillycomsourcenostarchimages254530.png)
+    are shown at `0xbffff7c0`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The stack frame contains more than just the local variables and padding. Elements
+    of the `check_authentication()` stack frame are shown below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, the memory saved for the local variables is shown in italic. This starts
+    at the `auth_flag` variable at `0xbffff7bc` and continues through the end of the
+    16-byte `password_buffer` variable. The next few values on the stack are just
+    padding the compiler threw in, plus something called the *saved frame pointer*.
+    If the program is compiled with the flag `-fomit-frame-pointer` for optimization,
+    the frame pointer won't be used in the stack frame. At ![](httpatomoreillycomsourcenostarchimages254537.png)
+    the value `0x080484bb` is the return address of the stack frame, and at ![](httpatomoreillycomsourcenostarchimages254461.png)
+    the address `0xbffffe9b7` is a pointer to a string containing 30 *A*s. This must
+    be the argument to the `check_authentication()` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: The return address in a stack frame can be located by understanding how the
+    stack frame is created. This process begins in the `main()` function, even before
+    the function call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice the two lines shown in bold on page 131\. At this point, the EAX register
+    contains a pointer to the first command-line argument. This is also the argument
+    to `check_authentication()`. This first assembly instruction writes EAX to where
+    ESP is pointing (the top of the stack). This starts the stack frame for `check_authentication()`
+    with the function argument. The second instruction is the actual call. This instruction
+    pushes the address of the next instruction to the stack and moves the execution
+    pointer register (EIP) to the start of the `check_authentication()` function.
+    The address pushed to the stack is the return address for the stack frame. In
+    this case, the address of the next instruction is `0x080484bb`, so that is the
+    return address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Execution will continue into the `check_authentication()` function as EIP is
+    changed, and the first few instructions (shown in bold above) finish saving memory
+    for the stack frame. These instructions are known as the function prologue. The
+    first two instructions are for the saved frame pointer, and the third instruction
+    subtracts `0x38` from ESP. This saves 56 bytes for the local variables of the
+    function. The return address and the saved frame pointer are already pushed to
+    the stack and account for the additional 8 bytes of the 64-byte stack frame.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the function finishes, the `leave` and `ret` instructions remove the stack
+    frame and set the execution pointer register (EIP) to the saved return address
+    in the stack frame (![](httpatomoreillycomsourcenostarchimages254488.png)). This
+    brings the program execution back to the next instruction in `main()` after the
+    function call at `0x080484bb`. This process happens every time a function is called
+    in any program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: When some of the bytes of the saved return address are overwritten, the program
+    will still try to use that value to restore the execution pointer register (EIP).
+    This usually results in a crash, since execution is essentially jumping to a random
+    location. But this value doesn't need to be random. If the overwrite is controlled,
+    execution can, in turn, be controlled to jump to a specific location. But where
+    should we tell it to go?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Experimenting with BASH
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Since so much of hacking is rooted in exploitation and experimentation, the
+    ability to quickly try different things is vital. The BASH shell and Perl are
+    common on most machines and are all that is needed to experiment with exploitation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Perl* is an interpreted programming language with a `print` command that happens
+    to be particularly suited to generating long sequences of characters. Perl can
+    be used to execute instructions on the command line by using the `-e` switch like
+    this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: This command tells Perl to execute the commands found between the single quotes—in
+    this case, a single command of `print "A" x 20;`. This command prints the character
+    *A* 20 times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Any character, such as a nonprintable character, can also be printed by using
+    `\x##`, where ## is the hexadecimal value of the character. In the following example,
+    this notation is used to print the character *A*, which has the hexadecimal value
+    of `0x41`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: In addition, string concatenation can be done in Perl with a period (.). This
+    can be useful when stringing multiple addresses together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'An entire shell command can be executed like a function, returning its output
+    in place. This is done by surrounding the command with parentheses and prefixing
+    a dollar sign. Here are two examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: In each case, the output of the command found between the parentheses is substituted
+    for the command, and the command `uname` is executed. This exact command-substitution
+    effect can be accomplished with grave accent marks (', the tilted single quote
+    on the tilde key). You can use whichever syntax feels more natural for you; however,
+    the parentheses syntax is easier to read for most people.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Command substitution and Perl can be used in combination to quickly generate
+    overflow buffers on the fly. You can use this technique to easily test the overflow_example.c
+    program with buffers of precise lengths.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the output above, GDB is used as a hexadecimal calculator to figure out the
+    distance between `buffer_two (0xbfffff7e0`) and the `value` variable (`0xbffff7f4`),
+    which turns out to be 20 bytes. Using this distance, the `value`variable is overwritten
+    with the exact value `0x44434241`, since the characters *A, B, C*, and *D* have
+    the hex values of `0x41, 0x42, 0x43`, and `0x44`, respectively. The first character
+    is the least significant byte, due to the little-endian architecture. This means
+    if you wanted to control the value variable with something exact, like `oxdeadbeef`,
+    you must write those bytes into memory in reverse order.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: This technique can be applied to overwrite the return address in the auth_overflow2.c
+    program with an exact value. In the example below, we will overwrite the return
+    address with a different address in `main()`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: This section of code shown in bold contains the instructions that display the
+    *Access Granted* message. The beginning of this section is at `0x080484bf`, so
+    if the return address is overwritten with this value, this block of instructions
+    will be executed. The exact distance between the return address and the start
+    of the `password_buffer` can change due to different compiler versions and different
+    optimization flags. As long as the start of the buffer is aligned with DWORDs
+    on the stack, this mutability can be accounted for by simply repeating the return
+    address many times. This way, at least one of the instances will overwrite the
+    return address, even if it has shifted around due to compiler optimizations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the example above, the target address of `0x080484bf` is repeated 10 times
+    to ensure the return address is overwritten with the new target address. When
+    the `check_authentication()` function returns, execution jumps directly to the
+    new target address instead of returning to the next instruction after the call.
+    This gives us more control; however, we are still limited to using instructions
+    that exist in the original programming.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The notesearch program is vulnerable to a buffer overflow on the line marked
+    in bold here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: The notesearch exploit uses a similar technique to overflow a buffer into the
+    return address; however, it also injects its own instructions into memory and
+    then returns execution there. These instructions are called *shellcode*, and they
+    tell the program to restore privileges and open a shell prompt. This is especially
+    devastating for the notesearch program, since it is suid root. Since this program
+    expects multiuser access, it runs under higher privileges so it can access its
+    data file, but the program logic prevents the user from using these higher privileges
+    for anything other than accessing the data file—at least that's the intention.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But when new instructions can be injected in and execution can be controlled
+    with a buffer overflow, the program logic is meaningless. This technique allows
+    the program to do things it was never programmed to do, while it's still running
+    with elevated privileges. This is the dangerous combination that allows the notesearch
+    exploit to gain a root shell. Let's examine the exploit further.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: The notesearch exploit generates a buffer in lines 24 through 27 (shown above
+    in bold). The first part is a for loop that fills the buffer with a 4-byte address
+    stored in the `ret` variable. The loop increments `i` by 4 each time. This value
+    is added to the buffer address, and the whole thing is typecast as a unsigned
+    integer pointer. This has a size of 4, so when the whole thing is dereferenced,
+    the entire 4-byte value found in `ret` is written.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: At the first breakpoint, the buffer pointer shows the result of the for loop.
+    You can also see the relationship between the command pointer and the buffer pointer.
+    The next instruction is a call to `memset()`, which starts at the beginning of
+    the buffer and sets 60 bytes of memory with the value `0x90`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, the call to `memcpy()` will copy the shellcode bytes into `buffer+60`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now the buffer contains the desired shellcode and is long enough to overwrite
+    the return address. The difficulty of finding the exact location of the return
+    address is eased by using the repeated return address technique. But this return
+    address must point to the shellcode located in the same buffer. This means the
+    actual address must be known ahead of time, before it even goes into memory. This
+    can be a difficult prediction to try to make with a dynamically changing stack.
+    Fortunately, there is another hacking technique, called the NOP sled, that can
+    assist with this difficult chicanery. *NOP* is an assembly instruction that is
+    short for *no operation*. It is a single-byte instruction that does absolutely
+    nothing. These instructions are sometimes used to waste computational cycles for
+    timing purposes and are actually necessary in the Sparc processor architecture,
+    due to instruction pipelining. In this case, NOP instructions are going to be
+    used for a different purpose: as a fudge factor. We''ll create a large array (or
+    sled) of these NOP instructions and place it before the shellcode; then, if the
+    EIP register points to any address found in the NOP sled, it will increment while
+    executing each NOP instruction, one at a time, until it finally reaches the shellcode.
+    This means that as long as the return address is overwritten with any address
+    found in the NOP sled, the EIP register will slide down the sled to the shellcode,
+    which will execute properly. On the *x*86 architecture, the NOP instruction is
+    equivalent to the hex byte 0x90\. This means our completed exploit buffer looks
+    something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254213.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x300-2.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even with a NOP sled, the approximate location of the buffer in memory must
+    be predicted in advance. One technique for approximating the memory location is
+    to use a nearby stack location as a frame of reference. By subtracting an offset
+    from this location, the relative address of any variable can be obtained.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Experimenting with BASH
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: From exploit_notesearch.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the notesearch exploit, the address of the variable `i` in `main()`'s stack
+    frame is used as a point of reference. Then an offset is subtracted from that
+    value; the result is the target return address. This offset was previously determined
+    to be 270, but how is this number calculated?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The easiest way to determine this offset is experimentally. The debugger will
+    shift memory around slightly and will drop privileges when the suid root notesearch
+    program is executed, making debugging much less useful in this case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the notesearch exploit allows an optional command-line argument to define
+    the offset, different offsets can quickly be tested.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: However, doing this manually is tedious and stupid. BASH also has a for loop
+    that can be used to automate this process. The `seq` command is a simple program
+    that generates sequences of numbers, which is typically used with looping.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: When only two arguments are used, all the numbers from the first argument to
+    the second are generated. When three arguments are used, the middle argument dictates
+    how much to increment each time. This can be used with command substitution to
+    drive BASH's for loop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: The function of the for loop should be familiar, even if the syntax is a little
+    different. The shell variable `$i` iterates through all the values found in the
+    grave accents (generated by `seq`). Then everything between the `do` and `done`
+    keywords is executed. This can be used to quickly test many different offsets.
+    Since the NOP sled is 60 bytes long, and we can return anywhere on the sled, there
+    is about 60 bytes of wiggle room. We can safely increment the offset loop with
+    a step of 30 with no danger of missing the sled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: When the right offset is used, the return address is overwritten with a value
+    that points somewhere on the NOP sled. When execution tries to return to that
+    location, it will just slide down the NOP sled into the injected shellcode instructions.
+    This is how the default offset value was discovered.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the Environment
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Sometimes a buffer will be too small to hold even shellcode. Fortunately, there
+    are other locations in memory where shellcode can be stashed. Environment variables
+    are used by the user shell for a variety of things, but what they are used for
+    isn't as important as the fact they are located on the stack and can be set from
+    the shell. The example below sets an environment variable called `MYVAR` to the
+    string *test*. This environment variable can be accessed by prepending a dollar
+    sign to its name. In addition, the `env` command will show all the environment
+    variables. Notice there are several default environment variables already set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: Similarly, the shellcode can be put in an environment variable, but first it
+    needs to be in a form we can easily manipulate. The shellcode from the notesearch
+    exploit can be used; we just need to put it into a file in binary form. The standard
+    shell tools of `head`, `grep`, and `cut` can be used to isolate just the hex-expanded
+    bytes of the shellcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first 10 lines of the program are piped into `grep`, which only shows the
+    lines that begin with a quotation mark. This isolates the lines containing the
+    shellcode, which are then piped into `cut` using options to display only the bytes
+    between two quotation marks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: BASH's for loop can actually be used to send each of these lines to an `echo`
+    command, with command-line options to recognize hex expansion and to suppress
+    adding a newline character to the end.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now we have the shellcode in a file called shellcode.bin. This can be used with
+    command substitution to put shellcode into an environment variable, along with
+    a generous NOP sled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: And just like that, the shellcode is now on the stack in an environment variable,
+    along with a 200-byte NOP sled. This means we just need to find an address somewhere
+    in that range of the sled to overwrite the saved return address with. The environment
+    variables are located near the bottom of the stack, so this is where we should
+    look when running notesearch in a debugger.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: A breakpoint is set at the beginning of `main()`, and the program is run. This
+    will set up memory for the program, but it will stop before anything happens.
+    Now we can examine memory down near the bottom of the stack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: The debugger reveals the location of the shellcode, shown in bold above. (When
+    the program is run outside of the debugger, these addresses might be a little
+    different.) The debugger also has some information on the stack, which shifts
+    the addresses around a bit. But with a 200-byte NOP sled, these inconsistencies
+    aren't a problem if an address near the middle of the sled is picked. In the output
+    above, the address `0xbffff947` is shown to be close to the middle of the NOP
+    sled, which should give us enough wiggle room. After determining the address of
+    the injected shellcode instructions, the exploitation is simply a matter of overwriting
+    the return address with this address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: The target address is repeated enough times to overflow the return address,
+    and execution returns into the NOP sled in the environment variable, which inevitably
+    leads to the shellcode. In situations where the overflow buffer isn't large enough
+    to hold shellcode, an environment variable can be used with a large NOP sled.
+    This usually makes exploitations quite a bit easier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A huge NOP sled is a great aid when you need to guess at the target return addresses,
+    but it turns out that the locations of environment variables are easier to predict
+    than the locations of local stack variables. In C's standard library there is
+    a function called `getenv()`, which accepts the name of an environment variable
+    as its only argument and returns that variable's memory address. The code in getenv_example.c
+    demonstrates the use of `getenv()`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: getenv_example.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: When compiled and run, this program will display the location of a given environment
+    variable in its memory. This provides a much more accurate prediction of where
+    the same environment variable will be when the target program is run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is accurate enough with a large NOP sled, but when the same thing is attempted
+    without a sled, the program crashes. This means the environment prediction is
+    still off.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: In order to be able to predict an exact memory address, the differences in the
+    addresses must be explored. The length of the name of the program being executed
+    seems to have an effect on the address of the environment variables. This effect
+    can be further explored by changing the name of the program and experimenting.
+    This type of experimentation and pattern recognition is an important skill for
+    a hacker to have.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: As the preceding experiment shows, the length of the name of the executing program
+    has an effect on the location of exported environment variables. The general trend
+    seems to be a decrease of two bytes in the address of the environment variable
+    for every single-byte increase in the length of the program name. This holds true
+    with the program name *a.out*, since the difference in length between the names
+    *a.out* and *a* is four bytes, and the difference between the address `0xbfffff4e`
+    and `0xbfffff46` is eight bytes. This must mean the name of the executing program
+    is also located on the stack somewhere, which is causing the shifting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Armed with this knowledge, the exact address of the environment variable can
+    be predicted when the vulnerable program is executed. This means the crutch of
+    a NOP sled can be eliminated. The getenvaddr.c program adjusts the address based
+    on the difference in program name length to provide a very accurate prediction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: getenvaddr.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: When compiled, this program can accurately predict where an environment variable
+    will be in memory during a target program's execution. This can be used to exploit
+    stack-based buffer overflows without the need for a NOP sled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, exploit code isn't always needed to exploit programs. The use
+    of environment variables simplifies things considerably when exploiting from the
+    command line, but these variables can also be used to make exploit code more reliable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `system()` function is used in the notesearch_exploit.c program to execute
+    a command. This function starts a new process and runs the command using `/bin/sh
+    -c`. The `-c` tells the `sh` program to execute commands from the command-line
+    argument passed to it. Google's code search can be used to find the source code
+    for this function, which will tell us more. Go to [http://www.google.com/codesearch?q=package:libc+system](http://www.google.com/codesearch?q=package:libc+system)
+    to see this code in its entirety.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Code from libc-2.2.2
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: The important part of this function is shown in bold. The `fork()` function
+    starts a new process, and the `execl()` function is used to run the command through
+    /bin/sh with the appropriate command-line arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The use of `system()` can sometimes cause problems. If a setuid program uses
+    `system()`, the privileges won't be transferred, because /bin/sh has been dropping
+    privileges since version two. This isn't the case with our exploit, but the exploit
+    doesn't really need to be starting a new process, either. We can ignore the `fork()`
+    and just focus on the `execl()` function to run the command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `execl()` function belongs to a family of functions that execute commands
+    by replacing the current process with the new one. The arguments for `execl()`
+    start with the path to the target program and are followed by each of the command-line
+    arguments. The second function argument is actually the zeroth command-line argument,
+    which is the name of the program. The last argument is a NULL to terminate the
+    argument list, similar to how a null byte terminates a string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `execl()` function has a sister function called `execle()`, which has one
+    additional argument to specify the environment under which the executing process
+    should run. This environment is presented in the form of an array of pointers
+    to null-terminated strings for each environment variable, and the environment
+    array itself is terminated with a NULL pointer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With `execl()`, the existing environment is used, but if you use `execle()`,
+    the entire environment can be specified. If the environment array is just the
+    shellcode as the first string (with a NULL pointer to terminate the list), the
+    only environment variable will be the shellcode. This makes its address easy to
+    calculate. In Linux, the address will be `0xbffffffa`, minus the length of the
+    shellcode in the environment, minus the length of the name of the executed program.
+    Since this address will be exact, there is no need for a NOP sled. All that's
+    needed in the exploit buffer is the address, repeated enough times to overflow
+    the return address in the stack, as shown in exploit_nosearch_env.c.
+  prefs: []
+  type: TYPE_NORMAL
+- en: exploit_notesearch_env.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: This exploit is more reliable, since it doesn't need a NOP sled or any guesswork
+    regarding offsets. Also, it doesn't start any additional processes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: Overflows in Other Segments
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Buffer overflows can happen in other memory segments, like heap and bss. As
+    in auth_overflow.c, if an important variable is located after a buffer vulnerable
+    to an overflow, the program's control flow can be altered. This is true regardless
+    of the memory segment these variables reside in; however, the control tends to
+    be quite limited. Being able to find these control points and learning to make
+    the most of them just takes some experience and creative thinking. While these
+    types of overflows aren't as standardized as stack-based overflows, they can be
+    just as effective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Basic Heap-Based Overflow
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The notetaker program from [Chapter 0x200](ch02.html "Chapter 0x200. PROGRAMMING")
+    is also susceptible to a buffer overflow vulnerability. Two buffers are allocated
+    on the heap, and the first command-line argument is copied into the first buffer.
+    An overflow can occur here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Excerpt from notetaker.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: Under normal conditions, the buffer allocation is located at `0x804a008`, which
+    is before the `datafile` allocation at `0x804a070`, as the debugging output shows.
+    The distance between these two addresses is 104 bytes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since the first buffer is null terminated, the maximum amount of data that can
+    be put into this buffer without overflowing into the next should be 104 bytes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: As predicted, when 104 bytes are tried, the null-termination byte overflows
+    into the beginning of the `datafile` buffer. This causes the `datafile` to be
+    nothing but a single null byte, which obviously cannot be opened as a file. But
+    what if the `datafile` buffer is overwritten with something more than just a null
+    byte?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: This time, the overflow is designed to overwrite the `datafile` buffer with
+    the string *testfile*. This causes the program to write to testfile instead of
+    /var/notes, as it was originally programmed to do. However, when the heap memory
+    is freed by the `free()` command, errors in the heap headers are detected and
+    the program is terminated. Similar to the return address overwrite with stack
+    overflows, there are control points within the heap architecture itself. The most
+    recent version of glibc uses heap memory management functions that have evolved
+    specifically to counter heap unlinking attacks. Since version 2.2.5, these functions
+    have been rewritten to print debugging information and terminate the program when
+    they detect problems with the heap header information. This makes heap unlinking
+    in Linux very difficult. However, this particular exploit doesn't use heap header
+    information to do its magic, so by the time `free()` is called, the program has
+    already been tricked into writing to a new file with root privileges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: A string is read until a null byte is encountered, so the entire string is written
+    to the file as the `userinput`. Since this is a suid root program, the file that
+    is created is owned by root. This also means that since the filename can be controlled,
+    data can be appended to any file. This data does have some restrictions, though;
+    it must end with the controlled filename, and a line with the user ID will be
+    written, also.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are probably several clever ways to exploit this type of capability. The
+    most apparent one would be to append something to the /etc/passwd file. This file
+    contains all of the usernames, IDs, and login shells for all the users of the
+    system. Naturally, this is a critical system file, so it is a good idea to make
+    a backup copy before messing with it too much.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: The fields in the /etc/passwd file are delimited by colons, the first field
+    being for login name, then password, user ID, group ID, username, home directory,
+    and finally the login shell. The password fields are all filled with the *x* character,
+    since the encrypted passwords are stored elsewhere in a shadow file. (However,
+    this field can contain the encrypted password.) In addition, any entry in the
+    password file that has a user ID of 0 will be given root privileges. That means
+    the goal is to append an extra entry with both root privileges and a known password
+    to the password file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The password can be encrypted using a one-way hashing algorithm. Because the
+    algorithm is one way, the original password cannot be recreated from the hash
+    value. To prevent lookup attacks, the algorithm uses a *salt value*, which when
+    varied creates a different hash value for the same input password. This is a common
+    operation, and Perl has a `crypt()` function that performs it. The first argument
+    is the password, and the second is the salt value. The same password with a different
+    salt produces a different salt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that the salt value is always at the beginning of the hash. When a user
+    logs in and enters a password, the system looks up the encrypted password for
+    that user. Using the salt value from the stored encrypted password, the system
+    uses the same one-way hashing algorithm to encrypt whatever text the user typed
+    as the password. Finally, the system compares the two hashes; if they are the
+    same, the user must have entered the correct password. This allows the password
+    to be used for authentication without requiring that the password be stored anywhere
+    on the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using one of these hashes in the password field will make the password for
+    the account be *password*, regardless of the salt value used. The line to append
+    to /etc/passwd should look something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'However, the nature of this particular heap overflow exploit won''t allow that
+    exact line to be written to /etc/passwd, because the string must end with /etc/passwd.
+    However, if that filename is merely appended to the end of the entry, the passwd
+    file entry would be incorrect. This can be compensated for with the clever use
+    of a symbolic file link, so the entry can both end with /etc/passwd and still
+    be a valid line in the password file. Here''s how it works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE68]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now /tmp/etc/passwd points to the login shell /bin/bash. This means that a
+    valid login shell for the password file is also /tmp/etc/passwd, making the following
+    a valid password file line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE69]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The values of this line just need to be slightly modified so that the portion
+    before /etc/passwd is exactly 104 bytes long:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE70]'
+  prefs: []
+  type: TYPE_PRE
+- en: If /etc/passwd is added to the end of that final string (shown in bold), the
+    string above will be appended to the end of the /etc/passwd file. And since this
+    line defines an account with root privileges with a password we set, it won't
+    be difficult to access this account and obtain root access, as the following output
+    shows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE71]'
+  prefs: []
+  type: TYPE_PRE
+- en: Overflowing Function Pointers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If you have played with the game_of_chance.c program enough, you will realize
+    that, similar to at a casino, most of the games are statistically weighted in
+    favor of the house. This makes winning credits difficult, despite how lucky you
+    might be. Perhaps there's a way to even the odds a bit. This program uses a function
+    pointer to remember the last game played. This pointer is stored in the `user`
+    structure, which is declared as a global variable. This means all the memory for
+    the user structure is allocated in the bss segment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From game_of_chance.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE72]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The name buffer in the user structure is a likely place for an overflow. This
+    buffer is set by the `input_name()` function, shown below:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE73]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function only stops inputting at a newline character. There is nothing
+    to limit it to the length of the destination name buffer, meaning an overflow
+    is possible. In order to take advantage of the overflow, we need to make the program
+    call the function pointer after it is overwritten. This happens in the `play_the_game()`
+    function, which is called when any game is selected from the menu. The following
+    code snippet is part of the menu selection code, used for picking and playing
+    a game.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE74]'
+  prefs: []
+  type: TYPE_PRE
+- en: If `last_game` isn't the same as the current choice, the function pointer of
+    `current_game` is changed to the appropriate game. This means that in order to
+    get the program to call the function pointer without overwriting it, a game must
+    be played first to set the `last_game` variable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE75]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can temporarily suspend the current process by pressing CTRL-Z. At this
+    point, the `last_game` variable has been set to 1, so the next time 1 is selected,
+    the function pointer will simply be called without being changed. Back at the
+    shell, we figure out an appropriate overflow buffer, which can be copied and pasted
+    in as a name later. Recompiling the source with debugging symbols and using GDB
+    to run the program with a breakpoint on `main()` allows us to explore the memory.
+    As the output below shows, the name buffer is 100 bytes from the `current_game`
+    pointer within the user structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE76]'
+  prefs: []
+  type: TYPE_PRE
+- en: Using this information, we can generate a buffer to overflow the name variable
+    with. This can be copied and pasted into the interactive Game of Chance program
+    when it is resumed. To return to the suspended process, just type `fg`, which
+    is short for *foreground*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE77]'
+  prefs: []
+  type: TYPE_PRE
+- en: Select menu option 5 to change the username, and paste in the overflow buffer.
+    This will overwrite the function pointer with `0x42424242`. When menu option 1
+    is selected again, the program will crash when it tries to call the function pointer.
+    This is proof that execution can be controlled; now all that's needed is a valid
+    address to insert in place of *BBBB*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `nm` command lists symbols in object files. This can be used to find addresses
+    of various functions in a program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE78]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `jackpot()` function is a wonderful target for this exploit. Even though
+    the games give terrible odds, if the `current_game` function pointer is carefully
+    overwritten with the address of the `jackpot()` function, you won't even have
+    to play the game to win credits. Instead, the `jackpot()` function will just be
+    called directly, doling out the reward of 100 credits and tipping the scales in
+    the player's direction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This program takes its input from standard input. The menu selections can be
+    scripted in a single buffer that is piped to the program's standard input. These
+    selections will be made as if they were typed. The following example will choose
+    menu item 1, try to guess the number 7, select `n` when asked to play again, and
+    finally select menu item 7 to quit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE79]'
+  prefs: []
+  type: TYPE_PRE
+- en: This same technique can be used to script everything needed for the exploit.
+    The following line will play the Pick a Number game once, then change the username
+    to 100 *A*'s followed by the address of the `jackpot()` function. This will overflow
+    the `current_game` function pointer, so when the Pick a Number game is played
+    again, the `jackpot()` function is called directly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE80]'
+  prefs: []
+  type: TYPE_PRE
+- en: After confirming that this method works, it can be expanded upon to gain any
+    number of credits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE81]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you might have already noticed, this program also runs suid root. This means
+    shellcode can be used to do a lot more than win free credits. As with the stack-based
+    overflow, shellcode can be stashed in an environment variable. After building
+    a suitable exploit buffer, the buffer is piped to the game_of_chance's standard
+    input. Notice the dash argument following the exploit buffer in the cat command.
+    This tells the cat program to send standard input after the exploit buffer, returning
+    control of the input. Even though the root shell doesn't display its prompt, it
+    is still accessible and still escalates privileges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE82]'
+  prefs: []
+  type: TYPE_PRE
+- en: Format Strings
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A format string exploit is another technique you can use to gain control of
+    a privileged program. Like buffer overflow exploits, *format string exploits*
+    also depend on programming mistakes that may not appear to have an obvious impact
+    on security. Luckily for programmers, once the technique is known, it's fairly
+    easy to spot format string vulnerabilities and eliminate them. Although format
+    string vulnerabilities aren't very common anymore, the following techniques can
+    also be used in other situations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Format Parameters
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You should be fairly familiar with basic format strings by now. They have been
+    used extensively with functions like `printf()` in previous programs. A function
+    that uses format strings, such as `printf()`, simply evaluates the format string
+    passed to it and performs a special action each time a format parameter is encountered.
+    Each format parameter expects an additional variable to be passed, so if there
+    are three format parameters in a format string, there should be three more arguments
+    to the function (in addition to the format string argument).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recall the various format parameters explained in the previous chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Parameter | Input Type | Output Type |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `%d` | Value | Decimal |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `%u` | Value | Unsigned decimal |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `%x` | Value | Hexadecimal |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `%s` | Pointer | String |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `%n` | Pointer | Number of bytes written so far |'
+  prefs: []
+  type: TYPE_TB
+- en: The previous chapter demonstrated the use of the more common format parameters,
+    but neglected the less common `%n` format parameter. The fmt_uncommon.c code demonstrates
+    its use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: fmt_uncommon.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE83]'
+  prefs: []
+  type: TYPE_PRE
+- en: This program uses two `%n` format parameters in its `printf()` statement. The
+    following is the output of the program's compilation and execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE84]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `%n` format parameter is unique in that it writes data without displaying
+    anything, as opposed to reading and then displaying data. When a format function
+    encounters a `%n` format parameter, it writes the number of bytes that have been
+    written by the function to the address in the corresponding function argument.
+    In `fmt_uncommon`, this is done in two places, and the unary address operator
+    is used to write this data into the variables `count_one` and `count_two`, respectively.
+    The values are then outputted, revealing that 46 bytes are found before the first
+    `%n` and 113 before the second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The stack example at the end is a convenient segue into an explanation of the
+    stack''s role with format strings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE85]'
+  prefs: []
+  type: TYPE_PRE
+- en: When this `printf()` function is called (as with any function), the arguments
+    are pushed to the stack in reverse order. First the value of `B`, then the address
+    of `A`, then the value of `A`, and finally the address of the format string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The stack will look like the diagram here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The format function iterates through the format string one character at a time.
+    If the character isn't the beginning of a format parameter (which is designated
+    by the percent sign), the character is copied to the output. If a format parameter
+    is encountered, the appropriate action is taken, using the argument in the stack
+    corresponding to that parameter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254207.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x300-3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But what if only two arguments are pushed to the stack with a format string
+    that uses three format parameters? Try removing the last argument from the `printf()`
+    line for the stack example so it matches the line shown below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE86]'
+  prefs: []
+  type: TYPE_PRE
+- en: This can be done in an editor or with a little bit of `sed` magic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE87]'
+  prefs: []
+  type: TYPE_PRE
+- en: The result is `b7fd6ff4`. What the hell is `b7fd6ff4`? It turns out that since
+    there wasn't a value pushed to the stack, the format function just pulled data
+    from where the third argument should have been (by adding to the current frame
+    pointer). This means `0xb7fd6ff4` is the first value found below the stack frame
+    for the format function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is an interesting detail that should be remembered. It certainly would
+    be a lot more useful if there were a way to control either the number of arguments
+    passed to or expected by a format function. Luckily, there is a fairly common
+    programming mistake that allows for the latter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Format String Vulnerability
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Sometimes programmers use `printf(string)` instead of `printf("%s", string)`
+    to print strings. Functionally, this works fine. The format function is passed
+    the address of the string, as opposed to the address of a format string, and it
+    iterates through the string, printing each character. Examples of both methods
+    are shown in fmt_vuln.c.
+  prefs: []
+  type: TYPE_NORMAL
+- en: fmt_vuln.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE88]'
+  prefs: []
+  type: TYPE_PRE
+- en: The following output shows the compilation and execution of fmt_vuln.c.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE89]'
+  prefs: []
+  type: TYPE_PRE
+- en: Both methods seem to work with the string *testing*. But what happens if the
+    string contains a format parameter? The format function should try to evaluate
+    the format parameter and access the appropriate function argument by adding to
+    the frame pointer. But as we saw earlier, if the appropriate function argument
+    isn't there, adding to the frame pointer will reference a piece of memory in a
+    preceding stack frame.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE90]'
+  prefs: []
+  type: TYPE_PRE
+- en: When the `%x` format parameter was used, the hexadecimal representation of a
+    four-byte word in the stack was printed. This process can be used repeatedly to
+    examine stack memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE91]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is what the lower stack memory looks like. Remember that each four-byte
+    word is backward, due to the little-endian architecture. The bytes `0x25, 0x30,
+    0x38, 0x78`, and `0x2e` seem to be repeating a lot. Wonder what those bytes are?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE92]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, they're the memory for the format string itself. Because the
+    format function will always be on the highest stack frame, as long as the format
+    string has been stored anywhere on the stack, it will be located below the current
+    frame pointer (at a higher memory address). This fact can be used to control arguments
+    to the format function. It is particularly useful if format parameters that pass
+    by reference are used, such as `%s` or `%n`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reading from Arbitrary Memory Addresses
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `%s` format parameter can be used to read from arbitrary memory addresses.
+    Since it''s possible to read the data of the original format string, part of the
+    original format string can be used to supply an address to the `%s` format parameter,
+    as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE93]'
+  prefs: []
+  type: TYPE_PRE
+- en: The four bytes of `0x41` indicate that the fourth format parameter is reading
+    from the beginning of the format string to get its data. If the fourth format
+    parameter is `%s` instead of `%x`, the format function will attempt to print the
+    string located at `0x41414141`. This will cause the program to crash in a segmentation
+    fault, since this isn't a valid address. But if a valid memory address is used,
+    this process could be used to read a string found at that memory address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE94]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here the `getenvaddr` program is used to get the address for the environment
+    variable `PATH`. Since the program name *fmt_vuln* is two bytes less than *getenvaddr*,
+    four is added to the address, and the bytes are reversed due to the byte ordering.
+    The fourth format parameter of `%s` reads from the beginning of the format string,
+    thinking it's the address that was passed as a function argument. Since this address
+    is the address of the `PATH` environment variable, it is printed as if a pointer
+    to the environment variable were passed to `printf()`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that the distance between the end of the stack frame and the beginning of
+    the format string memory is known, the field-width arguments can be omitted in
+    the `%x` format parameters. These format parameters are only needed to step through
+    memory. Using this technique, any memory address can be examined as a string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writing to Arbitrary Memory Addresses
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If the `%s` format parameter can be used to read an arbitrary memory address,
+    you should be able to use the same technique with `%n` to write to an arbitrary
+    memory address. Now things are getting interesting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `test_val` variable has been printing its address and value in the debug
+    statement of the vulnerable fmt_vuln.c program, just begging to be overwritten.
+    The test variable is located at `0x08049794`, so by using a similar technique,
+    you should be able to write to the variable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE95]'
+  prefs: []
+  type: TYPE_PRE
+- en: As this shows, the `test_val` variable can indeed be overwritten using the `%n`
+    format parameter. The resulting value in the test variable depends on the number
+    of bytes written before the `%n`. This can be controlled to a greater degree by
+    manipulating the field width option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE96]'
+  prefs: []
+  type: TYPE_PRE
+- en: By manipulating the field-width option of one of the format parameters before
+    the `%n`, a certain number of blank spaces can be inserted, resulting in the output
+    having some blank lines. These lines, in turn, can be used to control the number
+    of bytes written before the `%n` format parameter. This approach will work for
+    small numbers, but it won't work for larger ones, like memory addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Looking at the hexadecimal representation of the `test_val` value, it''s apparent
+    that the least significant byte can be controlled fairly well. (Remember that
+    the least significant byte is actually located in the first byte of the fourbyte
+    word of memory.) This detail can be used to write an entire address. If four writes
+    are done at sequential memory addresses, the least significant byte can be written
+    to each byte of a four-byte word, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE97]'
+  prefs: []
+  type: TYPE_PRE
+- en: As an example, let's try to write the address `0xDDCCBBAA` into the test variable.
+    In memory, the first byte of the test variable should be `0xAA`, then `0xBB`,
+    then `0xCC`, and finally `0xDD`. Four separate writes to the memory addresses
+    `0x08049794, 0x08049795, 0x08049796`, and `0x08049797` should accomplish this.
+    The first write will write the value `0x000000aa`, the second `0x000000bb`, the
+    third `0x000000cc`, and finally `0x000000dd`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first write should be easy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE98]'
+  prefs: []
+  type: TYPE_PRE
+- en: The last `%x` format parameter uses 8 as the field width to standardize the
+    output. This is essentially reading a random DWORD from the stack, which could
+    output anywhere from 1 to 8 characters. Since the first overwrite puts 28 into
+    test_val, using 150 as the field width instead of 8 should control the least significant
+    byte of `test_val` to `0xAA`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now for the next write. Another argument is needed for another `%x`format parameter
+    to increment the byte count to 187, which is 0xBB in decimal. This argument could
+    be anything; it just has to be four bytes long and must be located after the first
+    arbitrary memory address of `0x08049754`. Since this is all still in the memory
+    of the format string, it can be easily controlled. The word *JUNK* is four bytes
+    long and will work fine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After that, the next memory address to be written to, `0x08049755`, should be
+    put into memory so the second `%n` format parameter can access it. This means
+    the beginning of the format string should consist of the target memory address,
+    four bytes of junk, and then the target memory address plus one. But all of these
+    bytes of memory are also printed by the format function, thus incrementing the
+    byte counter used for the `%n` format parameter. This is getting tricky.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Perhaps we should think about the beginning of the format string ahead of time.
+    The goal is to have four writes. Each one will need to have a memory address passed
+    to it, and among them all, four bytes of junk are needed to properly increment
+    the byte counter for the `%n` format parameters. The first `%x` format parameter
+    can use the four bytes found before the format string itself, but the remaining
+    three will need to be supplied data. For the entire write procedure, the beginning
+    of the format string should look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254358.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x300-4.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's give it a try.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE99]'
+  prefs: []
+  type: TYPE_PRE
+- en: The addresses and junk data at the beginning of the format string changed the
+    value of the necessary field width option for the `%x` format parameter. However,
+    this is easily recalculated using the same method as before. Another way this
+    could have been done is to subtract 24 from the previous field width value of
+    150, since 6 new 4-byte words have been added to the front of the format string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that all the memory is set up ahead of time in the beginning of the format
+    string, the second write should be simple.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE100]'
+  prefs: []
+  type: TYPE_PRE
+- en: The next desired value for the least significant byte is `0xBB`. A hexadecimal
+    calculator quickly shows that 17 more bytes need to be written before the next
+    `%n` format parameter. Since memory has already been set up for a `%x` format
+    parameter, it's simple to write 17 bytes using the field width option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This process can be repeated for the third and fourth writes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE101]'
+  prefs: []
+  type: TYPE_PRE
+- en: By controlling the least significant byte and performing four writes, an entire
+    address can be written to any memory address. It should be noted that the three
+    bytes found after the target address will also be overwritten using this technique.
+    This can be quickly explored by statically declaring another initialized variable
+    called `next_val`, right after `test_val`, and also displaying this value in the
+    debug output. The changes can be made in an editor or with some more `sed` magic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, `next_val` is initialized with the value `0x11111111`, so the effect of
+    the write operations on it will be apparent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE102]'
+  prefs: []
+  type: TYPE_PRE
+- en: As the preceding output shows, the code change has also moved the address of
+    the `test_val` variable. However, `next_val` is shown to be adjacent to it. For
+    practice, let's write an address into the variable `test_val` again, using the
+    new address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Last time, a very convenient address of `oxdccbbaa` was used. Since each byte
+    is greater than the previous byte, it's easy to increment the byte counter for
+    each byte. But what if an address like `0x0806abcd` is used? With this address,
+    the first byte of `0xCD` is easy to write using the `%n` format parameter by outputting
+    205 bytes total bytes with a field width of 161\. But then the next byte to be
+    written is `0xAB`, which would need to have 171 bytes outputted. It's easy to
+    increment the byte counter for the `%n` format parameter, but it's impossible
+    to subtract from it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE103]'
+  prefs: []
+  type: TYPE_PRE
+- en: Instead of trying to subtract 34 from 205, the least significant byte is just
+    wrapped around to `0x1AB` by adding 222 to 205 to produce 427, which is the decimal
+    representation of `0x1AB`. This technique can be used to wrap around again and
+    set the least significant byte to `0x06` for the third write.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE104]'
+  prefs: []
+  type: TYPE_PRE
+- en: With each write, bytes of the `next_val` variable, adjacent to `test_val`, are
+    being overwritten. The wraparound technique seems to be working fine, but a slight
+    problem manifests itself as the final byte is attempted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE105]'
+  prefs: []
+  type: TYPE_PRE
+- en: What happened here? The difference between `0x06` and `0x08` is only two, but
+    eight bytes are output, resulting in the byte `0x0e` being written by the `%n`format
+    parameter, instead. This is because the field width option for the `%x` format
+    parameter is only a *minimum* field width, and eight bytes of data were output.
+    This problem can be alleviated by simply wrapping around again; however, it's
+    good to know the limitations of the field width option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE106]'
+  prefs: []
+  type: TYPE_PRE
+- en: Just like before, the appropriate addresses and junk data are put in the beginning
+    of the format string, and the least significant byte is controlled for four write
+    operations to overwrite all four bytes of the variable `test_val`. Any value subtractions
+    to the least significant byte can be accomplished by wrapping the byte around.
+    Also, any additions less than eight may need to be wrapped around in a similar
+    fashion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Direct Parameter Access
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Direct parameter access is a way to simplify format string exploits. In the
+    previous exploits, each of the format parameter arguments had to be stepped through
+    sequentially. This necessitated using several `%x` format parameters to step through
+    parameter arguments until the beginning of the format string was reached. In addition,
+    the sequential nature required three 4-byte words of junk to properly write a
+    full address to an arbitrary memory location.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As the name would imply, *direct parameter access* allows parameters to be accessed
+    directly by using the dollar sign qualifier. For example, *`%n`*`$d` would access
+    the *n*th parameter and display it as a decimal number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE107]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding `printf()` call would have the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE108]'
+  prefs: []
+  type: TYPE_PRE
+- en: First, the *70* is outputted as a decimal number when the format parameter of
+    `%7$d` is encountered, because the seventh parameter is 70\. The second format
+    parameter accesses the fourth parameter and uses a field width option of `05`.
+    All of the other parameter arguments are untouched. This method of direct access
+    eliminates the need to step through memory until the beginning of the format string
+    is located, since this memory can be accessed directly. The following output shows
+    the use of direct parameter access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE109]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, the beginning of the format string is located at the fourth
+    parameter argument. Instead of stepping through the first three parameter arguments
+    using `%x` format parameters, this memory can be accessed directly. Since this
+    is being done on the command line and the dollar sign is a special character,
+    it must be escaped with a backslash. This just tells the command shell to avoid
+    trying to interpret the dollar sign as a special character. The actual format
+    string can be seen when it is printed correctly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Direct parameter access also simplifies the writing of memory addresses. Since
+    memory can be accessed directly, there's no need for four-byte spacers of junk
+    data to increment the byte output count. Each of the `%x` format parameters that
+    usually performs this function can just directly access a piece of memory found
+    before the format string. For practice, let's use direct parameter access to write
+    a more realistic-looking address of `0xbffffd72` into the variable `test_val`s.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE110]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since the stack doesn't need to be printed to reach our addresses, the number
+    of bytes written at the first format parameter is 16\. Direct parameter access
+    is only used for the `%n` parameters, since it really doesn't matter what values
+    are used for the `%x` spacers. This method simplifies the process of writing an
+    address and shrinks the mandatory size of the format string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Short Writes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Another technique that can simplify format string exploits is using short writes.
+    A *short* is typically a two-byte word, and format parameters have a special way
+    of dealing with them. A more complete description of possible format parameters
+    can be found in the printf manual page. The portion describing the length modifier
+    is shown in the output below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE111]'
+  prefs: []
+  type: TYPE_PRE
+- en: This can be used with format string exploits to write two-byte shorts. In the
+    output below, a short (shown in bold) is written in at both ends of the four-byte
+    `test_val` variable. Naturally, direct parameter access can still be used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE112]'
+  prefs: []
+  type: TYPE_PRE
+- en: Using short writes, an entire four-byte value can be overwritten with just two
+    `%hn` parameters. In the example below, the `test_val` variable will be overwritten
+    once again with the address `0xbffffd72`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE113]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding example used a similar wraparound method to deal with the second
+    write of `0xbfff` being less than the first write of `0xfd72`. Using short writes,
+    the order of the writes doesn't matter, so the first write can be `0xfd72` and
+    the second `0xbfff`, if the two passed addresses are swapped in position. In the
+    output below, the address `0x08049796` is written to first, and `0x08049794` is
+    written to second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE114]'
+  prefs: []
+  type: TYPE_PRE
+- en: The ability to overwrite arbitrary memory addresses implies the ability to control
+    the execution flow of the program. One option is to overwrite the return address
+    in the most recent stack frame, as was done with the stack-based overflows. While
+    this is a possible option, there are other targets that have more predictable
+    memory addresses. The nature of stack-based overflows only allows the overwrite
+    of the return address, but format strings provide the ability to overwrite any
+    memory address, which creates other possibilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detours with .dtors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In binary programs compiled with the GNU C compiler, special table sections
+    called `.dtors` and `.ctors` are made for destructors and constructors, respectively.
+    Constructor functions are executed before the `main()` function is executed, and
+    destructor functions are executed just before the `main()` function exits with
+    an exit system call. The destructor functions and the `.dtors` table section are
+    of particular interest.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A function can be declared as a destructor function by defining the destructor
+    attribute, as seen in dtors_sample.c.
+  prefs: []
+  type: TYPE_NORMAL
+- en: dtors_sample.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE115]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding code sample, the `cleanup()` function is defined with the destructor
+    attribute, so the function is automatically called when the `main()` function
+    exits, as shown next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE116]'
+  prefs: []
+  type: TYPE_PRE
+- en: This behavior of automatically executing a function on exit is controlled by
+    the `.dtors` table section of the binary. This section is an array of 32-bit addresses
+    terminated by a NULL address. The array always begins with `0xffffffff` and ends
+    with the NULL address of `0x00000000`. Between these two are the addresses of
+    all the functions that have been declared with the destructor attribute.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `nm` command can be used to find the address of the `cleanup()` function,
+    and `objdump` can be used to examine the sections of the binary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE117]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `nm` command shows that the `cleanup()` function is located at `0x080483e8`
+    (shown in bold above). It also reveals that the `.dtors` section starts at `0x080495ac`
+    with `__DTOR_LIST__` ![](httpatomoreillycomsourcenostarchimages254530.png) and
+    ends at `0x080495b4` with `__DTOR_END__`( ![](httpatomoreillycomsourcenostarchimages254488.png)).
+    This means that `0x080495ac` should contain `0xffffffff, 0x080495b4` should contain
+    `0x00000000`, and the address between them (`0x080495b0`) should contain the address
+    of the `cleanup()` function (`0x080483e8`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `objdump` command shows the actual contents of the `.dtors` section (shown
+    in bold below), although in a slightly confusing format. The first value of `80495ac`
+    is simply showing the address where the `.dtors` section is located. Then the
+    actual bytes are shown, opposed to DWORDs, which means the bytes are reversed.
+    Bearing this in mind, everything appears to be correct.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE118]'
+  prefs: []
+  type: TYPE_PRE
+- en: An interesting detail about the `.dtors` section is that it is writable. An
+    object dump of the headers will verify this by showing that the `.dtors` section
+    isn't labeled `READONLY`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE119]'
+  prefs: []
+  type: TYPE_PRE
+- en: Another interesting detail about the `.dtors` section is that it is included
+    in all binaries compiled with the GNU C compiler, regardless of whether any functions
+    were declared with the destructor attribute. This means that the vulnerable format
+    string program, fmt_vuln.c, must have a `.dtors` section containing nothing. This
+    can be inspected using `nm` and `objdump`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE120]'
+  prefs: []
+  type: TYPE_PRE
+- en: As this output shows, the distance between `__DTOR_LIST__` and `__DTOR_END__`
+    is only four bytes this time, which means there are no addresses between them.
+    The object dump verifies this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the `.dtors` section is writable, if the address after the `0xffffffff`
+    is overwritten with a memory address, the program's execution flow will be directed
+    to that address when the program exits. This will be the address of `__DTOR_LIST__`
+    plus four, which is `0x08049694` (which also happens to be the address of `__DTOR_END__`
+    in this case).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the program is suid root, and this address can be overwritten, it will be
+    possible to obtain a root shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE121]'
+  prefs: []
+  type: TYPE_PRE
+- en: Shellcode can be put into an environment variable, and the address can be predicted
+    as usual. Since the program name lengths of the helper program getenvaddr.c and
+    the vulnerable fmt_vuln.c program differ by two bytes, the shellcode will be located
+    at `0xbffff9ec` when fmt_vuln.c is executed. This address simply has to be written
+    into the `.dtors` section at `0x08049694` (shown in bold below) using the format
+    string vulnerability. In the output below the short write method is used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE122]'
+  prefs: []
+  type: TYPE_PRE
+- en: Even though the `.dtors` section isn't properly terminated with a NULL address
+    of `0x00000000`, the shellcode address is still considered to be a destructor
+    function. When the program exits, the shellcode will be called, spawning a root
+    shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another notesearch Vulnerability
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In addition to the buffer overflow vulnerability, the notesearch program from
+    [Chapter 0x200](ch02.html "Chapter 0x200. PROGRAMMING") also suffers from a format
+    string vulnerability. This vulnerability is shown in bold in the code listing
+    below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE123]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function reads the `note_buffer` from the file and prints the contents
+    of the note without supplying its own format string. While this buffer can't be
+    directly controlled from the command line, the vulnerability can be exploited
+    by sending exactly the right data to the file using the notetaker program and
+    then opening that note using the notesearch program. In the following output,
+    the notetaker program is used to create notes to probe memory in the notesearch
+    program. This tells us that the eighth function parameter is at the beginning
+    of the buffer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE124]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that the relative layout of memory is known, exploitation is just a matter
+    of overwriting the `.dtors` section with the address of injected shellcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE125]'
+  prefs: []
+  type: TYPE_PRE
+- en: Overwriting the Global Offset Table
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Since a program could use a function in a shared library many times, it's useful
+    to have a table to reference all the functions. Another special section in compiled
+    programs is used for this purpose—the *procedure linkage table (PLT)*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section consists of many jump instructions, each one corresponding to the
+    address of a function. It works like a springboard—each time a shared function
+    needs to be called, control will pass through the PLT.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An object dump disassembling the PLT section in the vulnerable format string
+    program (fmt_vuln.c) shows these jump instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE126]'
+  prefs: []
+  type: TYPE_PRE
+- en: One of these jump instructions is associated with the `exit()` function, which
+    is called at the end of the program. If the jump instruction used for the `exit()`
+    function can be manipulated to direct the execution flow into shellcode instead
+    of the `exit()` function, a root shell will be spawned. Below, the procedure linking
+    table is shown to be read only.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE127]'
+  prefs: []
+  type: TYPE_PRE
+- en: But closer examination of the jump instructions (shown in bold below) reveals
+    that they aren't jumping to addresses but to pointers to addresses. For example,
+    the actual address of the `printf()` function is stored as a pointer at the memory
+    address `0x08049780`, and the `exit()` function's address is stored at `0x08049784`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE128]'
+  prefs: []
+  type: TYPE_PRE
+- en: These addresses exist in another section, called the *global offset table (GOT)*,
+    which is writable. These addresses can be directly obtained by displaying the
+    dynamic relocation entries for the binary by using `objdump`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE129]'
+  prefs: []
+  type: TYPE_PRE
+- en: This reveals that the address of the `exit()` function (shown in bold above)
+    is located in the GOT at `0x08049784`. If the address of the shellcode is overwritten
+    at this location, the program should call the shellcode when it thinks it's calling
+    the `exit()` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As usual, the shellcode is put in an environment variable, its actual location
+    is predicted, and the format string vulnerability is used to write the value.
+    Actually, the shellcode should still be located in the environment from before,
+    meaning that the only things that need adjustment are the first 16 bytes of the
+    format string. The calculations for the `%x` format parameters will be done once
+    again for clarity. In the output below, the address of the shellcode (![](httpatomoreillycomsourcenostarchimages254488.png))
+    is written into the address of the `exit()` function (![](httpatomoreillycomsourcenostarchimages254530.png)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE130]'
+  prefs: []
+  type: TYPE_PRE
+- en: When fmt_vuln.c tries to call the `exit()` function, the address of the `exit()`
+    function is looked up in the GOT and is jumped to via the PLT. Since the actual
+    address has been switched with the address for the shellcode in the environment,
+    a root shell is spawned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another advantage of overwriting the GOT is that the GOT entries are fixed per
+    binary, so a different system with the same binary will have the same GOT entry
+    at the same address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ability to overwrite any arbitrary address opens up many possibilities for
+    exploitation. Basically, any section of memory that is writable and contains an
+    address that directs the flow of program execution can be targeted.
+  prefs: []
+  type: TYPE_NORMAL

@@ -1,0 +1,931 @@
+- en: Chapter 3. VIEWING FLOWS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages651574.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: You have sensors transmitting data, and your collector is writing that data
+    to disk. Now what? Flow-tools provides several programs for viewing flow data,
+    generating statistical analysis, and generating reports. You'll start by displaying
+    the data in the flow files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using flow-print
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Flow files contain tightly packed binary data, and viewing a flow file with
+    `cat` or `more` will scramble your terminal. To view flow data, you should use
+    `flow-print`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each flow file contains header information that identifies the host that exported
+    the data, the capture time, and so on. When you need to view multiple flow files,
+    you should strip out these headers before feeding the data to `flow-print` so
+    that they don't interfere with your viewing of the actual flow data. That's where
+    `flow-cat` comes in. You'll use `flow-cat` to concatenate multiple flow files
+    and present clean data to `flow-print`. Although using `flow-cat` is optional,
+    I recommend that you always use it with `flow-print` unless you are specifically
+    examining header data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To examine a flow file, use `flow-cat` to feed the data to `flow-print`, and
+    then pipe the result to a pager so that you can view all of the results, as shown
+    in [Example 3-1](ch03.html#sample_flow-print_output "Example 3-1. Sample flow-print
+    output").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 3-1. Sample flow-print output
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Each line in [Example 3-1](ch03.html#sample_flow-print_output "Example 3-1. Sample
+    flow-print output") represents one flow. The first column, `srcIP`, shows the
+    source IP address of the flow, and the second (`dstIP`) shows the destination
+    address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `prot` column displays the protocol number for this flow. Protocol 17 is
+    UDP, and protocol 6 is TCP. ([Table 3-1](ch03.html#common_protocol_numbers "Table 3-1. Common
+    Protocol Numbers") in [Common Protocol and Port Number Assignments](ch03.html#common_protocol_and_port_number_assignme
+    "Common Protocol and Port Number Assignments") describes the protocols most commonly
+    seen on a network, and you'll find a mostly complete list of these protocols numbers
+    in the */etc/protocols* file on your collector server.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `srcPort` column shows the source port of a TCP or UDP flow, and `dstPort`
+    shows the destination port. Finally, the `octets` column shows the number of bytes
+    in the flow, and `packets` shows the number of packets in the flow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first flow in [Example 3-1](ch03.html#sample_flow-print_output "Example 3-1. Sample
+    flow-print output") comes from the address 36.85.32.9\. This is an address on
+    my network that's going to the IP 158.43.192.1\. Off the top of my head, I haven't
+    the foggiest idea what this address is or why I'm communicating with it, but I
+    do know that protocol 17 is UDP, the source port is 2325, and the destination
+    port is 53\. Port 53 is the UDP port reserved for DNS transactions, so I know
+    that this flow represents a DNS query, and I also know from the `octets` column
+    that 59 bytes were sent in one packet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now look at the second flow in [Example 3-1](ch03.html#sample_flow-print_output
+    "Example 3-1. Sample flow-print output"). Notice that the source and destination
+    IP addresses are reversed from our first flow: The remote end sent data from port
+    53 to port 2325 on my end, which is the reverse of the first flow. The response,
+    134 bytes in one packet, is almost certainly a DNS response to the query sent
+    in the first flow, but I''d need to view the timing information to be absolutely
+    certain.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The third flow in [Example 3-1](ch03.html#sample_flow-print_output "Example 3-1. Sample
+    flow-print output") originates from a different IP on my network and is going
+    to a different remote IP than either of the IPs in the first two flows. This flow
+    represents a TCP/IP transaction that is separate and different from the first
+    two flows. This transaction runs over protocol 6 (or TCP) and has a source port
+    of 25 and a destination port of 4115\. That''s odd. TCP port 25 is used for SMTP,
+    or email. You would expect an email connection to be *to* port 25, not *from*
+    port 25\. Why would a network transaction have a *source* port of 25? Remember,
+    every network transaction includes two flows: one from the client to the server
+    and another from the server to the client. This "source port 25" flow is the server''s
+    communication to the client.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now look at the fourth and final flow. This flow is the reverse of the third
+    flow and represents the other half of that SMTP transaction. The source port is
+    4115, and the destination is 25, which makes sense if someone is trying to send
+    mail to the email server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As these last two lines demonstrate, `flow-print` does not necessarily print
+    flows in the order in which the traffic occurred. For example, if two hosts have
+    very fast connectivity to each other, the flow record might show both the flow
+    that initiates a connection and the flow that is the response to that connection
+    request as starting simultaneously. In that case, `flow-print` displays the flows
+    in the order in which they are recorded in the flow file. (We'll extract actual
+    timing data from flow files later.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: BITS, BYTES, AND OCTETS
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most network management systems offer information about traffic in some multiple
+    of bits—kilobits, megabits, and so on, all in base 10\. However, some flow analysis
+    systems, such as flow-tools, offer traffic information in *octets*, rather than
+    bits or even bytes, because the byte is not always 8 bits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most computing professionals know a byte as 8 bits. But *very* strictly speaking,
+    most computer professionals are wrong. A byte is the smallest unit of memory addressing
+    on a particular hardware platform. The Intel 8086 CPU and its descendants, today's
+    most common machines, have an 8-bit byte, which many other platforms adopted as
+    a convenient standard. Commercially available hardware exists with bytes anywhere
+    from 5 to 12 bits, and experimental hardware can have bytes of just about any
+    size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An octet is always eight bits, the same size as the normal byte. If you have
+    systems where a byte is not 8 bits, the word *byte* is ambiguous. Some software,
+    such as flow-tools, explicitly uses octets for disambiguation because almost all
+    network administrators only have hardware with 8-bit bytes. (Most of us don't
+    have odd hardware.) You just need to recognize octets when you see them and be
+    grateful that some network administrators suffer from annoyances you'll never
+    need to cope with.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Printing Protocol and Port Names
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'You probably remember that port 53 is for the Domain Name System, and port
+    25 is for email''s SMTP protocol, but most of us haven''t memorized the purpose
+    of every port number. Similarly, you might remember that protocol 6 is TCP and
+    17 is UDP, but you can''t bother memorizing all the other protocol numbers. The
+    files */etc/protocols* and */etc/services* list port numbers and their associated
+    names. Use the `-n` flag to have `flow-print` display ports and protocols using
+    these names, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: These are the same results as in [Example 3-1](ch03.html#sample_flow-print_output
+    "Example 3-1. Sample flow-print output"), except that in the `prot` column `tcp`
+    replaces 6 and `udp` replaces 17\. Similarly, the numbers in the `srcPort` and
+    `dstPort` columns have been replaced with service names such as `domain` and `smtp`.
+    While using names for port numbers is reasonable, using hostnames instead of IP
+    addresses introduces a dependency on the network. Also, getting hostnames for
+    hundreds or thousands of IP addresses can take a very long time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Not all `flow-print` formats support output with names, however. In those output
+    formats, `flow-print` ignores the `-n` flag.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Common Protocol and Port Number Assignments
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Once you've worked with flow information for a while, you'll begin to recognize
+    port and protocol numbers automatically. [Table 3-1](ch03.html#common_protocol_numbers
+    "Table 3-1. Common Protocol Numbers") lists some protocols you'll commonly see
+    on the Internet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 3-1. Common Protocol Numbers
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Number | Protocol |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1 | Internet Control Message Protocol (ICMP) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 6 | Transmission Control Protocol (TCP) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 17 | User Datagram Protocol (UDP) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 47 | Generic Routing Encapsulation (GRE) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 50 | Encapsulating Security Payload (ESP) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 51 | Authentication Header (AH) |'
+  prefs: []
+  type: TYPE_TB
+- en: Similarly, [Table 3-2](ch03.html#common_tcp_and_udp_port_assignments "Table 3-2. Common
+    TCP and UDP Port Assignments") lists a few of the commonly used TCP and UDP port
+    assignments on internal and public networks. (For a more complete list, see */etc/services*
+    on your collector host.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 3-2. Common TCP and UDP Port Assignments
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Number | Service |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 20 | File Transfer Protocol (FTP) data channel |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 21 | File Transfer Protocol (FTP) control channel |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 22 | Secure Shell (SSH) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 23 | Telnet |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 25 | Email (SMTP) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 53 | Domain Name Service (DNS) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 80 | Hypertext Transfer Protocol (HTTP, Web) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 137 | NetBIOS Naming Service (Windows file sharing) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 138 | NetBIOS Datagram Service (Windows file sharing) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 139 | NetBIOS Session Service (Windows file sharing) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 161 | Simple Network Management Protocol (SNMP) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 389 | Lightweight Directory Access Protocol (LDAP) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 443 | Secure HTTP (HTTPS) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 445 | SMB over TCP (Windows file sharing) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'You''ll find many more ports than this in use, of course, and if you find that
+    a port isn''t in this list or in */etc/services*, an Internet search should identify
+    it. Some ports will stubbornly resist identification from the network, though:
+    Some program on the host is using that port, and you''ll need to use that host''s
+    native tools to identify that program.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: PORTS VS. SERVICES
+  prefs: []
+  type: TYPE_NORMAL
+- en: Always remember that a port assignment is not conclusive proof that a particular
+    protocol is running over that port. A systems administrator can run any program
+    on any port. For example, you can run a web server on port 25 (email) or an FTP
+    server on port 443 (HTTPS). One of my servers runs SSH on ports 23, 25, 53, 80,
+    443, and more, which lets me evade most simple packet-filtering firewalls. If
+    you discover suspicious traffic, such as very long TCP-based DNS requests, remember
+    that users are tricky little buggers and will try just about anything to evade
+    your access controls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Viewing Flow Record Header Information with -p
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Each flow file includes header data that records the collector hostname, timing
+    and compression information, and other capture data. The `-p` flag prints the
+    header information from a flow file before any of the flows to make it easier
+    for you to identify the sensor host, start and stop time of a flow, how long a
+    flow ran, how many flows `flow-capture` believes were lost in transit, and so
+    on. This flow data is not frequently useful, but you can see it if you think it
+    might help.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember, `flow-cat` specifically strips out this header data to avoid confusing
+    other flow tools, which means that you can only effectively examine the headers
+    of one flow file at a time, and you cannot use `flow-cat`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Printing to a Wide Terminal
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Many flow-print reports contain a lot of information and as such don't have
+    very much whitespace between columns. The `-w` flag tells `flow-print` that you
+    have a wide terminal, so it can add extra space between the columns to make the
+    output easier to read. If you have a very wide terminal, however, I suggest you
+    look at format 5 instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FLAGS AND CONTROL BITS
+  prefs: []
+  type: TYPE_NORMAL
+- en: The TCP protocol includes *flags*, also known as *control bits*. `flow-print`
+    provides the flags field for TCP flows, but this field is meaningless for other
+    protocols. I'll call TCP flags by the name *control bits* to be consistent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting flow-print Formats with -f
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Because the default `flow-print` output might not include all the information
+    you're interested in (and it certainly doesn't include all the information included
+    within a flow file), `flow-print` supports a wide variety of output formats. You
+    set the `flow-print` format with the `-f` flag.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each format has a number. For example, format 3 is the default format most commonly
+    used by `flow-print`. (If you are using NetFlow version 8, `flow-print` might
+    choose a different default.) You can use these format options to present flow
+    data in the manner that best suits you, as demonstrated in the following examples.
+    I'll cover only the most useful ones, but you can learn about the other formats
+    in the `flow-print` man page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Showing Interfaces and Ports in Hex with Format -f 0
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'If you want to view the router interfaces the flows passed through, use format
+    0, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Much of this output looks the same as the default output, but notice the addition
+    of the `Sif` and `Dif` columns. These represent the source (`Sif`) and destination
+    (`Dif`) interfaces. Flow records include information on which interface a packet
+    entered on and which interface the flow departed on. You can match these to router
+    interfaces, as you'll see in [Chapter 4](ch04.html "Chapter 4. FILTERING FLOWS")
+    ([Identifying Interface Numbers Using SNMP](ch04s02.html#identifying_interface_numbers_using_snmp
+    "Identifying Interface Numbers Using SNMP") in [Identifying Interface Numbers
+    Using SNMP](ch04s02.html#identifying_interface_numbers_using_snmp "Identifying
+    Interface Numbers Using SNMP")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, software flow sensors do *not* record interface information because
+    they cannot access it. Software-based sensors listen to a monitor port on a switch,
+    but they can't see interface information. The interface number is always 0 as
+    far as they're concerned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Format `0` adds interface numbers to the flow output by compressing some of
+    the other columns. The protocol column is now `Pr`, for example. But take a look
+    at the numbers. The first flow is protocol 11 (or Network Voice Protocol per */etc/protocols*),
+    the source port is 915, and the destination port is 35\. You're almost certainly
+    not running NVP on your network! What's going on here?
+  prefs: []
+  type: TYPE_NORMAL
+- en: What's happening is that this format creates space for interface numbers by
+    printing port and protocol information in hexadecimal. For example, 11 is hex
+    for 17, or UDP; 915 is hex for 2325; and 35 is hex for 53\. As it turns out, all
+    four of these flows are exactly the same flows shown in the earlier examples,
+    just printed in hex and with the interface column added.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Printing the port numbers in hex is useful if you're looking at ICMP flows.
+    If you're looking at TCP or UDP flows with ports and interfaces on something other
+    than an old 80-column terminal, use the 132-column format instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Two Lines with Times, Flags, and Hex Ports Using -f 1
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There is a better way to show all the information for a flow on a standard-width
+    screen: Split each flow across two lines. Use format `1` to see interface information
+    and times as well.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These are the same flows that have appeared in all preceding examples, but
+    they look very different. Each flow is shown on two lines, with a blank line separating
+    individual flows. In addition, the entries on each line are slightly offset. This
+    two-line format can be confusing at first glance, especially because it doesn''t
+    have actual columns: The header shows where information appears within each flow''s
+    two-line entry. The first line of each flow shows the source interface, source
+    IP address, destination interface, destination IP address, protocol, source and
+    destination ports, number of packets, and number of octets in the flow. (You''ve
+    seen all of these before.) Take a moment to see how these appear in each of the
+    four sample flows, and then you can look at the new items in the second line of
+    each flow.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `StartTime` and `EndTime` spaces give the time that a connection started
+    and ended. Here, at ❶, `1201` represents the date, December 1\. The next three
+    values give the time in 24-hour-clock format: `17:09:46` is 5:09:46 **pm**. The
+    last fraction is the millisecond the flow began, or `.750` seconds. (If you need
+    more precision than this, you''re probably trying to solve the wrong problem.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `Active` column gives the number of seconds the flow was active, saving
+    you the trouble of subtracting the `StartTime` from the `EndTime` (which would
+    be easy with the first two flows but slightly more difficult as the flows grow
+    longer).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `B/Pk` space gives the average number of bytes per packet. The first flow
+    had 59 bytes in 1 packet, so the math is pretty easy, but it's more difficult
+    in larger flows. The third flow at ❷ averaged 73 bytes per packet, while the fourth
+    at ❸ averaged 127 bytes per packet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `Ts` space gives the Type of Service (ToS), which is almost always `00`
+    because most TCP/IP networks do not have to respect the ToS flag. Generally, a
+    ToS in a packet indicates either that you're on an experimental network, that
+    you're using complicated services such as VoIP or MPLS, or that someone is playing
+    silly twits.^([[4](#ftn.CHP-3-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `Fl` space gives the flow's flags, the TCP control bits. Non-TCP flows,
+    such as the first two, always show flags of zero. The third and fourth examples
+    are TCP flows, and the flags are shown as `1b` for both. See [TCP Control Bits
+    and Flow Records](ch03s03.html "TCP Control Bits and Flow Records") in [TCP Control
+    Bits and Flow Records](ch03s03.html "TCP Control Bits and Flow Records") to learn
+    how to transform `1b` into a meaningful value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Printing BGP Information
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Routers that speak Border Gateway Protocol (BGP) with multiple upstream ISPs
+    transmit flow records that contain autonomous system numbers (ASNs). Format 4
+    prints this information instead of the port numbers. Otherwise, this format includes
+    the usual source and destination addresses, protocol, octets, and packet information
+    you've seen in other formats.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These are the same four flows used in [Example 3-1](ch03.html#sample_flow-print_output
+    "Example 3-1. Sample flow-print output"), displayed in format 4:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note in the previous listing that either the source (`srcAS`) or destination
+    AS (`dstAS`) for each flow is 0\. These flows are sourced locally. Flow sensors
+    don't track your local AS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're not using BGP, this format is irrelevant to you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Wide-Screen Display
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If you have a sufficiently wide monitor, working in 80 columns is an annoyance.
+    Why not just have a single very wide format that can show the most useful stuff
+    on a single line? While we're at it, let's get rid of that hexadecimal and print
+    everything in decimal. That's what format 5 is for, the format I use most frequently
+    when examining network problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Like a summer special-effects blockbuster film, this format works nicely on
+    a wide-screen monitor but less well on the printed page. But rather than provide
+    an actual printed sample that would run across two facing pages of the book or
+    have to be printed sideways, let's just walk through the fields this format shows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Format 5 produces the columns `Start`, `End`, `Sif`, `SrcIPaddress`, `SrcP`,
+    `DstIPaddress`, `DstP`, `P`, `Fl`, `Pkts`, and `Octets`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`Start` and `End` give the times the flow begins and ends in millisecond resolution,
+    just like format 1.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then there's `Sif` (source interface), `SrcIPaddress` (source IP address), and
+    `SrcP` (source port), followed by `DIf` (destination interface), `DstIPAddress`
+    (destination IP address), and `DstP` (destination port). You should have no trouble
+    reading these after understanding the earlier reports.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`P` is the protocol number.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`Fl` gives the TCP control bits printed in decimal.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the end, `Pkts` gives you the number of packets in the flow, and `Octets`
+    gives the bytes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TIMES VS. TIMES
+  prefs: []
+  type: TYPE_NORMAL
+- en: Flow record files are named after the time they were collected on the server.
+    The times shown when printing flows are the time on the flow sensor. If your collector's
+    clock and your sensor's clock don't match, the times shown in your flow records
+    won't match the time the records were collected. Synchronize your clocks!
+  prefs: []
+  type: TYPE_NORMAL
+- en: IP Accounting Format
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Perhaps you have software that interprets Cisco IP accounting output or you''ve
+    looked at the output for so long that you can process it without expending precious
+    brainpower. Format 6, shown here, exists specifically to make you happy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: For example, here are the four sample flows in Cisco format. If you sort this
+    output by the number of bytes, you should be able to easily identify the hosts
+    exchanging the most traffic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'By sorting the flows into order by the number of octets sent, you''ve ranked
+    the flows from largest to smallest. What filled up your circuit? Here''s the quick
+    answer: The first line shows that the host 36.85.32.36 sent 64.18.6.14 (❶) 12,820
+    packets containing (❷) 19,216,320 bytes. The same host 36.85.32.36 sent 64.18.6.13
+    the same amount of traffic. Further filtering and reporting can identify the type
+    of traffic between these busiest hosts, as you''ll see in the next two chapters.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you can view the traffic any way you want, let's take a closer look
+    at some intricacies of TCP and ICMP connections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'WARNING: HEXADECIMAL MATH AHEAD!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The network is binary, and lots of it is in base 16\. To understand TCP control
+    bits and ICMP codes and types, you'll need to use basic hexadecimal math. Remember,
+    a leading 0x indicates that a number is hexadecimal
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[4](#CHP-3-FN-1)]) Although Type of Service/Quality of Service are worthwhile
+    topics and although flow-tools supports ToS/QoS, these topics are required by
+    only a small fraction of networks. Including a proper discussion of them would
+    make this book much longer. Once you understand how to search and report on flows
+    based on ports and addresses, you won't have any trouble processing flows based
+    on their ToS or QoS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TCP Control Bits and Flow Records
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Every TCP packet includes one or more control bits, which are on-off switches
+    that tell the connection participants how to handle a particular packet. Flow
+    records capture the control bits used by each TCP flow. These control bits are
+    not terribly useful when a connection works correctly but are invaluable when
+    identifying problems. If you're not familiar with TCP control bits, read a good
+    TCP/IP primer such as Charles A. Kozierok's *The TCP/IP Guide* (No Starch Press,
+    2005).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Control bits are given this name because TCP has six bits set aside just for
+    them. These bits are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The SYN (synchronize) bit** indicates a connection synchronization request.
+    It permits the sender and receiver to synchronize TCP sequence numbers, allocate
+    consistent ports on each end, and so on. This bit is always set on the first packet
+    in a flow.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The ACK (acknowledge) bit** indicates that a packet contains acknowledgments
+    of receiving specific earlier packets.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The PSH (push) bit** is set when the side transmitting data wants the client''s
+    network stack to immediately shove this data up the protocol stack. This bit requests
+    that the client flush all hardware and kernel buffers and hand all data to the
+    client.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The URG (urgent) bit** indicates that the URGENT pointer field contains data
+    that needs to be interpreted. In everyday language, this means that this packet
+    contains the glue that the receiver needs if it is to correctly process other
+    packets in the flow.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**RST (reset)** immediately terminates the connection.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, the **FIN (finish) bit** announces that this host will send no more
+    data, but it will continue to listen for data from the other end. A FIN signals
+    that it's time to tear down the connection.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Each control bit is expressed as a hexadecimal number, as shown in [Table 3-3](ch03s03.html#tcp_control_bit_hexadecimal_values
+    "Table 3-3. TCP Control Bit Hexadecimal Values").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 3-3. TCP Control Bit Hexadecimal Values
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Flag | Hexadecimal |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FIN | 0x01 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| SYN | 0x02 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| RST | 0x04 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| PSH | 0x08 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| ACK | 0x10 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| URG | 0x20 |'
+  prefs: []
+  type: TYPE_TB
+- en: Many people find this easier to understand as a diagram, such as [Figure 3-1](ch03s03.html#tcp_control_bits
+    "Figure 3-1. TCP control bits").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![TCP control bits](httpatomoreillycomsourcenostarchimages651580.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-1. TCP control bits
+  prefs: []
+  type: TYPE_NORMAL
+- en: Any combination of control bits in a packet can be represented as a unique number.
+    If a control bit is set, add that flag's number to the packet's total control
+    bit number. If you say that a packet's control bits are set to 18, that indicates
+    a precise set of control bits. Only one possible combination of control bits adds
+    up to 18\. (Go ahead, try it. I'll wait.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, [Figure 3-2](ch03s03.html#tcp_control_bits_in_a_syn_solidus_ack_pa
+    "Figure 3-2. TCP control bits in a SYN/ACK packet") shows how you would represent
+    a typical SYN/ACK packet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![TCP control bits in a SYN/ACK packet](httpatomoreillycomsourcenostarchimages651582.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-2. TCP control bits in a SYN/ACK packet
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see in [Figure 3-2](ch03s03.html#tcp_control_bits_in_a_syn_solidus_ack_pa
+    "Figure 3-2. TCP control bits in a SYN/ACK packet"), this packet has the control
+    bits SYN (0x2) and ACK (0x10) marked, and all other control bits are unmarked.
+    Go ahead and add 0x2 and 0x10\. Hexadecimal 10 plus hexadecimal 2 is hexadecimal
+    12; my calculator tells me that hexadecimal 12 is decimal 18.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The only way to get a packet with a control bits value of 18 is if SYN and ACK,
+    and only these two control bits, are selected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Flows don't track individual packets, so how can flow records sensibly track
+    TCP control bits? The flow sensor tracks all control bits that appear in a single
+    flow. For example, when a host that initiates a connection sends a SYN and an
+    ACK during the connection, you'd reasonably expect to also see, say, a PSH and
+    a FIN. When any of these flags appear in a flow, the flow sensor notes their appearance.
+    [Figure 3-3](ch03s03.html#tcp_control_bits_in_a_flow_with_syn_comm "Figure 3-3. TCP
+    control bits in a flow with SYN, ACK, PSH, and FIN") shows how this would look
+    in a bitmap.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![TCP control bits in a flow with SYN, ACK, PSH, and FIN](httpatomoreillycomsourcenostarchimages651584.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-3. TCP control bits in a flow with SYN, ACK, PSH, and FIN
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, we have 0x1 + 0x2 + 0x8 + 0x10 = 0x1b, or decimal 27.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Look back at the first view of TCP flags earlier this chapter (in [Two Lines
+    with Times, Flags, and Hex Ports Using -f 1](ch03s02.html#two_lines_with_times_comma_flags_comma
+    "Two Lines with Times, Flags, and Hex Ports Using -f 1") in [Two Lines with Times,
+    Flags, and Hex Ports Using -f 1](ch03s02.html#two_lines_with_times_comma_flags_comma
+    "Two Lines with Times, Flags, and Hex Ports Using -f 1")). The `Flags` field of
+    the third and fourth sample flows equals `1b`, which tells you that this flow
+    included all the TCP flags required for a normal connection (SYN, ACK, and FIN).
+    It also tells you that this flow included a flag perfectly acceptable in a normal
+    connection (PSH) and that it didn't include the flag that would indicate a problem
+    (RST). This connection almost certainly worked. In [Chapter 4](ch04.html "Chapter 4. FILTERING
+    FLOWS") you'll search for flows that have combinations of control bits that indicate
+    problems ([TCP Control Bit Primitives](ch04s02.html#tcp_control_bit_primitives
+    "TCP Control Bit Primitives") in [TCP Control Bit Primitives](ch04s02.html#tcp_control_bit_primitives
+    "TCP Control Bit Primitives")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: CONVERTING HEX TO DECIMAL AND BINARY
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Calculator program in Windows can convert between the three bases. Open
+    the Calculator, and select **View ▸ Scientific**. You'll see buttons for Hex(adecimal),
+    Dec(imal), Oct(al), and Bin(ary). Select the base you want to convert from. Type
+    in the number in that base. Select the base you want to convert to, and the Calculator
+    will convert for you. You can also use the Calculator if you don't do hexadecimal
+    math often enough to learn it. Most Unix-like desktop environments also include
+    a hexadecimal/decimal calculator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ICMP Types and Codes and Flow Records
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Flow records also record ICMP types and codes, displaying them as destination
+    port numbers. I'll review ICMP types and codes first and then discuss how flow
+    records portray them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Types and Codes in ICMP
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Many people mentally pour the different ICMP requests into one large bucket
+    and get by on generalizations such as "ICMP is ping." Although this might be fine
+    for average users, you're not an average user, and you need a deeper understanding
+    of ICMP to manage a network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An ICMP *type* is a general class of ICMP request, such as ping requests and
+    ping replies. Other ICMP types include messages such as "host unreachable," routing
+    advertisements, traceroute requests, routing redirects, and so on. Some ICMP types
+    prompt a response from the recipient, while others are received without comment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some ICMP types also include an ICMP *code* that allows an ICMP message to provide
+    a more specific response. The meaning of each ICMP code varies with the message's
+    ICMP type. For example, although ICMP types 3, 5, and 11 all offer an ICMP code
+    of 1, that code has a completely different meaning with each type.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Internet Assigned Numbers Authority (IANA) assigns ICMP types and codes
+    and maintains a list of current assignments at [http://www.iana.org/assignments/icmp-parameters/](http://www.iana.org/assignments/icmp-parameters/).
+    These assignments rarely change, so [Table 3-4](ch03s04.html#common_icmp_types_and_associated_codes_i
+    "Table 3-4. Common ICMP Types and Associated Codes in Decimal and Hexadecimal")
+    offers the most commonly seen ICMP types and codes. Although an explanation of
+    the meanings of different ICMP messages is best left for a book on TCP/IP (such
+    as *The TCP/IP Guide*, mentioned earlier), this table provides an easy reference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 3-4. Common ICMP Types and Associated Codes in Decimal and Hexadecimal
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Type | Code | Decimal | Definition |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 0 | 0 | 0 | Echo Reply |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 3 |   |   | Destination Unreachable |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 0 | 300 | Network Unreachable |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 1 | 301 | Host Unreachable |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 2 | 302 | Protocol Unreachable |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 3 | 303 | Port Unreachable |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 4 | 304 | Fragmentation Needed, but Don''t Fragment was Set |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 6 | 306 | Destination Network Unknown |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 7 | 307 | Destination Host Unknown |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 9 | 309 | Communication with Destination Network Administratively Prohibited
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 10(a) | 310 | Communication with Destination Host Administratively Prohibited
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 13(d) | 313 | Communication Administratively Prohibited |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 5 |   |   | Redirect |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 0 | 500 | Redirect for Subnet |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 1 | 501 | Redirect for Host |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 8 | 0 | 800 | Echo Request |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 11(b) |   |   | Time Exceeded |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 0 | 2816 | Time to Live exceeded in Transit |'
+  prefs: []
+  type: TYPE_TB
+- en: '|   | 1 | 2817 | Fragment Reassembly Time Exceeded |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 12(c) |   | 3072 | Parameter Problem |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 13(d) |   | 3328 | Timestamp Request |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 14(e) |   | 3584 | Timestamp Reply |'
+  prefs: []
+  type: TYPE_TB
+- en: Flows and ICMP Details
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Flow sensors encode the ICMP type and code in the flow's destination port. Destination
+    (and source) ports are two bytes. The first byte of the port gives the type, and
+    the second byte gives the code. Because ICMP has no concept of an originating
+    port, the source port is always zero. In the following example, I've selected
+    a few ICMP flows out of my test data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This example uses a print format that displays destination ports in hexadecimal.
+    You can use a format that displays ports in decimal, but you must convert the
+    destination port from decimal to hex to interpret it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first flow comes from the address 80.95.220.173 to 36.85.32.153 and has
+    a destination port of hexadecimal 800 (❶). Although `flow-print` doesn't print
+    leading zeros, you could think of this as 0800, just as you could think of port
+    25 as port 025\. In this example, the ICMP type is 8, and the code is 00\. ICMP
+    type 8 has no associated codes, so `flow-print` gives the ICMP code as 00.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A look at [Table 3-4](ch03s04.html#common_icmp_types_and_associated_codes_i
+    "Table 3-4. Common ICMP Types and Associated Codes in Decimal and Hexadecimal")
+    tells you that ICMP type 8 is an echo request, also known as a *ping attempt*.
+    The host 80.95.220.173 is trying to ping 36.85.32.153.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second ICMP flow has a destination port of b00 (❷), or an ICMP type of b
+    and an ICMP code of 00\. ICMP type b is "time exceeded." Unlike ICMP type 8, this
+    ICMP type has codes with it. Code 0 means "time to live exceeded in transit."
+    In this case, the IP 189.163.178.51 is informing the IP 36.85.32.130 that it's
+    taking too long to reach a particular address, which usually means that a client
+    has been disconnected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third flow, from 64.142.0.205 to 36.85.32.5, has a destination port of 300
+    (❸). ICMP type 3 messages indicate that a destination is unreachable. ICMP type
+    3's code 0 means "network unreachable." In this case, host 36.85.32.5 attempted
+    to reach another host, and a router on the Internet is returning a message indicating
+    that the target network is not reachable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The fourth flow has a destination port of 303 (❹). ICMP type 3 indicates that
+    a destination is unreachable, but code 03 means "port unreachable." When a client
+    sends a UDP request to a server port that isn't open, the server returns this
+    ICMP message. If you were to search these flow records, you would find a UDP request
+    going in the other direction between these two hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our fifth flow has a destination port of 0 (❺). ICMP type 0 is an echo reply,
+    or a response to a ping. If you search these flows, you'll find an echo request
+    going in the other direction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, ICMP messages are frequently responses to other types of network
+    requests. They often show exactly what type of error occurred as a result of an
+    attempted connection. Matching these messages to other flows frequently requires
+    searching the flow records, which is best accomplished by filtering, as you'll
+    see in [Chapter 4](ch04.html "Chapter 4. FILTERING FLOWS").
+  prefs: []
+  type: TYPE_NORMAL

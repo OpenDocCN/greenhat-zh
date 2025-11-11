@@ -1,0 +1,347 @@
+- en: Chapter 2. Allocating Memory
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the previous chapter we used `malloc` and `free` for the allocation and release
+    of memory. The FreeBSD kernel, however, contains a richer set of memory allocation
+    primitives. In this chapter we’ll look at the stock kernel memory management routines.
+    This includes describing `malloc` and `free` in more detail and introducing the
+    `malloc_type` structure. We’ll finish this chapter by describing the contiguous
+    physical memory management routines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Memory Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides four functions for non-pageable memory allocation
+    and release: `malloc`, `free`, `realloc`, and `reallocf`. These functions can
+    handle requests of arbitrary size or alignment, and they are the preferred way
+    to allocate kernel memory.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `malloc` function allocates `size` bytes of memory in kernel space. If successful,
+    a kernel virtual address is returned; otherwise, `NULL` is returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `free` function releases the memory at `addr`—that was previously allocated
+    by `malloc`—for reuse. Note that `free` doesn’t clear this memory, which means
+    that you should explicitly zero any memory whose contents you need to keep private.
+    If `addr` is `NULL`, then `free` does nothing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If `INVARIANTS` is enabled, then `free` will stuff any released memory with
+    `0xdeadc0de`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thus, if you get a page fault panic and the faulting address is around `0xdeadc0de`,
+    this can be a sign that you’re using `freed` memory.^([[1](#ftn.CHP-2-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `realloc` function changes the size of the memory at `addr` to `size` bytes.
+    If successful, a kernel virtual address is returned; otherwise, `NULL` is returned,
+    and the memory is left alone. Note that the returned address may differ from `addr`,
+    because when the size changes, the memory may be relocated to acquire or provide
+    additional room. Interestingly, this implies that you should not have any pointers
+    into the memory at `addr` when calling `realloc`. If `addr` is `NULL`, then `realloc`
+    behaves identically to `malloc`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `reallocf` function is identical to `realloc` except that on failure it
+    releases the memory at `addr`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `malloc`, `realloc`, and `reallocf` functions provide a `flags` argument
+    to further qualify their operational characteristics. Valid values for this argument
+    are shown in [Table 2-1](ch02.html#malloc_comma_realloc_comma_and_reallocf "Table 2-1. malloc,
+    realloc, and reallocf Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 2-1. malloc, realloc, and reallocf Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `M_ZERO` | Causes the allocated memory to be set to zero |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `M_NOWAIT` | Causes `malloc`, `realloc`, and `reallocf` to return `NULL`
+    if the allocation cannot be immediately fulfilled due to resource shortage; `M_NOWAIT`
+    is required when running in an interrupt context |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `M_WAITOK` | Indicates that it is okay to wait for resources; if the allocation
+    cannot be immediately fulfilled, the current process is put to sleep to wait for
+    resources to become available; when `M_WAITOK` is specified, `malloc`, `realloc`,
+    and `reallocf` cannot return `NULL` |'
+  prefs: []
+  type: TYPE_TB
+- en: The `flags` argument must include either `M_NOWAIT` or `M_WAITOK`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[1](#CHP-2-FN-1)]) `INVARIANTS` is a kernel debugging option. For more on
+    `INVARIANTS`, see */sys/conf/NOTES*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: malloc_type Structures
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The `malloc`, `free`, `realloc`, and `reallocf` functions include a `type` argument,
+    which expects a pointer to a `malloc_type` structure; this structure describes
+    the purpose of the allocated memory. The `type` argument has no impact on performance;
+    it is used for memory profiling and for basic sanity checks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You can profile kernel dynamic memory usage, sorted by `type`, with the `vmstat
+    -m` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MALLOC_DEFINE Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `MALLOC_DEFINE` macro defines a new `malloc_type` structure. Here is its
+    function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `type` argument is the new `malloc_type` structure’s name. In general, `type`
+    should begin with `M_` and be in uppercase letters; for example, `M_FOO`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `shortdesc` argument expects a short description of the new `malloc_type`
+    structure. This argument is used in the output of `vmstat -m`. As a result, it
+    shouldn’t contain any spaces so that it’s easier to parse `vmstat -m`’s output
+    in scripts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `longdesc` argument expects a long description of the new `malloc_type`
+    structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MALLOC_DECLARE Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `MALLOC_DECLARE` macro declares a new `malloc_type` structure with the
+    `extern` keyword. Here is its function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This macro is defined in the `<sys/malloc.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: As an aside, if you require a private `malloc_type` structure, you would prefix
+    the `MALLOC_DEFINE` call with the `static` keyword. In fact, a non-static `MALLOC_DEFINE`
+    call without a corresponding `MALLOC_DECLARE` call actually causes a warning under
+    gcc 4.*x*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tying Everything Together
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 2-1](ch02s03.html#echo-2.0.c "Example 2-1. echo-2.0.c") is a revision
+    of [Example 1-2](ch01s06.html#echo.c "Example 1-2. echo.c") that uses its own
+    `malloc_type` structure instead of the kernel-defined `M_TEMP`.^([[2](#ftn.CHP-2-FN-2)])
+    [Example 2-1](ch02s03.html#echo-2.0.c "Example 2-1. echo-2.0.c") should clarify
+    any misunderstandings you may have about `MALLOC_DEFINE` and `MALLOC_DECLARE`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To save space, the functions `echo_open`, `echo_close`, `echo_write`, and `echo_read`
+    aren’t listed here, as they haven’t been changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 2-1. echo-2.0.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This driver ![](httpatomoreillycomsourcenostarchimages1137499.png) declares
+    and ![](httpatomoreillycomsourcenostarchimages1137501.png) defines a new `malloc_type`
+    structure named `M_ECHO`. To use this `malloc_type` structure, `malloc` and `free`
+    are ![](httpatomoreillycomsourcenostarchimages1137503.png) ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    adjusted accordingly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Because `M_ECHO` is used only locally, `MALLOC_DECLARE` is unnecessary—it’s
+    only included here for demonstration purposes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that [Example 2-1](ch02s03.html#echo-2.0.c "Example 2-1. echo-2.0.c") uses
+    a unique `malloc_type` structure, we can easily profile its dynamic memory usage,
+    like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that [Example 2-1](ch02s03.html#echo-2.0.c "Example 2-1. echo-2.0.c")
+    requests 512 bytes, though `sizeof(echo_t)` is only 260 bytes. This is because
+    `malloc` rounds up to the nearest power of two when allocating memory. Additionally,
+    note that the second argument to `MALLOC_DEFINE` (`echo_buffer` in this example)
+    is used in the output of `vmstat` (instead of the first argument).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[2](#CHP-2-FN-2)]) `M_TEMP` is defined in */sys/kern/kern_malloc.c*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Contiguous Physical Memory Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides two functions for contiguous physical memory management:
+    `contigmalloc` and `contigfree`. Ordinarily, you’ll never use these functions.
+    They’re primarily for dealing with machine-dependent code and the occasional network
+    driver.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `contigmalloc` function allocates `size` bytes of contiguous physical memory.
+    If `size` is `0`, `contigmalloc` will panic. If successful, the allocation will
+    reside between physical addresses `low` and `high`, inclusive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `alignment` argument denotes the physical alignment, in bytes, of the allocated
+    memory. This argument must be a power of two.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `boundary` argument specifies the physical address boundaries that cannot
+    be crossed by the allocated memory; that is, it cannot cross any multiple of `boundary`.
+    This argument must be `0`, which indicates no boundary restrictions, or a power
+    of two.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `flags` argument modifies `contigmalloc`’s behavior. Valid values for this
+    argument are shown in [Table 2-2](ch02s04.html#contigmalloc_symbolic_constants
+    "Table 2-2. contigmalloc Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 2-2. contigmalloc Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `M_ZERO` | Causes the allocated physical memory to be zero filled |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `M_NOWAIT` | Causes `contigmalloc` to return `NULL` if the allocation cannot
+    be immediately fulfilled due to resource shortage |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `M_WAITOK` | Indicates that it is okay to wait for resources; if the allocation
+    cannot be immediately fulfilled, the current process is put to sleep to wait for
+    resources to become available |'
+  prefs: []
+  type: TYPE_TB
+- en: The `contigfree` function releases the memory at `addr`—that was previously
+    allocated by `contigmalloc`—for reuse. The `size` argument is the amount of memory
+    to release. Generally, `size` should equal the amount allocated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Straightforward Example
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 2-2](ch02s05.html#echo_underscore_contig.c "Example 2-2. echo_contig.c")
+    modifies [Example 2-1](ch02s03.html#echo-2.0.c "Example 2-1. echo-2.0.c") to use
+    `contigmalloc` and `contigfree` instead of `malloc` and `free`. [Example 2-2](ch02s05.html#echo_underscore_contig.c
+    "Example 2-2. echo_contig.c") should clarify any misunderstandings you may have
+    about `contigmalloc` and `contigfree`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To save space, the functions `echo_open`, `echo_close`, `echo_write`, and `echo_read`
+    aren’t listed here, as they haven’t been changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 2-2. echo_contig.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `contigmalloc`
+    allocates ![](httpatomoreillycomsourcenostarchimages1137501.png) `sizeof(echo_t)`
+    bytes of ![](httpatomoreillycomsourcenostarchimages1137503.png) zero-filled memory.
+    This memory resides between physical address ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `0` and ![](httpatomoreillycomsourcenostarchimages1137507.png) `0xffffffff`, is
+    aligned on a ![](httpatomoreillycomsourcenostarchimages1137509.png) `PAGE_SIZE`
+    boundary, and does not cross a ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    1MB address boundary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following output shows the results from `vmstat -m` after loading [Example 2-2](ch02s05.html#echo_underscore_contig.c
+    "Example 2-2. echo_contig.c"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that [Example 2-2](ch02s05.html#echo_underscore_contig.c "Example 2-2. echo_contig.c")
+    uses 4KB of memory, though `sizeof(echo_t)` is only 260 bytes. This is because
+    `contigmalloc` allocates memory in `PAGE_SIZE` blocks. Predictably, this example
+    was run on an *i386* machine, which uses a page size of 4KB.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter detailed FreeBSD’s memory management routines and contiguous physical
+    memory management routines. It also introduced the `malloc_type` structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Incidentally, most drivers should define their own `malloc_type` structure.
+  prefs: []
+  type: TYPE_NORMAL

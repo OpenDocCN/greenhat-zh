@@ -1,0 +1,1611 @@
+- en: Chapter 13. Configuring Linux for Best Audio Quality
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages797347.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Linux audio is rather messy yet powerful. This chapter is a guide to getting
+    everything working correctly for high-end audio production. Linux is a wonderful
+    multimedia platform: It is stable, it is flexible, and if you use a lightweight
+    graphical environment, you’ll get better performance out of modest hardware. Although
+    Linux audio has some rough edges, it is advancing rapidly, and it has its own
+    universe of sophisticated audio software.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can use whatever Linux distribution you want, because you can customize
+    any Linux distribution to serve as your recording studio, depending on what hoops
+    you’re willing to jump through. The most important things you need, aside from
+    Audacity and other audio software applications, are a real-time preemptible kernel
+    for lowest latency and a few system configuration tweaks. You can configure and
+    tune your favorite Linux distribution, or you can use one of specialized Linux
+    distributions for multimedia production that takes care of the details for you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I used Ubuntu while writing this book because it was the first distribution
+    to bundle the FFADO drivers for FireWire recording interfaces. (I have the excellent
+    Focusrite Saffire Pro 26 I/O for multichannel recording.) FireWire recording interfaces
+    are great performers, but they present some special driver problems, so if you
+    don’t have one, don’t worry about finding a distribution that includes FFADO.
+    You can always add it later anyway.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The most important step is careful selection of your audio interface. Choose
+    one that is well-supported on Linux. Life is too short to waste on something that
+    doesn’t want to work right. Visit the ALSA Sound Card Matrix ([http://www.alsa-project.org/main/index.php/Matrix:Main](http://www.alsa-project.org/main/index.php/Matrix:Main))
+    to find supported sound cards. Also check out [Appendix A](apa.html "Appendix A. Audio
+    Hardware") for hardware information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Distributions with Real-Time Kernels
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If your particular Linux distribution packages a *real-time kernel*, that takes
+    care of the biggest hurdle. What is a real-time kernel? This is a kernel where
+    *real-time scheduling* and *real-time preemption* are configured to favor audio
+    recording for the lowest possible latency. Latency is inherent in computers because
+    modern CPUs use *preemptive multitasking*; they perform one task at a time but
+    switch back and forth between tasks so rapidly that they appear to be performing
+    multiple tasks at once. Multicore CPUs smooth out this switching, but they still
+    need help from the Linux kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because the Linux kernel continues to develop at warp speed, some folks are
+    saying that a special real-time kernel really isn’t necessary anymore because
+    real-time features are integrated into the mainline kernel. You can get by without
+    one if you strip your Linux system down to the essentials needed for audio production
+    and use a modern multicore PC, gigabytes of RAM, and fast hard drives. I’ll stick
+    with real-time kernels for now, because they behave a little differently from
+    general-purpose kernels.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Real-time preemption controls how tasks interrupt each other to get the CPU
+    time they need. It’s like a classroom of kids trying to get the teacher’s attention,
+    and the teacher can deal with only one at a time. A multicore CPU is like having
+    more teachers. Interrupts are typically milliseconds in duration, which doesn’t
+    matter when we’re typing a letter or editing a photograph but is enough to introduce
+    defects into a recording. So, we can configure Linux to give the highest scheduling
+    priority to audio functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are latencies inherent in the inner workings of the kernel itself, which
+    in modern kernels have become very small. So, it is possible to tune a Linux kernel
+    for very low-latency audio recording, down to less than 10 milliseconds. Anything
+    less than 20 is excellent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fedora and CentOS users should use Planet CCRMA packages ([http://ccrma.stanford.edu/planetccrma/software/planetccrma.html](http://ccrma.stanford.edu/planetccrma/software/planetccrma.html)).
+    Planet CCRMA (pronounced “karma”) is a special collection of RPMs for Fedora and
+    CentOS that includes a real-time kernel, all kinds of audio software, and up-to-date
+    audio drivers. Just add the Planet CCRMA repositories to your system and then
+    use Yum to install, update, and remove packages the usual way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Arch Linux is a superior audio production platform, and it has its own special
+    audio repository, ArchAudio. Red Hat, Mandriva, and openSUSE all package real-time
+    kernels.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Ubuntu (and Kubuntu, Xubuntu, and all the rest of the family) provides a real-time
+    kernel and related kernel modules; the bare minimum you need to get started with
+    Audacity are these packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*audacity*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*linux-rt*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Once you have an rt kernel installed, add all human users who are going to
+    be using Audacity to the *audio* group (in the */etc/group* file). Then add these
+    lines to */etc/security/limits.conf*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`@audio - rtprio 99`**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**`@audio - memlock 3000000`**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The first line gives all members of the audio group the highest scheduling priority.
+    The second value controls how memory is used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`rtprio` (real-time priority) values range from 0 to 99, with 99 being the
+    most favorable priority. This is the very front of the line.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`memlock` determines how much RAM the audio group locks up for itself, in kilobytes,
+    and prevents it from writing to the much slower swap file. My system has 4GB RAM,
+    so I set a limit of 3GB, or 3,000,000KB. Some how-tos say to set this to *unlimited*.
+    This is a bit controversial, because it seems like common sense to leave some
+    for system processes and nonaudio applications. A value of unlimited could also
+    result in out-of-memory errors and interrupt your audio session. Some users report
+    that setting any memlock value makes no difference.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Many how-tos also say to add one more line: `@audio - nice -19`. This isn’t
+    necessary because the rtprio function takes care of scheduling priority. It doesn’t
+    hurt anything to try it for yourself.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then reboot to your new kernel. Note that if you are already running your rt
+    kernel, all you need to do to activate your new group membership and changes to
+    *limits.conf* is to log out and then log back in. Then verify your audio group
+    membership:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Verify that your rt kernel is running:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `rt` tells you this is a real-time kernel; this example is from Ubuntu 10.04\.
+    You should also keep a stock kernel installed. Using a different kernel is as
+    easy as rebooting and choosing it from your boot menu. It will also help with
+    troubleshooting, because you can try tasks that are giving you problems with different
+    kernels to see whether they behave differently.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Specialized Multimedia Linux Distributions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: There are several complete Linux distributions that are customized for audio
+    and multimedia production. Some of them run from a CD, DVD, or USB stick, with
+    a hard drive installation option. You should still verify audio group membership,
+    */etc/security/limits.conf* settings, and a real-time kernel like we talked about
+    in the previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is a sampling of specialized multimedia Linux distributions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 64 Studio ([http://www.64studio.com/](http://www.64studio.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ubuntu Studio ([http://www.ubuntustudio.org/](http://www.ubuntustudio.org/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: dyne:bolic ([http://www.dynebolic.org/](http://www.dynebolic.org/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: pure:dyne ([http://www.puredyne.org/](http://www.puredyne.org/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Musix ([http://www.musix.org.ar/en/](http://www.musix.org.ar/en/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 64 Studio
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 64 Studio is a Debian-based distribution for all digital content creation, and
+    it includes a huge assortment of audio, video, graphics, and publishing software.
+    It supports both 32- and 64-bit architectures and runs on a wide range of PC hardware.
+    The maintainers aim for stability rather than bleeding edge, so they issue updates
+    conservatively. 64 Studio also builds and supports products such as the Trinity
+    Indamixx digital audio workstation and the Lionstracs Mediastation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ubuntu Studio
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Ubuntu Studio is akin to 64 Studio in having nearly every Linux multimedia application
+    there is, except that it is based on Ubuntu, which in turn is derived from Debian.
+    Ubuntu is more than warmed-over Debian; the Ubuntu development teams maintain
+    its own patches and customizations. Ubuntu Studio uses more up-to-date packages
+    than 64 Studio, so you get newer software releases and perhaps newer bugs. As
+    with all things Ubuntu, there is a large and enthusiastic user base and good community
+    support.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can also add Ubuntu Studio packages to a regular Ubuntu system. Run **`$
+    apt-cache search ubuntustudio`** to see your options. The *ubuntustudio-audio*
+    and *ubuntustudio-audio-plugins* metapackages should give you everything you need
+    for audio production, with one important exception: The linux-rt kernel is not
+    included, so you will have to install it separately.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: dyne:bolic
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: dyne:bolic is a unique software project. dyne:bolic is not based on any other
+    Linux distribution but is built from scratch from source code. That’s just the
+    beginning—dyne:bolic operates in its own creative ways. It uses only Free software
+    as defined by the Free Software Foundation. This is good news for users who want
+    a system unencumbered by proprietary software. It runs from a CD and is optimized
+    both for speed and low hardware requirements, requiring at a minimum a Pentium
+    II 400 MHz computer or an Xbox game console. You can use it with either a Linux
+    or Windows PC, you can save your data to a USB stick or local hard drive, and
+    it has a hard drive installation option. Customization is not as simple as using
+    Yum or Apt to install new software packages because you have to build a new CD
+    image. It comes with good documentation and a friendly user community.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'dyne:bolic is Rasta ([http://www.rastasoft.org/](http://www.rastasoft.org/))
+    software. Jaromil, the main dyne:bolic developer, says this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: But remember there is no Peace without Justice. This software is about Resistance
+    in a babylon world which tries to control more and more the way we communicate
+    and we share informations and knowledge. This software is for all those who cannot
+    afford to have the latest expensive hardware to speak out their words of consciousness
+    and good will. This software has a full range of applications for the production
+    and not only the fruition of information, it’s a full multimedia studio and has
+    nothing to envy to other proprietary systems, because freedom and share of knowledge
+    are solid principles for evolution and that’s where this software comes from.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: pure:dyne
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: pure:dyne was initially based on dyne:bolic but has evolved into a blend of
+    Ubuntu and Debian. It runs from CD, DVD, USB stick, or a hard drive installation.
+    It is more up-to-date than dyne:bolic and is optimized for modern i686 processors,
+    though it will also run on older hardware. It is designed to be user-customizable
+    and comes with tools to create customized images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Musix
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Musix is Debian based, for 32-bit systems. It comes on a live CD or live DVD,
+    and it also has a hard drive installation option. Musix is also a 100 percent
+    free operating system. It provides a lightweight desktop environment based on
+    IceWM and the wonderful Rox filer, so it is suitable for modest hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a Real-Time Kernel
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If you don’t want to use a multimedia Linux distribution and your favorite distro
+    does not package a real-time kernel, you can build your own. A complete kernel-building
+    how-to would be a whole chapter by itself, so I’m not going to try to stuff one
+    into this chapter. You can easily find good how-tos; look for instructions specific
+    to your distribution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You’ll need a proper build environment installed, kernel sources, and a copy
+    of the configuration file for your current kernel. Once those are in place, you
+    need the rt patch, which you can get from the mothership of the Linux kernel,
+    [http://www.kernel.org/](http://www.kernel.org/). Go to the rt wiki at ([http://rt.wiki.kernel.org/index.php/Main_Page](http://rt.wiki.kernel.org/index.php/Main_Page)),
+    and look for the “CONFIG_PREEMPT_RT Patch” download. It must have the same version
+    number as your kernel sources. Once you have that, apply it to your kernel sources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In your kernel makefile, set `EXTRAVERSION` equal to a value that tells you
+    this is a real-time kernel, such as `EXTRAVERSION = -rt`. Then if your kernel
+    version is 2.6.33.1, for example, your new kernel name will be linux-2.6.33.1-rt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now you are ready to configure your new kernel. Start with your existing kernel
+    configuration and run the **`make oldconfig`** command; you don’t need to start
+    from scratch just to enable real-time preemption. Review your kernel configuration
+    and enable Processor type and features > Preemption Mode (Complete Preemption
+    (Real-Time)), and Processor type and features > Timer frequency (1000 Hz).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then finish configuration, and compile and install your new kernel. That should
+    be all there is to it, but review the rt wiki to make sure, because Linux kernel
+    development is a fast-moving target. Keep your old stock kernel installed as well.
+    You can have as many kernels as you want on your system, and if anything goes
+    wrong, you’ll have a good kernel to boot to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Latency Is Not That Scary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Latency is not the great bugaboo that it is sometimes made out to be. One way
+    to handle latency is to throw horsepower at it. A modern multicore CPU, gigabytes
+    of RAM, and fast hard drives can make latency almost disappear.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If that is not an option, it helps to understand when latency really is a problem
+    and when it isn’t. It matters when you are overdubbing. And even here Audacity
+    helps with that, because it has a configurable latency correction in the **Edit**
+    > **Preferences** > **Recording** dialog. (See [Chapter 12](ch12.html "Chapter 12. Fix-its
+    and Cleanups") to learn how to measure and correct for latency.) It matters when
+    you are playing a software synthesizer or playing any instrument through special
+    effects plug-ins on your computer: When you press a key or strum a string, you
+    want music to come out, not lag. It matters when you are monitoring a recording
+    session, because you don’t want what you hear to be out of sync.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the **Edit** > **Preferences** > **Recording** dialog, there is a setting
+    that affects latency called “Audio to buffer.” Smaller buffers equal lower latency,
+    but if they are too small for your CPU to handle, you’ll get dropouts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Latency doesn’t matter so much during mixing or during multichannel recording
+    where everything is plugged into a good recording interface that has a direct
+    path to Audacity with no detours. It is more important to have a stable setup
+    that doesn’t crash in the middle of a recording session. If you can live with
+    higher latencies in exchange for stability, that is a good trade. It’s no good
+    pushing latency levels down to the point of instability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Interrupts are less of a problem when you run a clean system with everything
+    turned off except what you need for audio production. (See [Linux System Tweaks](ch13s10.html
+    "Linux System Tweaks") in [Linux System Tweaks](ch13s10.html "Linux System Tweaks").)
+  prefs: []
+  type: TYPE_NORMAL
+- en: JACK, the Jack Audio Connection Kit, has its own configuration options for latency
+    and buffer size, which you can read all about in [Using JACK with Audacity](ch13s08.html
+    "Using JACK with Audacity") in [Using JACK with Audacity](ch13s08.html "Using
+    JACK with Audacity").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sorting Out Linux Audio
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this book we use Audacity with ALSA and JACK. No PulseAudio, OSS, aRts, ESD,
+    or whatever else might be lurking in the weeds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Linux audio landscape has been complicated for some years, with multiple
+    subsystems and overlapping functionality, and now it is going through some significant
+    changes. There is not a single Linux audio API that developers can target, but
+    rather they must deal with a herd of audio servers and subsystems: the Open Sound
+    System (OSS), the Advanced Linux Sound Architecture (ALSA), the Enlightened Sound
+    Daemon (ESD) on Gnome, the analog Real time synthesizer (aRts) for KDE2/3, Phonon
+    for KDE4, PulseAudio, and the JACK Audio Connection Kit.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ESD and aRts are entering retirement, so that thins the herd a bit, leaving
+    PulseAudio (which runs on any Unix-type operating system), Phonon (KDE4) for controlling
+    playback, and JACK for professional audio production. ALSA provides a common driver
+    base for all of these that interacts directly with audio hardware, and it also
+    provides a useful set of user tools, such as a mixer, device discovery, a simple
+    player and recorder, and a speaker tester. PulseAudio is finding its way into
+    many Linux distributions, such as Ubuntu and Fedora, and it looks like it will
+    become the dominant desktop audio server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PulseAudio is a sound daemon, while Phonon is a multimedia API supporting multiple
+    audio frameworks, including PulseAudio. PulseAudio and Phonon provide playback
+    mixers and routers and networked sound. Many Linux applications do not have audio
+    device choosers. For example, the Firefox web browser only uses the default audio
+    device. PulseAudio and Phonon let you control which audio device Firefox uses.
+    I prefer to turn PulseAudio off when I’m using Audacity; [Turning PulseAudio and
+    Phonon Off](ch13s09.html "Turning PulseAudio and Phonon Off") in [Turning PulseAudio
+    and Phonon Off](ch13s09.html "Turning PulseAudio and Phonon Off") tells you how
+    to do this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What about OSS? Some folks prefer it, and you’re welcome to give it a try. ALSA
+    is better supported in Linux, and it includes OSS emulation for applications that
+    want OSS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The Adobe Flash Player music player is buggy and unreliable. For example, Pandora
+    Radio, the wonderful online music broadcaster, relies entirely on Flash. It is
+    a great service, and I am happy to be a paid subscriber. But Flash Player is an
+    ongoing source of trouble. It loses its connection to the audio system periodically,
+    and it doesn’t like changes in device routing, such as when changing from computer
+    speakers to an external sound system. When it flakes out, it takes a either a
+    browser refresh or a restart to get it going again. If you need an audio source
+    for testing, you should look for something else.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'JACK is a professional-quality, low-latency (meaning it adds no latency to
+    your sound chain) sound server for connecting audio hardware to audio production
+    software. JACK does not run standalone but requires *alsa-base*. JACK supports
+    multiple audio backends: OSS; FFADO (formerly Freebob) for using FireWire recording
+    interfaces on Linux; PortAudio, which is a simple cross-platform audio API; and
+    CoreAudio, the Mac OS X audio API. Audacity uses PortAudio.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s clear up some common confusions regarding PulseAudio and JACK. They address
+    two different types of usage: PulseAudio is a device chooser and audio stream
+    router for playback and recording, while JACK is an audio router for high-end
+    audio production. JACK lets you route the output of multiple audio applications
+    pretty much any way you want, so you can combine different synths and capture
+    audio streams in various ways for recording. Pulse is CPU-intensive and creates
+    too much latency for overdubbing and other latency-sensitive tasks, though both
+    issues are improving as Pulse matures. It works fine for making simple recordings,
+    and Audacity and JACK both support Pulse. You need the pulseaudio-module-jack
+    plug-in for JACK support, which should be in your distro repositories.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When do you use JACK? You don’t need it when your recording interface handles
+    all the connections you need for your recording session. If everything plugs into
+    a single recording interface, just point Audacity to it, and you’re good to go.
+    Though even here JACK can help by giving you flexible routing options, letting
+    you mix the audio streams in different ways and making performance adjustments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You need JACK when you are using a FireWire recording interface. You need it
+    when you want to incorporate software audio applications into your Audacity recording
+    session. (JACK has great MIDI support, though Audacity does not support MIDI.)
+    A simple example that we’ll go into in detail (in [Using JACK with Audacity](ch13s08.html
+    "Using JACK with Audacity") in [Using JACK with Audacity](ch13s08.html "Using
+    JACK with Audacity")) is adding the excellent Hydrogen software drum machine to
+    an Audacity recording session. If you want to use Hydrogen to create a drum track
+    in Audacity, you need JACK to connect the two.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using ALSA
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'ALSA has two parts: the low-level base that supplies sound card drivers and
+    interacts directly with audio hardware and a higher-level interface that contains
+    the userland tools. *alsa-base* and its dependencies should already be present,
+    but you may need to install *alsa-utils* to get the userland tools. *alsa-utils*
+    gives you `alsamixer, aplay, speaker-test, arecord`, and number of sound files
+    for testing your speakers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Open a terminal and type in **`alsamixer`** to open the mixer console, shown
+    in [Figure 13-1](ch13s05.html#using_alsamixer_to_configure_onboard_sur "Figure 13-1. Using
+    alsamixer to configure onboard surround sound. On my system, all of the modules
+    must be active—Surround, Center, LFE, and Side—for stereo sound to work, even
+    though their volume controls have no effect."). ALSA runs in the console via an
+    ncurses interface, which means it is completely keyboard controlled and does not
+    require an X server. The top-left caption tells you a lot of useful information:
+    your sound card and chipset, which set of functions you’re viewing, and the values
+    for the highlighted setting. Use the arrow keys to navigate back and forth. There
+    are three views: Playback, Capture, and All. Press the tab key to toggle between
+    them. Pressing the esc key closes `alsamixer`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Using alsamixer to configure onboard surround sound. On my system, all of
+    the modules must be active—Surround, Center, LFE, and Side—for stereo sound to
+    work, even though their volume controls have no effect.](httpatomoreillycomsourcenostarchimages797851.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-1. Using `alsamixer` to configure onboard surround sound. On my system,
+    all of the modules must be active—Surround, Center, LFE, and Side—for stereo sound
+    to work, even though their volume controls have no effect.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Press the F2 key to see detailed information on all your detected audio devices,
+    as in [Figure 13-2](ch13s05.html#alsamixer_queries_the_solidus_proc_files "Figure 13-2. alsamixer
+    queries the /proc filesystem to show detailed information on your audio devices.").
+    Note that they are numbered from zero. Use the arrow keys to scroll up and down,
+    and press the return key to close the information window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![alsamixer queries the /proc filesystem to show detailed information on your
+    audio devices.](httpatomoreillycomsourcenostarchimages797853.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-2. `alsamixer` queries the */proc* filesystem to show detailed information
+    on your audio devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 13-3](ch13s05.html#the_alsamixer_playback_screen_controls_m "Figure 13-3. The
+    alsamixer playback screen controls muting and volume on playback devices.") shows
+    the Playback configuration screen.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The alsamixer playback screen controls muting and volume on playback devices.](httpatomoreillycomsourcenostarchimages797855.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-3. The `alsamixer` playback screen controls muting and volume on playback
+    devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting Recording and Playback Levels in alsamixer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`alsamixer` only displays functions that your sound card is capable of performing.
+    Here are the basic `alsamixer` commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The little boxes with MM in the playback menu mean those functions are muted,
+    or disabled. Toggle the M key to mute/unmute, and the MM turns to 00.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 00 means zero volume, so use the up- and down-arrow keys to adjust it. page
+    up increases volume by 5, page down decreases volume by 5, and end sets the volume
+    to 0.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When there are two channels on one slider, you can adjust each one independently.
+    Q increases the left channel, and Z decreases it. E increases the right channel,
+    and C decreases it.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In the Capture screen, press the spacebar to select the active recording (Capture)
+    device. There may be more than two options, so press it several times to see what
+    your choices are.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Press the F1 key to see a Help menu. F2 displays your */proc* information, which
+    shows you what is actually detected and working, as well as device addresses.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sometimes you will experience static or too-low volume that is caused by having
+    unnecessary functions enabled. For example, the Playback screen for my ATI onboard
+    sound shows a front mic volume control. When this is enabled, it causes static.
+    When I’m using headphones, the Headphone control needs to be turned on, but changing
+    the volume level has little effect, and I need to use both the Master and PCM
+    volume controls. The Master volume control is not needed for the speakers, but
+    the Headphone control is. Trial and error is about the only way to figure these
+    things out, and lower-end sound cards are more troublesome and quirky than the
+    better-quality ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Master vs. PCM
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There is often confusion over Master and PCM playback settings. You usually
+    need both Master and PCM to enable playback, though sometimes only the PCM slider
+    has any effect. If the Master slider has no effect, this means either there is
+    no hardware volume control built into your sound card or your sound card driver
+    is lacking this functionality. Master is the master volume control, and PCM stands
+    for *pulse code modulation*. Remember [Audio File Formats and Quality Settings](ch01s13.html
+    "Audio File Formats and Quality Settings") in [Final Mixdown](ch01s12.html "Final
+    Mixdown"), where we learned about converting analog signals to digital representations?
+    ALSA’s definition of PCM sorts it out for us:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although abbreviation PCM stands for “pulse code modulation,” we are understanding
+    it as general digital audio processing with volume samples generated in continuous
+    time periods.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: So think of ALSA’s PCM channel as a virtual sound card.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multiple Sound Cards
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'If you have more than one audio interface, `alsamixer` numbers them from zero.
+    For example, I have both onboard sound and the M-Audio MobilePre connected to
+    a USB port. The MobilePre is #1, so to control it, I need to open `alsamixer`
+    with this command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`-c1` means “card number 1.” How do you know what your card numbers are? One
+    way is to query */proc*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Another way is to press F2 in `alsamixer` ([Figure 13-2](ch13s05.html#alsamixer_queries_the_solidus_proc_files
+    "Figure 13-2. alsamixer queries the /proc filesystem to show detailed information
+    on your audio devices.")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adjusting Volume Levels
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When you’re adjusting recording and playback settings in Audacity, you can have
+    `alsamixer` open at the same time, as [Figure 13-4](ch13s05.html#the_alsamixer_capture_window_controls_de
+    "Figure 13-4. The alsamixer Capture window controls device selection and volume
+    on recording devices. Here it is tiled with Audacity for controlling the recording
+    volume level.") shows. It’s a fast way to tweak volume settings and to find out
+    what the `alsamixer` settings actually control. In this example, a bit of trial
+    and error showed me that the Mic Boost and the first Capture slider controlled
+    the microphone recording volume and that this sound card has a real stereo microphone
+    input with two channels. (Remember, the Q and Z keys raise and lower the volume
+    on the left channel, and E and C control the right channel.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The alsamixer Capture window controls device selection and volume on recording
+    devices. Here it is tiled with Audacity for controlling the recording volume level.](httpatomoreillycomsourcenostarchimages797857.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-4. The `alsamixer` Capture window controls device selection and volume
+    on recording devices. Here it is tiled with Audacity for controlling the recording
+    volume level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even in a simple setup like this, there are multiple recording level controls,
+    both in ALSA and Audacity. Keep `alsamixer` open for adjustments during recording.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you need a good excuse to splurge on a dual-monitor setup, audio production
+    is a great reason. You can have Audacity, JACK, and alsamixer on one screen and
+    your other audio applications (like Hydrogen, other synths, special effects) on
+    the second screen. Nice and tidy, and you don’t have to keep moving things out
+    of the way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hardware Testing with alsa-utils
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*alsa-utils* includes some good commands to help you troubleshoot and test
+    your hardware. Keep `alsamixer` open to the sound card you are testing so you
+    can quickly try different settings. The most common cause of no sound is because
+    it is muted in `alsamixer`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you are running the JACK audio server, turn it off for these tests because
+    these commands may not work when JACK is running. It is best to keep tests as
+    simple as possible in any case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is a quick and annoying way to verify that your default sound card and
+    speakers work. It should generate some white noise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'ctrl-C stops it. A nicer way is to use `aplay` to play a WAV file of your choosing,
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`-t` means “file type,” and your choices are `voc`, `wav`, `raw`, and `au`.
+    `wav` is the default.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To see the PCM structure and a nice ASCII VU (volume units) meter, try this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`-V stereo` means “display stereo VU meter,” which is represented by the hash
+    marks. These represent the RMS volume levels (root mean square, or average volume
+    over time), and the percentage values are the peaks. You can see that this is
+    a stereo CD-quality file, or 2-channel 16 bits at 44.1 kHz.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'What if you have more than one sound card? Use `aplay -l` to display the raw
+    ALSA device information for all of your audio interfaces:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'ALSA devices are named in the format *interface:card,device*. Sound cards are
+    numbered from zero. An ALSA interface is a PCM playback or recording device, a
+    MIDI device, or a control device such as a mixer. The `hw` interface talks directly
+    to the kernel, so this is the most direct way to test your audio hardware. This
+    example sends a WAV file to the first ALSA interface, the ATI SB onboard sound
+    chipset at `hw:0,0`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Sometimes you’ll see an error message like this: `Warning: rate is not accurate
+    (requested = 44100Hz, got = 48000Hz) please, try the plug plugin.` This means
+    use `plughw` in place of `hw`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`hw` makes no conversions of any kind—think of it as your literal playback
+    device. It can do only what the hardware supports, so some audio files might sound
+    weird or not play at all. `plughw` is a special ALSA plug-in that is like `hw`
+    with extra powers; it can perform whatever conversions are necessary to play your
+    files. `aplay` supports only `voc`, `wav`, `raw`, or `au`, so you might as well
+    stick with WAVs.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This example plays a file on the second ALSA device, which in the example is
+    the MobilePre:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: If there were a third audio interface, it would be `hw:2,0`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing Speakers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `speaker-test` command helps you determine whether your speakers are connected
+    in the correct order. This example tests two-channel stereo:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should hear a pleasant woman’s voice say, “Front left, front right.” `-c2`
+    means two channels, and `-l1` means run the test once.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This chipset supports 5:1 surround sound, so you can test this too:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can test a single speaker with the `-s` option, like this example that
+    tests the center speaker channel:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice the clever gotcha: The `speaker-test` output numbers the speakers from
+    zero, but for the `-s` option, you have to start from 1.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`-t wav` uses the included default WAV testing file; you might also try `pink`,
+    which generates pink noise, and `sine`, which sounds like the sine wave tones
+    from way back in the olden days of TV test screens. (Now they use infomercials.
+    I miss the test screens.) You may specify different frequencies (in Hz) to use
+    with the `sine` option, like this example that tests the subwoofer with a nice
+    low 45 Hz tone:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: LFE means low frequency effects channel or low frequency emitter. This is the
+    channel that handles low-pitched sounds ranging from 3 to 200 Hz. This is not
+    the same as the physical port that you plug a subwoofer into, because the LFE
+    signal can be routed to any speaker or speakers that support it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing Recording
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`aplay` has a companion command, `arecord`. Remember to check `alsamixer` for
+    the correct settings, such as capture device and volume controls. If your computer
+    has both front and rear microphone ports, `alsamixer` should have an option to
+    select the correct one. In this example, two audio devices are detected:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This example makes a test recording with the MobilePre:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'ctrl-C stops recording. `-fcd` means CD-quality, which is 2-channel 16-bit
+    at 44.1 kHz. `aplay` plays back the test recording:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: ALSA Applications
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'ALSA creates a number of virtual interfaces for your sound card called *applications*.
+    You can view these with `aplay`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'That’s a lot of applications! In ordinary use, these don’t matter to the user,
+    or to applications that send sound streams to ALSA, because everything is handled
+    behind the scenes. You can test these the same way you tested the `hw` interfaces:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'On my system, `aplay` returned an identical set of applications for the MobilePre
+    even though it doesn’t support surround sound but only two-channel stereo. So,
+    this works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'But this doesn’t:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Querying Your Sound Card
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'How do you know what abilities your sound card has, what bit depths and sample
+    rates it supports, and how many channels? If you have no manual, you can query
+    the */proc* filesystem to find out. Audio devices are in */proc/asound*. You can
+    browse this directory in any file manager or from the command line. For example,
+    on my system */proc/asound/card0* is the onboard ATI chipset. Reading */proc/asound/card0/codec#0*
+    spits out a lot of information, and this snippet shows that this chipset supports
+    high sampling rates and bit depths:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The MobilePre looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: How did I know which */proc* files to read? I tried ’em all. Do not try to edit
+    */proc* files. */proc* is a pseudo-filesystem that exists only in memory, showing
+    the current state of the kernel and operating system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using JACK with Audacity
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The JACK Audio Connection Kit is a marvelous creation. Its original creator
+    was Paul Davis, and now Mr. Davis and a team of developers support JACK. It is
+    a professional-quality, low-latency sound server for Linux and any POSIX-compliant
+    operating system such as Mac OS X, Solaris, AIX, HP-UX, and IRIX. Currently it
+    runs well on Linux, Mac OS X, and FreeBSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Phonon (in KDE4) doesn’t get in the way when you’re using Audacity, but Pulse-Audio
+    often does, so see [Turning PulseAudio and Phonon Off](ch13s09.html "Turning PulseAudio
+    and Phonon Off") in [Turning PulseAudio and Phonon Off](ch13s09.html "Turning
+    PulseAudio and Phonon Off") to learn how to disable it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: JACK acts like a switchboard to route audio signals between your audio hardware
+    and software without adding latency. JACK can interface with only one sound card
+    at a time, but it can interface with any number of software audio production applications,
+    as long as they are JACK-aware. If you have a hardware device that controls all
+    of your audio sources, then you don’t need JACK. For example, in my little studio,
+    my MobilePre can handle up to 4 inputs, and the Saffire Pro can handle as many
+    as 26\. If everything I want to record plugs into one of those, I don’t need JACK.
+    But suppose I want to use Hydrogen, the software drum kit for Linux? This is an
+    excellent, fun drum synthesizer that is in most distro repositories, and it comes
+    with a batch of demos so I can immediately start playing with it. How do I connect
+    Hydrogen to Audacity? This is where JACK comes in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The order in which you start your various applications is important. First get
+    everything running and connected with JACK, and then Audacity always starts last.
+    It seems we should be able to open Audacity after JACK is running, connect it
+    to JACK, and then run whatever else we want. Sometimes this works because JACK
+    updates new connections dynamically. But Audacity can be finicky, so I get everything
+    else going first. Usually everything works fine on the first try, but sometimes
+    Audacity throws out an error message about having the wrong sound device or some
+    other unhappiness. Closing and reopening it usually takes care of this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s use the MobilePre, since it is easy and simple. It has two microphones
+    connected for vocal and a guitar, and then we’ll add a nice drum track. First
+    close all other audio applications, and then start JACK. JACK can run from the
+    command line or the Qjackctl graphical interface. We’ll use Qjackctl, which should
+    appear in your system menu as JACK Control ([Figure 13-5](ch13s08.html#qjackctl_comma_the_graphical_jack_contro
+    "Figure 13-5. Qjackctl, the graphical JACK controller")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Qjackctl, the graphical JACK controller](httpatomoreillycomsourcenostarchimages797859.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-5. Qjackctl, the graphical JACK controller
+  prefs: []
+  type: TYPE_NORMAL
+- en: If JACK starts up when you open Qjackctl, stop it, and then click the Setup
+    button. You’ll see a configuration dialog like [Figure 13-6](ch13s08.html#selecting_your_audio_devices_and_configu
+    "Figure 13-6. Selecting your audio devices and configuring JACK in the Qjackctl
+    Setup dialog").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Selecting your audio devices and configuring JACK in the Qjackctl Setup dialog](httpatomoreillycomsourcenostarchimages797861.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-6. Selecting your audio devices and configuring JACK in the Qjackctl
+    Setup dialog
+  prefs: []
+  type: TYPE_NORMAL
+- en: Check Realtime in the Parameters column if you are using a real-time kernel.
+    Otherwise, don’t check it.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If there is a monitoring port on your recording interface, check H/W Monitor
+    to enable it. Leave everything else in the first column unchecked.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the next column, leave Priority at (default).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Leave Frames/Period at the default of 1024.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set your sample rate and make sure it agrees with Audacity, Hydrogen, and any
+    other audio software you are running. It must be a rate that your recording interface
+    supports.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Periods/Buffer defaults to 2; leave it there for now.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Leave Port Maximum and Timeout at their defaults of 256 and 500, respectively.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the third column, choose “alsa” as the driver.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Choose your input and output devices; click the little arrows to the right to
+    display all of your sound devices.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set the numbers of input and output channels, which are whatever your audio
+    interface supports. The MobilePre has two channels for both input and output.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click **OK**, and then click the **Start** button. It is normal to see a few
+    xruns at startup. Click the Messages and Status buttons to display everything
+    you need to know about your JACK session, both good and bad.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now start up Hydrogen. [Figure 13-7](ch13s08.html#the_excellent_hydrogen_drum_synthesizer
+    "Figure 13-7. The excellent Hydrogen drum synthesizer") shows what Hydrogen looks
+    like.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The excellent Hydrogen drum synthesizer](httpatomoreillycomsourcenostarchimages797863.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-7. The excellent Hydrogen drum synthesizer
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hydrogen, like so many good Linux synths, lets you select which audio interface
+    to use and which audio backend. Go into **Tools** > **Preferences** > **Audio
+    System** and select JACK. Make sure that the Connect to Default Output Pair option
+    is not checked ([Figure 13-8](ch13s08.html#configuring_hydrogen_to_use_jack "Figure 13-8. Configuring
+    Hydrogen to use JACK")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now go to **Project** > **Open Demo** and select a demo to play. Click the **Loop
+    Song** button (to the right of the Fast Forward button) to keep it going while
+    you’re testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, click the **Connect** button in Qjackctl. [Figure 13-9](ch13s08.html#jack_and_hydrogen_are_running_comma_and
+    "Figure 13-9. JACK and Hydrogen are running, and the Connections window shows
+    that Hydrogen is connected to your audio interface’s playback ports.") is the
+    result. The System clients are the MobilePre channels; System clients always represent
+    your audio interface, and of course Hydrogen is labeled as Hydrogen. You should
+    hear a drum track on the playback device selected in JACK. If you don’t, connect
+    the two Hydrogen out ports to two System playback ports. You will see lines connecting
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configure your playback device in JACK’s Setup dialog, whether it’s headphones,
+    external speakers, or something else.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Configuring Hydrogen to use JACK](httpatomoreillycomsourcenostarchimages797865.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-8. Configuring Hydrogen to use JACK
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![JACK and Hydrogen are running, and the Connections window shows that Hydrogen
+    is connected to your audio interface’s playback ports.](httpatomoreillycomsourcenostarchimages797867.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-9. JACK and Hydrogen are running, and the Connections window shows
+    that Hydrogen is connected to your audio interface’s playback ports.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now open Audacity. Configure Audacity to use JACK Audio Connection Kit: Hydrogen
+    as the recording device and press the Record button. You should see something
+    like [Figure 13-10](ch13s08.html#audacity_is_recording_the_hydrogen_drum "Figure 13-10. Audacity
+    is recording the Hydrogen drum track, thanks to JACK.").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Audacity is recording the Hydrogen drum track, thanks to JACK.](httpatomoreillycomsourcenostarchimages797869.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-10. Audacity is recording the Hydrogen drum track, thanks to JACK.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Voilà! Audacity is recording Hydrogen! The JACK Connections window now displays
+    two new PortAudio clients, which are the Audacity recording inputs ([Figure 13-11](ch13s08.html#jack_connects_hydrogen_and_the_mobilepre
+    "Figure 13-11. JACK connects Hydrogen and the MobilePre to Audacity. Audacity
+    is represented by the two PortAudio clients. In this example, Hydrogen is being
+    recorded through the two PortAudio clients and simultaneously playing back through
+    the two system playback ports.")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![JACK connects Hydrogen and the MobilePre to Audacity. Audacity is represented
+    by the two PortAudio clients. In this example, Hydrogen is being recorded through
+    the two PortAudio clients and simultaneously playing back through the two system
+    playback ports.](httpatomoreillycomsourcenostarchimages797871.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-11. JACK connects Hydrogen and the MobilePre to Audacity. Audacity
+    is represented by the two PortAudio clients. In this example, Hydrogen is being
+    recorded through the two PortAudio clients and simultaneously playing back through
+    the two system playback ports.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Usually the Connections window opens with the necessary connections in place
+    and dynamically creates new ones on demand. If it doesn’t or you want to change
+    them, just click a Readable Client, then click a Writable Client, and then click
+    the Connect button (or Disconnect). You can create multiple connections to each
+    client.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The MobilePre is a two-channel recording interface that supports up to four
+    inputs, so when I record something through the microphones, it goes into the same
+    two-channel stereo track as the Hydrogen drum track.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In some of the older versions of Audacity and JACK, the recording device selection
+    was not consistent. Sometimes selecting JACK Audio Connection Kit: System worked,
+    and sometimes I had to use JACK Audio Connection Kit: <something else>, depending
+    on what else I was using. So, you may have to try a bit of trial and error.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Connecting a FireWire Recording Interface
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[Figure 13-12](ch13s08.html#the_ffado-mixer_for_the_focusrite_saffir "Figure 13-12. The
+    ffado-mixer for the Focusrite Saffire Pro I/O 26") shows a simple example of using
+    the Saffire Pro with JACK and Audacity. You need the ffado driver for Linux ([http://www.ffado.org/](http://www.ffado.org/))
+    to use a FireWire recording interface, a FireWire adapter on your computer, and
+    the correct cable to connect your FireWire device. There are two different FireWire
+    plugs, 4-pin and 6-pin, and you must have the one that matches your device.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The ffado-mixer for the Focusrite Saffire Pro I/O 26](httpatomoreillycomsourcenostarchimages797873.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-12. The ffado-mixer for the Focusrite Saffire Pro I/O 26
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is how I got the Saffire Pro working for this example. First I opened ffado-mixer,
+    which comes with the ffado driver ([Figure 13-12](ch13s08.html#the_ffado-mixer_for_the_focusrite_saffir
+    "Figure 13-12. The ffado-mixer for the Focusrite Saffire Pro I/O 26")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then I started Qjackctl, opened the Setup dialog, changed the driver to “firewire,”
+    and changed the Interface to hw:0\. Then I opened Hydrogen, set it to use JACK
+    as the audio backend, and then started a demo loop playing. The Saffire has headphone-monitoring
+    ports, so I plugged headphones into the appropriate port and created connections
+    in the JACK connector to route Hydrogen’s playback to the first two Saffire input
+    ports, System playback_1 and playback_2.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then I opened Audacity last of all. I made sure the sample rate was the same
+    in ffado-mixer, JACK, and Audacity, and I configured Audacity to record four tracks,
+    using the recording device JACK Audio Connection Kit: System.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 13-13](ch13s08.html#everything_is_working_colon_hydrogen_is "Figure 13-13. Everything
+    is working: Hydrogen is both recording and playing back. Two mics are plugged
+    into the Saffire Pro and are recording from Capture 3 and 4 to PortAudio 16 and
+    17.") shows what this all looks like: There are four PortAudio clients, which
+    means that four recording channels are open in Audacity. Hydrogen is using two
+    of them, and I have two mics plugged into the Saffire Pro for recording on the
+    other two.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Everything is working: Hydrogen is both recording and playing back. Two mics
+    are plugged into the Saffire Pro and are recording from Capture 3 and 4 to PortAudio
+    16 and 17.](httpatomoreillycomsourcenostarchimages797875.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13-13. Everything is working: Hydrogen is both recording and playing
+    back. Two mics are plugged into the Saffire Pro and are recording from Capture
+    3 and 4 to PortAudio 16 and 17.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 13-14](ch13s08.html#how_it_looks_in_audacity_colon_two_hydro "Figure 13-14. How
+    it looks in Audacity: two Hydrogen tracks recording and two mic tracks") shows
+    how the recording session looks in Audacity.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![How it looks in Audacity: two Hydrogen tracks recording and two mic tracks](httpatomoreillycomsourcenostarchimages797877.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13-14. How it looks in Audacity: two Hydrogen tracks recording and two
+    mic tracks'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating Persistent Configurations
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the JACK Setup dialog, you can create and save multiple profiles. Make a
+    configuration; then on the first tab enter a name for it in the Preset Name box,
+    and then click **Save**. To open a profile, click the drop-down arrow in the Preset
+    Name box.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Connections window only displays your current setup and does not save it,
+    so you must use the Patchbay to create saved connections. Get everything hooked
+    up the way you like in Connections, open the Patchbay, and then click the **New**
+    button. A little message will pop up and ask you if you want to save your current
+    Connections configuration ([Figure 13-15](ch13s08.html#the_patchbay_asks_if_you_want_to_save_yo
+    "Figure 13-15. The Patchbay asks if you want to save your current Connections
+    configuration.")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The Patchbay asks if you want to save your current Connections configuration.](httpatomoreillycomsourcenostarchimages797879.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-15. The Patchbay asks if you want to save your current Connections
+    configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Click **Yes**, and this will automatically duplicate the current settings in
+    the Connections window. You can modify this or accept it as is and save it with
+    the Save button, giving it a unique name ([Figure 13-16](ch13s08.html#you_can_edit_what_the_patchbay_captured
+    "Figure 13-16. You can edit what the Patchbay captured for you or save it as is.")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![You can edit what the Patchbay captured for you or save it as is.](httpatomoreillycomsourcenostarchimages797881.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-16. You can edit what the Patchbay captured for you or save it as
+    is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: JACK Settings
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let’s take a look at the settings in the Qjackctl Setup window in more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: “Realtime” should be checked when you have a real-time kernel and unchecked
+    when you do not.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Leave “No Memory Lock” unchecked when you have abundant RAM, but if you’re making
+    do with a lower-end computer, try checking it if you get out-of-memory errors.
+    This will prevent JACK from locking up memory for its exclusive use and freeing
+    it for all processes that need it.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Checking “Unlock Memory” helps lower-end computers by reclaiming memory slurped
+    up by graphics toolkits like Qt and GTK, especially if you are running VST plug-ins
+    under WINE. Leave it unchecked if you are not experiencing problems.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Checking “Soft Mode” tells JACK to ignore xrun errors and keep running. Use
+    this when you want JACK to keep running no matter what, for example during a live
+    show. It’s better to track down and fix the problem, but it’s not always possible,
+    and xruns don’t always translate into big defects in your recording.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can check “Force 16-bit” when your audio interface supports only 16-bit
+    recording. It’s not required because JACK uses 32-bit internally, and it tests
+    32-, 24-, and 16-bit settings for your input and output devices. If your interface
+    supports only 16 bits or you want to record at 16 bits, this will shush the routine
+    error messages in the Messages window.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: “H/W Monitor” and “H/W Meter” enable hardware monitoring and metering for devices
+    with support for these functions. For example, the MobilePre has a zero-latency
+    monitoring port, so this activates it. H/W Meter is for ALSA devices only, and
+    few recording interfaces support this feature.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The default Priority is 10, and this maxes out at 89. Usually the default is
+    fine. If you are running a real-time kernel, try setting it to 70 or greater to
+    see whether it makes any difference.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Frames/Period controls your balance between lower latency and fewer errors.
+    The default is a buffer of 1,024 frames per second sent from JACK to your sound
+    card, and the lowest possible value that is supported by PC hardware is 64\. For
+    lower latency, you want a lower value. If you see a lot of xruns in the Messages
+    window, then increase this to a higher number until you have no *xruns*. An xrun
+    is either a buffer overrun or an underrun, and xruns are audible as crackles and
+    pops. On my system, JACK performs well at 128 frames, which results in very low
+    latency. One audio frame is one sample times the number of channels, so a two-channel
+    recording has two samples per frame. A *period* is a CPU processing cycle, so
+    a Frames/Period rate of 128 results in a buffer size of 128 samples per channel,
+    for a total of 256 samples per period for two channels. To get the buffer size
+    in bytes, multiply Frames/Period by Periods/Buffers by 4.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Sample Rate setting must equal your Audacity sample rate and be supported
+    by your recording interface. Higher sample rates put a heavier load on your CPU
+    and may require higher values in Frames/Period and Periods/Buffers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Periods/Buffers is an interesting bit of memory management. JACK divides the
+    memory buffer into periods and transfers data in units of periods. The default
+    is two periods per buffer. More periods equals higher latency and greater stability.
+    Try different values in combination with Frames/Period to get latency down. For
+    example, if it takes a high Frames/Period value to get xruns down, like 2,048,
+    try increasing Periods/Buffers to 3 or 4, and try lowering Frames/Period.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Every input or output connection is a port. The default is 256 ports, which
+    is more than enough for most mortals, and you can have as many as 1,024.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Timeout controls how long JACK waits to kill an application during periods of
+    heavy congestion. The default is 500 milliseconds.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The driver is set to whatever driver your recording interface uses. Freebob
+    is the old version of the FFADO driver for FireWire interfaces, so select “firewire”
+    since Freebob is obsolete (unless you are running an old system with actual old
+    Freebob drivers). “dummy” is a fake driver for testing JACK.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Interface drop-down is active only when you select (default), meaning the
+    ALSA default, for your Input and Output devices. Then you have a few extra choices
+    such as */dev/dsp* and */dev/oss*. These are really not relevant in modern Linux
+    systems, but JACK supports them if your system supports them.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Dither can make 16-bit recordings sound better; it is analogous to anti-aliasing
+    fonts or dithering in graphical images. Don’t use dither for higher-bit depths
+    because it is unnecessary, and they will sound worse. Think of it as blending
+    the rough edges for a cleaner sound. Shaped dither is considered to be the best,
+    but it is also the most CPU-intensive. Triangular is a good compromise between
+    quality and CPU cost, and rectangular is lightweight and makes the smallest alterations.
+    You don’t have to use dithering, but it doesn’t hurt to try it. Audacity also
+    has dither, so be sure to use only one or the other.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: On the Audio menu, you can choose Duplex, Capture Only, and Playback only. Usually
+    Duplex works fine, but you can try the other settings to see whether there are
+    any performance improvements.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Pick your Input and Output Devices from the drop-down menus (the little arrows
+    on the right).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Input Latency and Output Latency are for increasing latency. You might want
+    to fiddle with these to bring your Input and Output streams into synchronization,
+    especially when overdubbing or applying special effects.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Turning PulseAudio and Phonon Off
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'PulseAudio can be a stubborn little daemon. The man page says you can turn
+    it off with the command `pulseaudio --kill`. But depending on your particular
+    Linux distribution, it won’t stay killed; instead, it respawns itself. This is
+    how it works on Ubuntu 10.04: It has a normal init script to start it at boot,
+    */etc/rc2.d/S03pulseaudio*. But when you try controlling this the normal way,
+    it doesn’t work, because running `/etc/init.d/pulseaudio stop` doesn’t stop it.
+    Removing */etc/rc2.d/S03pulseaudio* doesn’t prevent it from starting at boot.
+    Fortunately, I am even more stubborn and have figured out how to control stopping
+    and starting Pulse. I don’t want to remove it; I want it to run when I want it
+    to run. (If you want to remove Pulse, it shouldn’t hurt anything to do so.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First look for a graphical control panel for Pulse with an option to disable
+    it. This is missing from my Ubuntu 10.04 installation but present on Fedora and
+    other distros. If your system has this, it might be all you need.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If there is no graphical control panel with an option to disable pulse, open
+    */etc/pulse/client.conf*, change `autospawn = yes` to **`autospawn = no`**, and
+    set `daemon-binary` to **`/bin/true`**. Make sure they are uncommented, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, to stop it from starting at boot requires several steps. First remove
+    the relevant `/etc/rc*.d/S*pulseaudio` link for your usual runlevel or rename
+    it to a “kill” link. This prevents `init` from starting Pulse. On my system, that
+    looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'How do you know your runlevel? Use the **`runlevel`** command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: That means runlevel 2, which is controlled by the links (which must be links
+    to files in */etc/init.d*, not the files themselves!) in */etc/rc2.d/*. Your distro
+    may have a nice graphical services manager, which is a good thing to use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On Ubuntu 10.04, there is one more startup file to dispense with: */etc/X11/Xsession.d/70pulseaudio*.
+    This starts Pulse when a Gnome session starts. Move this file to a different directory,
+    like your home directory. Don’t delete it because you might want it again someday.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other distros customize Pulse in different ways, so if these instructions don’t
+    work, then look for help specific to your distro. There is no shortage of it because
+    a lot of users are struggling with this. Another little trick, when you find scripts
+    that start PulseAudio, is to change the binary that they call from */usr/bin/pulseaudio*
+    to */bin/true*. This is a nice little executable whose only job is to “do nothing,
+    successfully.” It keeps the scripts happy, and it’s a convenient placeholder if
+    you ever want to change it back.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that you have purged all the startup scripts, how do you stop and start
+    PulseAudio? It’s as easy as pie:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Phonon is a different kettle of clams. Phonon exists only on KDE4, and it is
+    impossible to remove because virtually all of KDE4 depends on it. It is not necessary
+    to stop or remove Phonon in any case, because it uses only a tiny bit of system
+    resources and adds no latency to your audio chain. It does have one annoying habit—when
+    a sound daemon like Pulse or JACK takes control of a sound card, Phonon freaks
+    out and emits an error message about how that sound card is missing, and it wants
+    to remove the sound card from its menus. Just click **Cancel** to shush it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Linux System Tweaks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Linux is a pretty efficient operating system, so you don’t need to go to heroic
+    lengths to make it get out of its own way. However, there are a few things you
+    can do to ensure the best possible performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: High-powered PC hardware is always good and is cheaper than high-end audio devices.
+    My audio workstation has an AMD Phenom X3 2.4 GHz CPU, 4GB of RAM, and a terabyte’s
+    worth of SATA II hard drives. Those extra cores make a nice difference, because
+    even though Audacity is not optimized for multicore processors, those extra cores
+    mean faster, smoother multitasking. I also have an old laptop with a 1.4 GHz CPU,
+    1GB of RAM, and a slower hard drive. This handles up to four-channel 16/44.1 recording
+    capably, but at higher bit depths or sampling rates it tends to stall. I consider
+    a 1 GHz CPU and 512MB of RAM to be the bare minimum for music recording and editing.
+    For podcasts and spoken-word recordings, you can go as low as 128MB RAM and a
+    500 MHz CPU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Turn off your screensaver and all fancy video effects. All that CompizFusion
+    bling is pretty, but it gets in the way of good audio. In fact, you should turn
+    off everything that is not absolutely needed: Don’t run other applications, and
+    turn off unnecessary services. There usually isn’t too much cruft; Bluetooth,
+    wireless daemons on systems without wireless devices, and Wacom tablet daemons
+    are the most common on-by-default services that most users don’t need.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Both KDE and GNOME are heavy-duty desktops that feast on CPU and memory, so
+    you can slim your system down by using a lighter-weight graphical environment
+    such as Xfce, IceWM, LXDE, Fluxbox, or any of the many other lightweight Linux
+    graphical environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Video is the single most demanding system on your PC, so you might want to upgrade
+    to a better video card. Many lower-end systems use shared system memory instead
+    of a dedicated graphics processing unit (GPU). In other words, they use some of
+    your system RAM to process video, and this is quite a bit slower because it places
+    an extra load on your system RAM and CPU, both of which are considerably slower
+    than a GPU. GPUs are so much faster that they are used to build clusters for very
+    fast, very powerful, high-end scientific calculations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Depending on your distribution, you should have a good graphical system resources
+    monitor so you can see where your system resources are being used. The good old-fashioned
+    `top` command is still a useful tool for viewing active processes and how much
+    system resources they are using. After starting `top`, press 1 to see all the
+    cores in a multicore CPU:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This shows that all is well. The summary at the top tells us many things: One
+    process is running, and the rest, all 231 of ’em, are sleeping. Three CPU cores
+    are chugging away.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: All of these fields are explained in the nice man page, `man top`. Your version
+    of `top` may display different fields, but it is still the same `top` command.
+    The top section is the summary, and the bottom section is the task area.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CPU states (in the summary) are fun to examine in detail, but the main fields
+    to keep an eye on are the `us`, or user field, which shows the load per CPU, and
+    the `sy`, or system field, which shows the load from kernel processes. If you
+    are seeing `sy` values greater than 10 percent consistently, you should track
+    down the cause, because ordinarily it should be in the single digits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `Mem` and `Swap` fields tell you whether your physical RAM is sufficient.
+    As long as `Swap` usage is zero and your `Mem` is not maxed out, that is ideal
+    for audio processing, since RAM is many times faster than a swap file, which is
+    on your hard disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Down in the task area, you see information on every process on your system.
+    Again, don’t go crazy on the minute details, but look at the biggest users at
+    the top. This quickly reveals who the CPU and memory hogs are. Web browsers can
+    be awful hogs in this era of lardy, script- and Flash-heavy websites, so shut
+    ’em down. Audio processing chews up a lot of CPU cycles, so that’s the main thing
+    to keep an eye on. If you’re hitting greater than 75 percent consistently, think
+    about upgrading your CPU. The Linux kernel and most CPUs don’t mind working that
+    hard, but at that level you’re probably noticing slower performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can tune your swap file size a bit for better performance. If you have 512MB
+    of RAM or less, make your swap file size at least equal to your RAM size. If you
+    have 1GB of RAM or more, make your swap file no larger than half your RAM. But
+    don’t remove your swap file entirely—laptops need them for suspend and hibernate,
+    and if you ever use up all of your physical memory, that swap file might save
+    your recording session.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are using a PCI sound card, check your motherboard manual to find a slot
+    that does not use shared interrupts. PCI-Express sound cards are great because
+    PCI-E uses dedicated buses, rather than shared buses like the old PCI 2.0 standard.
+    There are not a lot of PCI-E sound cards yet; the RME HDSPe MADI series, for one
+    example, is first-rate and works in Linux.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t use networked file shares, except for storing backups of your audio files,
+    because they’re too slow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Tangled History of Linux Audio
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The original Linux audio subsystem was Sound Blaster 16, which “just happened”
+    because SB16 sound cards had the best support and a nice API. Those of us who
+    are old enough to remember i386 PCs might also remember that competing brands
+    used SB16 emulation because it was the path of least resistance. This evolved
+    into the Open Sound System (OSS), which is portable across all Unix and Unix-type
+    operating systems. It still exists and is maintained, and it is often confused
+    with the OSS-compatible module in ALSA.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OSS fell out of favor as sound cards got cheaper and depended more on software
+    to handle mixing, instead of doing the mixing in hardware. And so ESD (Gnome)
+    and aRts (KDE) were born; these took care of mixing before sending audio streams
+    to OSS. However, this complicated matters because Linux developers now had three
+    different sound systems to deal with. The Simple DirectMedia Layer (SDL) was then
+    invented as a portability layer that could use any audio backend, but it has some
+    limitations that prevent it from ascending the throne as the Great Linux Audio
+    Uniter. Like everything else in life, it hasn’t gone away but is still used in
+    some applications. You probably have it on your own systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then OSS went closed source, and users had to pay money for it. That was the
+    last straw for hardy Linux developers, who retaliated by inventing ALSA. So, that
+    is how ALSA became the standard Linux audio subsystem. A good way to start a flame
+    war is to ignite an OSS versus ALSA debate—a lot of folks still have strong passions
+    on the subject.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'OSS 4.*x* became Free software again when it was released under the GPL for
+    Linux in 2007, and now there are two versions: the GPL version and a commercial
+    version that includes some non-Free drivers. Some users claim that their music
+    sounds better with OSS and that it is simpler and better and easier to use. I
+    think a lot of that is wishful thinking, but if you like OSS, I won’t think less
+    of you.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I prefer plain old ALSA. It is the default in virtually all Linux systems, and
+    it works. As always with Linux, do your homework before you buy to make sure you
+    purchase well-supported hardware. The ALSA project has a supported sound cards
+    matrix at [http://www.alsa-project.org/main/index.php/Matrix:Main](http://www.alsa-project.org/main/index.php/Matrix:Main).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ESD is the old Gnome and Enlightenment sound server, and it runs on top of ALSA.
+    It can manage multiple sound streams and networked playback. PulseAudio has replaced
+    ESD in GNOME.
+  prefs: []
+  type: TYPE_NORMAL
+- en: aRts also manages multiple streams and networked playback. Don’t use aRts because
+    it increases latency beyond acceptable levels and because it is doomed—it has
+    been unmaintained for some time now and is outdated. Phonon replaces aRts in KDE4\.
+    Phonon is not a sound server or an API but is intended to be a universal interface
+    for all audio and video playback servers and subsystems. Phonon doesn’t get in
+    the way, so you can leave it alone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The future of desktop playback audio for Linux is cloudy. PulseAudio is poised
+    to become the standard sound manager for desktop Linux, but some say there are
+    still some deeper problems to resolve that Pulse can’t fix. So, don’t be surprised
+    by anything.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sound Cards
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Please visit [Appendix A](apa.html "Appendix A. Audio Hardware") to learn about
+    sound cards that are well supported on Linux, from low-budget to high-end. Remember,
+    it is very important to shop carefully and purchase hardware that is well supported
+    in Linux. There is a lot of great quality audio hardware that works in Linux—life
+    is too short to waste on low-quality or poorly supported audio gear.
+  prefs: []
+  type: TYPE_NORMAL

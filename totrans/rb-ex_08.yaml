@@ -1,0 +1,775 @@
+- en: Chapter 8. HTML and XML Tools
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages686190.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Text runs the Web. This is especially true of text that is encoded within some
+    sort of markup, such as HyperText Markup Language (HTML) or eXtensible Markup
+    Language (XML).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even non-programmers know that HTML is the markup generally used by websites,
+    even if they’ve never heard the term markup before. XML is becoming increasingly
+    important for both data transfer and data storage. As I work on the chapters of
+    this book, I save them as a filetype that consists of a compressed collection
+    of XML files. I also used a type of XML called DocBook ([http://docbook.org](http://docbook.org))
+    for my Doctoral dissertation. The bottom line is, XML-based markup is everywhere.
+    Luckily, Ruby can understand, output, and manipulate XML (and HTML).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#30 Cleaning Up HTML (html_tidy.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Let’s start with HTML. This markup language has had several numbered releases,
+    similar to different versions of software, and it’s come a long way since Tim
+    Berners-Lee made the first web page at CERN in the mid ’90s. Recent versions of
+    HTML are subsets of XML and are called XHTML as a result. However, the earlier
+    versions of HTML were not as disciplined; they allowed very liberal interpretations
+    of HTML. Especially when people were first learning how to use HTML, they would
+    often throw together pages that were not very well designed, either aesthetically
+    or technically. But browser manufacturers didn’t want to take the blame for rendering
+    content badly, so they made their browsers very forgiving.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the short term, the practice of allowing non-compliant HTML was great, because
+    it meant that more people could view more content. In the long term, however,
+    that liberality had some negative consequences because it allowed web designers
+    to continue using some uncorrected bad techniques. There’s a lot of sloppy HTML
+    out there, and there’s little reason to add to the mess. We want a tool that helps
+    us make sure that our own HTML is up to spec.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*I’m assuming that you have a basic familiarity with HTML. If not, there’s
+    a good guide at* [http://w3schools.com/html/default.asp](http://w3schools.com/html/default.asp).
+    *If you’re curious about the various versions of HTML and its relationship to
+    XML, browse to the World Wide Web Consortium (W3C) MarkUp page at* [http://www.w3.org/MarkUp](http://www.w3.org/MarkUp).
+    *This page also has a link to the HTML Tidy program that the* *`html_tidy.rb`*
+    *script depends on*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s an excellent program that does most of this clean-up work already. It’s
+    called HTML Tidy, and it was written by Dave Raggett. It’s available at [http://tidy.sourceforge.net](http://tidy.sourceforge.net),
+    but it also comes prepackaged within many GNU/Linux distributions. Seeing no need
+    to reinvent the wheel, I wrote `html_tidy.rb` to use Raggett’s program and add
+    some specific features that I wanted. Let’s take a look at the code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We start by defining some constants at ❶. `EMPTY_STRING` should be obvious,
+    and `SIMPLE_TAG_REPLACEMENTS` is a Hash whose keys are regular expressions and
+    whose values are whatever the corresponding key should be replaced with. You’ll
+    notice that you need to mark certain characters within a regular expression with
+    a backslash (`\`)—that’s because some characters have special meanings within
+    regular expressions. You’ve already seen examples of that, where `?` means *Zero
+    or one of whatever preceded me* and `*` means *Zero or more of whatever preceded
+    me*. Similarly, `\` means *Treat whatever follows me as a literal character, not
+    a special regex character*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why do I make these particular replacements? The `<b>` and `<i>` tags are still
+    commonly used, but they are not compliant with the Web Accessibility Initiative
+    (WAI). I’ve set up this script to replace them with appropriate tags that accomplish
+    the same goal but don’t discriminate against the visually impaired. I also replace
+    `/\<td\>\<\strong\>/` with `<th>` because I find that people often make “almost”
+    table headers by putting formatting within a table cell, rather than making the
+    cell a real header. Finally, I’ve taken out the `<u>` tag because it doesn’t mean
+    anything, even if it creates an underline. It’s just a visual formatting tag with
+    no semantic meaning, which is a no-no. Formatting is what stylesheets are for—the
+    markup itself should just have content. Therefore, I replace `<u>` with a `<div>`
+    that has an underline style attached to it. I make all these replacements both
+    for the opening tags and the closing tags.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Web accessibility is important: These fixes help people who are visually impaired
+    surf the Web. The* *`html_tidy.rb`* *script fixes my mistakes, at least for these
+    particular cases. If you’re curious, read more about accessibility and its importance
+    at the W3C’s Web Accessibility Commission page (*[http://www.w3c.org/WAI](http://www.w3c.org/WAI)*)*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We continue with more constants, including some `TIDY_OPTIONS`. Execute `man
+    tidy` at the command line to see what these do. These options reflect my preferences,
+    but you can certainly make some changes to the constant once you’re comfortable
+    with operating the script. At ❷, we have an Array constant called `UNWANTED_REGEXES`.
+    It sounds harsh, but there are some things I just don’t want in my HTML. One of
+    these is a `<meta>` tag, which Microsoft’s FrontPage sometimes adds to files.
+    I also don’t want either lines with only whitespace (which `/^ *$/` matches) or
+    completely empty lines (which `/^\n$/` matches). As the comment suggests, you
+    can add to this Hash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first method, `declare_regexes_and_replacements`, is at ❸. It combines `SIMPLE_TAG_REPLACEMENTS`
+    with `UNWANTED_REGEXES` by looping through `UNWANTED_REGEXES` and making a Hash
+    called `replacement_of`, whose keys are the elements of `UNWANTED_REGEXES` and
+    whose values are all the `EMPTY_STRING`. This makes sense—if a regex is unwanted,
+    we want to replace it with the empty string. The `declare_regexes_and_replacements`
+    method then returns the merged Hash, which is made up of both `SIMPLE_TAG_REPLACEMENTS`,
+    which was already a Hash in the first place, and our new `replacement_of` Hash.^([[25](#ftn.CHP-8-FNOTE-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: On to ❹ and the `perform_replacements_on_contents` method. It takes an argument,
+    unsurprisingly called `contents`, immediately duplicates it with the `dup` method,
+    and calls the result `output`. It then calls `declare_regexes_and_replacements`
+    (defined at ❸), getting the return value which we already know is a Hash that
+    is called `replacement_of`. For simplicity, we’ll keep the same name for that
+    Hash inside `perform_replacements_on_contents`. At ❺, we sort the keys of `replacement_of`
+    with the `sort_by` method, which takes a block. Strings know how to compare themselves
+    to other Strings for sorting purposes, whereas regular expressions don’t. Therefore,
+    we convert each of our regular expression keys into a String for sorting purposes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Strings know how to compare themselves to other Strings because* *`String`*
+    *has a* *`<=>`* *method, and one of* *`String`**’s ancestors is the Comparable
+    module*.^([[26](#ftn.CHP-8-FNOTE-2)]) *Comparable uses the* *`<=>`* *method to
+    implement the other comparison operators, such as* *`==, <=, >=`*, *and so on.
+    If you create a new class and want it to be sortable, give it a method called*
+    *`<=>`*, *figure out how to implement it in a way that makes sense, and then mix
+    in Comparable. You’ll get lots of sorting value for a minimal amount of effort,
+    and you’ll make your objects more useful*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In an earlier version of `html_tidy.rb`, I didn’t include the sorting at ❺,
+    and I would occasionally miss replacements described in `SIMPLE_TAG_REPLACEMENTS`.
+    The reason was that Hash keys do not have a deterministic order, so sometimes
+    my program would replace `<b>` with `<strong>` before getting to replacing `</strong></td>`
+    with `</th>`, but sometimes it wouldn’t. To make my program more robust, I’d either
+    need to add a Hash pair that replaced `</b></td>` with `</th>` or enforce a specific
+    order on how I used `replacement_of` at ❺. I chose to enforce order, not just
+    because it makes the program more dependable, and not just because I’m a petty
+    tyrant at heart, but also because it makes the program simpler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We sort the keys of `replacement_of` and loop through `each` of them at ❺, calling
+    them `regex` in turn. We also want the replacement value, so we read that out
+    of the Hash as `replace`. Then at ❻, we loop through `each` `line` of the eventual
+    `output`, destructively `gsub!`ing `regex` with `replace`. The `output` variable
+    is now ready to be `return`ed. That’s how we `perform_replacements_on_contents`.
+    Where do we get the `contents`?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `perform_replacements_on_filename!` method is at ❼. At ❿, we call it on
+    `each` element of the `ARGV` Array, which we call `filename` as we pass it into
+    `perform_replacements_on_filename!` as the single argument. We first attempt a
+    system call of `‘which tidy > /dev/null’` (❽). Without getting too deep into Unix
+    black magic, I’ll tell you that when executed, this command determines whether
+    there is a version of `tidy` installed on the machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the test succeeds, we know we can use `tidy`. First, we define a `new_filename`,
+    which is just the old `filename` with the `TIDY_EXTENSION` appended to it. We
+    then make a call to `tidy` itself, passing it its own `TIDY_OPTIONS` (as an interpolated
+    String) and calling it on `filename`. We pass its output into the `new_filename`,
+    discarding any error messages. The `new_filename` file now contains all of the
+    tidying done by `tidy` itself but none of our add-on changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The* *`>`* *character in the Unix shell just means* Send my output into the
+    following filename, *so* *`some_command > some_file`* *takes the output of* *`some_command`*
+    *and writes it into a file called* *`some_file`*. *Putting a* *`2`* *in front
+    of* *`>`* *makes it apply to error messages, instead of regular output. Unix calls
+    the output of error messages* Standard Error. *The file called /dev/null just
+    means* nowhere, *so* *`some_command > some_file 2> /dev/null`* *means* Send *`some_command`*’s
+    output into *`some_file`*, and I don’t care about any error messages.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We then read `new_filename`’s `contents` using `File.open` and the `readlines`
+    method at ❾. That `contents` variable is ready for `perform_replacements_on_contents`,
+    which we call on it, assigning the results into `new_contents`. We then open the
+    `new_filename` file again, this time for writing, and replace its contents with
+    `new_contents`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the `which tidy` test fails, we know that our beloved `tidy` is not present,
+    so there’s little point in proceeding. We simply ask the user to install `tidy`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'I have a sample file at `extras/eh.html`, so we can call this script with the
+    command `ruby -w html_tidy.rb extras/eh.html`. Here’s the original version, `extras/eh.html`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'And here’s the new version, `extras/eh.html.tidy`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how `tidy` added a `<meta>` tag for itself and wrapped the style information
+    inside `CDATA` markers. It also defined a paragraph class called `c1` for our
+    `text-align:center;` style that is attached to the free-floating `<p>` tag. In
+    addition to everything that `tidy` does, our script does what I’ve described above.
+    It replaced the tags for our “almost” header with a `<th>`, converted the underlining
+    from a bad `<u>` tag to a style declaration, and changed the `<i>` tag to an `<em>`
+    tag, making this content a little friendlier to an audio browser, such as a blind
+    person might use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Could we use `inject`, rather than `each`, to modify `declare_regexes_and_replacements`
+    at ❸ and make it more functional? Here’s one way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this variant, `h` takes the place of `replacement_of`, and it is the memoized
+    Hash that persists from one iteration of `inject` to the next. Each time, we merge
+    it with the new pair (consisting of `discard` as a key pointing to the `EMPTY_STRING`),
+    so we end up with a Hash of things to replace, all of whose replacements are the
+    `EMPTY_STRING`—just like in the original version. This time, however, our temporary
+    variables are confined entirely within the `inject` loop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Could we have simply altered `contents` in place with a method called `perform_replacements_on_contents!`?
+    Of course. I just wanted to show both a destructive method (`perform_replacements_on_filename!`)
+    and a regular method (`perform_replacements_on_contents`) whose output we would
+    then use for demonstration purposes. Both could have been either destructive or
+    non-destructive. Change the script as you like if you’d prefer these to use the
+    same approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[25](#CHP-8-FNOTE-1)]) I generally find Perl rather sloppy, but one benefit
+    of its policy of storing Hashes as even-length Arrays is that you can make Hashes
+    out of Arrays very easily. The Perl equivalent of our `UNWANTED_REGEXES.each`
+    loop would be something like this: `my %replacement_of = map { $_ => EMPTY_STRING
+    } @unwanted_regexes;`. Of course, it’s more trouble to `merge` Hashes in Perl,
+    so I still like Ruby better. Don’t worry about any of this if you don’t know Perl.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[26](#CHP-8-FNOTE-2)]) Since Comparable is a module, rather than a class,
+    it is an ancestor of String via mixing in, rather than straightforward inheritance.
+    However, `String.ancestors` includes Comparable, so I’ve referred to it as an
+    ancestor here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#31 Counting Tags (xml_tag_counter.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: XML is strict about its internal structure. It can only have a single top-level
+    element (called the *root element*), but that root element can have any number
+    of elements within itself, and each of those elements can have any number of other
+    elements within itself, continuing on recursively. We want a script that we can
+    run on an XML file that will output how many times each tag (or element) occurs
+    within that document, no matter how many layers deep it appears—for example, we
+    want to find all `<p>` tags regardless of whether or not those tags are immediately
+    within the top-level `<html>` element, or within some other element, such as a
+    `<blockquote>` or `<div>`. Let’s take a look.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Most of the work in this script comes from adding new methods to the Hash class.
+    First, at ❶, we `require` the `rexml/document` library, an XML processing library.
+    Then at ❷, we start the RDoc explaining the `sort_by_tag_count` method. The RDoc
+    explains the method’s goals, but let’s look at each step. First, `self.sort` converts
+    a Hash into an Array of Arrays. Each element of the main Array is another Array
+    with the structure *[key, value]*. Let’s show this in irb:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since this in the context of a method called `sort`, the Array of Arrays is
+    sorted. The `sort` method takes a block, which allows us to specify how we’d like
+    it to be sorted. We do this at ❸ with the expression `( (b[1] <=> a[1]) * 2 )
+    + (a[0] <=> b[0])`. What does this expression mean?
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we need to talk a bit about `sort`ing. You see in the line before ❸ that
+    we identify the variables within the `sort` loop as `a` and `b`. Those names are
+    traditional for `sort`s, although Ruby allows you to pick other names if you like.
+    Our expression calls the `<=>` method on whatever `b[1]` is, with `a[1]` as the
+    argument. It then multiplies this by two and adds the result of calling `<=>`
+    on `a[0]`, with `b[0]` as an argument. That should clear everything up, right?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `<=>` method returns `1` when `self` is greater then the argument, however
+    it is defined; `-1` when `self` is less than the argument, hopefully according
+    to the same criteria; and `0` when they are equal. Keep this in mind when you
+    create your own classes that implement the `<=>` method. Our project specifications
+    from [#31 Counting Tags (xml_tag_counter.rb)](ch08s02.html "#31 Counting Tags
+    (xml_tag_counter.rb)") on page 148 says that the pairs of our Array of Arrays
+    from `sort_by_tag_count` will have keys that are the names of XML tags and values
+    that are the number of times that the tag appears in the document being analyzed.
+    The first part of our expression (the part that is doubled) is just a `sort` on
+    the tag count, as the name suggests. We put `b[1]` before `a[1]` because we want
+    to `sort` in descending order, so the most common tags come first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What happens when two different tags occur the same number of times in the document?
+    That’s what the second part of the expression is for. When the tag count is tied,
+    we want to then `sort` on the name of the tag, which is either `a[0]` or `b[0]`.
+    We put these in regular order, where `a` comes before `b`, because we want to
+    `sort` in ascending order. Our output is sorted by descending tag count first,
+    and ascending tag name within a given tag count. Why do we double the value of
+    `<=>` for the tag counts?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since `<=>` always returns `-1, 0`, or `1`, and this is true for either sorting
+    by tag count or tag name, we need to give tag count sorting greater weight somehow.
+    Doubling does this very well, because it increases the magnitude of either `1`
+    or `-1` for the tag count `sort` relative to the tag name `sort`, but does nothing
+    for tag count ties, because zero doubled is still zero. Our tag name `sort` still
+    counts for something, just less than the `sort_by_tag_count`.^([[27](#ftn.CHP-8-FNOTE-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: We now know how to `sort_by_tag_count`, but we also want to be able to `merge`
+    Hashes together, take another Hash as an argument, add their tag counts together,
+    and have that new pair be the pair in the result. Hashes already have a method
+    called `merge`, which takes a Hash argument. That should take care of everything,
+    right? Sadly, no. The preexisting `merge` method *replaces* any existing `key
+    => value` pair with whatever is in the hash taken as an argument. We don’t want
+    that—we want to keep the key that they share, but add the values together. How
+    do we do that?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As is often true in Ruby, the answer is, *Write your own method and add it
+    to an existing class*. The RDoc for `merge_totals` starts at ❹ and explains what
+    we want to happen. All we do is loop through `each` `key` of the `other_hash`
+    (the one taken as an argument) and add its value for that `key` to `self[key]`.
+    Simple. There’s a problem, though. What’s the value of `some_hash[some_key]` when
+    `some_key` isn’t one of `some_hash`’s keys? The value is `nil`, and `nil` doesn’t
+    like to be added. Let’s see what happens in irb:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: That’s not good. We’ll need to find a way around that problem—but we’ll do that
+    later in the script. For now, know that `merge_totals` will properly add the counts
+    for tags in Hashes that follow the format `{ tag => tag_count }` when that tag
+    is present.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have one more method called `pretty_report` to add to all Hashes (❺). This
+    method outputs a String showing each tag and its count within the document. It
+    accomplishes that by sorting through `each` `pair` in the Array of Arrays returned
+    by `sort_by_tag_count` from ❷, and creating an `output` String to which it adds
+    a line with the `tag`, a colon, a space, the tag `count`, and a newline character.
+    Then it `return`s that String. That’s it for the new methods in Hash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This script also has two functions not attached as methods to the Hash: `get_elements_from_filename`
+    (❻) and `tag_count` (❼). The `get_elements_from_filename` method takes one argument
+    called `filename` and instantiates a new `REXML:: Document`, which takes an instance
+    of File as its argument. We provide that File via `File.open(filename)`. Instances
+    of `REXML::Document` have a method called `elements`, which does much of our script’s
+    work for us, returning all the XML elements from the File.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `tag_count` method takes those `elements` as an argument, it instantiates
+    a new Hash called `count_of` at (❽), and passes `0` into the `new` method. This
+    `0` argument sets the default value for this Hash, which is the value returned
+    by `count_of` when it lacks the key it is asked for. This default of `0` is how
+    we deal with the problem of adding tag counts that don’t yet exist in the `merge_totals`
+    method. The `self` Hash has a default of zero, so when a new tag comes in to `merge_totals`
+    (which we call at ❾), it is assumed to have a `count_of` `0` for that tag. Unlike
+    `nil`, a `0` is happy to have another Integer added to it, so our addition problem
+    is solved. We continue recursively, calling `tag_counts` on the `elements` found
+    within each `tag`, which then calls `tag_counts` as needed on its own `elements`,
+    if there are any. It all continues, aggregating tag counts with `merge_totals`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Hashes similar to* *`count_of`* *often benefit from having default values
+    of either* *`0`* *or the empty string. Hashes serving as* *`histograms`*, *like*
+    *`count_of`*, *count occurrences of something, and should have a default of* *`0`*.
+    *Other hashes, which accumulate Strings for whatever reason, could have a default
+    of the empty string. Since Strings know to concatenate with other objects, the
+    script could accumulate Strings with* *`+=`*, *just as in our example, which uses
+    Integers as Hash values*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ❿, we get the output of `tag_count`, which expects `elements`. We get those
+    `elements` by calling `get_elements_from_filename` on the first command-line argument.
+    Since `tag_count` returns a Hash, that return value has the method `pretty_report`,
+    which provides the argument to the `puts` method and provides information to the
+    user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let’s use the file `extras/eh.html.tidy`, the corrected output provided by
+    the `html_tidy.rb` script. Let’s try `ruby -w xml_tag_counter.rb extras/eh.html.tidy`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Here’s the output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'What if we wanted `sort_by_tag_count` to return a Hash, rather than an Array?
+    We could theoretically make a method like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The problem is all Hash pairs are unordered. Our new `sorted_by_tag_count` goes
+    to all the trouble of calling `sort_by_tag_count` but then rehashes it, losing
+    the ordering.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What if we wanted to implement `pretty_report` with `inject`? Here’s one way
+    to do it. Notice how the method becomes a bit shorter, and the `output` variable
+    becomes internal to `inject`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, instead of calling `get_elements_from_filename` only on the first command-line
+    argument, we could have used `ARGV.each` to allow the script to analyze multiple
+    files in succession.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[27](#CHP-8-FNOTE-3)]) To paraphrase George Orwell’s *Animal Farm*, “All
+    `sort`s are equal, but some are more equal than others.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#32 Extracting Text from XML (xml_text_extractor.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Counting occurrences of tags is fine, but XML is designed to hold text wrapped
+    in tags, providing some organization beyond what’s available simply from the content.
+    That said, though, sometimes having just the text content is handy. When I was
+    preparing a document using DocBook, I found myself wanting to use a spell checker
+    on it. There are spell checkers that are XML-aware, but another approach would
+    be to run a text extractor on XML and pass that output into a spell checker that
+    expects plain text. This `xml_text_extractor.rb` is just such a script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This `xml_text_extractor.rb` script is similar to `xml_tag_counter.rb`, although
+    it is simpler—ironic, since its output is arguably more complex. It starts out
+    at ❶ by defining a Proc Constant called `CHOMP_TAG`, which accepts a single argument
+    and returns the chomped version of that argument’s rendition as a String. Following
+    that, it requires the `REXML` library at ❷, just as in `xml_tag_counter.rb`. At
+    ❸, it defines its own version of `get_elements_by_filename`, identical to the
+    one in `xml_tag_counter.rb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*These scripts are designed to demonstrate techniques, rather than to function
+    as production code. For production code, the definition of a method that will
+    be used in multiple places should reside in a single library file that is required
+    by any other file that needs access to that method. Please forgive the duplication
+    in this case for the sake of simplicity*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we have `strip_tags` at ❹. Contrast the design of this function with `pretty_report`
+    in `xml_tag_counter.rb`. Rather than a more iterative approach of (for example)
+    defining an output variable looping through an Array with the `each` method and
+    appending results onto the output variable), this uses a more functional approach.
+    It maps an action onto each member of `elements` (which it calls `tag`) at ❻.
+    That action is itself a mapping of the `CHOMP_TAG` Proc onto each member of `tag.texts`
+    (❼). Then it `join`s the resulting Array with an empty String separator between
+    each element, and appends the results of a recursive call to `strip_tags` onto
+    the `elements` of `tag`. The result of a `map` is an Array, so it `join`s the
+    elements of that Array with a space character before returning (❽). It also has
+    an exit condition, which `return`s the empty String if there are no `elements`
+    (❺).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Since `strip_tags` returns either the elements of a `map` joined on a space
+    (which is a String) or the empty String, that String can easily be printed with
+    `puts` at ❾. Let’s look at the output returned by `ruby -w xml_text_extracter.rb
+    extras/eh.html.tidy`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As I mentioned, one change that could be done on both `xml_text_extractor.rb`
+    and `xml_tag_counter.rb` would be to take the common `get_elements_by_filename`
+    method and place it in a single library file that both `xml_text_extractor.rb`
+    and `xml_tag_counter.rb` access via `require`. This operation has a name in the
+    refactoring community: *Pull Up Method*. The `xml_text_extractor.rb` script could
+    also massage the output of `strip_tags`, stripping out empty lines and/or lines
+    consisting entirely of whitespace, as `html_tidy.rb` does with `UNWANTED_REGEXES`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '#33 Validating XML (xml_well_formedness_checker.rb)'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: All the XML processing in the world won’t do any good if your XML file is not
+    well-formed. Since an XML document either is or is not well-formed, a well-formedness
+    checker that will `return` either `true` or `false` seems like an ideal predicate
+    method. Since XML documents are Files with Strings as their contents, we’ll add
+    a `well_formed_xml?` method to both the File class and the String class.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: At ❶, we require the `XML::DOM::Builder` library file, which is available as
+    part of Ruby’s standard library. DOM stands for *Document Object Model*, and it’s
+    a way to express an XML document as a object with methods like `elements`, which
+    returns the elements found within whatever `self` is at the time—it could be the
+    entire document, or it could be a sub-element within the document. We’ve used
+    `elements` already in our previous scripts with the `REXML` library.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Programmers that do a lot of Ajax or other JavaScript are intimately familiar
+    with the DOM. Because JavaScript’s most common use is as a client-side scripting
+    language within web browsers, JavaScript programs often find themselves dealing
+    with XML (especially XHTML) data. JavaScript is an excellent language with a terribly
+    misleading name and some poor implementations. It shares a similar fused OO/functional
+    heritage with Ruby*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We said that we’d be adding a `well_formed_xml?` predicate to File, which is
+    what we do at ❷. The `read` method of a File returns the contents of that File
+    as a String. We know that we want to add `well_formed_xml?` to all Strings as
+    well as all Files, so we just call `read.well_formed_xml?` within File’s `well_formed_xml?`
+    method and assume that String will do its job and provide its own version of `well_formed_xml?`
+    for us.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We don’t want to make Strings out to be liars, so we provide String with its
+    own `well_formed_xml?` predicate at ❸. This delegates some of its work to the
+    `XML::DOM::Builder` library, instantiating a `Builder` and setting its base to
+    `‘./’`, which stands for the root element of an XML document.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The* *`0`* *argument to* *`XML::DOM::Builder.new`* *tells it to ignore default
+    events, which has no impact our script. You can read more about* *`XML::DOM::Builder`*
+    *at* [http://raa.ruby-lang.org/gonzui/markup/xmlparser/lib/xml/dom/builder.rb?q=moduledef:XML](http://raa.ruby-lang.org/gonzui/markup/xmlparser/lib/xml/dom/builder.rb?q=moduledef:XML).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We then start a block at ❹ with the `begin` keyword, which indicates a block
+    that may fail so disastrously to do what’s asked of it that it could exit the
+    program entirely. The `begin` keyword allows you to trap that error and deal with
+    it in some intelligent way, without causing the program to crash. We ask our `builder`
+    instance to `parse` the XML content represented by `self`, which is of course
+    a String within a String instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This parse operation is the one that might fail. The potentially disastrous
+    error has a type called `XMLParserError`, so at ❺ we use the `rescue` keyword
+    to trap that particular error type and prevent it from killing the entire program.
+    Since our predicate tests for XML well-formedness, an `XMLParserError` indicates
+    that the document is not well-formed. Therefore, we should `return` `false` in
+    the event of an `XMLParserError`. If we get out of the `begin` block without entering
+    the `rescue` section, that means there was no error, so we can safely `return`
+    `true` at ❻.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll finish the `xml_wellformedness_checker.rb` script with a `well_formed?`
+    function that accepts a `filename` argument, created at ❼. It `return`s an implicit
+    `nil` for a `nil filename` at ❽. We then `return` a call to `well_formed_xml?`
+    on the File instance created by opening `filename` at ❾. Finally, ❿ prints the
+    result of calling `well_formed?` to the user via `puts`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We know that we have a well-formed XML file in `extras/eh.html.tidy` because
+    we ran `html_tidy.rb` on it to fix it. We also know that `extras/eh.html` had
+    an unclosed paragraph tag, which would make it not well-formed. Let’s see how
+    `xml_wellformedness_checker.rb` performs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `extras/eh.html.tidy` file is well-formed XML, so it properly reports `true`.
+    The `extras/eh.html` and `xml_wellformedness_checker.rb` files are either not
+    well-formed XML or not XML at all, so they properly report `false`. If we call
+    `xml_wellformedness_checker.rb` with no `filename`, it returns `nil`, as we expect
+    from ❽.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hacking the Script
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Calling a separate function called `well_formed?` on a `filename` argument is
+    really just for demonstration purposes. In production code, a more likely use
+    for this script would be to add another method to String called `well_formed_xml_filename?`,
+    implemented as `well_formed?`, except that it would use `self` in place of `filename`.
+    Or, in whatever code opens a given XML file, that file could be checked using
+    File’s `well_formed_xml?` method before performing any operations that depend
+    on the file’s contents being well-formed XML.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter Recap
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What was new in this chapter?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tidying HTML/XML markup
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Piping output to standard error with `2>`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Web Accessibility Initiative
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `<=>` method and the Comparable module
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Processing XML with `REXML` and `XML::DOM::Builder`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Manipulating XML documents with regular expressions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Making Hashes out of Arrays with `inject`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Hashes serving as histograms
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Mapping Procs onto Arrays
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Document Object Model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `begin` and `rescue` keywords
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: That’s it for our XML-processing scripts. I hope these example scripts are not
+    only useful in and of themselves but that they also might give you ideas about
+    how you could modify or extend them to suit new tasks other than those presented
+    here. For now, we’ll proceed to our next chapter, [Chapter 9](ch09.html "Chapter 9. More
+    Complex Utilities and Tricks, Part I"). As the name suggests, its scripts are
+    more detailed, and they will continue to introduce some new functional techniques,
+    as well.
+  prefs: []
+  type: TYPE_NORMAL

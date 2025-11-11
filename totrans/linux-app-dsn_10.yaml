@@ -1,0 +1,1035 @@
+- en: '![](../images/171-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[**BUILDING A FRONT PANEL INTERFACE**](toc.html#chapter10)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/as.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Buttons, light-emitting diodes (LEDs), and small alphanumeric displays are so
+    common that we hardly notice them anymore. Printers, microwave ovens, phones,
+    and DVD and CD players all use buttons, LEDs, and LCDs as part of their user interfaces—and
+    it is likely that you will want to have buttons and LEDs on the front panel of
+    your appliance, as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will describe how to build a front panel UI. First, we will
+    discuss the hardware used on front panels, and we will then show you how to design
+    a UI and menu system for a front panel by reviewing the requirements and design
+    of Laddie’s front panel UI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We divided our coverage of the front panel interface into these sections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Buttons, LEDs, and LCDs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Designing a front panel UI
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Laddie front panel
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Improving our design
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We’ll start by looking at the details of front panel hardware. (If you’re uncomfortable
+    with hardware or wiring diagrams, feel free to just skim this chapter.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Buttons, LEDs, and LCDs**](toc.html#chapter10.1)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section introduces the kinds of hardware that you’ll find on an appliance’s
+    front panel, including buttons, LEDs, and LCDs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Buttons***](toc.html#chapter10.2)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The size of your production run may determine the type of hardware you use in
+    your design, especially where buttons are concerned. When your appliance is produced
+    as part of a large production run, buttons will usually be built directly onto
+    the printed circuit board. Small production runs or prototypes, on the other hand,
+    often use either a pre-built assembly or individual switches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Electrically speaking, buttons are simply switches that are, most often, normally
+    open. Each button usually requires one digital input line that can be read by
+    your processor. (Chapter 5 explains how you can use an input line to read the
+    state of a single switch.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Keypads**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A *keypad* is an array of buttons that is scanned for a closure. Scanning for
+    a closure can reduce the total number of input and output lines needed in your
+    hardware. The idea behind scanning a keypad is dividing the switches into an array
+    of rows and columns and then examining the switches one row at a time. Keypads
+    are described as *n-by-m*, indicating a array of switches with *n* rows and *m*
+    columns. Each row is assigned an output line and each column is assigned an input
+    line. Sixteen switches arranged as a 4-by-4 keypad would use eight I/O lines from
+    the CPU, not 16.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a keypad becomes a viable option when you have more than five or six buttons.
+    You can use a microprocessor to help with keyboard scanning and other hardware-based
+    I/O, but in a cost-sensitive appliance, your Linux-based code may need to do all
+    of the scanning and low-level I/O. Some system-on-chip processors, such as the
+    PXA270 from Marvell, have dedicated hardware on board to do keypad scanning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Consider the 2-by-2 keypad circuit shown in Figure 10-1\. The pull-up resistors
+    bias the column lines to V+, or a logic one, so the two inputs will read a logic
+    one when no switches are closed. The two diodes on the output lines isolate one
+    row from the other row. To scan the keypad, the processor puts zero volts (a logic
+    zero) on row 0 and a logic one on row 1\. The processor reads the input port,
+    and if input 0 is a logic zero, then it knows button A (at row 0, column 0) is
+    being pressed. If the input 1 is a zero, then it knows button B (at row 0, column
+    1) is being pressed. The processor then sets output 0 to a logic one and output
+    1 to a logic zero. Now if input 0 is a zero, it knows button C (at row 1, column
+    0) is being pressed, and if input 1 is a zero, then it knows button D (at row
+    1, column 1) is being pressed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/173-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-1: A 2-by-2 keypad*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here is some simple code to scan the above keypad.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/173-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This code illustrates the sequence of events fairly well, but you’ll probably
+    want to use a loop if you are scanning more than a few rows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Switch Bounce**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you drop a ball bearing onto a steel plate, it will bounce. Switch closures
+    can also be thought of as two metal pieces colliding with each other. Switch contacts
+    bounce when they are closed and when they are opened. If you scan the keypad too
+    quickly, you can erroneously detect a bounce as a new switch closure. The duration
+    of switch bounces depends on the physical properties of the switch, so they can
+    vary widely. The manufacturer of your switch can give you specifications, but
+    you should be sure to measure the bounce time yourself. One way to avoid switch
+    bounce is to scan the keypad more slowly, but slowing the scan too much can make
+    the keypad seem sluggish. You can make the keypad more responsive and still avoid
+    switch bounce by keeping a history of the last few scan values and reporting a
+    new closure only when the saved values are the same but are different from the
+    current value. This is the technique we use in the following subroutine that waits
+    for a new keypress and returns the ASCII value of the key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/174-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'It is important that the scan rate for a keypad be constant. It is possible
+    to do keypad scanning in a user-space program, but you may find that the scan
+    rate varies widely and that the program uses much more of the CPU than necessary.
+    It is best to use a real-time Linux kernel to get accurate scan timing if you
+    want to scan from user space, or do what we did for Laddie: Put the keypad scanning
+    into a simple character device driver so that accurate scan timing is provided
+    by the Linux kernel.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***LEDs***](toc.html#chapter10.3)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using *light-emitting diodes (LEDs)* is one of the most intuitive, easiest,
+    and cheapest ways to present status information from your application or appliance
+    to the user or developer. LEDs come in round or rectangular plastic packages as
+    well as in the form of surface mount chips. They also come in a wide variety of
+    colors, with red, yellow, and green being the most popular. Some LED packages
+    have two LED chips in them and can light with more than one color; these bi-color
+    LEDs are great for a go-or-no-go status indication. Consider using a bezel or
+    a diffuser if your application requires that the LED be easily visible. In our
+    alarm application, we use a bright LED with a bezel so that it is easy to see
+    when the system is in alarm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Usually, each LED uses one digital output line from your hardware. If you have
+    a lot of LEDs (such as the 28 segments in a four-digit, seven-segment display
+    on a digital clock, for example), you can scan the LEDs similarly to how you would
+    scan a keypad, as described above. If you need to scan your LEDs, especially if
+    they are seven-segment displays, you should use a device driver to make the scan
+    timing precise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The human eye is drawn toward movement, and you can use this to your advantage
+    in your front panel design. A flashing LED attracts much more attention than a
+    static one. Color can also give meaning to an LED, but color blindness and the
+    various cultural associations of colors make it a good idea to not rely too heavily
+    on color to convey meaning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Some popular vendors for LEDs and LED hardware include:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Digi-Key, Inc. ([http://www.digi-key.com](http://www.digi-key.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Jameco Electronics, Inc. ([http://www.jameco.com](http://www.jameco.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Super Bright LEDs, Inc. ([http://www.superbrightleds.com](http://www.superbrightleds.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[***LCDs***](toc.html#chapter10.4)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Small *liquid crystal displays (LCDs)* are standard interfaces for consumer
+    appliances. Your use of an LCD will depend on the nature of your appliance and
+    your customer’s expectations, but there are several reasons to include an LCD
+    in your design:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Primary UI** A text-based LCD display can be the primary UI for your appliance.
+    This is often the case for audio equipment, such as satellite receivers and network-attached
+    audio players.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Reliability** Network equipment often needs fail-safe access to configuration
+    and status information. While using a serial port and a CLI is common, high-end
+    network appliances often provide a keypad and LCD on the front panel for configuration.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Perceived value** There is nothing like an LCD (or even better, a vacuum
+    florescent display) to distinguish one beige box from its competitors and to convince
+    customers that they’re buying a high-end piece of equipment.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are two common architectures used to interface an LCD to an appliance.
+    The first is to have the Linux processor drive the LCD directly. This architecture
+    is appropriate for low-cost, low-power, and high-volume appliances that require
+    a graphic display. Common uses of this architecture include PDAs and cell phones.
+    Several members of the ARM processor family have on-chip support for LCD displays.
+    Examples include the EP9307 from Cirrus Logic and the AT91SAM926 from Atmel. Chapter
+    11 describes how to build a UI for memory-mapped graphics displays.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second common architecture is to have the Linux processor deal with the
+    LCD through a controller chip that is attached to a serial, parallel, or USB port.
+    This architecture is appropriate for small production runs and appliances based
+    on personal computer motherboards.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LCDs for this architecture usually have one to four lines of text with between
+    10 and 40 characters per line. The most common controller chip for these displays
+    is the ubiquitous HD44780, originally from Hitachi, but now available from several
+    vendors. Displays based on the HD44780 usually have parallel input, but many have
+    a daughter card that offers a serial or USB input, keyboard scanning, and LED
+    outputs. Some displays with a daughter card give you the ability to program flash
+    memory with text to display when the unit is first powered up. Programmable power-up
+    text is particularly important for an appliance since responsiveness is critical
+    to a successful UI. Displays with a daughter card and flash memory usually also
+    have a programmable character set, which is useful if you want to display a logo
+    or other simple graphic. We’ll have much more to say about the HD44780 later in
+    this chapter when we review Laddie’s front panel hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are several web pages and packages that support alphanumeric LCD displays
+    under Linux. Two websites that you may find of particular value are [http://lcd4linux.sourceforge.net](http://lcd4linux.sourceforge.net/)
+    and [http://lcdproc.org](http://lcdproc.org/). Alphanumeric LCD displays with
+    serial, parallel, or USB inputs are available from several vendors. Here are a
+    few that you might want to consider:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scott Edwards Electronics, Inc. ([http://www.seetron.com](http://www.seetron.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Crystalfontz America, Inc. ([http://www.crystalfontz.com](http://www.crystalfontz.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Matrix Orbital, Inc. ([http://www.matrixorbital.com](http://www.matrixorbital.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cwlinux Limited ([http://www.cwlinux.com](http://www.cwlinux.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Decade Engineering ([http://www.decadenet.com](http://www.decadenet.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: EarthLCD ([http://store.earthlcd.com](http://store.earthlcd.com/))
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a standard I/O port does not preclude having a graphic display. For example,
+    Decade Engineering’s BOB-4 takes commands and characters from a serial port and
+    outputs to composite sync video, and the ezLCD from EarthLCD is a color graphic
+    LCD with a 240-by-160-pixel resolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Designing a Front Panel UI**](toc.html#chapter10.5)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section gives some tips on how to build a front panel UI. We’ll discuss
+    various approaches to building a menu system for LCD displays, and we’ll offer
+    some ideas on how to make your front panel responsive as soon as possible after
+    your user powers on the appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Be Simple***](toc.html#chapter10.6)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The primary goal of an appliance is for it to do one thing well. To call your
+    product an appliance is to promise that you will not overwhelm users with functions
+    and options that they do not need. Your goal is to keep the appliance simple enough
+    that a new or non-technical user can install the appliance in a few minutes without
+    reading the manual. You can accomplish this by having reasonable defaults and
+    by designing the UIs so they are easy to navigate. You can still give technical
+    and sophisticated users access to all configuration options, but you should hide
+    this complexity from novice users by putting it in an “Advanced Options” sub-menu.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The simplest UI on your appliance should be the buttons, LEDs, and LCDs on the
+    front panel. When you design your front panel, consider assigning one button or
+    LED to one function or status. A one-button interface is especially useful for
+    the most common functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Try, Fail, Try Again***](toc.html#chapter10.7)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t expect to get your front panel right on the first try. It is very difficult
+    to accurately anticipate what kind of menu flow and button labeling will be the
+    most intuitive for users. Don’t be afraid to wear out the good will of your friends
+    and neighbors by giving them a mock-up of your appliance and asking them to navigate
+    the menu system. You may need to build and try several front panels before choosing
+    the right one for your appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ve found several tricks that help in this area. The first is to build a prototype
+    display with interchangeable paper faceplates. Install the paper faceplate, and
+    ask new users to perform specific tasks. How quickly and easily the new users
+    can navigate the menu system is the major criteria we used to select the best
+    menu layout for Laddie. Figure 10-2 shows the paper faceplates we used for prototyping
+    the Laddie front panel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/177-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-2: A front panel with paper faceplates*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another technique is to recognize that a menu system is a state machine and
+    can be stored as a table. Instead of hard coding the states and transitions in
+    a program, build a table that contains the state, event, next state, and processing
+    to perform. Then store the state transition table in a separate file and load
+    it when the LCD UI program initializes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While nothing beats the user feedback from using real front panel hardware,
+    you may find that you want to start by building a working prototype of the front
+    panel using a web page, Tcl/Tk, or a character interface built with the curses
+    library. You’ll appreciate being able to test various front panel designs before
+    specifying your front panel hardware. An advantage of a web or Tcl/Tk version
+    of the front panel is that you can use it as another type of UI on the finished
+    appliance. For instance, we’ve found that the curses version of the Laddie front
+    panel is sometimes easier to use and more capable than the Laddie CLI, though
+    both run in an xterm session.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Laddie has front panel emulators written using curses, Tcl/Tk, and JavaScript
+    combined with PHP. The web-based front panel uses an image map on top of a photograph
+    of the front panel hardware. The Tcl/Tk version is shown in Figure 10-3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/178-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-3: A Laddie front panel implemented in Tcl/Tk*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Use LCD Menus and Modes***](toc.html#chapter10.8)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your appliance has an LCD display, you can add menus and status to your front
+    panel UI. A *menu*, in this context, is a linear list of items to select. These
+    items might be commands, configuration settings, or pathways into sub-menus. The
+    interface will need to have buttons that allow users to navigate the list and
+    to select desired items. Common navigation buttons include next item, previous
+    item, select this item, and previous menu. The best way to avoid building a menu
+    system that is *a maze of twisty passages, all alike* is to map out the menu system
+    with a state transition diagram. Try to keep your transition diagram orthogonal
+    so that directions like up, down, left, and right have meaning. Many LCD menu
+    systems treat the LCD display as a window that sees part of the state transition
+    diagram. An LCD assembly from Matrix Orbital that is made for this kind of menu
+    structure is shown in Figure 10-4.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/178-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-4: A typical front panel with menu navigation buttons*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can save on cost and front panel space by eliminating the Up and Left buttons
+    and having the Down and Right buttons wrap from the last menu option back to the
+    first. Of course, some type of Enter button would still be required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Most LCD-based UIs operate in one of two modes: They display status if no buttons
+    are pressed, and they display a menu when a button is pressed. For example, some
+    printers have a one-line LCD display that reports *Ready* if there is no activity,
+    shows *Printing* if it is receiving or printing, and enters a configuration menu
+    if any button is pressed. Laddie has three modes: one to display status, one to
+    display log messages, and one to display a menu for configurations changes and
+    clearing alarms.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Be Quick!***](toc.html#chapter10.9)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The rule of thumb is that the front panel UI should be functional within two
+    seconds of turning on the appliance. This section discusses some common techniques
+    that can help you meet this goal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Boot Linux Faster**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is quite a bit that can be done to improve the boot time for Linux. One
+    technique avoids a boot entirely by doing a suspend and resume, instead. A *suspend*
+    copies the memory and state of the computer to a file or disk partition. A *resume*
+    reloads the previously saved memory. To set up a suspend and resume on your system,
+    build your kernel with software suspend enabled, and get your appliance into the
+    state that you want your users to see after power on. Issue the suspend command
+    (this may be hibernate, swsusp, or a write into /proc, depending on your system)
+    to save the system state to the swap partition. Properly handled, the suspend
+    image on the swap partition can actually be the software that ships on your appliance.
+    There are configurable scripts that can run on suspend and resume, and you can
+    modify these scripts to restart network connections and to reset the clock. See
+    [http://www.suspend2.net](http://www.suspend2.net/) for more details. Be sure
+    to read the HOWTO section on *Keep image mode*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Software suspend does not improve the load time for the kernel itself, but there
+    are several techniques that do. For example, you can build your kernel with module
+    support disabled and with only the minimum number of device drivers that you need.
+    This reduces the time needed to load modules and should remove the need for an
+    initial RAM disk (initrd). You might be able to avoid loading the kernel entirely
+    if you can execute it directly from ROM or flash memory. This technique is called
+    *execute in place (XIP)*. Using the kernel option quiet to disable printk messages
+    during boot can save several hundred milliseconds. These and many other techniques
+    are explained on the Consumer Electronics Linux Forum website at [www.celinuxforum.org](http://www.celinuxforum.org/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: After the kernel starts, the first program to run is usually /sbin/init, which
+    executes the script /etc/rc.d/rc.sysinit. The rc.sysinit file sets up vital services
+    and starts the other init scripts. On a consumer appliance you should probably
+    replace the entire set of init scripts with one or two custom scripts. This can
+    be a lot of work, but the time savings can be tremendous. A good way to start
+    is to boot your system with the kernel option init=/bin/sh and manually bring
+    up your appliance one command at a time. Try to get the button and LED UIs running
+    as quickly as possible, deferring the non–front panel programs until the end of
+    the initialization. Start programs in the background if you can, but be careful
+    not to background a program if it must complete before another program you need
+    can start. The InitNG package by Jimmy Wennlund is a popular init script alternative
+    that is optimized for a faster boot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the above techniques are not sufficient to get your front panel working quickly,
+    you may want to add a microcontroller to your design.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Use a Microcontroller**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can use a microcontroller to handle the buttons, LEDs, and LCD in your UI.
+    Microcontrollers are single-chip computers with on-board RAM, ROM, CPU, and I/O.
+    Common microcontrollers include the Microchip PIC and the Atmel AVR.¹ These controllers
+    are a great way to display messages on an LCD immediately after boot and to make
+    the buttons and keypad responsive immediately. Let’s consider a DVD player as
+    an example. After power-on, the user will usually open the disc drawer, insert
+    a disc, close the drawer, and press Play. If the drawer mechanism is tied directly
+    to your Linux system, the user must wait for Linux to boot before starting the
+    above process. If, on the other hand, you have a microcontroller handling the
+    drawer mechanism and Open button, you can immediately display *Ready* on the LCD
+    and make the button usable. By the time the user has opened the drawer, loaded
+    the disc, and pressed Play, the Linux part of the DVD player will probably be
+    done booting. Of course, once Linux is running, it will want to control the drawer
+    mechanism directly by treating the microcontroller as one of its peripherals.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Use the Main CPU as a Microcontroller**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding a microcontroller increases the cost, power requirement, and printed
+    circuit board space of an appliance. An alternative is to carve out a piece of
+    the main CPU to use as a microcontroller while Linux is starting. You can modify
+    the bootloader to set up a timer interrupt and use the interrupt handler to provide
+    a front panel UI. You’ll need to modify Linux so that it does not touch the timer
+    or interrupt handler while booting. Once Linux is running, it can take over the
+    timer and interrupt, making the front panel hardware just another device that
+    it manages. This technique describes a form of virtual machine (VM); as they become
+    more popular, you may find that a VM provides all the hooks necessary to be used
+    as an I/O controller.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Don’t Shut Down**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A common technique to make an appliance more responsive is to never shut it
+    down. Instead, you can build your appliance to enter a low power state when the
+    user presses the Off button. A low power state might include having a slower CPU
+    clock and removing power to as many peripherals as possible. However, you should
+    be aware that this approach has fallen into disfavor as more and more consumers
+    demand that *Off* means zero power consumption.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Give Feedback**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you can’t be quick, at least try to give the user an idea of what the system
+    is doing. Don’t be afraid to modify the Linux kernel to send simplified boot status
+    messages to the LCD. Telling the user what is happening can help him or her tolerate
+    the 10- to 20-second boot time of Linux.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Giving feedback should not be limited to just the boot process. Give the user
+    constant feedback by bringing the Ethernet activity LED to the front panel or
+    having the LCD display rotate through various appliance statistics. Be sure to
+    indicate error conditions clearly and unambiguously.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**The Laddie Front Panel**](toc.html#chapter10.10)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our requirements for the Laddie front panel UI were that we be able to view
+    either system status or log messages, and that we have the minimal set of commands
+    necessary to manage the system. We gave Laddie’s LCD UI three modes: Status, Logs,
+    and Menu. The *Status* display reports whether there are any alarms, the *Logs*
+    mode shows the last two log messages, and the *Menu* mode lets a user clear, test,
+    enable, and disable an alarm zone. There are four buttons for navigating the menu
+    system, and a flashing LED indicates an alarm in the system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Laddie LCD UI listens for log messages from logmuxd and opens a PostgreSQL/RTA
+    connection to the alarm daemon (ladd). The DB connection to ladd is used for configuration
+    changes and to request the current status. The diagram in Figure 10-5 illustrates
+    how these daemons connect.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/181-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-5: Architecture of the Laddie front panel UI*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our front panel uses a parallel port to control a HD44780-based LCD (with two
+    lines of 16 characters each) and to scan a 4-button, 2-by-2 keypad. The frame
+    is made of wood, and a paper faceplate made it easy to try different front panel
+    labeling. Figure 10-6 shows a picture of the front panel showing alarms in zones
+    2 and 5.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/182-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-6: A picture of the Laddie front panel*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Laddie LCD Menu System***](toc.html#chapter10.11)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The menu system we chose for Laddie’s front panel is always in one of three
+    modes: Status, Logs, or Menu. This description of Laddie’s menu system might make
+    more sense if you can see one in action as you read. If you have a PC running
+    the Laddie CD, you can use the web-based front panel emulator at [http://192.168.1.11/front_panel](http://192.168.1.11/front_panel).
+    We’ll show just the text of the display and you can picture what it would look
+    like on a real display. Status mode shows which, if any, zones are in alarm.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/182-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Logs mode shows the last two log messages that were received. Alarm system
+    log messages are rewritten and forwarded by logmuxd. They include the time that
+    the event occurred, as well as a description of the event. For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/182-3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The user can toggle between Status and Logs modes by pressing the Display button.
+    The default mode at program start is Status.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the user presses the Command, Zone, or Enter button, the display switches
+    to Menu mode. When going into Menu mode, the system saves the previous mode (Status
+    or Logs). This lets the user revert to the previous mode when he or she exits
+    Menu mode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first screen displayed in Menu mode lets the user clear all the alarms
+    with one more button press. The display is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/183-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Subsequent presses of the Command button rotate through the available commands.
+    The top line of the display does not change; only the second line rotates through:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/183-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The Zone button increments the zone from one to five and then back to one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After the user has selected a command and a zone, a press of the Enter button
+    sends the SQL command to the LAD daemon to make the requested change. After sending
+    the command, the menu system displays:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/183-3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The *Command Sent* message is displayed for about two seconds, and then the
+    display reverts to the mode (Status or Logs) it saved before it went into Menu
+    mode. The user can exit Menu mode at any time by pressing the Display button,
+    which recalls the previous mode (Status or Logs) and reverts to that mode. In
+    addition, if the user abandons a Menu session by not pressing any button for about
+    10 seconds, the system times out and reverts to the previous display (Status or
+    Logs).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We hope our simple menu system for Laddie gives you some ideas for what to include
+    in your front panel menu.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Laddie Front Panel Hardware***](toc.html#chapter10.12)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Laddie front panel uses a parallel port to scan a 2-by-2 keypad, to control
+    an alarm LED, and to control an HD44780-based, two-line, 16-character LCD display.
+    We provide a Linux 2.6 character device driver for the keypad, LED, and alphanumeric
+    display.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Schematics**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The wiring diagram for the hardware of our prototype front panel is shown in
+    Figure 10-7\. Signal frequencies in this circuit are fairly low, so either wire
+    wrap or point-to-point wiring should be fine. None of the component values are
+    critical, and the values shown should be taken as guides, not as requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/184-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-7: Schematic of the Laddie front panel*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our prototype uses a second parallel port for the front panel. (The first parallel
+    port was used, you may recall, for the alarm system zone sensors.) We use the
+    data lines of the parallel port for the character input to the display. Two of
+    the parallel port’s control lines are used for the register select and write strobe.
+    A third control line from the parallel port controls the alarm LED. Two data lines
+    and two status lines are used for scanning the four-button keypad. From your understanding
+    of how a scanned keypad works, you may be able to add the five zone switches to
+    this schematic, putting all the Laddie hardware on one parallel port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The HD44780 Display Controller**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An HD44780-based alphanumeric display can be thought of as a mini-terminal.
+    Like any terminal, you write ASCII characters to it and it displays them. This
+    terminal’s eight-bit character set includes the printable ASCII characters, a
+    subset of the Katakana character set, and 16 user-defined characters. The actual
+    character set depends on which version of HD4478 you have, but the character set
+    for the Samsung KS0066U shown in Figure 10-8 is fairly typical. Note that the
+    character code corresponds mostly to the ASCII code. For example, the code for
+    *A* is 0x41, which is also the ASCII code for *A*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/185-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-8: A typical HD44780 character set*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The HD44780 Command Set**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An HD44780 display accepts both commands and characters. Figure 10-9 shows a
+    typical command set for the HD44780\. Initialization commands can clear the display,
+    turn it on or off, and specify whether the interface uses four or eight bits.
+    Cursor commands control the cursor type (block or underline), whether or not the
+    cursor is visible, whether the cursor or the display moves after displaying a
+    character, and whether the movement is to the left or the right. Other commands
+    let you move the cursor to a specific location and to read and write to the user-defined
+    character generator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/185-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-9: The HD44780 command set*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our initialization of the HD44780 consists of the following command sequence:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/186-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: We’ve found that after initialization, the only command we use is the move cursor
+    command—and we only use it to move the cursor to the first column of either the
+    top or bottom row.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Sending Commands and Characters to the Laddie Front Panel**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can read status and configuration information from the HD44780 if you want,
+    but many designs, including ours, connects the read/write pin to ground, making
+    the part write only. This saves a pin (since it is not controlling the R/W line),
+    and it is just as easy to maintain any necessary state information—cursor location,
+    for example—in the controlling software.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our HD44780 design has 10 pins that tie to the microprocessor: eight data lines,
+    a pin to specify either command or character data (RS), and a strobe pin to tell
+    to tell the HD44780 that new data is available (E). The eight output lines on
+    the parallel port connect directly to the eight data pins on the HD44780\. If
+    your hardware design has fewer pins, you can configure the part to use a four-bit
+    bus instead of an eight-bit bus. Of course, this doubles the number of steps needed
+    to write a byte to the part.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since both characters and commands are eight bits in length, we need another
+    way to differentiate commands and data. Consider, for example, the byte 0x20\.
+    Is this a space or a configuration command? Since both commands and characters
+    are eight bits, the HD44780 uses another pin, the RS pin, to distinguish between
+    the two. You can set the RS pin to a zero for commands and to a one for character
+    data. One of the issues to decide in designing the device driver is how to control
+    this pin.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data is transferred to the HD44780 on the high-to-low transition of the E pin.
+    The data must be valid for at least half a microsecond before the E line goes
+    low. The actual setup time is a function of the brand of HD44780 and its oscillator
+    frequency. In our device driver we use usleep() to delay two microseconds before
+    setting E low.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Relative to the schematic given above, the sequence for writing to the HD44780
+    is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Output the character or command to the data register.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Set the RS line high or low.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Set the E line high.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Wait two microseconds.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Set the E line low.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Wait at least five milliseconds before writing the next byte.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The HD44780 can take several milliseconds to execute some commands. You can
+    read the status of the display to tell you when to write the next byte, or you
+    can do what we did, which is just wait at least five milliseconds between writes.
+    The exact time is dependent on the version of HD44780 that you use. For this book
+    we used a display we bought on the surplus market, so we had to experiment a little
+    to find the right delay.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Design Notes**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While the HD44780-based display can be thought of as a simple ASCII terminal,
+    there were a couple of decisions we needed to make when we designed our API and
+    device driver. The first was how to handle the RS pin. Since both commands and
+    display characters are eight bits in length, we could not mix display characters
+    and commands in the same byte stream. We saw three ways to get around this problem:
+    We could send commands using an ioctl, we could use an escape sequence to bury
+    the commands in the character stream, or we could have two different devices for
+    the display, one for characters and one for commands. We chose to use an escape
+    sequence. The HD44780 we used had no display characters in the range of 0x10 to
+    0x1F, so we used 0x10 as the escape code for HD44780 commands and 0x11 as the
+    escape code for commands to control the front panel LED.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other consideration in our design was how to handle the five-millisecond
+    delay between writes. We could have put a usleep(5000) between writes, but this
+    would have been a problem when updating all 32 characters on our display. (You
+    may recall that the whole reason for writing a device driver was to have a guaranteed
+    scan rate for the keypad.) We handled the five-millisecond delay by writing all
+    output bytes into a circular buffer and reading one byte from the buffer each
+    time we scanned the keypad. This slowed the maximum rate that we can output characters
+    but was simple and effective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Linux device driver that we wrote to drive our display is available on the
+    CD. Look in the source files under front_panel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Further Reading**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The HD44780 came out quite some time ago and is in fact no longer available.
+    Nonetheless, it set the standard for alphanumeric LCD displays, and HD44780-compatible
+    parts are still available from several vendors. A web search will locate data
+    sheets for several HD44780-compatible parts, including the Samsung KS0066U that
+    we used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our review of the HD44780 is very far from complete. If you are considering
+    using any alphanumeric displays on your appliance, you might want to make use
+    of some of the online references that we used:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**http://www.epemag.wimborne.co.uk/resources.htm**](http://www.epemag.wimborne.co.uk/resources.htm)
+    A simple but complete introduction to the HD44780'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**http://home.iae.nl/users/pouweha/lcd/lcd.shtml**](http://home.iae.nl/users/pouweha/lcd/lcd.shtml)
+    Offers details on HD44780 interfacing'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**http://www.eio.com/datashet.htm**](http://www.eio.com/datashet.htm) Data
+    sheets on HD44780-compatible parts'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Laddie Front Panel UI***](toc.html#chapter10.13)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In earlier sections of this chapter we reviewed the requirements, operations,
+    and hardware for the Laddie front panel. In this section we’ll look at the software
+    that implements the front panel UI. We’ll break our discussion into three areas:
+    the software for the front panel, the various front panel emulators, and the software
+    architecture common to both. Let’s start with the common architecture.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**UI Software Architecture**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The front panel software uses an event-driven state machine. Events include
+    button presses, the expiration of a timer, and arriving log messages that indicate
+    a possible change of state in the alarm system. Output from the program includes
+    SQL commands sent to the Laddie daemon, a flag to flash (or not flash) the LED,
+    and the text displayed on the LCD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/188-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-10: Laddie front panel architecture*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Several state variables are used. The primary state variable, unimaginatively
+    called State, indicates the type of information displayed on the LCD: status,
+    log, or menu. There are also states for the brief *Command Sent* message and for
+    an indication that the program could not open an SQL connection to the ladd daemon.
+    Another state variable, Curcmd, contains an integer that indicates which command
+    to show when the user is in the menu. The *Command* button cycles Curcmd through
+    the five possible front panel commands. The Zone state variable holds the zone
+    number to use for the current command. The Zone button cycles Zone through the
+    five possible zone numbers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/188-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 10-11: Events and states in the front panel menu system*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code to handle the state and event processing is fairly easy to read once
+    you’ve reviewed the operation of the front panel. The state machine code is implemented
+    twice—once in C for the hardware and several emulators, including a web-based
+    emulator written in JavaScript and PHP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**lad216**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The C code to generate the proper escape sequences is in the lad216 program.
+    The program uses standard in and out, so if you build the hardware described above
+    and install our /dev/lad_pad driver, you could tie the lad216 program to the hardware
+    with the command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: lad216 </dev/lad_pad >/dev/lad_pad
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The code is in three files: main.c which has the select loop, menu.c which
+    has the state machine, and lad216.c which encodes the output for display on the
+    lad_pad hardware. Using standard input and output makes it easy to connect lad216
+    to the various front panel emulators described below.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Front Panel Emulators**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A front panel emulator is a great way to test a front panel design without actually
+    building it. Front panel emulators that ship with the finished product are particularly
+    nice for end users who do not want to be burdened with learning different UIs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We went a little overboard building front panel emulators for Laddie, building
+    one that uses C and curses, one that uses Tcl/Tk and the X Window system, and
+    one that uses JavaScript and HTML. You can choose which emulator to examine based
+    on your preferred programming language.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The curses version replaces lad216.c with cur216.c, but still uses the main.c
+    and menu.c files. You can try the curses front panel emulator by booting the Laddie
+    CD and telnetting into the appliance. The cur216 executable is in the default
+    path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Tcl/Tk version, x216.tcl, is based on the lad216 executable, using Tcl/Tk
+    to replace the lad_pad hardware with a Tcl equivalent. The Laddie CD does not
+    include the X Window system so you can not run x216.tcl on a booted Laddie appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can try the web-based front panel emulator by booting Laddie and pointing
+    your browser to [http://192.168.1.11/front_panel](http://192.168.1.11/front_panel).
+    The index.html file should open a window with a photograph of our actual front
+    panel hardware. The buttons are tied to an image map and operate the same way
+    the buttons do on the real system. The LED is either a static image of the LED
+    in the off state, or is an animated GIF image of the flashing LED. The HTML of
+    the LCD uses CSS to specify a fairly large monospaced font.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The techniques used in the web emulator are simple, and you may find them of
+    use if you ever build a web emulator of your own front panel. To illustrate these
+    techniques, let’s look at how the LED image is controlled. In the HTML we specify
+    the exact location of the image and give it a name, *led.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: <div id="led" style="position:absolute; left:27; top:20;"></div>
+  prefs: []
+  type: TYPE_NORMAL
+- en: The JavaScript code uses XMLHttpRequest() to request the alarm status from a
+    PHP script tied to the webserver running on the appliance. The value returned
+    is zero if there are no alarms. The JavaScript to control the LED image is straightforward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/190-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The JavaScript program uses the exact same architecture and state machine as
+    described above, and it uses XMLHttpRequest() instead of select() to asynchronously
+    wait for log messages. After the arrival of any log message, the code queries
+    ladd for the latest status and redraws the web page based on the new status information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Improving Our Design**](toc.html#chapter10.14)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Laddie front panel could be improved in several ways. The lad_pad driver
+    could have been simplified had we separated the LCD data lines from the two output
+    lines used for keypad scanning. Separating them would have allowed the convenient
+    use of a second timer just for LCD output characters, which would have made the
+    LCD more responsive to output. Another improvement in the driver would have been
+    to pull more than one character from the queue if the characters were not sent
+    to the LCD. For example, there is no reason to wait 20 milliseconds between characters
+    if the character is an escape code or an LED command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The photograph in the web front panel is of the hardware we built. This is a
+    little backward. Normally, you would build and test the emulated web-based version
+    before building the actual hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The web-based front panel has a more subtle problem. It uses XMLHttpRequest()
+    to wait for arriving log messages, and after receiving one, it sets a timer to
+    make the next request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: setTimeout("GetLogMsg()", 100);
+  prefs: []
+  type: TYPE_NORMAL
+- en: This arrangement, no matter how short the timer, will miss log messages that
+    arrive close together. You can see this in action by setting three alarms and
+    clearing them all at once. The log display will capture the log of the first alarm
+    being cleared, but it will miss one or both of the logs for the next two. The
+    main web interface has the same problem, but solves it by numbering the log messages.
+    After updating the web page, the JavaScript code in the main web UI reads the
+    ID of the last message received from logmuxd. If the ID of the log in the web
+    page does not include the most recent log message, the page is redrawn using the
+    most recent log messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Summary**](toc.html#chapter10.15)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter we’ve looked at how you can build an effective front panel using
+    buttons, LEDs, and small, text-only LCDs. We saw that scanning a keypad or LED
+    array can reduce the number of I/O lines you need, and that movement, such as
+    a blinking LED, can draw the eye and let the user know that the appliance is running.
+    We also noted that how well your appliance is accepted may depend on how quickly
+    you make user interaction possible and how easily users can navigate your menu
+    system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We reviewed Laddie’s front panel design, including its menu system, hardware,
+    UI software, and various front panel emulators. Our hardware design includes an
+    HD44780 display and a 2-by-2 keypad. The source for our 2.6 character device driver,
+    lad_pad, is on the CD and might be a nice introduction to kernel modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The UI menu system is implemented as a state machine, and is implemented twice.
+    The first implementation, using C, uses standard in and out so that it can be
+    tied to either a Tcl/Tk emulator or to the real front panel. The second implementation
+    uses JavaScript and image maps for the front panel buttons and uses XMLHttpRequest()
+    to receive the asynchronous log messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/192-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: __________________
+  prefs: []
+  type: TYPE_NORMAL
+- en: ¹ You can program the Atmel AVR using C on a Linux workstation. See [www.avrfreaks.org](http://www.avrfreaks.org/)
+    for more information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ² You may need to set the terminal type, since telnet does not set it for you.
+    I use xterm on my desktop, so when I telnet to the Laddie appliance, I set the
+    terminal type with the command export TERM=xterm.
+  prefs: []
+  type: TYPE_NORMAL

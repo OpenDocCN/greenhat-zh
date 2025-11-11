@@ -1,0 +1,661 @@
+- en: Chapter 1. Building and Running Modules
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This chapter provides an introduction to FreeBSD device drivers. We’ll start
+    by describing the four different types of UNIX device drivers and how they are
+    represented in FreeBSD. We’ll then describe the basics of building and running
+    loadable kernel modules, and we’ll finish this chapter with an introduction to
+    character drivers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you don’t understand some of the terms used above, don’t worry; we’ll define
+    them all in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Types of Device Drivers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In FreeBSD, a *device* is any hardware-related item that belongs to the system;
+    this includes disk drives, printers, video cards, and so on. A *device driver*
+    is a computer program that controls or “drives” a device (or sometimes numerous
+    devices). In UNIX and pre-4.0 FreeBSD, there are four different types of device
+    drivers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Character drivers, which control character devices
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Block drivers, which control block devices
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Network drivers, which control network devices
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Pseudo-device drivers, which control pseudo-devices
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Character devices* provide either a character-stream-oriented I/O interface
+    or, alternatively, an unstructured (raw) interface (McKusick and Neville-Neil,
+    2005).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Block devices* transfer randomly accessible data in fixed-size blocks (Corbet
+    et al., 2005). In FreeBSD 4.0 and later, block drivers are gone (for more information
+    on this, See [Block Drivers Are Gone](ch01s07.html "Block Drivers Are Gone") in
+    [DEV_MODULE Macro](ch01s06.html#dev_underscore_module_macro "DEV_MODULE Macro")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Network devices* transmit and receive data packets that are driven by the
+    network subsystem (Corbet et al., 2005).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, a *pseudo-device* is a computer program that emulates the behavior
+    of a device using only software (that is, without any underlying hardware).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loadable Kernel Modules
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A device driver can be either statically compiled into the system or dynamically
+    loaded using a loadable kernel module (KLD).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Most operating systems call a loadable kernel module an *LKM*—FreeBSD just had
+    to be different.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A *KLD* is a kernel subsystem that can be loaded, unloaded, started, and stopped
+    after bootup. In other words, a KLD can add functionality to the kernel and later
+    remove said functionality while the system is running. Needless to say, our “functionality”
+    will be device drivers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In general, two components are common to all KLDs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A module event handler
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A `DECLARE_MODULE` macro call
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Module Event Handler
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A *module event handler* is the function that handles the initialization and
+    shutdown of a KLD. This function is executed when a KLD is loaded into the kernel
+    or unloaded from the kernel, or when the system is shut down. Its function prototype
+    is defined in the `<sys/module.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `modeventtype_t`
+    is defined in the `<sys/module.h>` header like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, `modeventtype_t` labels whether the KLD is being ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    loaded into the kernel or ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    unloaded from the kernel, or whether the system is about to ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    shut down. (For now, ignore the value at ![](httpatomoreillycomsourcenostarchimages1137505.png);
+    we’ll discuss it in [Chapter 4](ch04.html "Chapter 4. Thread Synchronization").)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Generally, you’d use the `modeventtype_t` argument in a `switch` statement
+    to set up different code blocks for each situation. Some example code should help
+    clarify what I mean:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice how the ![](httpatomoreillycomsourcenostarchimages1137499.png) second
+    argument is the ![](httpatomoreillycomsourcenostarchimages1137501.png) expression
+    for the `switch` statement. Thus, this module event handler prints “Hello, world!”
+    when the KLD is ![](httpatomoreillycomsourcenostarchimages1137503.png) loaded
+    into the kernel, prints “Good-bye, cruel world!” when the KLD is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    unloaded from the kernel, and returns `EOPNOTSUPP` (which stands for *error: operation
+    not supported*) prior to ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    system shutdown.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: DECLARE_MODULE Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `DECLARE_MODULE` macro registers a KLD and its module event handler with
+    the system. Here is its function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The arguments expected by this macro are as follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: name
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `name` argument is the module name, which is used to identify the KLD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: data
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The `data` argument expects a filled-out `moduledata_t` structure, which is
+    defined in the `<sys/module.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `name` is the official
+    module name, ![](httpatomoreillycomsourcenostarchimages1137501.png) `evhand` is
+    the KLD’s module event handler, and ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `priv` is a pointer to private data (if any exists).
+  prefs: []
+  type: TYPE_NORMAL
+- en: sub
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `sub` argument specifies the kernel subsystem that the KLD belongs in. Valid
+    values for this argument are defined in the `sysinit_sub_id` enumeration, found
+    in `<sys/kernel.h>`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: For obvious reasons, we’ll almost always set `sub` to ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `SI_SUB_DRIVERS`, which is the device driver subsystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: order
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `order` argument specifies the KLD’s order of initialization within the
+    `sub` subsystem. Valid values for this argument are defined in the `sysinit_elem_order`
+    enumeration, found in `<sys/kernel.h>`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: In general, we’ll always set `order` to ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `SI_ORDER_MIDDLE`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hello, world!
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You now know enough to write your first KLD. [Example 1-1](ch01s03.html#hello.c
+    "Example 1-1. hello.c") is the complete skeleton code for a KLD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 1-1. hello.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This code contains a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    module event handler—it’s identical to the one described in [Module Event Handler](ch01s02.html#module_event_handler
+    "Module Event Handler") in [Loadable Kernel Modules](ch01s02.html "Loadable Kernel
+    Modules")—and a filled-out ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `moduledata_t` structure, which is passed as the ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    second argument to the ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `DECLARE_MODULE` macro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In short, this KLD is just a module event handler and a `DECLARE_MODULE` call.
+    Simple, eh?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compiling and Loading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To compile a KLD, you can use the `<bsd.kmod.mk>` Makefile. Here is the complete
+    Makefile for [Example 1-1](ch01s03.html#hello.c "Example 1-1. hello.c"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `KMOD` is the KLD’s
+    name and ![](httpatomoreillycomsourcenostarchimages1137501.png) `SRCS` is the
+    KLD’s source files. Incidentally, I’ll adapt this Makefile to compile every KLD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, assuming [Example 1-1](ch01s03.html#hello.c "Example 1-1. hello.c") and
+    its Makefile are in the same directory, simply type `make`, and the compilation
+    should proceed (very verbosely) and produce an executable named *hello.ko*, as
+    shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can then load and unload *hello.ko* with `kldload(8)` and `kldunload(8)`,
+    respectively:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As an aside, with a Makefile that includes `<bsd.kmod.mk>`, you can use `make
+    load` and `make unload` instead of `kldload(8)` and `kldunload(8)`, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Congratulations! You’ve now successfully loaded code into a live kernel. Before
+    moving on, one additional point is also worth mentioning. You can display the
+    status of any file dynamically linked into the kernel using `kldstat(8)`, like
+    so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the output is pretty self-explanatory. Now, let’s do something
+    more interesting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Character Drivers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Character drivers* are basically KLDs that create character devices. As mentioned
+    previously, character devices provide either a character-stream-oriented I/O interface
+    or, alternatively, an unstructured (raw) interface. These (*character-device*)
+    *interfaces* establish the conventions for accessing a device, which include the
+    set of procedures that can be called to do I/O operations (McKusick and Neville-Neil,
+    2005). In short, character drivers produce character devices, which provide device
+    access. For example, the `lpt(4)` driver creates the `/dev/lpt0` character device,
+    which is used to access the parallel port printer. In FreeBSD 4.0 and later, most
+    devices have a character-device interface.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In general, three components are common to all character drivers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `d_foo` functions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A character device switch table
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A `make_dev` and `destroy_dev` function call
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: d_foo Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `d_foo` functions, whose function prototypes are defined in the `<sys/conf.h>`
+    header, are the I/O operations that a process can execute on a device. These I/O
+    operations are mostly associated with the file I/O system calls and are accordingly
+    named `d_open`, `d_read`, and so on. A character driver’s `d_foo` function is
+    called when “foo” is done on its device. For example, `d_read` is called when
+    a process reads from a device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Table 1-1](ch01s05.html#d_underscore_foo_functions-id1 "Table 1-1. d_foo Functions")
+    provides a brief description of each `d_foo` function.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 1-1. d_foo Functions
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Function | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_open` | Called to open the device in preparation for I/O operations |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_close` | Called to close the device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_read` | Called to read data from the device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_write` | Called to write data to the device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_ioctl` | Called to perform an operation other than a read or a write |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_poll` | Called to check the device to see whether data is available for
+    reading or space is available for writing |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_mmap` | Called to map a device offset into a memory address |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_kqfilter` | Called to register the device with a kernel event list |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_strategy` | Called to start a read or write operation and then immediately
+    return |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_dump` | Called to write all physical memory to the device |'
+  prefs: []
+  type: TYPE_TB
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you don’t understand some of these operations, don’t worry; we’ll describe
+    them in detail later when we implement them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Character Device Switch Table
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A character device switch table, `struct cdevsw`, specifies which `d_foo` functions
+    a character driver implements. It is defined in the `<sys/conf.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is an example character device switch table for a read/write device:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, not every `d_foo` function or attribute needs to be defined.
+    If a `d_foo` function is undefined, the corresponding operation is unsupported
+    (for example, a character device switch table for a read-only device would not
+    define `d_write`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unsurprisingly, `d_version` (which denotes the version of FreeBSD this driver
+    supports) and `d_name` (which is the driver’s name) must be defined. Generally,
+    `d_version` is set to `D_VERSION`, which is a macro substitution for whichever
+    version of FreeBSD it’s compiled on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: make_dev and destroy_dev Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `make_dev` function takes a character device switch table and creates a
+    character device node under */dev*. Here is its function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Conversely, the `destroy_dev` function takes the ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `cdev` structure returned by `make_dev` and destroys the character device node.
+    Here is its function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Mostly Harmless
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 1-2](ch01s06.html#echo.c "Example 1-2. echo.c") is a complete character
+    driver (based on code written by Murray Stokely and Søren Straarup) that manipulates
+    a memory area as though it were a device. This pseudo (or memory) device lets
+    you write and read a single character string to and from it.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take a quick look at this code and try to discern some of its structure. If
+    you don’t understand all of it, don’t worry; an explanation follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 1-2. echo.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: This driver starts by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    defining a character device switch table, which contains four `d_foo` functions
+    named `echo_foo`, where `foo` equals to `open`, `close`, `read`, and `write`.
+    Consequently, the ensuing character device will support only these four I/O operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, there are two variable declarations: an `echo` structure pointer named
+    ![](httpatomoreillycomsourcenostarchimages1137505.png) `echo_message` (which will
+    contain a ![](httpatomoreillycomsourcenostarchimages1137501.png) character string
+    and its ![](httpatomoreillycomsourcenostarchimages1137503.png) length) and a `cdev`
+    structure pointer named ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `echo_dev` (which will maintain the `cdev` returned by the ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `make_dev` call).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, the `d_foo` functions ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `echo_open` and ![](httpatomoreillycomsourcenostarchimages1137511.png) `echo_close`
+    are defined—each just prints a debug message. Generally, the `d_open` function
+    prepares a device for I/O, while `d_close` breaks apart those preparations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: There is a difference between “preparing a device for I/O” and “preparing (or
+    initializing) a device.” For pseudo-devices like [Example 1-2](ch01s06.html#echo.c
+    "Example 1-2. echo.c"), device initialization is done in the module event handler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remaining bits—`echo_write`, `echo_read`, `echo_modevent`, and `DEV_MODULE`—require
+    a more in-depth explanation and are therefore described in their own sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: echo_write Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `echo_write` function acquires a character string from user space and stores
+    it. Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `struct uio` describes
+    a character string in motion—the variables ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `iov_base` and ![](httpatomoreillycomsourcenostarchimages1137507.png) `iov_len`
+    specify the character string’s base address and length, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, this function starts by ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    copying a character string from ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    user space to ![](httpatomoreillycomsourcenostarchimages1137505.png) kernel space.
+    At most, ![](httpatomoreillycomsourcenostarchimages1137509.png) `'BUFFER_SIZE
+    - 1'` bytes of data are copied. Once this is done, the character string is ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    null-terminated, and its length (minus the null terminator) is ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    recorded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This isn’t the proper way to copy data from user space to kernel space. I should’ve
+    used `uiomove` instead of `copyin`. However, `copyin` is easier to understand,
+    and at this point, I just want to cover the basic structure of a character driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: echo_read Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `echo_read` function returns the stored character string to user space.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the variables ![](httpatomoreillycomsourcenostarchimages1137501.png) `uio_resid`
+    and ![](httpatomoreillycomsourcenostarchimages1137505.png) `uio_offset` specify
+    the amount of data remaining to be transferred and an offset into the character
+    string, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, this function first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    determines the number of characters to return—either the ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    amount the user requests or ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    all of it. Then `echo_read` ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    transfers that ![](httpatomoreillycomsourcenostarchimages1137511.png) number from
+    ![](httpatomoreillycomsourcenostarchimages1137509.png) kernel space to ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    user space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For more on copying data between user and kernel space, see the `copy(9)` and
+    `uio(9)` manual pages. I’d also recommend the OpenBSD `uiomove(9)` manual page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: echo_modevent Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `echo_modevent` function is the module event handler for this character
+    driver. Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'On module load, this function first calls ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `malloc` to allocate `sizeof(echo_t)` bytes of memory. Then it calls ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `make_dev` to create a character device node named ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `echo` under */dev*. Note that when `make_dev` returns, the character device is
+    “live” and its `d_foo` functions can be executed. Consequently, if I had called
+    `make_dev` ahead of `malloc`, `echo_write` or `echo_read` could be executed before
+    ![](httpatomoreillycomsourcenostarchimages1137499.png) `echo_message` points to
+    valid memory, which would be disastrous. The point is: Unless your driver is completely
+    ready, don’t call `make_dev`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: On module unload, this function first calls ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `destroy_dev` to destroy the `echo` device node. Then it calls ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `free` to release the allocated memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DEV_MODULE Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `DEV_MODULE` macro is defined in the `<sys/conf.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, `DEV_MODULE` merely wraps ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `DECLARE_MODULE`. So [Example 1-2](ch01s06.html#echo.c "Example 1-2. echo.c")
+    could have called `DECLARE_MODULE`, but `DEV_MODULE` is cleaner (and it saves
+    you some keystrokes).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t Panic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now that we’ve walked through [Example 1-2](ch01s06.html#echo.c "Example 1-2. echo.c"),
+    let’s give it a try:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Unsurprisingly, it works. Before this chapter is concluded, a crucial topic
+    bears mentioning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Block Drivers Are Gone
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As mentioned previously, block devices transfer randomly accessible data in
+    fixed-size blocks; for example, disk drives. Naturally, *block drivers* provide
+    access to block devices. Block drivers are characterized by the fact that all
+    I/O is cached within the kernel’s buffer cache, which makes block drivers unreliable,
+    for two reasons. First, because caching can reorder a sequence of write operations,
+    it deprives the writing process of the ability to identify the exact disk contents
+    at any moment in time. This makes reliable crash recovery of on-disk data structures
+    (for example, filesystems) impossible. Second, caching can delay write operations.
+    So if an error occurs, the kernel cannot report to the process that did the write
+    which particular operation failed. For these reasons, every serious application
+    that accesses block devices specifies that a character-device interface always
+    be used. Consequently, FreeBSD dropped support for block drivers during the modernization
+    of the disk I/O infrastructure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Obviously, FreeBSD still supports block devices. For more on this, see [Chapter 13](ch13.html
+    "Chapter 13. Storage Drivers").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter introduced you to the basics of FreeBSD device driver development.
+    In the following chapters, we’ll build upon the concepts described here to complete
+    your driver toolkit. As an aside, because most FreeBSD device drivers are character
+    drivers, don’t think of them as a primary driver class—they’re more like a tool
+    used to create character device nodes.
+  prefs: []
+  type: TYPE_NORMAL

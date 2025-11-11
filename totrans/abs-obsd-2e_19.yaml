@@ -1,0 +1,720 @@
+- en: Chapter 19. Building Custom Kernels
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Rewiring the brain?*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Knowing where the parts plug in*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*makes it possible.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages1616079.png) The OpenBSD team works
+    very hard to provide a high-quality kernel that requires no tweaking beyond setting
+    the occasional sysctl or perhaps enabling a feature. But if you want to use an
+    experimental feature or add a device driver to the kernel, or you want to squeeze
+    OpenBSD into tiny hardware or embedded systems, you’ll need to build a custom
+    kernel from source code. The OpenBSD people won’t support you if you venture into
+    custom kernels, but they’ll provide you with everything you need to shoot yourself
+    in the foot, as you’ll learn in this chapter.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kernel Cautions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Before we get into the details of building custom kernels, we’ll look at why
+    that’s usually a bad idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t Build Custom Kernels
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Many open source operating systems encourage sysadmins to build custom kernels.
+    Mailing lists for these operating systems are full of suggestions on rebuilding,
+    tweaking, and modifying the kernel. Those user communities will walk new users
+    through rebuilding the kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD developers take a different approach to rebuilding the kernel. They
+    ship a default kernel, called GENERIC, which you will almost never need to rebuild.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a kernel from source doesn’t prove that you’re an alpha geek, and rebuilding
+    the kernel is never a recommended way to solve a problem. The people who build
+    custom kernels are either kernel developers or ignorant newbies. The OpenBSD Project
+    members feel no particular obligation to help users with customized kernels. If
+    your custom kernel crashes, destroys your filesystem, or starts making threatening
+    calls to the local constabulary, they won’t care. Why? Adding, moving, or changing
+    one kernel option might seem trivial, but each option might represent tens of
+    thousands of lines of source code that you’ve just casually gutted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That said, the OpenBSD Project is much friendlier than closed source operating
+    systems, in that it provides the source code for the kernel, and gives you the
+    tools and instructions needed to build it. The territory might be dangerous, with
+    rattlesnakes and bears and the occasional bottomless pit, but they give you a
+    map and a flashlight. If you can carve out some new territory for yourself, good
+    for you! If you get eaten by coyotes, well, that’s pretty much what happens.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: These warnings apply only to custom kernels. The OpenBSD team is extremely interested
+    in problems in a provided kernel, whether that’s the GENERIC kernel, the installer
+    kernel, or any other.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When working with kernels, keep in mind that some platforms have multiple GENERIC
+    kernels. For example, the i386 platform has the standard GENERIC kernel, but it
+    provides GENERIC.MP for multiprocessor machines, and it supports both versions.
+    By the same token, the SGI platform has several GENERIC kernels—one for each supported
+    hardware variety. These kernels are all GENERIC, and all supported.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why Build Custom Kernels?
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: People build custom kernels for various reasons. For example, if you’re a kernel
+    developer, or aspire to be one, you will need to build customized kernels to test
+    new features and new code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some people who play with kernels are interested in using experimental features.
+    For example, OpenBSD supports the newly developed but not well-tested multipath
+    SCSI, which is not supported by GENERIC. Not many people have the hardware to
+    use multipath SCSI, but those who do have the hardware, along with programming
+    skills, are encouraged to help improve this feature. (When running experimental
+    features, be sure that you understand that *experimental* is the Siamese twin
+    of *unstable*.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Rarely, remediating a security flaw will require a patch to the kernel source
+    code. But rather than build your own, get the patch from OpenBSD’s stable branch
+    or a snapshot (discussed in [Chapter 20](ch20.html "Chapter 20. Upgrading")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, some people will build custom kernels to save RAM on a machine with
+    very low memory. Removing features from the kernel reduces its size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Problems Building Custom Kernels
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When building a custom kernel, you are likely to run into trouble. For one,
+    the interdependencies between kernel modules are quite complex and not thoroughly
+    documented. The developers generally assume that people building custom kernels
+    will read kernel source code and man pages. You are expected to read error messages
+    and sort them out yourself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD’s cross-platform design slightly complicates kernel configuration. Some
+    devices run on some architectures, but they fail to run or behave weirdly on others.
+    If you include the wrong device in your kernel or tell the kernel a card is attached
+    to the wrong bus, you’ll be building a busted kernel. Be sure that you understand
+    how your hardware actually fits together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When mucking around in the source tree, you can corrupt the source code in various
+    ways, such as by applying a patch incorrectly, scrambling a file, or forgetting
+    that you edited a file that is now causing you grief. To test your source code,
+    compile GENERIC. If GENERIC won’t compile, you’ve either mucked up the source
+    code or your system has some deeper problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a custom kernel usually means including or removing kernel options
+    and features from the configuration file. If you’re trying to use fancy compiler
+    flags, however, stop. Custom compiler options are great for exposing compiler
+    bugs, but the OpenBSD team members make no effort to have their code comply with
+    the demands from these compiler options. Many of these options and higher optimizations
+    break if you’re not running very specific operating systems on very specific architectures.
+    The kernel code assumes that you are using the specified compiler options; if
+    you change them, you’ll get nothing but pain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you’ve checked everything, and you still can’t get your kernel to build,
+    you might don your flameproof suit and ask for help on *misc@OpenBSD.org*. State
+    up front that you’re trying to build a custom kernel, and include the following
+    information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Your kernel configuration
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: OpenBSD version
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Unedited boot-time messages from booting a GENERIC kernel on your computer
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A full description of the problem
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Someone might take pity and try to help you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Problems Running Custom Kernels
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Custom kernels can have any number of problems, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Programs might not run as expected.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The system might not boot.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The system might crash randomly.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The kernel might not find all of your hardware.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The kernel might eat your hard drives or your motherboard (without mustard or
+    even a shot of malt vinegar).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you have customized your kernel narrowly—say, by adding only the multipath
+    SCSI driver to the GENERIC kernel—the developers working on that feature will
+    probably be interested in your bug reports on that feature.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you can reproduce that problem when the same system boots with the GENERIC
+    kernel, the OpenBSD team is definitely interested. Report your problem as occurring
+    on the GENERIC kernel, and include debugging output only from GENERIC, not from
+    your custom kernel. If you manage to identify, debug, and create a patch for a
+    problem with a custom kernel, send your patch and a problem description to the
+    mailing list. Your problem may be due to running on a custom kernel, but you may
+    also have found a bug that could be triggered in GENERIC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But most important, if you have a problem running a custom kernel, reboot with
+    GENERIC and get on with your day.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing for Kernel Customization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Before customizing the kernel, back up the known-good GENERIC kernel on your
+    system by copying */bsd* to */bsd.GENERIC*. That way, if your custom kernel doesn’t
+    boot, you can recover by booting the backup kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You’ll need the kernel source code in order to build a custom kernel. You can
+    just grab *sys.tar.gz* from your OpenBSD installation media. If you installed
+    from an Internet mirror, make sure to get the source code for your version of
+    OpenBSD. The OpenBSD mirror root directory usually contains a snapshot of fairly
+    recent source code, but check the directory for your release for its source code.
+    Expand this directory under */usr/src*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that you have a backup (you *did* make a backup of your working kernel when
+    I told you to, right?) and the source code, let’s look at kernel configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kernel Configuration
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You configure the OpenBSD kernel via text files. Like 4.4BSD, OpenBSD doesn’t
+    offer a fancy graphical kernel configuration utility or menu-driven system. Each
+    kernel configuration is on a single line, along with a label indicating the type
+    of entry and a description. Pound signs (`#`) mark comments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuration Entries
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Kernel configuration entries fall into four general categories: options, device
+    drivers, pseudo-devices, and keywords.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Options
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: '*Options* are hardware-independent kernel functions. Options handle things
+    like filesystems, networking protocols, and compatibility layers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Option entries look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: To learn more about options, read the `options(4)` man page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Device Drivers
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Device drivers give the kernel the necessary software to interact with a piece
+    of hardware. If you want your kernel to support a piece of hardware, it must include
+    the appropriate device driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Device driver kernel configuration entries can be quite long. They might include
+    flags or settings that tell the kernel where to find the device and how to initialize
+    it. (ISA cards usually have a hard-coded IRQ and/or memory address.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Device drivers have no common label, but their entry starts with the device
+    name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Pseudo-Devices
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: '*Pseudo-devices* behave much like devices, but have no real hardware attached
+    to them. Pseudo-devices are frequently abstractions that can be opened, read from,
+    written to, and closed in the same way as real hardware.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, the loopback interface is a pseudo-device used for network connections
+    to the local machine. (Your computer has no loopback network card, but the loopback
+    interface behaves just like a real network card with an unusual MTU value.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pseudo-devices are labeled with `pseudo-device`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Keywords
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Finally, a handful of other keywords appear only once or rarely. These one-offs
+    change how the kernel runs or how it’s built, and defy easy categorization. The
+    following keywords may appear:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `machine` keyword tells the kernel which architecture it should run on.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `makeoptions` keyword tells the compiler how to build the kernel.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `include` keyword means pull in another configuration file.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `maxusers` value sets the size of some in-kernel tables.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You’ll find even less common keywords scattered in different kernel configurations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: All of these affect the kernel in wildly different ways. You’ll find several
+    of these keywords in any kernel, even GENERIC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring GENERIC
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Let’s look at an actual kernel configuration. OpenBSD divides kernel configuration
+    into machine-independent and machine-dependent files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Machine-Independent Configuration
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: The machine-independent kernel configuration files are in */usr/src/sys/conf*.
+    The file */usr/src/sys/conf/GENERIC* contains the machine-independent kernel configuration,
+    which describes all of the features that OpenBSD supports on all hardware platforms.
+    Every GENERIC kernel contains the configuration in this file. If you change this
+    file, it will affect every kernel built that includes this file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The machine-independent configuration file doesn’t contain device drivers; instead,
+    devices are tied to particular hardware. This file won’t contain any special building
+    instructions, because they vary from platform to platform. Nor will it include
+    hard-coded system limits, data structure sizes, and so on, as OpenBSD running
+    on a 25-year-old VAX has considerably fewer resources than a brand-new amd64 system.
+    The */usr/src/sys/conf/GENERIC* file contains mostly options and pseudo-devices.
+    Every OpenBSD kernel must support a filesystem, or it won’t be able to write to
+    disk or anything disk-like.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A kernel based on this file doesn’t yet know what sort of hardware the filesystem
+    will run on, but it knows how to make a filesystem. It doesn’t know what kind
+    of network card it will have, but once you give it a network card, it can create
+    a TCP data stream and serve your web pages. You’ll need the machine-dependent
+    configuration to make a kernel that can function in the real world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Machine-Dependent Configuration
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Each platform has its own machine-dependent kernel directory under */usr/src/sys/arch*.
+    Here’s where you’ll find a subdirectory for every platform OpenBSD supports, as
+    well as a directory for any platforms under development. Separate directories
+    contain platform-specific code, as well as further *conf* subdirectories for the
+    kernel configuration file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I’m using amd64 as an example, so the kernel configuration directory is */usr/src/sys/arch/amd64/conf*.
+    While we’ll focus on the common i386 and amd64 architectures, the kernel-building
+    process is the same across all hardware platforms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A traditional kernel configuration filename is in all capital letters. You’ll
+    see the *GENERIC* configuration, as well as the *RAMDISK** files used for the
+    installation disks. (The *GENERIC.MP* kernel is the multiprocessor kernel.) We’ll
+    start with the *GENERIC* kernel configuration file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first entry in this kernel configuration defines the machine.The machine
+    definition tells the kernel configuration parser the kind of hardware you’re running,
+    and defines core hardware characteristics and constraints, such as how many bits
+    are in an integer and how much memory the system can support.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second entry pulls in the machine-independent kernel configuration (described
+    in the previous section), defining all of the protocols and tools that make OpenBSD
+    OpenBSD. The amd64 kernel inherits the filesystems and network stacks from this
+    entry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Following these two lines you’ll see the devices OpenBSD supports on amd64 hardware.
+    Take a moment and skim the file. It’s the same mix of devices and attachments
+    as described earlier in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Your Kernel Configuration
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In order to build your own kernel, you’ll need a configuration file. Here, we’ll
+    look at how to create your configuration file. (Do not just edit either GENERIC
+    kernel file.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Minor Changes
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'If your kernel adds only a couple of items to the GENERIC kernel, use the GENERIC
+    configuration as a basis for your new one. For example, here’s the multiprocessor
+    kernel configuration, GENERIC.MP:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The multiprocessor kernel builds on GENERIC, adding only one option and one
+    device attachment. You can use this model to define your own kernel configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, suppose you want to enable the experimental SCSI multipathing
+    feature on a kernel. You could create a kernel configuration file in your platform
+    directory, and simply copy the commented-out multipathing entries from the machine-independent
+    GENERIC kernel, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This creates a custom kernel that closely resembles GENERIC, with these two
+    extra devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Removing Options
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'To strip options from your kernel, use the `rmoption` keyword. For example,
+    to create a minimal kernel based on GENERIC, you could use the `rmoption` keyword
+    to remove some kernel options, as in this example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: One advantage to creating a configuration by including the default kernel is
+    that when you update your source code, your custom kernel configuration will probably
+    still be valid. However, the more options you remove from the kernel, the greater
+    the chance that the kernel will fail to compile, or if it compiles, that it might
+    not boot. And if it boots, it might eat your hard drive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When removing options, keep in mind that some options are more important than
+    you might think. For example, removing the `INET6` option (aka IPv6) can create
+    a nonfunctional system. Removing options doesn’t save you much memory, and it
+    might cripple any number of programs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Removing Devices
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: If you want to remove a lot of stuff from a machine-dependent kernel configuration,
+    while retaining the options for base OpenBSD functions, copy the machine-dependent
+    GENERIC configuration file to a new text file and make your changes in that file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Wholesale Butchery
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'If you want to commit wholesale butchery on the kernel, you’ll want a configuration
+    that includes both the machine-independent and machine-dependent parts. Start
+    by copying the existing GENERIC kernel configurations into one file, in the platform’s
+    kernel configuration. Here, I call my new kernel TREBLE, after the hostname:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Before making any other changes, remove the line that includes the machine-independent
+    kernel configuration file. Then slice out everything that makes the system functional,
+    and try to build the new kernel. Next, add stuff back in until the kernel builds.
+    (Although removing drivers won’t save much memory, doing so will make booting
+    a tiny bit faster.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You might be tempted to use the man pages to create your own kernel configuration
+    from scratch. You’re certainly free to do that, if you’re either a Kernel Lord
+    or an irremediable doofus. Feel free to try it. Every sysadmin can use such a
+    valuable lesson in humility.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stripping Down the Kernel
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Every device driver and option in the kernel uses memory. If you’re trying to
+    cram OpenBSD onto a tiny computer, or you’re doing any sort of embedded development,
+    you might want to build a custom kernel that includes as few device drivers as
+    possible by editing */var/run/dmesg.boot*, where every entry matches a line in
+    the kernel configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The simplest way to trim out unnecessary device drivers is to remove everything
+    that’s not in your computer. The kernel includes dozens of network card drivers,
+    but you need only one or two. If you’re unsure about a device, keep it in the
+    configuration. (The ACPI and BIOS devices in particular are tightly interrelated,
+    and you’ll probably have a really hard time building a bootable custom kernel
+    without the complete set of ACPI and BIOS devices.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Gutting the Kernel
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: If removing device drivers doesn’t create a sufficiently small kernel for you,
+    try removing machine-independent options. Many of these options are interdependent,
+    however, and removing them can create a kernel you can’t compile. If you can compile
+    the kernel, it might not boot, and if it boots, it might not function correctly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing Your Kernel Configuration with config(8)
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Is your custom kernel configuration internally consistent? To test your kernel
+    and prepare the files needed to compile it, use `config(8)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While still in the kernel configuration directory, give `config` the kernel
+    configuration filename as an argument, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you get any error messages, read them. For example, `config` might tell you
+    that you need to run `make clean` before building your new kernel, or that your
+    kernel configuration is internally inconsistent and will not compile. If there’s
+    a problem, `config` will often give a line number where you made an error. Follow
+    any advice `config` offers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following are some of the more common types of errors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Orphaned Devices
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'One common way that `config` fails is if you’re missing a device that’s needed
+    by another device. Here’s an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Your configuration attaches various devices to `mainbus0`, but there’s no `mainbus0`
+    entry in your configuration. Kernels that include devices that aren’t attached
+    don’t make sense and cannot compile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To address this, examine your hardware again. Figure out how these devices are
+    supposed to attach to the system, and fix your kernel configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Bogus Hardware
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Another common problem is including nonexistent device drivers, which generates
+    the following error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`config` shows me the error and the line number where it occurs. There is no
+    `cpe` device, but there is a `cpu` device. My bad.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The error checking performed by `config` does not guarantee that your kernel
+    will compile or run as expected. The only errors it catches are ones where the
+    configuration is either internally inconsistent or flat-out wrong. The first real
+    test comes when you try to actually build your configured kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a Kernel
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If `config` ran successfully, you will have a kernel compilation directory including
+    a makefile and a whole slew of header files. The traditional place for the *compile*
+    directory is under the platform directory, which is */usr/src/sys/arch/amd64*
+    for amd64 hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The compile directory contains a subdirectory for each kernel configuration
+    processed by `config`. My amd64 kernel called TREBLE is in the */usr/src/sys/arch/amd64/compile/TREBLE*
+    directory, which contains a makefile, as well as all the header files for all
+    included devices and options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now it’s time to wait. A successful compilation will create a kernel file *bsd*
+    without generating any error messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kernel Build Errors
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'If your kernel fails to build, you probably have a perfectly explicable error.
+    First, read the error message given by the compilation. Most of the time, the
+    error message will explain what the kernel is missing. Generally, you will need
+    to change your kernel configuration in some manner because of an error that `config`
+    could not catch. A broken kernel compilation will end something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: This kernel cannot be built because something is missing. When a build fails
+    with statements that something “is undeclared” (as shown in bold), that’s a hint
+    that the kernel is missing a necessary entry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The name of where it failed might offer you a hint as to what’s missing. In
+    this case, at **1**, I have a function name where the compilation failed, and
+    then a specific undeclared variable **2** that caused the compilation to fail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I would start by figuring out where the `pci_intr_map` function comes from and
+    what it’s supposed to do. Search the source code and man pages for references
+    to the missing function. Failing that, try the mailing list archives. Be sure
+    to include the function and variable names in any web search. Generic output that
+    says that “there was an error” **3** or “the compile has stopped” **4** is less
+    unique, and hence it could be useful. If all else fails, fall back to the GENERIC
+    configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Your Kernel
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Your completed kernel is the file *bsd* in the compile directory. Before you
+    use your new kernel, verify that you have your current, working, well-behaved
+    kernel backed up to a separate file on the root filesystem, and then copy your
+    new kernel to */bsd*. That’s it! The next time you reboot, you’ll come up on your
+    new kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Some people do not like to copy their custom kernel to */bsd* until they’re
+    certain that the kernel will boot. If you’re one of these people, copy your new
+    kernel to the root directory under a different name, such as */bsd.test*. Boot
+    into this alternate kernel. Test your system. If everything works, properly install
+    your new kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Identifying the Running Kernel
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If you build several custom kernels, you might forget which kernel you’re running.
+    The `uname(1)` command will tell you the name of the kernel configuration file
+    used to build the running kernel. The `-v` flag will tell you the name of your
+    kernel configuration and the number of times you have compiled it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: This output does not mean that I’ve built a multiprocessor GENERIC kernel 348
+    times. I use the GENERIC kernel, and I let the OpenBSD release engineers build
+    my kernels for me. They have built 348 official snapshot multiprocessor kernels
+    without wiping the kernel build directory. Remember that building custom kernels
+    is for advanced programmers and ignorant newbies. I’m neither.
+  prefs: []
+  type: TYPE_NORMAL

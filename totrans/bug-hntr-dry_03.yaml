@@ -1,0 +1,974 @@
+- en: Chapter 3. Escape from the WWW Zone
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Thursday, August 23, 2007*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Dear Diary*,'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I’ve always been a big fan of vulnerabilities in operating system kernels because
+    they’re usually quite interesting, very powerful, and tricky to exploit. I recently
+    combed through several operating system kernels in search of bugs. One of the
+    kernels that I searched through was the kernel of Sun Solaris. And guess what?
+    I was successful. ![](httpatomoreillycomsourcenostarchimages939227.png)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*On January 27, 2010, Sun was acquired by Oracle Corporation. Oracle now generally
+    refers to Solaris as “Oracle Solaris.”*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 3.1 Vulnerability Discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Since the launch of OpenSolaris in June 2005, Sun has made most of its Solaris
+    10 operating system freely available as open source, including the kernel. So
+    I downloaded the source code^([[23](ch03s05.html#ftn.CHP-3-FN-1)]) and started
+    reading the kernel code, focusing on the parts that implement the user-to-kernel
+    interfaces, like IOCTLs and system calls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Input/output controls* (*IOCTLs*) are used for communication between user-mode
+    applications and the kernel.^([[24](ch03s05.html#ftn.CHP-3-FN-2)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Any user-to-kernel interface or API that results in information being passed
+    over to the kernel for processing creates a potential attack vector. The most
+    commonly used are*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*IOCTLs*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*System calls*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Filesystems*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Network stack*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Hooks of third-party drivers*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The vulnerability that I found is one of the most interesting I’ve discovered
+    because its cause—an undefined error condition—is unusual for an exploitable vulnerability
+    (compared to the average overflow bugs). It affects the implementation of the
+    `SIOCGTUNPARAM` IOCTL call, which is part of the IP-in-IP tunneling mechanism
+    provided by the Solaris kernel.^([[25](ch03s05.html#ftn.CHP-3-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I took the following steps to find the vulnerability:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: List the IOCTLs of the kernel.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 2: Identify the input data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 3: Trace the input data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These steps are described in detail below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: List the IOCTLs of the Kernel'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are different ways to generate a list of the IOCTLs of a kernel. In this
+    case, I simply searched the kernel source code for the customary IOCTL macros.
+    Every IOCTL gets its own number, usually created by a macro. Depending on the
+    IOCTL type, the Solaris kernel defines the following macros: `_IOR`, `_IOW`, and
+    `_IOWR`. To list the IOCTLs, I changed to the directory where I unpacked the kernel
+    source code and used the Unix `grep` command to search the code.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I now had a list of IOCTL names supported by the Solaris kernel. To find the
+    source files that actually process these IOCTLs, I searched the whole kernel source
+    for each IOCTL name on the list. Here is an example search for the `SIOCTONLINK`
+    IOCTL:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 2: Identify the Input Data'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The Solaris kernel provides different interfaces for IOCTL processing. The
+    interface that is relevant for the vulnerability I found is a programming model
+    called *STREAMS*.^([[26](ch03s05.html#ftn.CHP-3-FN-4)]) Intuitively, the fundamental
+    STREAMS unit is called a *Stream*, which is a data transfer path between a process
+    in user space and the kernel. All kernel-level input and output under STREAMS
+    are based on STREAMS messages, which usually contain the following elements: a
+    data buffer, a data block, and a message block. The *data buffer* is the location
+    in memory where the actual data of the message is stored. The *data block* (`struct
+    datab`) describes the data buffer. The *message block* (`struct msgb`) describes
+    the data block and how the data is used.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The message block structure has the following public elements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/sys/stream.h*^([[27](ch03s05.html#ftn.CHP-3-FN-5)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The structure elements `b_rptr` and `b_wptr` specify the current read and write
+    pointers in the data buffer pointed to by `b_datap` (see [Figure 3-1](ch03.html#diagram_of_a_simple_streams_message
+    "Figure 3-1. Diagram of a simple STREAMS message")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Diagram of a simple STREAMS message](httpatomoreillycomsourcenostarchimages939249.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-1. Diagram of a simple STREAMS message
+  prefs: []
+  type: TYPE_NORMAL
+- en: When using the STREAMS model, the IOCTL input data is referenced by the `b_rptr`
+    element of the `msgb` structure, or its typedef `mblk_t`. Another important component
+    of the STREAMS model is the so-called *linked message blocks*. As described in
+    the *STREAMS Programming Guide*, “[a] complex message can consist of several linked
+    message blocks. If buffer size is limited or if processing expands the message,
+    multiple message blocks are formed in the message” (see [Figure 3-2](ch03.html#diagram_of_linked_streams_message_blocks
+    "Figure 3-2. Diagram of linked STREAMS message blocks")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Diagram of linked STREAMS message blocks](httpatomoreillycomsourcenostarchimages939251.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-2. Diagram of linked STREAMS message blocks
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Trace the Input Data'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: I then took the list of IOCTLs and started reviewing the code. As usual, I searched
+    the code for input data and then traced that data while looking for coding errors.
+    After a few hours, I found the vulnerability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ip_process_ioctl()`^([[28](ch03s05.html#ftn.CHP-3-FN-6)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: When a `SIOCGTUNPARAM` IOCTL request is sent to the kernel, the function `ip_process_ioctl()`
+    is called. In line 26717, the value of `ci.ci_ipif` is explicitly set to `NULL`.
+    Because of the `SIOCGTUNPARAM` IOCTL call, the switch case `TUN_CMD` is chosen
+    (see line 26735), and the function `ip_extract_tunreq()` is called (see line 26740).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip_if.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ip_extract_tunreq()`^([[29](ch03s05.html#ftn.CHP-3-FN-7)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: In line 8178, a linked STREAMS message block is referenced, and on line 8179,
+    the structure `ta` is filled with the user-controlled IOCTL data. Later on, the
+    function `ipif_lookup_on_name()` is called (see line 8192). The first two parameters
+    of `ipif_lookup_on_name()` derive from the user-controllable data of structure
+    `ta`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip_if.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ipif_lookup_on_name()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: In line 19139, the value of `error` is explicitly set to 0\. Then in line 19161,
+    the interface name provided by the user-controlled IOCTL data is checked for the
+    presence of a colon (`IPIF_SEPARATOR_CHAR` is defined as a colon). If a colon
+    is found in the name, the bytes after the colon are treated as an interface alias.
+    If an alias has two or more digits and the first is zero (ASCII zero or hexadecimal
+    `0x30`; see line 19175), the function `ipif_lookup_on_name()` returns to `ip_extract_tunreq()`
+    with a return value of `NULL`, and the variable `error` is still set to 0 (see
+    lines 19139 and 19176).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip_if.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ip_extract_tunreq()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Back in `ip_extract_tunreq()`, the pointer `ipif` is set to `NULL` if `ipif_lookup_on_name()`
+    returns that value (see line 8192). Since `ipif` is `NULL`, the `if` statement
+    in line 8195 returns `TRUE`, and line 8196 is executed. The `ip_extract_tunreq()`
+    function then returns to `ip_process_ioctl()` with `error` as a return value,
+    which is still set to 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ip_process_ioctl()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Back in `ip_process_ioctl()`, the variable `err` is set to 0 since `ip_extract_tunreq()`
+    returns that value (see line 26740). Because `err` equals 0, the `if` statement
+    in line 26741 returns `FALSE`, and lines 26742 and 26743 are not executed. In
+    line 26788, the function pointed to by `ipip->ipi_func`—in this case the function
+    `ip_sioctl_tunparam()`—is called while the first parameter, `ci.ci_ipif`, is still
+    set to `NULL` (see line 26717).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip_if.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ip_sioctl_tunparam()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since the first parameter of `ip_sioctl_tunparam()` is `NULL`, the reference
+    `ipif->ipif_ill` in line 9432 can be represented as `NULL->ipif_ill`, which is
+    a classic NULL pointer dereference. If this NULL pointer dereference is triggered,
+    the whole system will crash due to a kernel panic. (See Section A.2 for more information
+    on NULL pointer dereferences.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Summary of the results so far:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An unprivileged user of a Solaris system can call the `SIOCGTUNPARAM` IOCTL
+    (see (1) in [Figure 3-3](ch03.html#summary_of_the_results_so_far._an_unpriv "Figure 3-3. Summary
+    of the results so far. An unprivileged user can force a system crash by triggering
+    a NULL pointer dereference in the Solaris kernel.")).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the IOCTL data sent to the kernel is carefully crafted—there has to be an
+    interface name with a colon directly followed by an ASCII zero and another arbitrary
+    digit—it’s possible to trigger a NULL pointer dereference (see (2) in [Figure 3-3](ch03.html#summary_of_the_results_so_far._an_unpriv
+    "Figure 3-3. Summary of the results so far. An unprivileged user can force a system
+    crash by triggering a NULL pointer dereference in the Solaris kernel.")) that
+    leads to a system crash (see (3) in [Figure 3-3](ch03.html#summary_of_the_results_so_far._an_unpriv
+    "Figure 3-3. Summary of the results so far. An unprivileged user can force a system
+    crash by triggering a NULL pointer dereference in the Solaris kernel.")).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: But why is it possible to trigger that NULL pointer dereference? Where exactly
+    is the coding error that leads to the bug?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem is that `ipif_lookup_on_name()` can be forced to return to its caller
+    function without an appropriate error condition being set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This bug exists in part because the `ipif_lookup_on_name()` function reports
+    error conditions to its caller in two different ways: through the return value
+    of the function (`return (null)`) as well as through the variable `error` (`*error
+    != 0`). Each time the function is called, the authors of the kernel code must
+    ensure that both error conditions are properly set and are properly evaluated
+    within the caller function. Such a coding style is error-prone and therefore not
+    recommended. The vulnerability described in this chapter is an excellent example
+    of the kind of problem that can arise from such code.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Summary of the results so far. An unprivileged user can force a system crash
+    by triggering a NULL pointer dereference in the Solaris kernel.](httpatomoreillycomsourcenostarchimages939253.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-3. Summary of the results so far. An unprivileged user can force a
+    system crash by triggering a NULL pointer dereference in the Solaris kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip_if.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ipif_lookup_on_name()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: In line 19139, the value of `error`, which holds one of the error conditions,
+    is explicitly set to 0\. Error condition 0 means that no error has occurred so
+    far. By supplying a colon directly followed by an ASCII zero and an arbitrary
+    digit in the interface name, it is possible to trigger the code in line 19176,
+    which leads to a return to the caller function. The problem is that no valid error
+    condition is set for `error` before the function returns. So `ipif_lookup_on_name()`
+    returns to `ip_extract_tunreq()` with `error` still set to 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip_if.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ip_extract_tunreq()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Back in `ip_extract_tunreq()`, the error condition is returned to its caller
+    function `ip_process_ioctl()` (see line 8196).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ip_process_ioctl()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then in `ip_process_ioctl()`, the error condition is still set to 0\. Thus,
+    the `if` statement in line 26741 returns `FALSE`, and the kernel continues the
+    execution of the rest of the function leading to the NULL pointer dereference
+    in `ip_sioctl_tunparam()`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What a nice bug!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 3-4](ch03.html#call_graph_summarizing_the_relationships "Figure 3-4. Call
+    graph summarizing the relationships of the functions involved in the NULL pointer
+    dereference bug. The numbers shown refer to the chronological order of events.")
+    shows a call graph summarizing the relationships of the functions involved in
+    the NULL pointer dereference bug.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Call graph summarizing the relationships of the functions involved in the
+    NULL pointer dereference bug. The numbers shown refer to the chronological order
+    of events.](httpatomoreillycomsourcenostarchimages939255.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-4. Call graph summarizing the relationships of the functions involved
+    in the NULL pointer dereference bug. The numbers shown refer to the chronological
+    order of events.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 3.2 Exploitation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Exploiting this bug was an exciting challenge. NULL pointer dereferences are
+    usually labeled as unexploitable bugs because they can generally be used for a
+    denial-of-service attack but not for arbitrary code execution. However, this NULL
+    pointer dereference is different, as it can be successfully exploited for arbitrary
+    code execution at the kernel level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The platform that I used throughout this section was the default installation
+    of Solaris 10 10/08 x86/x64 DVD Full Image (sol-10-u6-ga1-x86-dvd.iso), which
+    is called Solaris 10 Generic_137138-09*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To exploit the vulnerability, I performed the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Trigger the NULL pointer dereference for a denial of service.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use the zero page to get control over `EIP`/`RIP`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Step 1: Trigger the NULL Pointer Dereference for a Denial of Service'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To trigger the NULL pointer dereference, I wrote the following proof-of-concept
+    (POC) code (see [Example 3-1](ch03s02.html#proof-of-concept_code "Example 3-1. Proof-of-concept
+    code (poc.c) that I wrote to trigger the NULL pointer dereference bug I found
+    in Solaris")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 3-1. Proof-of-concept code (*poc.c*) that I wrote to trigger the NULL
+    pointer dereference bug I found in Solaris
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The POC code first opens the kernel network device `/dev/arp` (see line 14).
+    Note that the devices `/dev/tcp` and `/dev/udp` also support the `SIOCGTUNPARAM`
+    IOCTL and could therefore be used instead of `/dev/arp`. Next, the IOCTL data
+    is prepared (see lines 22–25). The data consists of an interface name with invalid
+    alias `:01` to trigger the bug. Finally the `SIOCGTUNPARAM` IOCTL is called and
+    the IOCTL data is sent to the kernel (see line 28).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I then compiled and tested the POC code as an unprivileged user on a Solaris
+    10 64-bit system:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The system crashed immediately and rebooted. After the reboot, I logged in
+    as root and inspected the kernel crash files with the help of Solaris Modular
+    Debugger (mdb)^([[30](ch03s05.html#ftn.CHP-3-FN-8)]) (see Section B.1 for a description
+    of the following debugger commands):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I used the `::msgbuf` debugger command to display the message buffer, including
+    all console messages up to the kernel panic:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The debugger output shows that the kernel panic happened due to a NULL pointer
+    dereference at address `0xfffffffff6314c7c` (see the value of the `RIP` register).
+    Next, I asked the debugger to display the instruction at that address:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The crash was caused by the instruction `movq 0x8(%r13),%r14` at address `ip_sioctl_tunparam+0x5c`.
+    The instruction tried to reference the value pointed to by register `r13`. As
+    the debugger output of the `::msgbuf` command shows, `r13` had the value 0 at
+    the time of the crash. So the assembler instruction is equivalent to the NULL
+    pointer dereference that happens in `ip_sioctl_tunparam()` (see line 9432 in the
+    following code snippet).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip_if.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ip_sioctl_tunparam()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: I was able to demonstrate that this bug can be successfully exploited by an
+    unprivileged user to crash the system. Because all Solaris Zones share the same
+    kernel, it’s also possible to crash the whole system (all zones), even if the
+    vulnerability is triggered in an unprivileged, non-global zone (see Section C.3
+    for more information on the Solaris Zones technology). Any hosting provider using
+    the Solaris Zones functionality could be greatly impacted if it were exploited
+    by someone with malicious intent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 2: Use the Zero Page to Get Control over EIP/RIP'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'After I was able to crash the system, I decided to attempt arbitrary code execution.
+    To do this, I had to solve the following two problems:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prevent the system from crashing as the NULL pointer dereference gets triggered.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Take control over `EIP`/`RIP`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The system crash is caused by the NULL pointer dereference. As the zero or
+    NULL page is normally not mapped, the dereference leads to an access violation
+    that crashes the system (see also Section A.2). All I had to do to prevent the
+    system from crashing was to map the zero page before triggering the NULL pointer
+    dereference. This can be done easily on the x86 and AMD64 architecture, because
+    Solaris segregates the virtual address space of processes on these platforms into
+    two parts: user space and kernel space (see [Figure 3-5](ch03s02.html#virtual_address_space_of_a_process_open
+    "Figure 3-5. Virtual address space of a process (Solaris x86 64-bit)")). User
+    space is where all user-mode applications run, while kernel space is where the
+    kernel itself, as well as kernel extensions (e.g., drivers), run. However, the
+    kernel and the user space of a process share the same zero page.^([[31](ch03s05.html#ftn.CHP-3-FN-9)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Each user-mode address space is unique to a particular process, while the kernel
+    address space is shared across all processes. Mapping the NULL page in one process
+    only causes it to be mapped in that process’s address space only.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Virtual address space of a process (Solaris x86 64-bit)](httpatomoreillycomsourcenostarchimages939257.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-5. Virtual address space of a process (Solaris x86 64-bit)^([[32](ch03s05.html#ftn.CHP-3-FN-10)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By mapping the zero page before triggering the NULL pointer dereference, I
+    was able to prevent the system from crashing. That got me to the next problem:
+    How to gain control over `EIP`/`RIP`? The only data that was under my full control
+    was the IOCTL data sent to the kernel and the user-space data of a process, including
+    the zero page. The only way to get control was to make the kernel reference some
+    data from the zero page that would later be used to control the execution flow
+    of the kernel. I thought that approach would not work, but I was wrong.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/inet/ip/ip_if.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`ip_sioctl_tunparam()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: The NULL pointer dereference happens in line 9432, when `ipif` is forced to
+    be `NULL`. This leads to the system crash. But if the zero page is mapped before
+    `NULL` is dereferenced, the access violation won’t be triggered, and the system
+    won’t crash. Instead, the value of the `ill` structure is determined while referencing
+    valid user-controlled data from the zero page. Therefore, all values of the `ill`
+    structure can be controlled by carefully crafting the zero page data. I was pleased
+    to find that in line 9446, the function `putnext()` is called with the user-controllable
+    value of `ill->ill_wq` as a parameter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*uts/common/os/putnext.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`putnext()`^([[33](ch03s05.html#ftn.CHP-3-FN-11)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: The user can fully control the data of the first function parameter of `putnext()`,
+    which means that the values of `qp`, `sq`, and `qi` can also be controlled through
+    the data of the mapped zero page (see lines 176, 177, and 180). Furthermore, the
+    user can control the value of the function pointer declared in line 154 (see line
+    273). This function pointer is then called in line 277.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, in summary, if the data of the mapped zero page is carefully crafted, it’s
+    possible to take control of a function pointer, thereby gaining full control over
+    `EIP`/`RIP` and resulting in arbitrary code execution at the kernel level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I used the following POC code to gain control over `EIP`/`RIP`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 3-2. POC code (*poc2.c*) used to gain control of EIP/RIP and thereby
+    achieve arbitrary code execution at the kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: In line 19 of [Example 3-2](ch03s02.html#poc_code_open_parenthesis "Example 3-2. POC
+    code (poc2.c) used to gain control of EIP/RIP and thereby achieve arbitrary code
+    execution at the kernel."), the zero page is mapped using `mmap()`. But the most
+    interesting part of the POC code is the layout of the zero page data (see lines
+    32–63). [Figure 3-6](ch03s02.html#data_layout_of_the_zero_page "Figure 3-6. Data
+    layout of the zero page") illustrates the relevant parts of this layout.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Data layout of the zero page](httpatomoreillycomsourcenostarchimages939259.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-6. Data layout of the zero page
+  prefs: []
+  type: TYPE_NORMAL
+- en: The left-hand side of [Figure 3-6](ch03s02.html#data_layout_of_the_zero_page
+    "Figure 3-6. Data layout of the zero page") shows the offsets into the zero page.
+    The middle lists the actual values of the zero page. The right-hand side shows
+    the references the kernel makes into the zero page. [Table 3-1](ch03s02.html#description_of_the_zero_page_data_layout
+    "Table 3-1. Description of the Zero Page Data Layout") describes the zero page
+    data layout illustrated in [Figure 3-6](ch03s02.html#data_layout_of_the_zero_page
+    "Figure 3-6. Data layout of the zero page").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 3-1. Description of the Zero Page Data Layout
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Function/Line of code | Data referenced by the kernel | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ip_sioctl_tunparam()`9432 | `ill = ipif-> ipif_ill;` | `ipif` is `NULL`,
+    and the offset of `ipif_ill` within the `ipif` structure is `0x8`. Therefore,
+    `ipif->ipif_ill` references address `0x8`. The value at address `0x8` is assigned
+    to `ill`. So the `ill` structure starts at address `0x10` (see (1) in [Figure 3-6](ch03s02.html#data_layout_of_the_zero_page
+    "Figure 3-6. Data layout of the zero page")). |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ip_sioctl_tunparam()`9446 | `putnext(ill-> ill_wq, mp1);` | The value of
+    `ill->ill_wq` is used as a parameter for `putnext()`. The offset of `ill_wq` inside
+    the `ill` structure is `0x10`. The `ill` structure starts at address `0x10`, so
+    `ill->ill_wq` is referenced at address `0x20`. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `putnext()`147 | `putnext(queue_t *qp, mblk_t *mp)` | The address of `qp`
+    equals the value pointed to by `ill->ill_wq`. Therefore, `qp` starts at address
+    `0x28` (see (2) in [Figure 3-6](ch03s02.html#data_layout_of_the_zero_page "Figure 3-6. Data
+    layout of the zero page")). |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `putnext()`176 | `qp = qp->q_next;` | The offset of `q_next` inside the `qp`
+    structure is `0x18`. Therefore, the next `qp` gets assigned the value from address
+    `0x40:` the start address of `qp` (`0x28`) + offset of `q_next` (`0x18`). The
+    value at address `0x40` is again `0x28`, so the next `qp` structure starts at
+    the same address as the one before (see (3) in [Figure 3-6](ch03s02.html#data_layout_of_the_zero_page
+    "Figure 3-6. Data layout of the zero page")). |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `putnext()`177 | `sq = qp->q_syncq;` | The offset of `q_syncq` inside the
+    `qp` structure is `0x78`. Since `q_syncq` is referenced later, it has to point
+    to a valid memory address. I chose `0x7d0`, which is an address in the mapped
+    zero page. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `putnext()`180 | `qi = qp->q_qinfo;` | The value of `qp->q_qinfo` is assigned
+    to `qi`. The offset of `q_qinfo` inside the `qp` structure is `0x0`. Since the
+    `qp` structure starts at address `0x28`, the value `0x0` is assigned to `qi` (see
+    (4) in [Figure 3-6](ch03s02.html#data_layout_of_the_zero_page "Figure 3-6. Data
+    layout of the zero page")). |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `putnext()`273 | `putproc = qi-> qi_putp;` | The value of `qi->qi_putp` is
+    assigned to the function pointer `putproc`. The offset of `qi_putp` inside the
+    `qi` structure is `0x0`. Therefore, `qi->qi_putp` is referenced at address `0x0`,
+    `and` the value at this address (`0x0000000041414141`) is assigned to the function
+    pointer. |'
+  prefs: []
+  type: TYPE_TB
+- en: 'I then compiled and tested the POC code as an unprivileged user inside a restricted,
+    non-global Solaris Zone:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The system crashed immediately and rebooted. After the reboot, I inspected
+    the kernel crash files (see Section B.1 for a description of the following debugger
+    commands):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: This time, the system crashed as the kernel tried to execute code at address
+    `0x41414141` (the value of the `RIP` register, as shown in bold in the debugger
+    output above). That means I had managed to gain full control over `EIP`/`RIP`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the right exploit payload, this bug can be used to escape from a restricted,
+    non-global Solaris Zone and then gain superuser privileges in the global zone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because of the strict laws in my home country, I am not allowed to provide you
+    with a full working exploit. However, if you are interested, you can go to the
+    book’s website to watch a video I recorded that shows the exploit in action.^([[34](ch03s05.html#ftn.CHP-3-FN-12)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 3.3 Vulnerability Remediation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Thursday, June 12, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After I informed Sun about the bug, it developed the following patch to address
+    the vulnerability:^([[35](ch03s05.html#ftn.CHP-3-FN-13)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: To fix the bug, Sun introduced the new error definition in lines 19180 and 19181
+    of `ipif_lookup_on_name()`. That successfully prevents the NULL pointer dereference
+    from happening. Although this measure rectifies the vulnerability described in
+    this chapter, it doesn’t solve the basic problem. The `ipif_lookup_on_name()`
+    function, as well as other kernel functions, still report error conditions to
+    their caller functions in two different ways, so chances are good that a similar
+    bug will occur again if the API isn’t used with great care. Sun should have changed
+    the API to prevent future bugs, but it didn’t.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 3.4 Lessons Learned
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As a programmer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Always define proper error conditions.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Always validate return values correctly.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Not all kernel NULL pointer dereferences are simple denial-of-service conditions.
+    Some of them are really bad vulnerabilities that can lead to arbitrary code execution.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'As a system administrator:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t blindly trust zones, compartments, fine-grained access controls, or virtualization.
+    If there is a bug in the kernel, there’s a good chance that every security feature
+    can be bypassed or evaded. And that’s true not only for Solaris Zones.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 3.5 Addendum
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Wednesday, December 17, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the vulnerability was fixed and a patch for Solaris is available, I released
+    a detailed security advisory on my website today.^([[36](ch03s05.html#ftn.CHP-3-FN-14)])
+    The bug was assigned CVE-2008-568\. Sun took **471 days** to provide a fixed version
+    of its operating system (see [Figure 3-7](ch03s05.html#timeline_from_notification_of_the_bug_to
+    "Figure 3-7. Timeline from notification of the bug to the release of the fixed
+    operating system")). That’s an unbelievably long time!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Timeline from notification of the bug to the release of the fixed operating
+    system](httpatomoreillycomsourcenostarchimages939261.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 3-7. Timeline from notification of the bug to the release of the fixed
+    operating system
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ^([[23](#ftn.CHP-3-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[24](#ftn.CHP-3-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[25](#ftn.CHP-3-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[26](#ftn.CHP-3-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[27](#ftn.CHP-3-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[28](#ftn.CHP-3-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[29](#ftn.CHP-3-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[30](#ftn.CHP-3-FN-8)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[31](#ftn.CHP-3-FN-9)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[32](#ftn.CHP-3-FN-10)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[33](#ftn.CHP-3-FN-11)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[34](#ftn.CHP-3-FN-12)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[35](#ftn.CHP-3-FN-13)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[36](#ftn.CHP-3-FN-14)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[23](#CHP-3-FN-1)]) The source code of OpenSolaris can be downloaded at [http://dlc.sun.com/osol/on/downloads/](http://dlc.sun.com/osol/on/downloads/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[24](#CHP-3-FN-2)]) See [http://en.wikipedia.org/wiki/Ioctl](http://en.wikipedia.org/wiki/Ioctl).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[25](#CHP-3-FN-3)]) For more information on the IP-in-IP tunneling mechanism,
+    refer to [http://download.oracle.com/docs/cd/E19455-01/806-0636/6j9vq2bum/index.html](http://download.oracle.com/docs/cd/E19455-01/806-0636/6j9vq2bum/index.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[26](#CHP-3-FN-4)]) See the *STREAMS Programming Guide* from Sun Microsystems
+    Inc., which can be downloaded at [http://download.oracle.com/docs/cd/E19504-01/802-5893/802-5893.pdf](http://download.oracle.com/docs/cd/E19504-01/802-5893/802-5893.pdf).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[27](#CHP-3-FN-5)]) OpenGrok source browser reference of OpenSolaris: [http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/sys/stream.h?r=4823%3A7c9aaea16585](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/sys/stream.h?r=4823%3A7c9aaea16585).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[28](#CHP-3-FN-6)]) OpenGrok source browser reference of OpenSolaris: [http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip.c?r=4823%3A7c9aaea16585](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip.c?r=4823%3A7c9aaea16585).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[29](#CHP-3-FN-7)]) OpenGrok source browser reference of OpenSolaris: [http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c?r=5240%3Ae7599510dd03](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c?r=5240%3Ae7599510dd03).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[30](#CHP-3-FN-8)]) The official *Solaris Modular Debugger Guide* can be
+    found at [http://dlc.sun.com/osol/docs/content/MODDEBUG/moddebug.html](http://dlc.sun.com/osol/docs/content/MODDEBUG/moddebug.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[31](#CHP-3-FN-9)]) For more information, refer to the paper “Attacking
+    the Core: Kernel Exploiting Notes” by twiz & sgrakkyu, which can be found at [http://www.phrack.com/issues.html?issue=64&id=6](http://www.phrack.com/issues.html?issue=64&id=6).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[32](#CHP-3-FN-10)]) More information on the virtual address space of Solaris
+    processes can be found at [http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/i86pc/os/startup.c?r=10942:eaa343de0d06](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/i86pc/os/startup.c?r=10942:eaa343de0d06).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[33](#CHP-3-FN-11)]) OpenGrok source browser reference of OpenSolaris: [http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/os/putnext.c?r=0%3A68f95e015346](http://cvs.opensolaris.org/source/xref/onnv/onnv-gate/usr/src/uts/common/os/putnext.c?r=0%3A68f95e015346).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[34](#CHP-3-FN-12)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[35](#CHP-3-FN-13)]) The patch from Sun can be found at [http://cvs.opensolaris.org/source/diff/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c?r1=/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c@5240&r2=/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c@5335&format=s&full=0](http://cvs.opensolaris.org/source/diff/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c?r1=/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c@5240&r2=/onnv/onnv-gate/usr/src/uts/common/inet/ip/ip_if.c@5335&format=s&full=0).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[36](#CHP-3-FN-14)]) My security advisory that describes the details of the
+    Solaris kernel vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2008-015.txt](http://www.trapkit.de/advisories/TKADV2008-015.txt).
+  prefs: []
+  type: TYPE_NORMAL

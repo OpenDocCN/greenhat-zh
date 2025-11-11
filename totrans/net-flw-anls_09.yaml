@@ -1,0 +1,637 @@
+- en: Chapter 9. EDGES AND ANALYSIS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages651574.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: With the tools I've discussed throughout this book, you can analyze and present
+    your data in just about any way you might need. In this chapter, you'll consider
+    a couple of similar systems and learn how to connect them to your flow collector.
+    Then you'll look at a couple of common use cases that illustrate what you can
+    accomplish with flow analysis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: NetFlow v9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: NetFlow version 9 is mostly used for IPv6 (although it can be extended to include
+    other types of information as well) and is only rarely deployed. Although most
+    NetFlow sensors support multiple versions, such as 5 or 7 in addition to 9, a
+    few manufacturers make hardware that speaks only version 9\. When version 9 becomes
+    more widely used, flow-tools and its brethren will probably develop support for
+    it. Until that time, however, how can you cope with NetFlow version 9 data?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other free flow collectors accept version 9 flows. You can translate version
+    9 data into flow-tools format. I'll show how to use `flowd`^([[11](#ftn.CHP-9-FN-1)])
+    ([http://www.mindrot.org/projects/flowd/](http://www.mindrot.org/projects/flowd/)),
+    by the author of `softflowd`. To transform your data into a `flow-capture` record
+    file, you first need to install `flowd`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing flowd
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'If your operating system includes a `flowd` package, use it. If not, you should
+    install `flowd`, but before you do, install the following software:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: BSD `yacc` (usually packaged as `byacc` on Linux systems)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: GNU `make`
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Yes, that's GNU-style `make` plus BSD-style `yacc`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `flowd` software expects to run as the unprivileged user *_flowd*. Create
+    this user before building the software.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once `yacc` and `make` are installed, build `flowd` much like you would flow-tools
+    or `softflowd`. The `configure` script includes a variety of options. Here, I
+    build and install `flowd` under */usr/local/flowd*`:`
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: That's it! You should get a configuration file and the program itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring flowd
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Where you control `flow-capture` with command-line arguments, `flowd` uses a
+    configuration file. Most `flowd` configuration options are similar to options
+    offered by `flow-capture`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`flowd` stores flow records in the logfile at ❶. Like `flow-capture`''s `ft-`
+    files, a `flowd` log is a compressed binary file that you cannot view directly.
+    Like most other software, `flowd` records its process ID in a PID file, as shown
+    at ❷. Most systems store PID files in the directory */var/run*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`flowd` must listen to the network, and at ❸ you specify an IP address and
+    a UDP port, separated by a colon. If you were to use an IP of 0.0.0.0, `flowd`
+    would listen for incoming flow data on all IP addresses on the system. To restrict
+    the IP addresses `flowd` accepts flow data from, list a router''s IP address as
+    a flow source, as shown at ❹.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although `flowd` has comprehensive filtering features to let you record only
+    certain types of flows, you tell `flowd` at ❺ to record everything and at ❻ to
+    accept everything the sensor transmits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you've finished editing your configuration file, start `flowd`, and tell
+    your version 9 sensor to transmit data to this collector's IP address and port.
+    When version 9 flow data arrives, `flowd` should record it in the logfile. Once
+    you see the logfile grow larger, it's time to convert data to flow-tools format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Converting flowd Data to Flow-tools
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'NetFlow version 9 includes the information expected in a NetFlow v5 record:
+    source and destination addresses and ports, protocol numbers, packet counts, and
+    so on. You need to automatically extract this information from the `flowd` log
+    and import it into a `flow-capture ft-` file. Fortunately, Craig Weinhold''s `flowd2ft`
+    script does this for you. You can copy the script from the following listing or
+    download it from [http://www.networkflowanalysis.com/](http://www.networkflowanalysis.com/).
+    Let''s look at it.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Before using this script, you'll need to set the configuration variables. At
+    ❶ you hard-code the location of the `flow-import` program. At ❷ you point the
+    script to the directory you want to use to store your created `flow-capture` files.
+    At ❸ you give the script the time zone offset in minutes so that it can include
+    that information in the filename just like `flow-capture` would. At ❹ you tell
+    the script to create a new `ft-` file every 300 seconds, just as your usual `flow-capture`
+    instances do.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The script also needs to know where the `flowd-reader` program (❺) is installed
+    and where to find the `flowd` configuration (❻). At ❼ the script reads the `flowd`
+    configuration file for the rest of its settings and then at ❽ moves the existing
+    `flowd` file out of the way so that it can restart `flowd` and close the existing
+    logfile. Finally, at ❾ it reads the freshly closed logfile and creates a new `flow-capture`
+    file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After configuring the script, run it once by hand. It should create a new `ft-`
+    logfile in the destination directory and tell you how many flows it processed.
+    If the script doesn''t run correctly, check your settings and error and log messages.
+    Once you''re sure that your script is running properly, have your system run it
+    every five minutes by making the appropriate entry in `cron`, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: You will now have flow records that are compatible with the rest of your flow
+    reporting system. You can use these records to set up FlowScan, run `flow-report`,
+    or do anything else you like.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[11](#CHP-9-FN-1)]) I seriously considered using `flowd` for this book, but
+    it doesn't yet have the variety of canned reports that `flow-capture` supports.
+    I expect this to change over time, however, and if you need an IPv6 flow collector
+    and are comfortable writing reports in Perl or Python, you should consider `flowd`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sFlow
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'sFlow is a flow export technology invented by InMon that competes with Cisco''s
+    NetFlow. Many vendors, such as HP and Extreme, offer equipment that exports sFlow
+    but not NetFlow. No need to despair, though: You can translate sFlow packets into
+    NetFlow version 5 data and feed that to flow-tools.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you have a lot of sFlow-based equipment, however, you should really look
+    into an sFlow reporting system. I recommend converting sFlow to NetFlow when you
+    have an existing `flow-tools` setup and a couple of sFlow devices that you'd like
+    to integrate into that system, not when you have a data center full of sFlow hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring sFlow Export with sflowenable
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Some sFlow sensors can be configured through the GUI or command line, but a
+    few sFlow sensors require configuration via SNMP. Although you could manually
+    use SNMP GET and SET commands to set up sFlow, the fine folks at InMon offer a
+    script to automate this process for you. Grab a copy of `sflowenable` from [http://www.inmon.com/technology/sflowenable/](http://www.inmon.com/technology/sflowenable/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`sflowenable` requires the net-snmp tools you probably already have installed
+    on your network management workstation. It also requires GNU `awk`, also known
+    as `gawk`. Some operating systems include `gawk` as the default `awk`; others
+    have it as an add-on package. If `sflowenable` fails with cryptic `awk` errors,
+    you have the wrong `awk`. Install `gawk`, and either edit the script to use `gawk`
+    instead of `awk` or alias `awk` to `gawk` in your shell. Now say that three times
+    fast.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running `sflowenable` requires the sensor hostname and a read-write SNMP community,
+    the collector IP, and the UDP port you want to receive sFlow data on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For example, to activate sFlow on the device bigSwitch, using the SNMP community
+    LucasRulez, and to transmit the data to a sFlow collector on the host 192.0.2.15
+    on port 5515, I would run the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should see data coming to port 5515 on your collector almost immediately.
+    But wait a minute—you have nothing that can listen to sFlow, let alone do anything
+    with it! You'll handle that detail now.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Convert sFlow to NetFlow
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `sflowtool` program is a free sFlow collector, capture, and converter available
+    from [http://www.inmon.com/technology/sflowTools.php](http://www.inmon.com/technology/sflowTools.php).
+    Among its features, it can convert a sFlow data stream to NetFlow version 5 and
+    send it to a NetFlow collector. This is perfect for these purposes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`sflowtool` is a simple program with no special prerequisites. Build it with
+    the familiar `./configure`, `make`, `make install` routine you''ve used repeatedly.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To have `sflowtool` convert and retransmit data, you need a port to listen for
+    sFlow connections, a `flow-capture` host, and the `flow-capture` port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the earlier example, I assumed that you had a sFlow collector on port 5515\.
+    Let''s assume you want to accept those sFlow packets, convert them to NetFlow,
+    and retransmit them to a `flow-capture` instance running on the same host on port
+    5516\. You would run `sflowtool` like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now configure a `flow-capture` instance to record the flow data, and you have
+    data from your sFlow-only device with no local scripts or conversion routines
+    necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Problem Solving with Flow Data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You've explored the usefulness of various flow analysis features throughout
+    this book. Now you'll look at a few case studies of real problems and possible
+    solutions. Some of these I've touched on earlier; others are completely new.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding Busted Software
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Under normal circumstances, a small percentage of TCP connections break regularly
+    on every network. Software stacks misbehave, clients try to connect to defunct
+    printers, and users who ought to know better install freeware that behaves unspeakably.
+    Perhaps the fastest way to use flow data to improve your network is to check for
+    these broken connections, identify their sources and destinations, and discover
+    what software on the affected machines is causing the problems. The following
+    are two common groups of "broken" TCP connections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**SYN-only flows**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A machine attempts to connect to a remote host that doesn't answer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**RST-only flows**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A machine attempts to connect to a remote host that refuses the connection.
+    You can write filters for each of these and report on them separately.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Broken Connection Filters
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The following filters will capture these two types of broken TCP connection:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here you define a primitive for SYN-only flows at ❶, a corresponding filter
+    at ❸, an RST-only primitive at ❷, and its matching filter at ❹.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Checking for Resets
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now use the `rst-only` filter on a sample of typical traffic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Choose records from a time where you expect "typical" traffic. For example,
+    if your office is open only from 9 **am** to 5 **pm**, the flow records from 2
+    **am** will not represent normal use (although they're probably interesting to
+    look at separately). On my network, I'm analyzing records at ❶ from 10 **am**
+    to 11 **am**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You're hunting for machines that are either sending or receiving abnormally
+    large numbers of SYN-only or RST-only flows. Although you might initially view
+    the data with `flow-print`, what you really want is a list of IP addresses and
+    the number of matching flows, as offered by the `ip-address` report at ❷. I want
+    to sort in decreasing order, as shown at ❸. In this hour, the first two hosts
+    have 30 times more RST-only flows than the host in third place, as you can see
+    at ❹. Something isn't behaving well there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next step is to check a few more time windows to see whether this behavior
+    is consistent or whether these two hosts were just having trouble at a particular
+    time. Assuming that the behavior is consistent, take a closer look at the RST-only
+    traffic from the first host. In this example, I''m using the `ip-addr` report
+    created in [Chapter 4](ch04.html "Chapter 4. FILTERING FLOWS"), so I don''t need
+    to differentiate between source and destination addresses yet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see in the previous listing, each flow appears basically identical
+    at first glance. The host 192.0.2.184 sends two TCP RSTs to 192.0.2.197, from
+    port 443 to a high-numbered port. These are rejected HTTPS requests. If you were
+    to view all traffic between these two hosts, you'd see that 192.0.2.197 makes
+    HTTPS requests to 192.0.2.184, which then rejects them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Running `flow-print` a second time with a format that includes timestamps,
+    such as the following, shows that the client makes this request every few seconds:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: The host 192.0.2.197 is running a piece of software that is broken or misconfigured.
+    Now go ask the system administrator what's going on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that my test network is fairly small. In an enterprise data center, you
+    might find dozens of different software packages behaving badly; I've personally
+    seen misconfigured software try to contact other hosts hundreds of times a second.
+    Although TCP RSTs don't usually consume enough bandwidth to cause problems, resolving
+    these problems makes the software more efficient, reduces hardware requirements,
+    and might reduce network traffic and service delays in unexpected ways.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Checking for Failed Connections
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: SYN-only flows show that a host requested a connection but nothing answered.
+    Either the requested address is not on the network, the host at that address cannot
+    answer the request, or the host is silently ignoring the request. Although you
+    probably know whether your equipment is configured to silently ignore requests,
+    identifying the first two types of hosts can be very useful. You'll identify IP
+    addresses with high levels of SYN-only flows much like you checked for RST-only
+    flows; only the filter changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this report, once again you have a clear outlier: the host 192.0.2.13 shown
+    at ❶ has many more SYN-only flows than any other host. To see why, look at that
+    host''s traffic using the same technique you used for a particular RST-only host,
+    as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the host 192.0.2.13 repeatedly tries to contact 192.0.2.16,
+    first on port 24 at ❶ and then port 26 (❷), port 27 (❸), port 28 (❹), and so on.
+    This particular data shows that 192.0.2.13 is trying every port between 1 and
+    1024 on 192.0.2.16\. The connection attempts then move to 192.0.2.17.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This activity is indicative of a port scanner. Remember, not all port scanners
+    scan ports sequentially—the key is to look for the same IP being hit at many ports
+    in a relatively brief time. If 192.0.2.13 is your security workstation and you
+    habitually scan your own network, this might be normal behavior. However, worms
+    and intruders also use port scanners to identify vulnerable targets. If you don't
+    know why this machine is scanning the network, find out!
+  prefs: []
+  type: TYPE_NORMAL
+- en: One interesting thing in this output is that the port scan appears to skip port
+    25\. Remember, you're checking for flows that reset immediately. If a host responds
+    on a port, it won't appear on this list. In this case, 192.0.2.16 runs a mail
+    server; viewing all the traffic between these hosts would show a flow to port
+    25 and an answering flow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Investigating another IP with a high SYN-only count might produce results like
+    these:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Each of these different source IP addresses is trying to connect to 192.0.2.158,
+    all on TCP port 80\. A quick check shows that this machine is a web server, and
+    it does answer requests on port 80\. Why do you see these SYN-only flows?
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your network equipment is reporting a flow, it certainly delivered the packet
+    to the network node because delivering packets is a much higher-priority task
+    than flow reporting! In this particular case, removing the `syn-only` filter from
+    the `flow-print` command showed that the web server answered thousands of requests.
+    `flow-report` told you that this host had 193 SYN-only flows during the hour you
+    checked, but the web server just didn't answer these 193 requests. Maybe it ran
+    out of memory or CPU. Perhaps the network card was saturated, or the web server
+    software was reloaded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Graphing the times the SYN-only packets appeared might give some answers, especially
+    when compared with a graph of the number of connections opened at that time or
+    list of times the server performs internal maintenance. As the network administrator,
+    all you can say is that during this hour users got a "Page Cannot Be Displayed"
+    or some similar error 193 times. Is this acceptable in your environment and situation?
+    Probably not.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The nice thing with this type of result is that you know what part of the delivery
+    system failed. The network delivered the packets, and the web server didn't answer.
+    If the web server administrator reports that he's getting complaints about network
+    timeouts, you can provide evidence that the timeouts aren't actually network problems
+    and offer suggestions on how to fix the issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Identifying Worms
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If you're on an enterprise network, worms cause something worse than system
+    trouble. They cause meetings. With management. And because your antivirus software
+    probably kicked up desktop alarms as the worm tried to propagate, those meetings
+    will probably include senior managers who will ask inconvenient questions about
+    how you spend your time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Your best response is to find the worm source as quickly as possible. For example,
+    in spring 2009, my employer's antivirus systems began spewing warnings about infection
+    attempts from the Conficker virus. At a global company with tens of thousands
+    of desktops, manually identifying virus sources could take countless man-hours
+    and would require cooperation across umpteen time zones and multiple language
+    barriers. Even though I had flow data for only three plants out of dozens around
+    the world, flow analysis identified the sources in about 15 minutes and spared
+    most of those meetings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To find a worm, first identify the worm''s propagation method. A few minutes
+    on Google tells me that Conficker spreads through Microsoft''s file-sharing port,
+    on TCP/445\. The worm probes every IP on its network to identify Windows hosts
+    and infects any it finds. This is unusual behavior: Although many servers will
+    receive connections from many different hosts, very few systems will try to reach
+    every other host on a network.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can use the `ip-source-address-destination-count` report to count the number
+    of hosts a system tries to contact, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, I begin at ❶ with the flow files for the time window when the
+    worm attacked my local network. I then search at ❷ only for the flows going to
+    or from port 445, and I run these flows through the `ip-source-address-destination-count`
+    report at ❸. Unnecessary fields are removed at ❹ to make the output easier to
+    read.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Remember that this report and its counterpart, `ip-destination-address-source-count`,
+    do not have built-in sorting functions. You must sort these externally, as shown
+    at ❺. (One consequence of sorting externally is that the header for each column
+    appears at the bottom of the list. I've restored the header to the top of this
+    example to make it easier to understand. Do the same for your managers.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This report reveals two hosts that try to connect to a remarkably large number
+    of other hosts: 172.17.84.14 connected or tried to connect to 1,851 different
+    hosts on my data center network, as shown at ❻. Because the network has fewer
+    than 500 active computers, this is immediately suspicious. The second host shown
+    at ❼ has a similar profile, while the third at ❽ is my corporate file server,
+    which has many fewer connections.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These two machines turned out to be on a test network in a different hemisphere.
+    Without flow analysis, I could never have identified these machines. With analysis,
+    an email documenting the results got me out of having to attend any of the follow-up
+    meetings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Traffic to Illegal Addresses
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Is your firewall misconfigured? Yes. Yes, it is. You just don't know it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most firewalls use Network Address Translation (NAT) to connect hosts on private
+    addresses to ones on the public Internet. If you have a complicated firewall policy
+    and a firewall platform that encourages complicated or downright bizarre NAT rules,^([[12](#ftn.CHP-9-FN-2)])
+    it's easy to accidentally leak untranslated addresses onto your Internet-facing
+    network. If you're running multiple firewalls using one policy, it becomes almost
+    inevitable. Your ISP should filter internal addresses from your Internet circuits,
+    so any traffic with private IP addresses on your external network is coming from
+    you (or you and your ISP need to have a little talk).
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's easy to track down traffic from private addresses. First, define a filter
+    that includes your internal addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here you identify at ❶ three blocks of IP addresses that are used internally
+    and define a filter for them. Next, go to the directory where you store flow records
+    for your Internet-facing network, filter for these addresses, and print the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Each of these flows passed through a firewall rule with an improper NAT configuration.
+    In other words, these rules are broken, and they will impact you in unexpected
+    ways. For example, the line at ❶ shows a host trying to send email from a private
+    address. The connection never completes, of course. If this is your backup mail
+    exchanger, you'll have a nasty surprise when your primary breaks. Similarly, at
+    ❷ you also have a host trying to make name service queries from a private address.
+    Fixing these in advance will reduce future outages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Traffic to Nonexistent Hosts
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Theoretically, removing network servers should reduce network usage. Unfortunately,
+    that's not always true.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At one point, certain desktops on my employer's corporate network would not
+    become useful until more than five minutes after the user entered their username
+    and password. This is slow even for commodity operating systems. Although not
+    every workstation was affected, most of those that were impacted were at remote
+    locations where I lacked diagnostic equipment. I had a user try one of these workstations
+    at a specific time and then checked the flow records to see whether that workstation
+    had tried to contact anything at my data center during that window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As it turned out, most of the traffic from that workstation during that time
+    was trying to reach my Novell login server, which had been turned off a few days
+    before. The workstation still had the client installed, however. Apparently the
+    Novell client software insisted on trying to contact the login server even though
+    it had been told to shut down. Removing the Novell client from that client resolved
+    the slow login issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With one problem identified, I next used FlowGrapher to diagram traffic from
+    that remote plant to the disconnected server's IP address. For two hours every
+    morning, this traffic consumed almost 25 percent of the plant's network connection.
+    Although removing the disabled client had previously been considered unnecessary,
+    this evidence changed people's minds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Strictly speaking, this wasn't a network problem, but diagnosing it required
+    involvement by a network administrator and resolving it reduced the number of
+    network complaints. And remember, all a network engineer wants is for his users
+    to shut up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[12](#CHP-9-FN-2)]) (Cough.) Checkpoint. (Cough.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Afterword
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: I'm certain that most of you get along fabulously with each and every one of
+    your co-workers, your work environment is a delight and a joy, and your IT group
+    is a seamless, cohesive team without bitter bickering or belabored backbiting.
+    Those of you unfortunate enough to work in a less supportive environment should
+    read this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Flow analysis will change your problem-solving capacities. You'll solve odd
+    issues that have haunted your network for years. You'll conclusively show that
+    problems that everyone has comfortably blamed on the network are actually server
+    or software problems. You'll even be able to dig up a whole list of weird problems
+    that other people are causing on the network. All of this will quickly change
+    your relationship with your co-workers and management.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Systems administration and network engineers have a long tradition of being
+    difficult to work with; we even have archetypes like the Bastard Operator from
+    Hell. Now that you have evidence, it's tempting to make those who doubted you
+    suffer for their intransigence. Now that you have evidence, though, you can afford
+    to be generous. When something is your problem, admit it. When you show that something
+    isn't your problem, however, say something like "Here's the evidence identifying
+    the problem. Although this is clearly not a network issue, I'm happy to help you
+    solve your problem." Admittedly, this is much less satisfying than using words
+    like "you loser." Unlikely as it seems, a positive attitude can change co-worker
+    and management attitudes about the network staff and can improve your life.
+  prefs: []
+  type: TYPE_NORMAL
+- en: And if not, well, at least you'll know for certain that it's not your problem.
+    And it's *never* too late to call someone a doofus.
+  prefs: []
+  type: TYPE_NORMAL

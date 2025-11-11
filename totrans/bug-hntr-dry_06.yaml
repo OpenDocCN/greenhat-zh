@@ -1,0 +1,845 @@
+- en: Chapter 6. One Kernel to Rule Them All
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Saturday, March 8, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Dear Diary*,'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After spending time auditing open source kernels and finding some interesting
+    bugs, I wondered whether I could find a bug in a Microsoft Windows driver. There
+    are lots of third-party drivers available for Windows, so choosing just a few
+    to explore wasn’t easy. I finally chose some antivirus products, since they’re
+    usually promising targets for bug hunting.^([[57](ch06s05.html#ftn.CHP-6-FN-1)])
+    I visited VirusTotal^([[58](ch06s05.html#ftn.CHP-6-FN-2)]) and chose the first
+    antivirus product that I recognized on its list: avast! from ALWIL Software.^([[59](ch06s05.html#ftn.CHP-6-FN-3)])
+    That turned out to be a serendipitous decision.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*On June 1, 2010, ALWIL Software was renamed AVAST Software*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.1 Vulnerability Discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'I used the following steps to find the vulnerability:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The vulnerability described in this chapter affects all Microsoft Windows
+    platforms supported by avast! Professional 4.7\. The platform that I used throughout
+    this chapter was the default installation of Windows XP SP3 32-bit*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Prepare a VMware guest for kernel debugging.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 2: Generate a list of the drivers and device objects created by avast!'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 3: Check the device security settings.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 4: List the IOCTLs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 5: Find the user-controlled input values.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 6: Reverse engineer the IOCTL handler.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 1: Prepare a VMware Guest for Kernel Debugging'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: First, I set up a Windows XP VMware^([[60](ch06s05.html#ftn.CHP-6-FN-4)]) guest
+    system that I configured for remote kernel debugging with WinDbg.^([[61](ch06s05.html#ftn.CHP-6-FN-5)])
+    The necessary steps are described in Section B.3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 2: Generate a List of the Drivers and Device Objects Created by avast!'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: After downloading and installing the latest version of avast! Professional^([[62](ch06s05.html#ftn.CHP-6-FN-6)])
+    in the VMware guest system, I used DriverView^([[63](ch06s05.html#ftn.CHP-6-FN-7)])
+    to generate a list of the drivers that avast! loaded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the benefits of DriverView is that it makes identification of third-party
+    drivers easy. As illustrated in [Figure 6-1](ch06.html#a_list_of_the_avast_exclamation_drivers
+    "Figure 6-1. A list of the avast! drivers in DriverView"), avast! loaded four
+    drivers. I chose the first one on the list, called *Aavmker4.sys*, and used IDA
+    Pro^([[64](ch06s05.html#ftn.CHP-6-FN-8)]) to generate a list of the device objects
+    of that driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A driver can create device objects to represent devices, or an interface to
+    the driver, at any time by calling *`IoCreateDevice`* or *`IoCreateDeviceSecure`*.^([[65](ch06s05.html#ftn.CHP-6-FN-9)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A list of the avast! drivers in DriverView](httpatomoreillycomsourcenostarchimages939305.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6-1. A list of the avast! drivers in DriverView
+  prefs: []
+  type: TYPE_NORMAL
+- en: After IDA disassembled the driver, I started reading the assembly of the driver’s
+    initialization routine, called `DriverEntry()`.^([[66](ch06s05.html#ftn.CHP-6-FN-10)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the `DriverEntry()` function, a device called `\Device\AavmKer4` (see `.text:00010632`
+    and `.text:000105D2`) is created using the `IoCreateDevice()` function at address
+    `.text:0001064D`. The illustrated assembly snippet of `DriverEntry()` can be translated
+    into the following C code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 3: Check the Device Security Settings'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: I then checked the security settings of the `AavmKer4` device using WinObj (see
+    [Figure 6-2](ch06.html#navigating_to_the_security_settings_of_t "Figure 6-2. Navigating
+    to the security settings of the AavmKer4 device in WinObj")).^([[67](ch06s05.html#ftn.CHP-6-FN-11)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Navigating to the security settings of the AavmKer4 device in WinObj](httpatomoreillycomsourcenostarchimages939307.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6-2. Navigating to the security settings of the `AavmKer4` device in
+    WinObj
+  prefs: []
+  type: TYPE_NORMAL
+- en: To view the security settings of the device in WinObj, I right-clicked the device
+    name, chose **Properties** from the option list, and then chose the **Security**
+    tab. The device object allows every system user (Everyone group) to read from
+    or to write to the device (see [Figure 6-3](ch06.html#viewing_the_security_settings_of_reverse
+    "Figure 6-3. Viewing the security settings of \Device\AavmKer4")). This means
+    that every user of the system is allowed to send data to the IOCTLs implemented
+    by the driver, which is great—this makes this driver a valuable target!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 4: List the IOCTLs'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A Windows user space application must call `DeviceIoControl()` in order to send
+    an IOCTL request to a kernel driver. Such calls to `DeviceIoControl()` cause the
+    I/O manager of Windows to create an `IRP_MJ_DEVICE_CONTROL` request, which is
+    sent to the topmost driver. The driver implements a special dispatch routine to
+    handle `IRP_MJ_DEVICE_CONTROL` requests, and that dispatch routine is referenced
+    through an array called `MajorFunction[]`. This array is an element of the `DRIVER_OBJECT`
+    data structure, which can be found in *ntddk.h* of the Windows Driver Kit.^([[68](ch06s05.html#ftn.CHP-6-FN-12)])
+    To save space, I removed the comments from the following code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Viewing the security settings of \Device\AavmKer4](httpatomoreillycomsourcenostarchimages939309.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6-3. Viewing the security settings of `\Device\AavmKer4`
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Below, the elements of the `MajorFunction[]` array are defined (also from *ntddk.h*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To list the IOCTLs implemented by a driver, I had to find the driver’s IOCTL
+    dispatch routine. If I’d had access to the C code of the driver, this would have
+    been easy, since I know that the assignment of the dispatch routine usually looks
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Unfortunately, I didn’t have access to the source code of the avast! *Aavmker4.sys*
+    driver. How could I find the dispatch assignment using only the disassembly provided
+    by IDA Pro?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To answer this question, I needed more information about the `DRIVER_OBJECT`
+    data structure. I attached WinDbg to the VMware guest system and used the `dt`
+    command (see Section B.2 for a detailed description of the following debugger
+    commands) to display the available information about the structure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The debugger output shows that the `MajorFunction[]` array starts at structure
+    offset `0x38`. After looking at the *ntddk.h* header file of the Windows Driver
+    Kit, I knew that `IRP_MJ_DEVICE_CONTROL` was located at offset `0x0e` in `MajorFunction[]`
+    and that the element size of the array was a pointer (4 bytes on 32-bit platforms).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So the assignment can be expressed as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'There are countless ways to express this assignment in Intel assembly, but
+    what I found in the driver code of avast! was these instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: At address `.text:00010748`, a pointer to a `DRIVER_OBJECT` is stored in `EAX`.
+    Then at address `.text:00010750`, the function pointer of the IOCTL dispatch routine
+    gets assigned to `MajorFunction[IRP_MJ_DEVICE_CONTROL]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I had finally found the IOCTL dispatch routine of the driver: `sub_1098C`!
+    The IOCTL dispatch routine could also be found with the help of the debugger:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The output of WinDbg shows that the `IRP_MJ_DEVICE_CONTROL` dispatch routine
+    can be found at address `Aavmker4+0x98c`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After I found the dispatch routine, I searched this function for the implemented
+    IOCTLs. The IOCTL dispatch routine has the following prototype:^([[69](ch06s05.html#ftn.CHP-6-FN-13)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: The second function parameter is a pointer to an *I/O request packet* (*IRP*)
+    structure. An IRP is the basic structure that the Windows I/O manager uses to
+    communicate with drivers and allow drivers to communicate with each other. This
+    structure transports the user-supplied IOCTL data as well as the requested IOCTL
+    code.^([[70](ch06s05.html#ftn.CHP-6-FN-14)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I then had a look at the disassembly of the dispatch routine in order to generate
+    a list of the IOCTLs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: A pointer to the IRP structure is stored in `EBX` at address `.text:000109B2`
+    of the IOCTL dispatch routine. Then a value, located at offset `0x60` of the IRP
+    structure, is referenced (see `.text:000109B5`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output of WinDbg shows that the IRP structure member `CurrentStackLocation`
+    is located at offset `0x60`. This structure is defined in *ntddk.h* of the Windows
+    Driver Kit:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The layout of the `_IO_STACK_LOCATION` structure is shown below (see *ntddk.h*
+    of the Windows Driver Kit):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In addition to the `IoControlCode` of the requested IOCTL, this structure contains
+    information about the size of the input and output buffer. Now that I had more
+    information about the `_IO_STACK_LOCATION` structure, I took a second look at
+    the disassembly:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: As I mentioned before, a pointer to `_IO_STACK_LOCATION` is stored in `EAX`
+    at address `.text:000109B5`, and then at address `.text:000109B8` the `InputBufferLength`
+    is stored in `ESI`. At `.text:000109BE` the `OutputBufferLength` is stored in
+    `EDX`, and at `.text:000109C4` the `IoControlCode` is stored in `EAX`. Later,
+    the requested IOCTL code stored in `EAX` is compared with the value `0xB2D6002C`
+    (see address `.text:000109C7` and `.text:000109CC`). Hey, I found the first valid
+    IOCTL code of the driver! I searched the function for all values that are compared
+    with the requested IOCTL code in `EAX` and got a list of the supported IOCTLs
+    of *Aavmker4.sys*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 5: Find the User-Controlled Input Values'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'After I generated the list of all the supported IOCTLs, I tried to locate the
+    buffer containing the user-supplied IOCTL input data. All `IRP_MJ_DEVICE_CONTROL`
+    requests supply both an input buffer and an output buffer. The way the system
+    describes these buffers depends on the *data transfer type*. The transfer type
+    is stored in the IOCTL code itself. Under Microsoft Windows, the IOCTL code values
+    are normally created using the `CTL_CODE` macro.^([[71](ch06s05.html#ftn.CHP-6-FN-15)])
+    Here’s another excerpt from *ntddk.h*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The transfer type is specified using the `Method` parameter of the `CTL_CODE`
+    macro. I wrote a little tool to reveal which data transfer type is used by the
+    IOCTLs of *Aavmker4.sys*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 6-1. A little tool that I wrote (*IOCTL_method.c*) to show which data
+    transfer type is used by the IOCTLs of *Aavmker4.sys*
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I then compiled the tool with the command-line C compiler of Visual Studio
+    (`cl`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following output shows the tool from [Example 6-1](ch06.html#a_little_tool_that_i_wrote
+    "Example 6-1. A little tool that I wrote (IOCTL_method.c) to show which data transfer
+    type is used by the IOCTLs of Aavmker4.sys") in action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: So the driver uses the `METHOD_BUFFERED` transfer type to describe the input
+    and output buffers of an IOCTL request. According to the buffer descriptions in
+    the Windows Driver Kit, the input buffer of IOCTLs, which use the `METHOD_BUFFERED`
+    transfer type, can be found at `Irp->AssociatedIrp.SystemBuffer`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Below is an example of a reference to the input buffer in the disassembly of
+    *Aavmker4.sys*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, `EBX` holds a pointer to the IRP structure. At address `.text:00010CF1`,
+    the IRP structure member at offset `0x0c` is referenced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: The output of WinDbg shows that `AssociatedIrp` is located at this offset (`IRP->AssociatedIrp`).
+    At address `.text:00010CF4`, the input buffer of the IOCTL call is referenced
+    and stored in `EAX` (`Irp->AssociatedIrp.SystemBuffer`). Now that I had found
+    the supported IOCTLs, as well as the IOCTL input data, I started searching for
+    bugs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 6: Reverse Engineer the IOCTL Handler'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To find a possible security defect, I audited the handler code of one IOCTL
+    at a time while tracing the supplied input data. When I came across the IOCTL
+    code `0xB2D60030`, I found a subtle bug.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the IOCTL code `0xB2D60030` is requested by a user space application, the
+    following code is executed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If the requested IOCTL code matches `0xB2D60030` (see `.text:00010D28`), the
+    assembler code at address `.text:00010DAB` (`loc_10DAB`) is executed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: At address `.text:00010DAB EDI` is set to 0\. The `EBX` register holds a pointer
+    to the IRP structure, and at address `.text:00010DC9` a pointer to the input buffer
+    data is stored in `ESI` (`Irp->AssociatedIrp.SystemBuffer`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the beginning of the dispatch routine, the `InputBufferLength` of the request
+    is stored in the stack variable `var_1c` (see `.text:000109BB`). The length of
+    the input data at address `.text:00010DCC` is then compared to the value `0x878`
+    (see [Figure 6-4](ch06.html#graph_view_of_the_vulnerable_code_path_i "Figure 6-4. Graph
+    view of the vulnerable code path in IDA Pro, part 1")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Graph view of the vulnerable code path in IDA Pro, part 1](httpatomoreillycomsourcenostarchimages939311.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6-4. Graph view of the vulnerable code path in IDA Pro, part 1
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the data length equals `0x878`, the user-controlled input data, pointed
+    to by `ESI`, is further processed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The code at address `.text:00010DE2` checks whether the input data equals NULL.
+    If the input data is not NULL, a pointer from this data is extracted at `[user_data+0x870]`
+    and stored in `EAX` (see `.text:00010DE6`). This pointer value is stored in the
+    stack variable `var_48` (see `.text:00010DEC`). A check is then performed to see
+    if the data, pointed to by `EAX`, starts with the values `0xD0DEAD07` and `0x10BAD0BA`
+    (see `.text:00010DEF` and `.text:00010DF7`). If so, the parsing of the input data
+    continues:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `rep movsd` instruction at address `.text:00010E1B` represents a `memcpy()`
+    function. So `ESI` holds the source address, `EDI` holds the destination address,
+    and `ECX` holds the length for the copy operation. `ECX` gets assigned the value
+    `0x21a` (see `.text:00010E13`). `ESI` points to the user-controlled IOCTL data
+    (see `.text:00010E10`), and `EDI` is also derived from user-controlled data pointed
+    to by `EAX` (see `.text:00010E18` and [Figure 6-5](ch06.html#graph_view_of_the_vulnerable_code_pa
+    "Figure 6-5. Graph view of the vulnerable code path in IDA Pro, part 2")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Graph view of the vulnerable code path in IDA Pro, part 2](httpatomoreillycomsourcenostarchimages939313.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6-5. Graph view of the vulnerable code path in IDA Pro, part 2
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s some pseudo C code of that `memcpy()` call:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Or, in more abstract terms:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: It is therefore possible to write `0x868` bytes (`0x21a * 4` bytes, as the `rep
+    movsd` instruction copies DWORDs from one location to another) of user-controllable
+    data to an arbitrary user-controlled address in either user or kernel space. Nice!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The anatomy of the bug, diagrammed in [Figure 6-6](ch06.html#overview_of_the_vulnerability_from_ioctl
+    "Figure 6-6. Overview of the vulnerability from IOCTL request to memory corruption"),
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An IOCTL request (`0xB2D60030`) is sent to the kernel driver *Aavmker4.sys*
+    using the `AavmKer4` device.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The driver code checks whether the IOCTL input data length equals the value
+    `0x878`. If so, proceed to step 3.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Overview of the vulnerability from IOCTL request to memory corruption](httpatomoreillycomsourcenostarchimages939315.png.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: Figure 6-6. Overview of the vulnerability from IOCTL request to memory corruption
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The driver checks whether the user-controlled IOCTL input data contains the
+    values `0xD0DEAD07` and `0x10BAD0BA`. If so, proceed to step 4.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The erroneous `memcpy()` call is executed.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The memory is corrupted.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 6.2 Exploitation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To gain control of `EIP`, I first had to find a suitable target address to
+    overwrite. While searching through the IOCTL dispatch routine, I found two places
+    where a function pointer is called:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The function pointer declared at `.data:00012460` is called at `.text:00010D9D`
+    and `.text:00010DC3` in the dispatch routine. To gain control over `EIP`, all
+    I had to do was overwrite this function pointer and then wait for it to be called.
+    I wrote the following POC code to manipulate the function pointer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 6-2. The POC code that I wrote to manipulate the function pointer at
+    `.data:00012460` (*poc.c*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In line 67 of [Example 6-2](ch06s02.html#the_poc_code_that_i_wrote_to "Example 6-2. The
+    POC code that I wrote to manipulate the function pointer at .data:00012460 (poc.c)"),
+    the base address of the driver in memory is stored in `driveraddr`. Then, in line
+    72, the address of the function pointer is calculated; this is overwritten by
+    the manipulated `memcpy()` call. A buffer of `INPUTBUFFER_SIZE` (`0x878`) bytes
+    is allocated in line 75\. This buffer holds the IOCTL input data, which is filled
+    with the hexadecimal value `0x41` (see line 86). Then a pointer to another data
+    array is copied into the input data buffer (see line 89). In the disassembly of
+    the driver, this pointer is referenced at address `.text:00010DE6`: `mov eax,
+    [esi+870h]`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Directly after the call of the `memcpy()` function, the kernel function `KeSetEvent()`
+    is called:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since the user-derived data pointed to by `EAX` is used as a parameter for this
+    function (see `.text:00010E2B`), the data buffer needs to be filled with valid
+    pointers in order to prevent an access violation. I filled the whole buffer with
+    its own valid user space address (see line 97). Then in lines 100 and 103, the
+    two expected patterns are copied into the data buffer (see `.text:00010DEF` and
+    `.text:00010DF7`), and in line 106, the destination address for the `memcpy()`
+    function is copied into the data buffer (`.text:00010E18 mov edi, [eax+18h]`).
+    The device of the driver is then opened for reading and writing (see line 110),
+    and the malicious IOCTL request is sent to the vulnerable kernel driver (see line
+    122).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After I developed that POC code, I started the Windows XP VMware guest system
+    and attached WinDbg to the kernel (see Section B.2 for a description of the following
+    debugger commands):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I then compiled the POC code with the command-line C compiler of Visual Studio
+    (`cl`) and executed it as an unprivileged user inside the VMware guest system:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After I executed the POC code, nothing happened. So how could I find out if
+    the function pointer was successfully manipulated? Well, all I had to do was trigger
+    the antivirus engine by opening an arbitrary executable. I opened Internet Explorer
+    and got the following message in the debugger:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Yes! The instruction pointer appeared to be under my full control. To verify
+    this, I asked the debugger for more information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The exploitation process, illustrated in [Figure 6-7](ch06s02.html#diagram_of_my_exploitation_of_the_avast
+    "Figure 6-7. Diagram of my exploitation of the avast! vulnerability"), was as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Is the length of the input data `0x878`? If so, proceed to step 2.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The user space buffer `data` gets referenced.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Are the expected patterns found at `data[0]` and `data[4]`? If so, proceed to
+    step 4.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Diagram of my exploitation of the avast! vulnerability](httpatomoreillycomsourcenostarchimages939317.png.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: Figure 6-7. Diagram of my exploitation of the avast! vulnerability
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The destination address for the `memcpy()` call gets referenced.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The `memcpy()` function copies the IOCTL input data into the `.data` area of
+    the kernel.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The manipulated function pointer gives full control over `EIP`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the POC code is executed without a kernel debugger attached, the famed Blue
+    Screen of Death (BSoD) will appear (see [Figure 6-8](ch06s02.html#the_blue_screen_of_death_open_parenthesi
+    "Figure 6-8. The Blue Screen of Death (BSoD)")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The Blue Screen of Death (BSoD)](httpatomoreillycomsourcenostarchimages939319.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6-8. The Blue Screen of Death (BSoD)
+  prefs: []
+  type: TYPE_NORMAL
+- en: After I gained control over `EIP`, I developed two exploits. One of them grants
+    SYSTEM rights to any requesting user (privilege escalation), and the other installs
+    a rootkit into the kernel using the well-known Direct Kernel Object Manipulation
+    (DKOM) technique.^([[72](ch06s05.html#ftn.CHP-6-FN-16)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Strict laws prohibit me from providing a full, working exploit, but if you’re
+    interested, you can watch a video of the exploit in action at the book’s website.^([[73](ch06s05.html#ftn.CHP-6-FN-17)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.3 Vulnerability Remediation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Saturday, March 29, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I informed ALWIL Software about the bug on March 18, 2008, and it released an
+    updated version of avast! today. Wow, that was really fast for a commercial software
+    vendor!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.4 Lessons Learned
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As a programmer and kernel-driver developer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Define strict security settings for exported device objects. Do not allow unprivileged
+    users to read from or write to these devices.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Always take care to validate input data correctly.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Destination addresses for memory-copy operations shouldn’t be extracted from
+    user-supplied data.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 6.5 Addendum
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Sunday, March 30, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the vulnerability was fixed and a new version of avast! is now available,
+    I released a detailed security advisory on my website today.^([[74](ch06s05.html#ftn.CHP-6-FN-18)])
+    The bug was assigned CVE-2008-1625\. [Figure 6-9](ch06s05.html#timeline_from_vendor_notification_to_the
+    "Figure 6-9. Timeline from vendor notification to the release of my security advisory")
+    shows the timeline of the vulnerability fix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Timeline from vendor notification to the release of my security advisory](httpatomoreillycomsourcenostarchimages939321.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6-9. Timeline from vendor notification to the release of my security
+    advisory
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ^([[57](#ftn.CHP-6-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[58](#ftn.CHP-6-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[59](#ftn.CHP-6-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[60](#ftn.CHP-6-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[61](#ftn.CHP-6-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[62](#ftn.CHP-6-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[63](#ftn.CHP-6-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[64](#ftn.CHP-6-FN-8)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[65](#ftn.CHP-6-FN-9)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[66](#ftn.CHP-6-FN-10)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[67](#ftn.CHP-6-FN-11)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[68](#ftn.CHP-6-FN-12)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[69](#ftn.CHP-6-FN-13)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[70](#ftn.CHP-6-FN-14)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[71](#ftn.CHP-6-FN-15)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[72](#ftn.CHP-6-FN-16)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[73](#ftn.CHP-6-FN-17)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[74](#ftn.CHP-6-FN-18)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[57](#CHP-6-FN-1)]) See SANS Top 20 Internet Security Problems, Threats and
+    Risks (2007 Annual Update), [http://www.sans.org/top20/2007/](http://www.sans.org/top20/2007/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[58](#CHP-6-FN-2)]) See [http://www.virustotal.com/](http://www.virustotal.com/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[59](#CHP-6-FN-3)]) See [http://www.avast.com/](http://www.avast.com/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[60](#CHP-6-FN-4)]) See [http://www.vmware.com/](http://www.vmware.com/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[61](#CHP-6-FN-5)]) WinDbg, the “official” Windows Debugger from Microsoft,
+    is distributed as part of the free “Debugging Tools for Windows” suite available
+    at [http://www.microsoft.com/whdc/DevTools/Debugging/default.mspx](http://www.microsoft.com/whdc/DevTools/Debugging/default.mspx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[62](#CHP-6-FN-6)]) You can find a download link for a vulnerable trial version
+    of avast! Professional 4.7 at [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[63](#CHP-6-FN-7)]) See [http://www.nirsoft.net/utils/driverview.html](http://www.nirsoft.net/utils/driverview.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[64](#CHP-6-FN-8)]) See [http://www.hex-rays.com/idapro/](http://www.hex-rays.com/idapro/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[65](#CHP-6-FN-9)]) See Mark E. Russinovich and David A. Solomon, *Microsoft
+    Windows Internals: Microsoft Windows Server 2003, Windows XP, and Windows 2000,
+    4th ed*. (Redmond, WA: Microsoft Press, 2005).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[66](#CHP-6-FN-10)]) See MSDN Library: Windows Development: Windows Driver
+    Kit: Kernel-Mode Driver Architecture: Reference: Standard Driver Routines: DriverEntry
+    at [http://msdn.microsoft.com/en-us/library/ff544113.aspx](http://msdn.microsoft.com/en-us/library/ff544113.aspx).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[67](#CHP-6-FN-11)]) WinObj is available at [http://technet.microsoft.com/en-us/sysinternals/bb896657.aspx](http://technet.microsoft.com/en-us/sysinternals/bb896657.aspx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[68](#CHP-6-FN-12)]) The Windows Driver Kit can be downloaded at [http://www.microsoft.com/whdc/devtools/WDK/default.mspx](http://www.microsoft.com/whdc/devtools/WDK/default.mspx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[69](#CHP-6-FN-13)]) See MSDN Library: Windows Development: Windows Driver
+    Kit: Kernel-Mode Driver Architecture: Reference: Standard Driver Routines: DispatchDeviceControl
+    available at [http://msdn.microsoft.com/en-us/library/ff543287.aspx](http://msdn.microsoft.com/en-us/library/ff543287.aspx).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[70](#CHP-6-FN-14)]) See MSDN Library: Windows Development: Windows Driver
+    Kit: Kernel-Mode Driver Architecture: Reference: Kernel Data Types: System-Defined
+    Data Structures: IRP available at [http://msdn.microsoft.com/en-us/library/ff550694.aspx](http://msdn.microsoft.com/en-us/library/ff550694.aspx).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[71](#CHP-6-FN-15)]) See MSDN Library: Windows Development: Windows Driver
+    Kit: Kernel-Mode Driver Architecture: Design Guide: Writing WDM Drivers: Managing
+    Input/Output for Drivers: Handling IRPs: Using I/O Control Codes: Buffer Descriptions
+    for I/O Control Codes available at [http://msdn.microsoft.com/en-us/library/ff540663.aspx](http://msdn.microsoft.com/en-us/library/ff540663.aspx).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[72](#CHP-6-FN-16)]) See Jamie Butler, *DKOM (Direct Kernel Object Manipulation)*
+    (presentation, Black Hat Europe, Amsterdam, May 2004), at [http://www.blackhat.com/presentations/win-usa-04/bh-win-04-butler.pdf](http://www.blackhat.com/presentations/win-usa-04/bh-win-04-butler.pdf).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[73](#CHP-6-FN-17)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[74](#CHP-6-FN-18)]) My security advisory that describes the details of the
+    avast! vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2008-002.txt](http://www.trapkit.de/advisories/TKADV2008-002.txt).
+  prefs: []
+  type: TYPE_NORMAL

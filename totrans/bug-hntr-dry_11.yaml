@@ -1,0 +1,585 @@
+- en: Appendix C. Mitigation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This appendix contains information about mitigation techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: C.1 Exploit Mitigation Techniques
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Various exploit mitigation techniques and mechanisms available today are designed
+    to make exploiting memory corruption vulnerabilities as difficult as possible.
+    The most prevalent ones are these:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Address Space Layout Randomization (ASLR)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Security Cookies (/GS), Stack-Smashing Protection (SSP), or Stack Canaries
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data Execution Prevention (DEP) or No eXecute (NX)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There are other mitigation techniques that are bound to an operating system
+    platform, a special heap implementation, or a file format like SafeSEH, SEHOP,
+    or RELRO (see Section C.2). There are also various heap mitigation techniques
+    (heap cookies, randomization, safe unlinking, etc.).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The many mitigation techniques could easily fill another book, so I will focus
+    on the most prevalent ones, as well as on some tools used to detect them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: There is a continuous race between exploit mitigation techniques and ways of
+    bypassing them. Even systems using all of these mechanisms may be successfully
+    exploited under certain circumstances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Address Space Layout Randomization (ASLR)
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ASLR randomizes the location of key areas of a process space (usually the base
+    address of the executable, the position of the stack, the heap, the libraries,
+    and others) to prevent an exploit writer from predicting target addresses. Say
+    you find a *write4 primitive* vulnerability that presents you with the opportunity
+    to write 4 bytes of your choosing to any memory location you like. That gives
+    you a powerful exploit if you choose a stable memory location to overwrite. If
+    ASLR is in place, it’s much harder to find a reliable memory location to overwrite.
+    Of course, ASLR is effective only if it’s implemented correctly.^([[100](apcs03.html#ftn.APP-C-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Security Cookies (/GS), Stack-Smashing Protection (SSP), or Stack Canaries
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: These methods normally inject a canary or cookie into a stack frame to protect
+    the function’s metadata associated with procedure invocation (e.g., the return
+    address). Before the return address is processed, the validity of the cookie or
+    canary is checked, and the data in the stack frame is reorganized to protect the
+    pointers and arguments of the function. If you find a stack buffer overflow in
+    a function that is protected by this mitigation technique, exploitation can be
+    tough.^([[101](apcs03.html#ftn.APP-C-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: NX and DEP
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The *No eXecute (NX)* bit is a CPU feature that helps prevent code execution
+    from data pages of a process. Many modern operating systems take advantage of
+    the NX bit. Under Microsoft Windows, hardware-enforced *Data Execution Prevention
+    (DEP)* enables the NX bit on compatible CPUs and marks all memory locations in
+    a process as nonexecutable unless the location explicitly contains executable
+    code. DEP was introduced in Windows XP SP2 and Windows Server 2003 SP1\. Under
+    Linux, NX is enforced by the kernel on 64-bit CPUs of AMD and Intel. ExecShield^([[102](apcs03.html#ftn.APP-C-FN-3)])
+    and PaX^([[103](apcs03.html#ftn.APP-C-FN-4)]) emulate the NX functionality on
+    older 32-bit x86 CPUs under Linux.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting Exploit Mitigation Techniques
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Before you can try to circumvent these mitigation techniques, you have to determine
+    which ones an application or a running process actually uses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mitigations can be controlled by system policy, by special APIs, and by compile-time
+    options. For example, the default system-wide DEP policy for Windows client–operating
+    systems is called OptIn. In this mode of operation, DEP is enabled only for processes
+    that explicitly opt in to DEP. There are different ways to opt a process in to
+    DEP. For example, you could use the appropriate linker switch (/NXCOMPAT) at compile
+    time, or you could use the `SetProcessDEPPolicy` API to allow an application to
+    opt in to DEP programmatically. Windows supports four system-wide configurations
+    for hardware-enforced DEP.^([[104](apcs03.html#ftn.APP-C-FN-5)]) On Windows Vista
+    and later, you can use the *bcdedit.exe* console application to verify the system-wide
+    DEP policy, but this must be done from an elevated Windows command prompt. To
+    verify the DEP and ASLR settings of an application, you can use Sysinternals’s
+    Process Explorer.^([[105](apcs03.html#ftn.APP-C-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To configure Process Explorer so that it shows the processes’ DEP and ASLR
+    status, add the following columns to the view: **View** ▸ **Select Columns** ▸
+    **DEP Status** and **View** ▸ **Select Columns** ▸ **ASLR Enabled**. Additionally,
+    set the lower pane to view DLLs for a process and add the “ASLR Enabled” column
+    to the view (see [Figure C-1](apc.html#dep_and_aslr_status_shown_in_process_exp
+    "Figure C-1. DEP and ASLR status shown in Process Explorer")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The newer versions of Windows (Vista or later) also support ASLR by default,
+    but the DLLs and EXEs must opt in to support ASLR using the /DYNAMICBASE linker
+    option. It is important to note that protection is significantly weaker if not
+    all modules of a process opt in to ASLR. In practice, the effectiveness of mitigations
+    like DEP and ASLR is heavily dependent on how completely each mitigation technology
+    has been enabled by an application.^([[106](apcs03.html#ftn.APP-C-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure C-1](apc.html#dep_and_aslr_status_shown_in_process_exp "Figure C-1. DEP
+    and ASLR status shown in Process Explorer") shows an example of Process Explorer
+    being used to observe the DEP and ASLR settings of Internet Explorer. Note that
+    the Java DLLs that have been loaded into the context of Internet Explorer do not
+    make use of ASLR (denoted by an empty value for the ASLR column in the lower pane).
+    Microsoft has also released a tool called *BinScope Binary Analyzer*,^([[107](apcs03.html#ftn.APP-C-FN-8)])
+    which analyzes binaries for a wide variety of security protections with a straightforward,
+    easy-to-use interface.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If both DEP and ASLR are correctly deployed, exploit development is a lot harder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To see if a Windows binary supports the security cookie (/GS) mitigation technique,
+    you can disassemble the binary with IDA Pro and look for references to the security
+    cookie in the function epilogue and prologue, as shown in [Figure C-2](apc.html#security_cookie_open_parenthesis_solidus
+    "Figure C-2. Security cookie (/GS) reference in the function prologue and epilogue
+    (IDA Pro)").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![DEP and ASLR status shown in Process Explorer](httpatomoreillycomsourcenostarchimages939357.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure C-1. DEP and ASLR status shown in Process Explorer
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Security cookie (/GS) reference in the function prologue and epilogue (IDA
+    Pro)](httpatomoreillycomsourcenostarchimages939359.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure C-2. Security cookie (/GS) reference in the function prologue and epilogue
+    (IDA Pro)
+  prefs: []
+  type: TYPE_NORMAL
+- en: To check the system-wide configurations of Linux systems as well as ELF binaries
+    and processes for different exploit mitigation techniques, you can use my `checksec.sh`^([[108](apcs03.html#ftn.APP-C-FN-9)])
+    script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: C.2 RELRO
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'RELRO is a generic exploit mitigation technique to harden the data sections
+    of an ELF^([[109](apcs03.html#ftn.APP-C-FN-10)]) binary or process. ELF is a common
+    file format for executables and libraries that is used by a variety of UNIX-like
+    systems, including Linux, Solaris, and BSD. RELRO has two different modes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Partial RELRO**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Compiler command line: `gcc -Wl,-z,relro`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The ELF sections are reordered so that the ELF internal data sections (`.got`,
+    `.dtors`, etc.) precede the program’s data sections (`.data` and `.bss`).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Non-PLT GOT is read-only.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: PLT-dependent GOT is still writeable.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Full RELRO**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Compiler command line: `gcc -Wl,-z,relro,-z,now`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Supports all the features of Partial RELRO.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Bonus: The entire GOT is (re)mapped as read-only.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Both Partial and Full RELRO reorder the ELF internal data sections to protect
+    them from being overwritten in the event of a buffer overflow in the program’s
+    data sections (`.data` and `.bss`), but only Full RELRO mitigates the popular
+    technique of modifying a GOT entry to get control over the program execution flow
+    (see Section A.4).
+  prefs: []
+  type: TYPE_NORMAL
+- en: To demonstrate the RELRO mitigation technique, I made up two simple test cases.
+    I used Debian Linux 6.0 as a platform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Test Case 1: Partial RELRO'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The test program in [Example C-1](apcs02.html#example_code_used_to_demonstrate
+    "Example C-1. Example code used to demonstrate RELRO (testcase.c)") takes a memory
+    address (see line 6) and tries to write the value `0x41414141` at that address
+    (see line 8).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example C-1. Example code used to demonstrate RELRO (*testcase.c*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I compiled the program with Partial RELRO support:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: I then checked the resulting binary with my `checksec.sh` script:^([[110](apcs03.html#ftn.APP-C-FN-11)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next I used `objdump` to gather the GOT address of the `printf()` library function
+    used in line 9 of [Example C-1](apcs02.html#example_code_used_to_demonstrate "Example C-1. Example
+    code used to demonstrate RELRO (testcase.c)") and then tried to overwrite that
+    GOT entry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I started the test program in gdb in order to see exactly what was happening:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Result: If only Partial RELRO is used to protect an ELF binary, it is still
+    possible to modify arbitrary GOT entries to gain control of the execution flow
+    of a process.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Test Case 2: Full RELRO'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'This time, I compiled the test program with Full RELRO support:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I then tried to overwrite the GOT address of `printf()` again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This time, the execution flow was interrupted by a `SIGSEGV` signal at source
+    code line 8\. Let’s see why:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, the program tried to write the value `0x41414141` at the given
+    memory address `0x8049ff8`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The memory map of the process shows that the memory range `08049000-0804a000`,
+    which includes the GOT, was successfully set to read-only (`r--p`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Result: If Full RELRO is enabled, the attempt to overwrite a GOT address leads
+    to an error because the GOT section is mapped read-only.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In case of a buffer overflow in the program’s data sections (`.data` and `.bss`),
+    both Partial and Full RELRO protect the ELF internal data sections from being
+    overwritten.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With Full RELRO, it’s possible to successfully prevent the modification of GOT
+    entries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is also a generic way to implement a similar mitigation technique for
+    ELF objects, which works on platforms that don’t support RELRO.^([[111](apcs03.html#ftn.APP-C-FN-12)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: C.3 Solaris Zones
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Solaris Zones is a technology used to virtualize operating system services and
+    provide an isolated environment for running applications. A *zone* is a virtualized
+    operating system environment created within a single instance of the Solaris Operating
+    System. When you create a zone, you produce an application execution environment
+    in which processes are isolated from the rest of the system. This isolation should
+    prevent processes that are running in one zone from monitoring or affecting processes
+    that are running in other zones. Even a process running with superuser credentials
+    shouldn’t be able to view or affect activity in other zones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Terminology
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are two different kinds of zones: *global* and *non-global*. The global
+    zone represents the conventional Solaris execution environment and is the only
+    zone from which non-global zones can be configured and installed. By default,
+    non-global zones cannot access the global zone or other non-global zones. All
+    zones have a security boundary around them and are confined to their own subtree
+    of the filesystem hierarchy. Every zone has its own root directory, has separate
+    processes and devices, and operates with fewer privileges than the global zone.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Sun and Oracle were very confident about the security of their Zones technology
+    when they rolled it out:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The platform that I used throughout this section was the default installation
+    of Solaris 10 10/08 x86/x64 DVD Full Image (sol-10-u6-ga1-x86-dvd.iso), which
+    is called Solaris 10 Generic_137138-09*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once a process has been placed in a zone other than the global zone, neither
+    the process nor any of its subsequent children can change zones.
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Network services can be run in a zone. By running network services in a zone,
+    you limit the damage possible in the event of a security violation. An intruder
+    who successfully exploits a security flaw in software running within a zone is
+    confined to the restricted set of actions possible within that zone. The privileges
+    available within a zone are a subset of those available in the system as a whole.
+    . .^([[112](apcs03.html#ftn.APP-C-FN-13)])
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: ''
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Processes are restricted to a subset of privileges. Privilege restriction prevents
+    a zone from performing operations that might affect other zones. The set of privileges
+    limits the capabilities of privileged users within the zone. To display the list
+    of privileges available within a zone, use the `ppriv` utility.^([[113](apcs03.html#ftn.APP-C-FN-14)])
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: 'Solaris Zones is great, but there is one weak point: All zones (global and
+    non-global) share the same kernel. If there is a bug in the kernel that allows
+    arbitrary code execution, it’s possible to cross all security boundaries, escape
+    from a non-global zone, and compromise other non-global zones or even the global
+    zone. To demonstrate this, I recorded a video that shows the exploit for the vulnerability
+    described in [Chapter 3](ch03.html "Chapter 3. Escape from the WWW Zone") in action.
+    The exploit allows an unprivileged user to escape from a non-global zone and then
+    compromise all other zones, including the global zone. You can find the video
+    on this book’s website.^([[114](apcs03.html#ftn.APP-C-FN-15)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Set Up a Non-Global Solaris Zone
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To set up the Solaris Zone for [Chapter 3](ch03.html "Chapter 3. Escape from
+    the WWW Zone"), I did the following steps (all steps have to be performed as a
+    privileged user in the global zone):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first thing I did was to create a filesystem area for the new zone to reside
+    in:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I then used `zonecfg` to create the new non-global zone:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After that, I checked the results of my actions with `zoneadm`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, I installed and booted the new non-global zone:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To ensure that everything had gone okay, I pinged the IP address of the new
+    non-global zone:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To log into the new non-global zone, I used the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After answering the questions regarding language and terminal settings, I logged
+    in as `root` and created a new unprivileged user:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: I then used this unprivileged user to exploit the Solaris kernel vulnerability
+    described in [Chapter 3](ch03.html "Chapter 3. Escape from the WWW Zone").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ^([[100](#ftn.APP-C-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[101](#ftn.APP-C-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[102](#ftn.APP-C-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[103](#ftn.APP-C-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[104](#ftn.APP-C-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[105](#ftn.APP-C-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[106](#ftn.APP-C-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[107](#ftn.APP-C-FN-8)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[108](#ftn.APP-C-FN-9)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[109](#ftn.APP-C-FN-10)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[110](#ftn.APP-C-FN-11)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[111](#ftn.APP-C-FN-12)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[112](#ftn.APP-C-FN-13)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[113](#ftn.APP-C-FN-14)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[114](#ftn.APP-C-FN-15)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[100](#APP-C-FN-1)]) See Rob King, “New Leopard Security Features—Part I:
+    ASLR,” *DVLabs Tipping Point* (blog), November 7, 2007, [http://dvlabs.tippingpoint.com/blog/2007/11/07/leopard-aslr](http://dvlabs.tippingpoint.com/blog/2007/11/07/leopard-aslr).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[101](#APP-C-FN-2)]) See Tim Burrell, “GS Cookie Protection—Effectiveness
+    and Limitations,” Microsoft TechNet Blogs: Security Research & Defense (blog),
+    March 16, 2009, [http://blogs.technet.com/srd/archive/2009/03/16/gs-cookie-protection-effectiveness-and-limitations.aspx](http://blogs.technet.com/srd/archive/2009/03/16/gs-cookie-protection-effectiveness-and-limitations.aspx);
+    “Enhanced GS in Visual Studio 2010,” Microsoft TechNet Blogs: Security Research
+    & Defense (blog), March 20, 2009, [http://blogs.technet.com/srd/archive/2009/03/20/enhanced-gs-in-visual-studio-2010.aspx](http://blogs.technet.com/srd/archive/2009/03/20/enhanced-gs-in-visual-studio-2010.aspx);
+    IBM Research “GCC Extension for Protecting Applications from Stack-Smashing Attacks,”
+    last updated August 22, 2005, [http://researchweb.watson.ibm.com/trl/projects/security/ssp/](http://researchweb.watson.ibm.com/trl/projects/security/ssp/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[102](#APP-C-FN-3)]) See [http://people.redhat.com/mingo/exec-shield/](http://people.redhat.com/mingo/exec-shield/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[103](#APP-C-FN-4)]) See the home page of the PaX team at [http://pax.grsecurity.net/](http://pax.grsecurity.net/)
+    as well as the grsecurity website at [http://www.grsecurity.net/](http://www.grsecurity.net/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[104](#APP-C-FN-5)]) See Robert Hensing, “Understanding DEP as a Mitigation
+    Technology Part 1,” Microsoft TechNet Blogs: Security Research & Defense (blog),
+    June 12, 2009, [http://blogs.technet.com/srd/archive/2009/06/12/understanding-dep-as-a-mitigation-technology-part-1.aspx](http://blogs.technet.com/srd/archive/2009/06/12/understanding-dep-as-a-mitigation-technology-part-1.aspx).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[105](#APP-C-FN-6)]) See [http://technet.microsoft.com/en-en/sysinternals/bb896653/](http://technet.microsoft.com/en-en/sysinternals/bb896653/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[106](#APP-C-FN-7)]) For more information, see the Secunia study by Alin
+    Rad Pop, “DEP/ASLR Implementation Progress in Popular Third-party Windows Applications,”
+    2010, [http://secunia.com/gfx/pdf/DEP_ASLR_2010_paper.pdf](http://secunia.com/gfx/pdf/DEP_ASLR_2010_paper.pdf).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[107](#APP-C-FN-8)]) To download BinScope Binary Analyzer, visit [http://go.microsoft.com/?linkid=9678113](http://go.microsoft.com/?linkid=9678113).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[108](#APP-C-FN-9)]) See [http://www.trapkit.de/tools/checksec.html](http://www.trapkit.de/tools/checksec.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[109](#APP-C-FN-10)]) See TIS Committee, *Tool Interface Standard (TIS) Executable
+    and Linking Format (ELF) Specification*, version 1.2, 1995, [http://refspecs.freestandards.org/elf/elf.pdf](http://refspecs.freestandards.org/elf/elf.pdf).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[110](#APP-C-FN-11)]) See note 9 above.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[111](#APP-C-FN-12)]) See Chris Rohlf, “Self Protecting Global Offset Table
+    (GOT),” draft version 1.4, August 2008, [http://code.google.com/p/em386/downloads/detail?name=Self-Protecting-GOT.html](http://code.google.com/p/em386/downloads/detail?name=Self-Protecting-GOT.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[112](#APP-C-FN-13)]) See “Introduction to Solaris Zones: Features Provided
+    by Non-Global Zones,” *System Administration Guide: Oracle Solaris Containers—Resource
+    Management and Oracle Solaris Zones*, 2010, [http://download.oracle.com/docs/cd/E19455-01/817-1592/zones.intro-9/index.html](http://download.oracle.com/docs/cd/E19455-01/817-1592/zones.intro-9/index.html).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[113](#APP-C-FN-14)]) See “Solaris Zones Administration (Overview): Privileges
+    in a Non-Global Zone,” *System Administration Guide:Virtualization Using the Solaris
+    Operating System*, 2010, [http://download.oracle.com/docs/cd/E19082-01/819-2450/z.admin.ov-18/index.html](http://download.oracle.com/docs/cd/E19082-01/819-2450/z.admin.ov-18/index.html).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[114](#APP-C-FN-15)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL

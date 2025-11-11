@@ -1,0 +1,818 @@
+- en: Chapter 9. XEN MIGRATION
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*In these situations the combination of virtualization and migration significantly
+    improves manageability*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: — Clark et al., **"Live Migration of Virtual Machines"**![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So let''s review: Xen, in poetic terms, is an abstraction, built atop other
+    abstractions, wrapped around still further abstractions. The goal of all this
+    abstraction is to ensure that you, in your snug and secure domU, never even have
+    to think about the messy, noisy, fallible hardware that actually sends electrical
+    pulses out the network ports.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, once in a while the hardware becomes, for reasons of its own, unable
+    to run Xen. Perhaps it's overloaded, or maybe it needs some preventive maintenance.
+    So long as you have advance warning, even this need not interrupt your virtual
+    machine. One benefit of the sort of *total hardware independence* offered by Xen
+    is the ability to move an entire virtual machine instance to another machine and
+    transparently resume operation—a process referred to as *migration*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen migration transfers the entire virtual machine—the in-memory state of the
+    kernel, all processes, and all application states. From the user's perspective,
+    a live migration isn't even noticeable—at most, a few packets are dropped. This
+    has the potential to make scheduled downtime a thing of the past. (Unscheduled
+    downtime, like death and taxes, shows every sign of being inescapable.^([[51](#ftn.CHP-9-FNOTE-1)]))
+  prefs: []
+  type: TYPE_NORMAL
+- en: Migration may be either *live* or *cold*,^([[52](#ftn.CHP-9-FNOTE-2)]) with
+    the distinction based on whether the instance is running at the time of migration.
+    In a live migration, the domain continues to run during transfer, and downtime
+    is kept to a minimum. In a cold migration, the virtual machine is paused, saved,
+    and sent to another physical machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In either of these cases, the saved machine will expect its IP address and ARP
+    cache to work on the new subnet. This is no surprise, considering that the in-memory
+    state of the network stack persists unchanged. Attempts to initiate live migration
+    between different layer 2 subnets will fail outright. Cold migration between different
+    subnets will work, in that the VM will successfully transfer but will most likely
+    need to have its networking reconfigured. We'll mention these characteristics
+    again later in our discussion of live migration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, though, let's examine a basic, manual method for moving a domain from
+    one host to another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Migration for Troglodytes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The most basic, least elegant way to move a Xen instance from one physical machine
+    to another is to stop it completely, move its backing storage, and re-create the
+    domain on the remote host. This requires a full shutdown and reboot cycle for
+    the VM. It isn't even "migration" in the formal Xen sense, but you may find it
+    necessary if, for example, you need to change out the underlying block device
+    or if certain machine-specific attributes change, for example, if you're moving
+    a VM between different CPU architectures or from a machine that uses PAE to one
+    that doesn't.^([[53](#ftn.CHP-9-FNOTE-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Begin by shutting down the virtual machine normally, either from within the
+    operating system or by doing an `xm shutdown` from the dom0\. Copy its backing
+    store, kernel image (if necessary), and config file over, and finally `xm create`
+    the machine as usual on the new host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's primitive, but at least it's almost certain to work and doesn't require
+    any sort of complex infrastructure. We mention it mostly for completeness; this
+    is a way to move a Xen domain from one physical machine to another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[51](#CHP-9-FNOTE-1)]) Maybe not; see Project Kemari or Project Remus at
+    [http://www.osrg.net/kemari/](http://www.osrg.net/kemari/) and [http://dsg.cs.ubc.ca/remus/](http://dsg.cs.ubc.ca/remus/)
+    for work being done on adding hardware redundancy to Xen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[52](#CHP-9-FNOTE-2)]) We also like the terms *hot* and *dead*, which are
+    the less-commonly used parallels of the more common terms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[53](#CHP-9-FNOTE-3)]) For example, NetBurst (Pentium 4 and friends) to Core
+    (Core 2 et al.). Xen offers no ability to move a VM from, say, x86 to PPC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Migration with xm save and xm restore
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This "cowboy" method aside, all forms of migration are based on the basic idea
+    of saving the domain on one machine and restoring it on another. You can do this
+    manually using the `xm save` and `xm restore` commands, simulating the automatic
+    process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Xen documentation likens the `xm save` and `restore` cycle to hibernation
+    on a physical machine. When a machine hibernates, it enters a power-saving mode
+    that saves the memory image to disk and physically powers off the machine. When
+    the machine turns on again, the operating system loads the saved memory image
+    from the disk and picks up where it left off. `xm save` behaves exactly the same
+    way. Just like with physical hibernation, the saved domain drops its network connections,
+    takes some time to pause and resume, and consumes no CPU or memory until it is
+    restored.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even if you're not planning to do anything fancy involving migration, you may
+    still find yourself saving machines when the physical Xen server reboots. Xen
+    includes an init script to save domains automatically when the system shuts down
+    and restore them on boot. To accommodate this, we suggest making sure that */var*
+    is large enough to hold the complete contents of the server's memory (in addition
+    to logs, DNS databases, etc.).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To save the machine, issue:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This command tells the domain to suspend itself; the domain releases its resources
+    back to domain 0, detaches its interrupt handlers, and converts its physical memory
+    mappings back to domain-virtual mappings (because the physical memory mappings
+    will almost certainly change when the domain is restored).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Those of you who maintain a constant burning focus on implementation will
+    notice that this implies domU OS-level support for Xen. HVM save and restore—that
+    is, when the guest can''t be counted on to be Xen-aware—are done slightly differently.
+    See [Chapter 12](ch12.html "Chapter 12. HVM: BEYOND PARAVIRTUALIZATION") for details*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, domain 0 takes over, stops the domU, and checkpoints the domain
+    state to a file. During this process it makes sure that all memory page references
+    are canonical (that is, domain virtual, because references to machine memory pages
+    will almost certainly be invalid on restore). Then it writes the contents of pages
+    to disk, reclaiming pages as it goes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After this process is complete, the domain has stopped running. The entire contents
+    of its memory are in a savefile approximately the size of its memory allocation,
+    which you can restore at will. In the meantime, you can run other domains, reboot
+    the physical machine, back up the domain's virtual disks, or do whatever else
+    required you to take the domain offline in the first place.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Although* *`xm save`* *ordinarily stops the domain while saving it, you can
+    also invoke it with the* *`-c`* *option, for checkpoint. This tells* *`xm`* *to
+    leave the domain running. It''s a bit complex to set up, though, because you also
+    need some way to snapshot the domain''s storage during the save. This usually
+    involves an external device migration script*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When that''s done, restoring the domain is easy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Restoration operates much like saving in reverse; the hypervisor allocates memory
+    for the domain, writes out pages from the savefile to the newly allocated memory,
+    and translates shadow page table entries to point at the new physical addresses.
+    When this is accomplished, the domain resumes execution, reinstates everything
+    it removed when it suspended, and begins functioning as if nothing happened.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The savefile remains intact; if something goes wrong with the restarted machine,
+    you can restore the savefile and try again*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This ability to save and restore on the local machine works as the backbone
+    of the more complex forms of migration supported by Xen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cold Migration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before we get into Xen's automated migration, we'll give an outline of a manual
+    *cold migration* process that approximates the flow of live migration to get an
+    idea of the steps involved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case, migration begins by saving the domain. The administrator manually
+    moves the save file and the domain's underlying storage over to the new machine
+    and restores the domain state. Because the underlying block device is moved over
+    manually, there's no need to have the same filesystem accessible from both machines,
+    as would be necessary for live migration. All that matters is transporting the
+    content of the Xen virtual disk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are some steps to cold migrate a Xen domain:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Perform the appropriate steps to copy the domain's storage to the target computer—`rsync,
+    scp, dd` piped into `ssh`, whatever floats your boat. Whatever method you choose,
+    ensure that it copies the disk in such a way that is bit-for-bit the same and
+    has the same path on both physical machines. In particular, do not mount the domU
+    filesystem on machine A and copy its files over to the new domU filesystem on
+    machine B. This will cause the VM to crash upon restoration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, restart the domain on the new machine:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: There's no need to copy the domain config file over to the new machine; the
+    savefile contains all the configuration information necessary to start the machine.
+    Conversely, this also means that you can't change the parameters of the machine
+    between save and restore and expect that to have any effect at all.^([[54](#ftn.CHP-9-FNOTE-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[54](#CHP-9-FNOTE-4)]) To forestall the inevitable question, we did try using
+    a hex editor on the savefile. The result was an immediate crash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Live Migration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Cold migration has its place, but one of the absolute neatest features of Xen
+    is the ability to move a domain from one physical machine to another transparently,
+    that is, imperceptibly to the outside world. This feature is *live migration*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As with cold migration, live migration transfers the domain's configuration
+    as part of its state; it doesn't require the administrator to manually copy over
+    a config file. Manual copying is, in fact, not required at all. Of course, you
+    will still need the config file if you want to recreate the domain from scratch
+    on the new machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Live migration has some extra prerequisites. It relies on the domain's storage
+    being accessible from both machines and on the machines being on the same subnet.
+    Finally, because the copy phase occurs automatically over the network, the machines
+    must run a network service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How It Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We would really like to say that live migration works by magic. In reality,
+    however, it works by the application of sufficiently advanced technology.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Live migration is based on the basic idea of *save and restore* only in the
+    most general sense. The machine doesn't hibernate until the very last phase of
+    the migration, and it comes back out of its virtual hibernation almost immediately.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As shown in [Figure 9-1](ch09s04.html#overview_of_live_migration "Figure 9-1. Overview
+    of live migration") Xen live migration begins by sending a request, or *reservation*,
+    to the target specifying the resources the migrating domain will need. If the
+    target accepts the request, the source begins the *iterative precopy* phase of
+    migration. During this step, Xen copies pages of memory over a TCP connection
+    to the destination host. While this is happening, pages that change are marked
+    as dirty and then recopied. The machine iterates this until only very frequently
+    changed pages remain, at which point it begins the *stop and copy* phase. Now
+    Xen stops the VM and copies over any pages that change too frequently to efficiently
+    copy during the previous phase. In practice, our testing suggests that Xen usually
+    reaches this point after four to eight iterations. Finally the VM starts executing
+    on the new machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By default, Xen will iterate up to 29 times and stop if the number of dirty
+    pages falls below a certain threshold. You can specify this threshold and the
+    number of iterations at compile time, but the defaults should work fine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Overview of live migration](httpatomoreillycomsourcenostarchimages333231.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9-1. Overview of live migration
+  prefs: []
+  type: TYPE_NORMAL
+- en: Making Xen Migration Work
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: First, note that migration won't work unless the domain is using some kind of
+    network-accessible storage, as described later in this chapter. If you haven't
+    got such a thing, set that up first and come back when it's done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Second, `xend` has to be set up to listen for migration requests on both physical
+    machines. Note that both machines need to listen; if only the target machine has
+    the relocation server running, the source machine won't be able to shut down its
+    Xen instance at the correct time, and the restarted domain will reboot as if it
+    hadn't shut down cleanly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Enable the migration server by uncommenting the following in */etc/xend-config.sxp*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will cause `xend` to listen for migration requests on port 8002, which
+    can be changed with the `(xend-relocation-port)` directive. Note that this is
+    somewhat of a security risk. You can mitigate this to some extent by adding lines
+    like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `xend-relocation-address` line confines `xend` to listen for migration requests
+    on that address so that you can restrict migration to, for example, an internal
+    subnet or a VPN. The second line specifies a list of hosts to allow migration
+    from as a space-separated list of quoted regular expressions. Although the idea
+    of migrating from the `localhost` seems odd, it does have some value for testing.
+    Xen migration to and from *other* hosts will operate fine without `localhost`
+    in the allowed-hosts list, so feel free to remove it if desired.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On distributions that include a firewall, you'll have to open port 8002 (or
+    another port that you've specified using the `xend-relocation-port` directive).
+    Refer to your distro's documentation if necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With live migration, Xen can maintain network connections while migrating so
+    that clients don't have to reconnect. The domain, after migration, sends an unsolicited
+    ARP (address request protocol) reply to advertise its new location. (Usually this
+    will work. In some network configurations, depending on your switch configuration,
+    it'll fail horribly. Test it first.) The migrating instance can only maintain
+    its network connections if it's migrating to a machine on the same physical subnet
+    because its IP address remains the same.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The commands are simple:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The domain's name in `xm list` changes to `migrating-[domain]` while the VM
+    copies itself over to the remote host. At this time it also shows up in the `xm
+    list` output on the target machine. On our configuration, this copy and run phase
+    took around 1 second per 10MB of domU memory, followed by about 6 seconds of service
+    interruption.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*If you, for whatever reason, want the migration to take less total time (at
+    the expense of greater downtime), you can eliminate the repeated incremental copies
+    by simply removing the* *`--live`* *option*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*This automatically stops the domain, saves it as normal, sends it to the destination
+    machine, and restores it. Just as with* *`--live`*, *the final product is a migrated
+    domain*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here''s a domain list on the target machine while the migration is in process.
+    Note that the memory usage goes up as the migrating domain transfers more data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'About 30 seconds later, the domain''s transferred a few hundred more MB:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Another 30 seconds further on, the domain''s completely transferred and running:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We also pinged the domain as it was migrating. Note that response times go
+    up dramatically while the domain moves its data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After most of the domain''s memory has been moved over, there''s a brief hiccup
+    as the domain stops, copies over its last few pages, and restarts on the destination
+    host:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: At this point the domain is completely migrated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, the migration tools don't make any guarantees that the migrated domain
+    will actually run on the target machine. One common problem occurs when migrating
+    from a newer CPU to an older one. Because instructions are enabled at boot time,
+    it's quite possible for the migrated kernel to attempt to execute instructions
+    that simply no longer exist.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, the `sfence` instruction is used to explicitly serialize out-of-order
+    memory writes; any writes issued before `sfence` must complete before writes after
+    the fence. This instruction is part of SSE, so it isn't supported on all Xen-capable
+    machines. A domain started on a machine that supports `sfence` will try to keep
+    using it after migration, and it'll crash in short order. This may change in upcoming
+    versions of Xen, but at present, all production Xen environments that we know
+    of migrate only between homogeneous hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Migrating Storage
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Live migration only copies the RAM and processor state; ensuring that the migrated
+    domain can access its disk is up to the administrator. As such, the storage issue
+    boils down to a question of capabilities. The migrated domain will expect its
+    disks to be exactly consistent and to retain the same device names on the new
+    machine as on the old machine. In most cases, that means the domU, to be capable
+    of migration, must pull its backing storage over the network. Two popular ways
+    to attain this in the Xen world are ATA over Ethernet (AoE), and iSCSI. We also
+    discussed NFS in [Chapter 4](ch04.html "Chapter 4. STORAGE WITH XEN"). Finally,
+    you could just throw a suitcase of money at NetApp.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are a lot of options beyond these; you may also want to consider cLVM
+    (with some kind of network storage enclosure) and DRBD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With all of these storage methods, we'll discuss an approach that uses a storage
+    server to export a block device to a dom0, which then makes the storage available
+    to a domU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that both iSCSI and AoE limit themselves to providing simple block devices.
+    Neither allows multiple clients to share the same filesystem without filesystem-level
+    support! This an important point. Attempts to export a single ext3 filesystem
+    and run domUs out of file-backed VBDs on that filesystem will cause almost immediate
+    corruption. Instead, configure your network storage technology to export a block
+    device for each domU. However, the exported devices don't have to correspond to
+    physical devices; we can as easily export files or LVM volumes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ATA over Ethernet
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ATA over Ethernet is easy to set up, reasonably fast, and popular. It's not
+    routable, but that doesn't really matter in the context of live migration because
+    live migration always occurs within a layer 2 broadcast domain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'People use AoE to fill the same niche as a basic SAN setup: to make centralized
+    storage available over the network. It exports block devices that can then be
+    used like locally attached disks. For the purposes of this example, we''ll export
+    one block device via AoE for each domU.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start by setting up the AoE server. This is the machine that exports
+    disk devices to dom0s, which in their turn host domUs that rely on the devices
+    for backing storage. The first thing you''ll need to do is make sure that you''ve
+    got the kernel AoE driver, which is located in the kernel configuration at:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can also make it a module (*m*). If you go that route, load the module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Either way, make sure that you can access the device nodes under */dev/etherd*.
+    They should be created by udev. If they aren''t, try installing the kernel source
+    and running the *Documentation/aoe/udev-install.sh* script that comes in the kernel
+    source tree. This script will generate rules and place them in an appropriate
+    location—in our case */etc/udev/rules.d/50-udev.rules*. You may need to tune these
+    rules for your udev version. The configurations that we used on CentOS 5.3 were:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: AoE also requires some support software. The server package is called vblade
+    and can be obtained from [http://aoetools.sourceforge.net/](http://aoetools.sourceforge.net/).
+    You'll also need the client tools aoetools on both the server and client machines,
+    so make sure to get those.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, run the `aoe-interfaces` command on the storage server to tell vblade
+    what interfaces to export on:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: vblade can export most forms of storage, including SCSI, MD, or LVM. Despite
+    the name ATA over Ethernet, it's not limited to exporting ATA devices; it can
+    export any seekable device file or any ordinary filesystem image. Just specify
+    the filename on the command line. (This is yet another instance where UNIX's *everything
+    is a file* philosophy comes in handy.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Although vblade has a configuration file, it''s simple enough to specify the
+    options on the command line. The syntax is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'So, for example, to export a file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This exports */path/file.img* as */dev/etherd/e0.0*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*For whatever reason, the new export is not visible from the server. The AoE
+    maintainers note that this is not actually a bug because it was never a design
+    goal*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'AoE may expect the device to have a partition table, or at least a valid partition
+    signature. If necessary, you can partition it locally by making a partition that
+    spans the entire disk:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When you''ve done that, make a filesystem and detach the loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Alternately, if you want multiple partitions on the device, `fdisk` the device
+    and create multiple partitions as normal. The new partitions will show up on the
+    client with names like */dev/etherd/e0.0p1*. To access the devices from the AoE
+    server, performing `kpartx -a` on an appropriately set up loop device should work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we've got a functional server, let's set up the client. Large chunks
+    of the AoE client are implemented as a part of the kernel, so you'll need to make
+    sure that AoE's included in the dom0 kernel just as with the storage server. If
+    it's a module, you'll mostly likely want to ensure it loads on boot. If you're
+    using CentOS, you'll probably also need to fix your udev rules, again just as
+    with the server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since we're using the dom0 to arbitrate the network storage, we don't need to
+    include the AoE driver in the domU kernel. All Xen virtual disk devices are accessed
+    via the domU `xenblk` driver, regardless of what technology they're using for
+    storage.^([[55](#ftn.CHP-9-FNOTE-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Download aoetools from your distro's package management system or [http://aoetools.sourceforge.net/](http://aoetools.sourceforge.net/).
+    If necessary, build and install the package.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once the aoetools package is installed, you can test the exported AoE device
+    on the client by doing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this case, the device is 1GB (or thereabouts) in size, has been exported
+    as slot 0 of shelf 0, and has been found on the client''s eth0\. If it mounts
+    successfully, you''re ready to go. You can unmount */mnt/aoe* and use */dev/etherd/e0.0*
+    as an ordinary `phy:` device for domU storage. An appropriate domU config `disk=`
+    line might be:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you run into any problems, check */var/log/xen/xend.log*. The most common
+    problems relate to the machine's inability to find devices—block devices or network
+    devices. In that case, errors will show up in the log file. Make sure that the
+    correct virtual disks and interfaces are configured.
+  prefs: []
+  type: TYPE_NORMAL
+- en: iSCSI
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: AoE and iSCSI share a lot of similarities from the administrator's perspective;
+    they're both ways of exporting storage over a network without requiring special
+    hardware. They both export block devices, rather than filesystems, meaning that
+    only one machine can access an exported device at a time. ISCSI differs from AoE
+    in that it's a routable protocol, based on TCP/IP. This makes it less efficient
+    in both CPU and bandwidth, but more versatile, since iSCSI exports can traverse
+    layer 2 networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: iSCSI divides the world into *targets* and *initiators*. You might be more familiar
+    with these as *servers* and *clients*, respectively. The servers function as targets
+    for SCSI commands, which are initiated by the client machines. In most installations,
+    the iSCSI targets will be dedicated devices, but if you need to set up an iSCSI
+    server for testing on a general-purpose server, here's how.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting Up the iSCSI Server
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For the target we recommend the *iSCSI Enterprise Target* implementation ([http://sourceforge.net/projects/iscsitarget/](http://sourceforge.net/projects/iscsitarget/)).
+    Other software exists, but we're less familiar with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Your distro vendor most likely provides a package. On Debian it's iscsitarget.
+    Red Hat and friends use the related tgt package, which has somewhat different
+    configuration. Although we don't cover the details of setting up tgt, there is
+    an informative page at [http://www.cyberciti.biz/tips/howto-setup-linux-iscsi-target-sanwith-tgt.html](http://www.cyberciti.biz/tips/howto-setup-linux-iscsi-target-sanwith-tgt.html).
+    For the rest of this section, we'll assume that you're using the iSCSI Enterprise
+    Target.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If necessary, you can download and build the iSCSI target software manually.
+    Download the target software from the website and save it somewhere appropriate
+    (we dropped it onto our GNOME desktop for this example). Unpack it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Most likely you''ll be able to build all of the components—both the kernel
+    module and userspace tools—via the usual `make` process. Ensure that you''ve installed
+    the openSSL headers, probably as part of the openssl-devel package or similar:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`make install` will also copy the default config files into */etc*. Our next
+    step is to edit them appropriately.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The main config file is */etc/ietd.conf*. It''s liberally commented, and most
+    of the values can safely be left at their defaults (for now). The bit that we''re
+    mostly concerned with is the Target section:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'There are many other variables that we could tweak here, but the basic target
+    definition is simple: the word **`Target`** followed by a conforming *iSCSI Qualified
+    Name* with a logical unit definition. Note the `Type=fileio`. In this example
+    we''re using plain files, but you''ll most likely also want to use this value
+    with whole disk exports and LVM volumes too.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The init script *etc/iscsi_target* should have also been copied to the appropriate
+    place. If you want iSCSI to be enabled on boot, create appropriate start and kill
+    links as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now we can export our iSCSI devices:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To check that it''s working:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should see the export(s) that you've defined, along with some status information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: iSCSI Client Setup
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For the initiator, a variety of clients exist. However, the best-supported package
+    seems to be Open-iSCSI, available at [http://www.open-iscsi.org/](http://www.open-iscsi.org/).
+    Both Red Hat and Debian make a version available through their package manager,
+    as iscsi-initiator-utils and open-iscsi, respectively. You can also download the
+    package from the website and work through the very easy installation process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you have the iSCSI initiator installed, however you choose to do it, the
+    next step is to say the appropriate incantations to instruct the machine to mount
+    your iSCSI devices at boot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The iSCSI daemon, `iscsid`, uses a database to specify its devices. You can
+    interact with this database with the `iscsiadm` command. `iscsiadm` also allows
+    you to perform target discovery and login (here we''ve used the long option forms
+    for clarity):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that *portal*, in iSCSI jargon, refers to the IP address via which the
+    resource can be accessed. In this case it''s the exporting host. `iscsiadm` tells
+    us that there''s one device being exported, *iqn.2001-04.com.prgmr:domU.odin*.
+    Now that we know about the node, we can update the iSCSI database:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here we use `iscsiadm` to update a node in the iSCSI database. We specify a
+    target, a portal, and the operation we want to perform on the database node: `update`.
+    We specify a node to update with the `-n` option and a new value with the `-v`
+    option. Other operations we can perform via the `-o` option are `new`, `delete`,
+    and `show`. See the Open-iSCSI documentation for more details.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Restart `iscsid` to propagate your changes. (This step may vary depending on
+    your distro. Under Debian the script is `open-iscsi`; under Red Hat it's `iscsid`.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note the new device in `dmesg`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that this is the first SCSI device on the dom0, and thus becomes */dev/sda*.
+    Further iSCSI exports become *sdb*, and so on. Of course, using local SCSI device
+    nodes for network storage presents obvious management problems. We suggest mitigating
+    this by using the devices under */dev/disk/by-path*. Here */dev/sda* becomes */dev/disk/by-path/ip-192.168.1.123:3260-iscsi-larry:domU.orlando*.
+    Your device names, of course, will depend on the specifics of your setup.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that you''re equipped with the device, you can install a Xen instance on
+    it, most likely with a `disk=` line similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since the domain is backed by shared iSCSI storage, you can then migrate the
+    domain to any connected Xen dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[55](#CHP-9-FNOTE-5)]) A natural extension would be to have the domU mount
+    the network storage directly by including the driver and support software in the
+    initrd. In that case, no local disk configuration would be necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Quo Peregrinatur Grex
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'So that''s migration. In this chapter we''ve described:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to manually move a domain from one host to another
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cold migration of a domain between hosts
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Live migration between hosts on the same subnet
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Shared storage for live migration
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Apply these suggestions, and find your manageability significantly improved!
+  prefs: []
+  type: TYPE_NORMAL

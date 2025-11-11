@@ -1,0 +1,643 @@
+- en: Chapter 13. XEN AND WINDOWS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the last chapter we described Xen's hardware virtualization support and how
+    to use it. Now that we have Xen operating with hardware virtualization, we can
+    run unmodified operating systems, including Windows, that 800-pound gorilla of
+    the computing world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why Run Windows Under Xen?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now, why exactly would you want to do this terrible thing? We could say, "because
+    you can," and that's reason enough to do many things. But it might not be entirely
+    satisfying—it sounds like a lot of work, after all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fortunately, reasons abound. Probably the best of these is the software—especially
+    the server software, considering that Xen's strengths are in the server field.^([[79](#ftn.CHP-13-FNOTE-1)])
+    Much of the Windows server software, like Exchange Server, has a giant installed
+    base and would be difficult to replace. The same holds for the client software.
+    Take, for example, Office, Outlook, Visual Studio—Microsoft continues to be a
+    fact of life. Xen with VNC, SDL, or rdesktop allows you to run productivity software
+    at acceptable speeds, with full, albeit unaccelerated, graphics support, all while
+    retaining your comfortable Linux computing environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen also gives you a way out from the old worry that the next security fix or
+    driver update will leave the machine completely unbootable—it provides an equivalent
+    to Microsoft's "system restore points" but under your own control, rather than
+    the OS's. By running Windows in a virtual machine with an effective storage backend,
+    you can snapshot it, roll back updates, and protect yourself from malware—all
+    without involving the domU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Security furnishes another reason to run Windows under Xen. Although it's cliche
+    to say that Windows is insecure, the fact remains that virtualization, when properly
+    used, can be an effective layer of isolation for any server, Windows, *nix, or
+    otherwise. The fact that Windows is a popular target makes this reasoning even
+    more compelling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's also worth noting that Xen's design, which partitions drivers in isolated
+    domains, at least contributes to security. An intrusion in the Windows domain,
+    even if it manages to exploit driver code to interact with physical hardware,
+    is unlikely to compromise other domains on the same hardware. This doesn't mean
+    that Xen is inherently secure, but it does suggest that it might be possible to
+    secure it. Work remains to be done, of course—indeed, a lot of the present work
+    in QEMU is in precisely the area of validating emulated device access to improve
+    security. But even as things are, Xen can help to reduce the exposure of Windows
+    machines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Besides, it's easier to run Windows in a domU than you might suppose.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[79](#CHP-13-FNOTE-1)]) At least in light of the ongoing commodification
+    of the operating system, which really is at least part of what Xen is all about,
+    isn't it?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Windows on Xen: Prerequisites'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before stepping into the brave new world of virtualized Windows, make sure that
+    you've got a few things.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, you''re going to need a box that does HVM. (See [Chapter 12](ch12.html
+    "Chapter 12. HVM: BEYOND PARAVIRTUALIZATION") for details on what that is, how
+    it works, and how to tell if you have it.) The box will also need enough free
+    memory and storage for a Windows install—Xen can help to use resources more efficiently,
+    but it''s not magic. For example, we suggest that a Xen box running Windows Server
+    2003 domUs have 512MB of memory and about 10GB of hard drive space for each domU,
+    plus 512MB and another 10GB for dom0\. You might want to consult Microsoft''s
+    website for more specific system requirements or requirements for other Windows
+    versions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It might sound obvious, but you're also going to need a copy of Windows, with
+    a license that allows virtualization. This copy of Windows should be reasonably
+    new. We're going to focus on Windows XP Service Pack 2 and Windows Server 2003
+    in this chapter—Vista's just too much hassle at this point. Windows NT and 9*x*,
+    while they should in theory work, seem to crash during the install step. No one
+    (us included) seems too interested in figuring out why this happens. Life is full
+    of mysteries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Windows on Xen: Installation'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Windows is actually quite easy to get installed and running. The basic steps
+    are exactly like any other Xen install, with some extra configuration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Get Windows install media and put it somewhere that Xen can find it.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Make a config file.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Boot from the install media.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Install using the Windows installer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Reboot from the emulated hard drive.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Install paravirtualized drivers.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use Windows.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Easy, right? Let's get started.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Windows Manually
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The first thing to do is get a copy of Windows. In our case, we used a physical
+    CD-ROM, which we put in the Xen server''s CD-ROM drive. For convenience, you can
+    of course create an image from the CD and use it just like the physical disc:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: (If you go that route, specify `file:/var/tmp/windows2k3.iso` instead of `phy:/dev/cdrom`
+    in the following steps.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: While you're at it, create the backing store in the usual way. Here we'll use
+    a file-backed device, but you can use any storage backend that Xen knows about.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, create a config file. Here''s a sample (pulled from [Chapter 12](ch12.html
+    "Chapter 12. HVM: BEYOND PARAVIRTUALIZATION") with minor changes). We''ll save
+    this as */etc/xen/falstaff*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This should be pretty familiar by now. Note that we're leaving ACPI and APIC
+    at their default "off " values to avoid confusing the Windows installer. You'll
+    want to point the entries in the `disk=` lines to the appropriate locations for
+    your install, of course. You might also want to diverge from our configuration
+    by setting `sdl=1` rather than `vnc`—SDL works only on the local X display but
+    has the virtue of popping up automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then create the machine as usual:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Start a VNC session so that you can talk to it, assuming you decided against
+    SDL. Insert the correct host and display number—in this case we''re on the local
+    machine, and this is the first VNC session running:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now Windows Setup will start in its accustomed fashion. Install Windows as usual.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Discussion of HALs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One problem that occasionally pops up at this stage involves the Windows HAL
+    (hardware abstraction layer). Windows ships with a selection of possible DLLs
+    to implement the abstraction layer, picking one of six choices during the install
+    process. The correct HAL to use with the system is affected by the `acpi, apic`,
+    and `vcpus` configuration directives, as indicated in [Table 13-1](ch13s03.html#hals_available_with_windows
+    "Table 13-1. HALs Available with Windows").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 13-1. HALs Available with Windows
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| OPTIONS | HAL | COMMENTS |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `acpi=0,apic=0` | HAL.DLL | Standard PCNon-ACPI Programmable Interrupt Controller
+    (PIC)Works with everything |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `acpi=0,apic=1` | HALAPIC.DLL | MPS (Multiprocessor Specification)Uniprocessor
+    PCNon-ACPI APIC uniprocessor HALUniprocessor onlyDoesn''t work with PIC machines
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `acpi=0,apic=1` | HALMPS.DLL | Non-ACPI APIC multiprocessor HALDoes not work
+    with ACPI machines |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `acpi=1,apic=0` | HALACPI.DLL | Advanced Configuration and Power Interface
+    (ACPI)ACPI PIC (not APIC) HALDo these even exist in hardware? |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `acpi=1,apic=1` | HALAACPI.DLL | ACPI Uniprocessor PCACPI APIC uniprocessor
+    HALACPI onlyAPIC onlyUniprocessor only |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `acpi=1,apic=1` | HALMACPI.DLL | ACPI Multiprocessor PCACPI APIC multiprocessor
+    HAL |'
+  prefs: []
+  type: TYPE_TB
+- en: The lucky winner becomes *$SYSTEMROOT\system32\HAL.DLL*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The easy answer, therefore, is to use *HAL.DLL*, regardless of the values of
+    ACPI and APIC. This should always work, but it might reduce performance. Microsoft
+    also warns that such a configuration is unsupported.^([[80](#ftn.CHP-13-FNOTE-2)])
+    We generally turn ACPI and APIC on so that Windows will install the ACPI APIC
+    HAL, and it hasn't caused the machine to burst into flames yet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With Windows XP, however, this sometimes doesn't work. Setting ACPI can cause
+    the install process to fail, usually by hanging at Setup is Starting Windows.
+    The easiest way to install Windows XP is to leave ACPI and APIC off during the
+    initial boot from the CD-ROM and then turn them on before the first boot into
+    graphical mode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then go through the initial format, copy, and so on. When the first phase of
+    Windows Setup completes and the VM turns off, change the config file to read:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will cause Windows to install the correct HAL during its second-phase installation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you need to change the HAL later on—for example, if you decide to move from
+    a uniprocessor to a multiprocessor configuration—we recommend reinstalling Windows.
+    It's possible to change the HAL manually by overwriting the various driver files,
+    but it's probably not a great idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Windows the Red Hat Way
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Red Hat's `virt-manager` app can handle most of the trouble of setting up Windows
+    for you. Just create a machine from the `virt-manager` GUI, select **Fully Virtualized**
+    rather than Paravirtualized in the appropriate dialog, and indicate the location
+    of Windows install media (either an ISO file or physical CD-ROM). Indicate whether
+    you'd like to connect to the network using a virtual network or shared physical
+    device (corresponding to networking via `virbr` and `xenbr`, respectively). Install
+    Windows as normal, using Microsoft's install program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The configuration generated by `virt-manager` will look something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Unfortunately, this doesn't get you quite to the end of the Windows install.
+    For whatever reason, the emulated CD-ROM isn't presented to Windows after the
+    first reboot in the install process, so Windows will complain that it can't find
+    its files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Red Hat''s documentation will tell you that Windows needs to format its virtual
+    disk as a FAT or FAT32 partition so that you can copy the install files to it.
+    While this approach will work, we prefer to avoid FAT32 in favor of NTFS. To get
+    around this problem, we use the I/O emulator. Modify the `disk=` line to use QEMU''s
+    I/O emulation as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: (Put your definition for the first hard drive in the appropriate place, of course.)
+    The second stanza specifies an ISO to use as a virtual CD-ROM drive, with hardware
+    emulation provided by Xen's hardware emulation layer (inherited from QEMU). When
+    you've made this change, the CD will appear to the domU as a QEMU emulated device,
+    and you can proceed with the installation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[80](#CHP-13-FNOTE-2)]) So is everything else about running Windows under
+    Xen, as far as we can tell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Windows with the Virtual Framebuffer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '"What''s the best remote administration tool for Windows NT?"'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '"A car."'
+  prefs: []
+  type: TYPE_NORMAL
+- en: —Anonymous, Usenet
+  prefs: []
+  type: TYPE_NORMAL
+- en: However you've gone about installing Windows, you'll almost certainly want to
+    log in and use the system when it's running. That's where the virtual framebuffer
+    comes in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen's virtual framebuffer allows you to interact with the domU at all stages—from
+    BIOS load, through the bootloader, to postsystem boot. It can be accessed through
+    SDL on the local console or via VNC over the network. It's one of the neater features
+    of HVM domUs, and it really helps to cement the illusion of a real machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Wonderful though the virtual framebuffer is, however, it's got some annoyances.
+    Mouse tracking, for example, can be kind of iffy out of the box. Here are some
+    ways to fix the most common problems that we've had with the VNC framebuffer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, by default Xen''s built-in VNC server won''t listen on interfaces other
+    than the loopback. To change this behavior, set `vnc-listen` in */etc/xen/xend-config.sxp*
+    to listen on all interfaces:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can also specify the IP address of the interface that you want the VNC server
+    to listen on. Note that this will expose the machine's console over the network
+    and should probably only be done on trusted networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One useful trick when working with the VNC framebuffer under Windows is to specify
+    a tablet as the pointing device, rather than a mouse. This improves the mouse
+    tracking by using absolute positioning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: (The `usb=1` line isn't strictly necessary—it's turned on implicitly by `usbdevice=`.
+    However, it's a useful reminder that Xen's USB emulation has been turned on.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One last minor annoyance: Sometimes the VNC mouse and keyboard interface just
+    stops working (or else the display stops updating). Nine times out of ten, if
+    you close and reopen the VNC session, it''ll come back.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In addition to Xen''s virtual framebuffer, you can handle access at the OS
+    level—for example, by installing the VNC server under Windows or using Microsoft''s
+    built-in RDP (Remote Desktop Protocol). These have the advantage of allowing the
+    virtual machine to handle its own graphics tasks rather than involving an emulator
+    in dom0\. RDP is also a higher-level, more efficient protocol than VNC, analogous
+    to X in its handling of widgets and graphics primitives. We recommend using it
+    if possible. As [Figure 13-1](ch13s04.html#here_we_see_two_domains_one_running_wind
+    "Figure 13-1. Here we see two domains: one running Windows XP and being accessed
+    through VNC; and one Windows Server 2003 domU being accessed through VNC, RDP
+    from the Windows XP domain, and rdesktop from a Linux machine.") shows, VNC, RDP,
+    and SDL can coexist, with multiple independent sessions on the same VM.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To enable RDP in administration mode, access **System Properties**, click the
+    **Remote** tab, and check the box marked **Enable Remote Desktop**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Here we see two domains: one running Windows XP and being accessed through
+    VNC; and one Windows Server 2003 domU being accessed through VNC, RDP from the
+    Windows XP domain, and rdesktop from a Linux machine.](httpatomoreillycomsourcenostarchimages333245.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 13-1. Here we see two domains: one running Windows XP and being accessed
+    through VNC; and one Windows Server 2003 domU being accessed through VNC, RDP
+    from the Windows XP domain, and rdesktop from a Linux machine.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Windows XP and Windows Server 2003 include RDP clients. On other platforms,
+    the open source rdesktop client allows you to access Windows machines from Unix-like
+    operating systems (including Mac OS X). Simply run the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Et Voilà!
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now you have Windows running. This would be a good time to make a backup of
+    your clean Windows install so that you can conveniently reimage it when something
+    goes wrong. Just create an LVM snapshot or file-based CoW device, as we outline
+    in the [Chapter 4](ch04.html "Chapter 4. STORAGE WITH XEN"). It'll be good for
+    your peace of mind.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you've got a backup, you can do whatever it is you are accustomed to do
+    with Windows. We would not presume to instruct you in this regard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are, however, some things to keep in mind about this new Windows install.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Windows Activation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Windows licenses and activations are tied to hardware unless you've got a volume
+    license. Thus, it would be a good idea to decide on a hardware configuration ahead
+    of time and keep it constant to avoid the computer demanding reactivation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In particular, specify a MAC address so that Xen doesn't randomly generate a
+    new one on every reboot—this is the single most important value in Windows XP's
+    hardware hash calculation. Other things to keep in mind are the memory amount
+    and virtual CD-ROM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Graphics Cards
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Another of the big caveats about Windows under Xen is that it still won't allow
+    you to use 3D hardware—so the scenario of a desktop Linux box that runs games
+    in a Windows domU is still purely in the realm of fantasy for now. As our discussion
+    above has shown, the virtual Windows machine uses an emulated framebuffer via
+    SDL or VNC. Neither of these modes supports any sort of acceleration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem with hardware access in HVM mode (this applies to any PCI device,
+    not just graphics cards) is that there's no way to map the hardware's memory space
+    into the memory of the guest—the guest has an additional layer of abstraction,
+    translating a discontiguous block of physical memory into something that the unmodified
+    domU operating system can use. Recently, chipsets have been incorporating an *IOMMU*,
+    which is hardware that can do this translation job in a manner analogous to the
+    processor's memory management unit (hence the name). Xen's support for Intel's
+    IOMMU implementation, under the name of VT-d, is progressing, but it hasn't gotten
+    to the point where it can make a graphics card usable by a Windows domU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: VT-D SUPPORT
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're curious about whether your machine supports VT-d, you can run `xm
+    dmesg | grep -i vt-d` in the dom0 to find out. A machine with VT-d will say something
+    like *Intel VT-d has been enabled*. If you see this, congratulations! The next
+    Xen version will likely include facilities to enable you to use this advanced
+    feature.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another approach to graphics—one that wouldn't require replacement of all existing
+    hardware—would be for the the graphics driver authors to implement the translation
+    from domU addresses to machine addresses in driver software. Rumor has it that
+    NVIDIA has a Xen-aware driver that could be assigned to an HVM domU and used for
+    3D acceleration; however, it hasn't yet been released, so there's a good chance
+    it doesn't actually exist.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One other promising direction uses a virtual 3D graphics driver to forward OpenGL
+    calls to the actual graphics hardware. There are a couple of Xen-based projects
+    that use this principle, but they are Linux only at the moment. VMware has also
+    done some work on a driver architecture that allows for 3D, which appears to take
+    the same tack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: No finished products exist, that we know of, to allow hardware 3D support under
+    Windows. Nonetheless, it's a much-requested feature, and it is being worked on.
+    We wouldn't make it an essential part of any Xen deployment just yet, however.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Paravirtualized Drivers for Windows
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As we''ve already mentioned (several times), HVM is somewhat slower than paravirtualization.
+    Partially this is because of the need to virtualize memory access; however, this
+    overhead is minimal compared with emulated I/O and its attendant context switches.
+    (See [Chapter 12](ch12.html "Chapter 12. HVM: BEYOND PARAVIRTUALIZATION") for
+    mind-numbing detail.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can address many of the speed issues related to HVM by swapping the emulated
+    devices for paravirtualized devices after the install process completes. These
+    devices will improve I/O speeds dramatically; however, Windows driver support
+    is lacking. There are two options: proprietary and expensive drivers, or free
+    and unfinished ones.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Proprietary Windows PVM Drivers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Three companies have so far provided Windows drivers that take advantage of
+    paravirtualization: XenSource, Virtual Iron, and Novell. All of these drivers
+    are signed by Microsoft for trouble-free installation on Windows.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Citrix, wearing its XenSource hat, produces paravirtualized drivers for Windows
+    as part of its Xen-based virtualization suite. These drivers work well, and you
+    can test them for yourself by downloading the free version of the XenSource product.
+    Unfortunately, these drivers don't work with the open source version of Xen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Virtual Iron ([http://virtualiron.com/](http://virtualiron.com/)) also provides
+    paravirtualized drivers for Windows as part of its product. These drivers work
+    with open source Xen, and Virtual Iron has been working on contributing changes
+    to the Xen community. However, the drivers themselves are still closed source.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, Novell offers Windows PV drivers that work with open source Xen as
+    an independent product. These drivers are quite expensive (to say the least)—they
+    are so expensive that we haven't actually tried them. More information is at [http://www.novell.com/products/vmdriverpack/](http://www.novell.com/products/vmdriverpack/)
+    if you're curious.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, while all of these drivers (in our experience) function as advertised,
+    none of them seem especially compelling to us. We're content to use Windows, with
+    the HVM drivers, solely in light productivity tasks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: GPL Windows Paravirtualized Drivers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: There is one thing that you can try if you're sufficiently adventurous. GPL
+    Windows PV drivers do exist. They are under active development, which is developer-speak
+    for "don't use these for anything important." They work pretty well for us, but
+    occasionally they do something surprising (usually unpleasant). These drivers
+    try to improve performance by avoiding some of the inefficient device emulation
+    and by using advanced techniques such as TCP Segmentation Offload, or TSO.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The GPL PV drivers are easy to install. First, we recommend checking the *xen-devel*
+    archives to figure out which version is the latest. As of this writing, 0.8.8
+    is the most current version, and it's available at [http://www.meadowcourt.org/WindowsXenPV-0.8.8.zip](http://www.meadowcourt.org/WindowsXenPV-0.8.8.zip).
+    Unfortunately, there's no web page that lists releases, so you'll want to search
+    the archives of the *xen-devel* mailing list to find out the most recent version.
+    (Alternatively, you can check the current version using Mercurial—check the repository
+    at [http://xenbits.xensource.com/ext/win-pvdrivers.hg](http://xenbits.xensource.com/ext/win-pvdrivers.hg).)
+  prefs: []
+  type: TYPE_NORMAL
+- en: We opted to download the binary driver package directly within an HVM Windows
+    XP Professional instance. It includes a fairly comprehensive set of installation
+    instructions, but we'll go over what we did anyway, just for convenience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, unpack the drivers. We just dragged the appropriate folder to the desktop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, run *install.bat*. Windows will complain several times about the drivers
+    not being signed. Just click **OK**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the install finishes, reboot to make sure that everything still works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Assuming you rebooted successfully, you should now be able to access PV devices
+    from Windows. Try creating a scratch device in the dom0, then running an `xm block-attach`
+    command like the following (with appropriate names, as always):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This should cause Windows to notice a new device, use the correct driver, and
+    present a blank disk, which we can then format, as shown in [Figure 13-2](ch13s06.html#adding_a_paravirtualized_disk_with_the_g
+    "Figure 13-2. Adding a paravirtualized disk with the GPL PV drivers"). Similarly,
+    you can attach a network device with the `xm network-attach` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, you'll need to edit the *boot.ini* file to tell the GPL PV drivers
+    to activate. (You might need to turn on Show Hidden Files and Folders and uncheck
+    Hide Protected Operating System Files in Tools ► Folder Options to make *boot.ini*
+    accessible.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here we've modified the boot entry by putting `/gplpv` on the end to tell the
+    GPL PV drivers to activate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Adding a paravirtualized disk with the GPL PV drivers](httpatomoreillycomsourcenostarchimages333247.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-2. Adding a paravirtualized disk with the GPL PV drivers
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now shut down the Windows install.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reboot, select the **Windows XP Professional (PV Drivers)** entry from the boot
+    menu, and you should have a full set of PV devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ongoing Development
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Windows under Xen is still immature, but it's already developed far enough to
+    be useful. Using Xen, you can consolidate Windows servers in a robust, manageable
+    platform and run client software in a native environment on the desktop. You have
+    a reasonable way of accessing the machine via the framebuffer or rdesktop, and
+    finally you have PV drivers for reasonable speed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All in all, Xen is quite a good platform for Windows. Not perfect, but certainly
+    usable.
+  prefs: []
+  type: TYPE_NORMAL

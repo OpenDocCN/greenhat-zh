@@ -1,0 +1,460 @@
+- en: Chapter 13. Building Your Own Module
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Building your own Metasploit module is relatively simple, as long as you have
+    some programming experience and an idea of what you want to build. Because Metasploit
+    is primarily Ruby-based, we’ll be working in the Ruby programming language in
+    this chapter. If you aren’t a Ruby ninja yet, but you have some exposure to the
+    language, don’t fret; continue to practice and learn. It’s fairly easy to learn
+    Ruby as you go. If you find yourself struggling with the concepts in this chapter,
+    skip it for now, try to build up your Ruby knowledge, and revisit the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we’ll write a module called *mssql_powershell* to harness a
+    technique released at the Defcon 18 Hacking Conference by Josh Kelley (winfang)
+    and David Kennedy. This module targets Windows platforms with Microsoft’s PowerShell
+    installed (the default on Windows 7).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This module converts a standard MSF binary payload to a *hex-blob* (a hexadecimal
+    representation of binary data) that can be transmitted to a target system through
+    Microsoft SQL commands. Once this payload is on the target system, a PowerShell
+    script is used to convert the hexadecimal data back to a binary executable, execute
+    it, and deliver a shell to the attacker. This module is already in Metasploit
+    and was developed by one of the authors of this book; it’s a great lesson on how
+    to build your own modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ability to convert a binary to hexadecimal, transmit it via MS SQL, and
+    convert it back to binary is an excellent example of how powerful the Metasploit
+    Framework can be. As you’re performing penetration tests, you will encounter many
+    unfamiliar scenarios or situations; your ability to create or modify modules and
+    exploits on the fly will give you that needed edge. As you begin to understand
+    the Framework, you’ll be able to write these types of modules in a relatively
+    short amount of time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting Command Execution on Microsoft SQL
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As mentioned in [Chapter 6](part0010.html#meterpreter), most system administrators
+    set the *sa* (system administrator) account password to something weak, not realizing
+    the impact of this simple mistake. The *sa* account is installed by default with
+    the SQL role of *sysadmin*, and when you’re performing penetration tests, you
+    can almost guarantee that a weak or blank *sa* account will exist on Microsoft
+    SQL Server instances. We will use the MS SQL instance that you built in [Appendix A](part0022.html#configuring_your_target_machines)
+    to exploit a situation with our module. As discussed in [Chapter 6](part0010.html#meterpreter),
+    you initially scan the system with the Metasploit auxiliary modules and brute
+    force the weak *sa* account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you have brute forced the *sa* account, you can insert, drop, create, and
+    perform most other tasks you would normally use in MS SQL. This includes calling
+    an extended administrative-level stored procedure called `xp_cmdshell`, as discussed
+    in [Chapter 6](part0010.html#meterpreter). This stored procedure lets you execute
+    underlying operating system commands under the same security context used by the
+    SQL Server service (for example, Local System).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: MS SQL installs with this stored procedure disabled in SQL Server 2005 and 2008,
+    but you can re-enable it using SQL commands if you have the *sysadmin* role within
+    MS SQL. For example, you could use `SELECT loginname FROM master..syslogins WHERE
+    sysadmin=1` to view all users with this level of access and then become one of
+    those users. If you have the sysadmin role, you’re almost guaranteed a full-system
+    compromise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following listing demonstrates how to run basic commands through Metasploit’s
+    MS SQL modules:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, we first select the *mssql_exec* auxiliary module at ![](../images/00002.gif),
+    which calls the `xp_cmdshell` stored procedure to execute commands. Next, we view
+    the module’s options at ![](../images/00004.gif) and set our target at ![](../images/00005.gif)
+    and the command to execute on the target at ![](../images/00006.gif). Finally,
+    we run the exploit with `exploit`, and you can see at ![](../images/00007.gif)
+    that the exploit is successful. We’ve added a user to the system using the `xp_cmdshell`
+    stored procedure. (At this point we could enter `net localgroup administrators
+    metasploit /ADD` to add the user to the local administrators group on the compromised
+    system.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can think of the *mssql_exec* module as a command prompt accessible via
+    MS SQL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring an Existing Metasploit Module
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now we’ll examine what is actually occurring “under the hood” of the module
+    we just worked with, *mssql_exec*. This allows us to get a feel for how existing
+    code is operating before we write our own. Let’s open the module with a text editor
+    to see how it operates:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following lines excerpted from the module yield a few important things
+    worthy of note:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first line at ![](../images/00002.gif) tells us that this module will include
+    all functionality from Metasploit’s core libraries. Next the class is set at ![](../images/00004.gif)
+    with code that defines this as an auxiliary module that inherits certain characteristics
+    of, for example, scanners, denial-of-service vectors, data retrieval, brute force
+    attacks, and reconnaissance attempts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `include` statement at ![](../images/00005.gif) is probably one of the most
+    important lines, because it pulls in the MS SQL module from the core Metasploit
+    libraries. Essentially, the MS SQL module handles all MS SQL–based communications
+    and anything related to MS SQL. Finally, at ![](../images/00006.gif) it pulls
+    a specific command from the Metasploit datastore.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s examine the MS SQL function in the Metasploit core libraries to get a
+    better understanding of its power. First, open *mssql.rb* and then *mssql_commands.rb*
+    with the following commands, each in a different window:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Press ctrl-W in Nano to search for `mssql_xpcmdshell` in *mssql.rb*, and you
+    should find the definition that tells Metasploit how to use the `xp_cmdshell`
+    procedure, as shown next:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This listing defines the SQL query to be run against the server as a call to
+    the `xp_cmdshell` stored procedure at ![](../images/00002.gif) and a variable
+    that will be replaced with the command line the user requests to be executed at
+    ![](../images/00004.gif). For instance, an attempt to add a user to the system
+    would execute within MS SQL as `EXEC master..xp_cmdshell 'net user metasploit
+    p@55w0rd! /ADD'` by setting the `cmd` variable to `'net user metasploit p@55w0rd!
+    /ADD'`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now turn your attention to the *mssql_commands.rb*, where the commands to enable
+    the `xp_cmdshell` procedure live:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here you can see the sequence of commands ![](../images/00002.gif) issued to
+    re-enable the `xp_cmdshell` stored procedure in MS SQL Server 2005 and 2008.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you understand the functions we will be using in creating our own module,
+    let’s get started.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a New Module
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Suppose you’re working on a penetration test and you encounter a system running
+    SQL Server 2008 and Microsoft Server 2008 R2\. Because Microsoft removed *debug.exe*
+    on Windows 7 x64 and Windows Server 2008, these systems won’t allow you to convert
+    executables in a traditional way as defined in [Chapter 11](part0015.html#fast-track).
+    That means you need to create a new module that will allow you to attack a Microsoft
+    Server 2008 and SQL Server 2008 instance successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll make certain assumptions for purposes of this scenario. First, you’ve
+    already guessed that the SQL Server password is blank, and you have gained access
+    to the `xp_cmdshell` stored procedure. You need to deliver a Meterpreter payload
+    onto the system, but all ports other than 1433 are closed. You don’t know whether
+    a physical firewall is in place or if the Windows-based firewall is in use, but
+    you don’t want to modify the port list or turn off the firewall because that might
+    raise suspicion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PowerShell
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Windows PowerShell is our only viable option here. PowerShell is a comprehensive
+    Windows scripting language that allows you to access the full Microsoft .NET Framework
+    from the command line. PowerShell’s active community works at extending the tool,
+    making it a valuable tool for security professionals because of its versatility
+    and compatibility with .NET. We aren’t specifically going to dive into how PowerShell
+    works and its functions, but you should know that it is a full-fledged programmatic
+    language available to you on newer operating systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll create a new module that will use Metasploit to convert the binary code
+    to hexadecimal (or Base64 if desired), and then echo it onto the underlying operating
+    system. Then we’ll use PowerShell to convert the executable back to a binary that
+    you can execute.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To begin, we create a boilerplate by copying the *mssql_payload* exploit as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, we open the *mssql_powershell.rb* file we just created and modify its
+    code so that it looks just like the following. This is an exploit base shell.
+    Take some time to review the various parameters and remember the topics covered
+    in the previous chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Before this exploit will work properly, you’ll need to define some basic settings.
+    Notice that the name, description, licensing, and references are defined at ![](../images/00002.gif).
+    We also define a platform at ![](../images/00004.gif) (Windows) and a target at
+    ![](../images/00005.gif) (all operating systems). We also define a new parameter
+    called `UsePowerShell` at ![](../images/00006.gif) for use in the body of the
+    exploit. Lastly, a handler is specified at ![](../images/00007.gif) to handle
+    the connections between the attacker and the exploited target.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the Shell Exploit
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'With the skeleton of the exploit built, we run it through *msfconsole* to see
+    what options are available:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Recall from [Chapter 5](part0009.html#the_joy_of_exploitation) that the `show
+    options` command will display any new options that have been added to an exploit.
+    After we set these options, they will be stored within Metasploit as valid options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we’ll finalize the *mssql_powershell.rb* file, which we have been editing
+    since the beginning of this chapter, before we edit *mssql.rb* (which will be
+    explained shortly).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When you examine the exploits in the *modules* directory inside Metasploit
+    (*modules/exploits*, *modules/auxiliary/*, and so on), you’ll notice that most
+    of them have the same overall structure (`def` exploit as an example). Remember
+    always to comment your code to give other developers an idea of what it’s doing!
+    In the following listing, we first introduce our `def exploit` line, which defines
+    what we’ll be doing in our exploit. We’ll frame our exploit the same way as the
+    other modules and add a few new sections, as explained next:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The module first checks to see if we are logged in at ![](../images/00002.gif).
+    If we aren’t logged in, the error message `"Invalid SQL Server Credentials"` ![](../images/00004.gif)
+    is displayed. The `UsePowerShell` method at ![](../images/00005.gif) is used to
+    call the function `powershell_upload_exec` ![](../images/00006.gif), which will
+    automatically create a Metasploit-based payload that we specify during our exploit.
+    After we finally run the exploit, when we specify our payload in *msfconsole*,
+    it will automatically generate it for us based on the `Msf::Util::EXE.to_win32pe(framework,payload.encoded)`
+    option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating powershell_upload_exec
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now we’ll open the *mssql.rb* file that we opened earlier, in preparation for
+    editing. We need to find space for the `powershell_upload_exec` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: In your version of Metasploit, you can do a search for PowerShell, and you should
+    see the referenced code that follows in the *mssql.rb* file. Feel free to delete
+    this code from the file and start from scratch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ![](../images/00002.gif) you see that our definition includes the commands
+    `exe` and `debug` parameters that are added to the `def powershell_upload_exec`
+    function. The `exe` command is the executable we will be sending from our original
+    code `Msf::Util::EXE.to_win32pe(framework,payload.encoded)`, as mentioned previously.
+    The `debug` command is set to `false`, which means we will not see debug information.
+    Generally this would be set to `true` if you wanted to see additional information
+    for troubleshooting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, at ![](../images/00004.gif) we convert the entire encoded executable to
+    raw hexadecimal format. The `H` in this line simply means “open the file as a
+    binary and place it in a hexadecimal representation.”
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ![](../images/00005.gif) we create a random, alphabetical, eight-character
+    filename. It’s usually best to randomize this name to throw off antivirus software.
+  prefs: []
+  type: TYPE_NORMAL
+- en: And finally, at ![](../images/00006.gif) we tell the attacker that our payload
+    will remain on the operating system, in the SQL Server */Temp* directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conversion from Hex to Binary
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The following listing shows the conversion from hexadecimal back to binary,
+    written in PowerShell. The code is defined as a string to be called later and
+    uploaded to the target machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ![](../images/00002.gif) we create the hex-to-binary (`h2b`) conversion method
+    through PowerShell. This code essentially creates a byte array that will write
+    out the hex-based Metasploit payload as a binary file. (The `{var_payload}` is
+    a random name specified through Metasploit.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because MS SQL has character limit restrictions, we need to break our hexadecimal
+    payload into 500-byte chunks that separate the payload into multiple requests.
+    But one side effect of this splitting is that carriage returns and line feeds
+    (CRLF) are added to the file on the target, and these need to be stripped out.
+    At ![](../images/00004.gif) we add better handling of CRLFs by stripping them
+    out properly. If we didn’t do this, our binary would be corrupt and would not
+    execute properly. Notice that we are simply redesignating the `$s` variable to
+    replace `` `r `` and `` `n `` with `''` (nothing). This effectively removes CRLFs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once the CRLFs are stripped out, `Convert::ToByte` is invoked in the hex-based
+    Metasploit payload. We tell PowerShell that the file’s format is base 16 (hexadecimal
+    format) and to write it out to a file called *#{var_payload}.exe* (our random
+    payload name). After the payload has been written, we can run a method for executing
+    PowerShell commands in an encoded format that is supported by the PowerShell programming
+    language. These encoded commands allow us to execute lengthy and large amounts
+    of code on one line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By first converting the `h2b` string at ![](../images/00005.gif) to Unicode
+    and then Base64 encoding the resultant string at ![](../images/00006.gif), we
+    can pass the `-EncodedCommand` flag through PowerShell to bypass execution restrictions
+    that would normally exist. The execution restriction policies do not allow untrusted
+    scripts to be executed. (These restrictions are an important way to protect users
+    from executing just any script they download on the Internet.) If we didn’t encode
+    these commands, we wouldn’t be able to execute our PowerShell code and ultimately
+    wouldn’t be able to compromise the target system. Encoding the commands allow
+    us to add lots of code to one command without worrying about execution restriction
+    policies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After we specified the `h2b` string and encoded command flags, we get the PowerShell
+    commands in the correct encoded format so that we can execute our PowerShell code
+    in an unrestricted format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ![](../images/00005.gif), the string was converted to Unicode; this is a
+    requirement to have the arguments and information passed to PowerShell. The `h2b_encoded
+    = Rex::Text.encoded_base64(h2b_unicode)` is then passed to convert it to a Base64-encoded
+    string to be passed through MS SQL. Base64 is the encoding required to leverage
+    the `-EncodedCommand` flag. We first converted our string to Unicode, and then
+    to Base64, which is the format we need for all of our PowerShell commands. Finally,
+    at ![](../images/00007.gif) a message stating that we are in the process of uploading
+    the payload is printed to the console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Counters
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Counters help you track your location in a file or keep track of how much data
+    the program has read in. In the next example, a base counter called `idx` starts
+    at `0`. The counter is used to identify the end of the file and move up 500 bytes
+    at a time when the hexadecimal-based binary is being sent to the operating system.
+    Essentially, the counter is saying, “Read 500 bytes, and then send. Read another
+    500 bytes, and then send,” until it reaches the end of the file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Recall that to deliver the payload to the target operating system, we need to
+    split it into 500-byte chunks. We use the counters `idx` ![](../images/00002.gif)
+    and `cnt` ![](../images/00004.gif) to track how the payload is being split up.
+    The counter `idx` will gradually increase by 500, and we set the other counter
+    `cnt` to 500 (we need to read in 500 bytes at a time). After the first 500 bytes
+    have been read from the Metasploit payload at ![](../images/00005.gif), the 500
+    hexadecimal characters will be sent to the target machine. The 500-byte chunks
+    continue to be added until the `idx` counter reaches the same length as the payload,
+    which equals the end of the file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At ![](../images/00006.gif) we see a message that the payload is being converted
+    and sent to the target using the `-EncodedCommand` PowerShell command, which is
+    where the conversion is occurring from the normal PowerShell command to a Base64
+    encoded format (mentioned earlier).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The line `"powershell -EncodedCommand #{h2b_encoded}"` tells us that the payload
+    has executed. The PowerShell commands that we converted to Base64 will convert
+    the hexadecimal-based payload back to binary after it is executed.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following shows the entire *mssql.rb* file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Running the Exploit
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'With our work on *mssql_powershell.rb* and *mssql.rb* complete, we can run
+    the exploit through Metasploit and *msfconsole*. But before we do, we need to
+    make sure that PowerShell is installed. Then we can run the following commands
+    to execute our newly created exploit:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Power of Code Reuse
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This process of leveraging existing code, tweaking it, and adding in some original
+    code is one of the most powerful things we can do with Metasploit. You have no
+    reason to start from scratch in most situations after you have a feel for the
+    Framework and you take a look at how existing code works. Because this module
+    was essentially built for you, you can get more practice by going through other
+    Metasploit modules and seeing what they are doing and how they work. You’ll start
+    to learn the basics of buffer overflows and how they are created. Notice how the
+    code is structured and how it works, and then create your own exploits from scratch.
+    If you’re not familiar with the Ruby programming language or if this chapter was
+    a bit over your head, pick up a book and read and learn. The best way to learn
+    how to create these types of module development is through trial and error.
+  prefs: []
+  type: TYPE_NORMAL

@@ -1,0 +1,1061 @@
+- en: Chapter 14. TIPS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: By now you're some kind of Xen expert, we imagine.^([[81](#ftn.CHP-14-FNOTE-1)])
+    As such, now we'd like to devote a chapter to the more esoteric aspects of working
+    with Xen. Here are some things that didn't seem to fit anywhere else—stuff like
+    the framebuffer, forwarding PCI devices, or building added functionality into
+    the XenStore. Tips, in other words.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A number of the topics in [Chapter 15](ch15.html "Chapter 15. TROUBLESHOOTING")
+    might also come in handy when you work through our examples here. Some of the
+    software discussed here is even more bleeding edge than the rest of Xen, which
+    is itself some kind of *heavenly sword*, ravening and incarnadine. What we're
+    trying to get at is that the material in this chapter might not work straight
+    off.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compiling Xen
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although we've relied, for the most part, on Xen packages provided by distro
+    maintainers, we think it's generally worthwhile to compile Xen from scratch. This
+    will allow you to use a much more up-to-date version of Xen than versions that
+    come with the distros. It also lets you enable options that the distro maintainers
+    may have disabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're feeling adventurous, it's also nice to be able to play with the code—change
+    it around a bit, perhaps, or add some `printk` messages to help with debugging.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The easiest way to compile is to check out the latest source from the Mercurial
+    repository. Start by making sure you have Mercurial and a bunch of build dependencies.
+    On CentOS 5, we installed these packages with `yum`:^([[82](#ftn.CHP-14-FNOTE-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: mercurial
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: zlib-devel
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: gcc
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: libX11-devel
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: openssl-devel
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: ncurses-devel
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: bridge-utils
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: python-devel
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: git
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: dev86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: glibc-devel
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'If you want the docs to build successfully, you should also install the following
+    packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: texinfo
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: tetex-latex
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: pstoedit
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: transfig
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Given the large amount of Xen documentation available online and from other
+    sources, the included docs are fairly optional.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When these packages are installed, clone the development repository. We're using
+    *xen-unstable* here, but if you'd like to use a less unstable repo, you might
+    want to try something like *xen-3.3-testing.hg*. As of early 2009, prgmr.com runs
+    *xen-3.3-testing.hg*. It has been pretty stable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: RPMFORGE REPOSITORY
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you want to install all the previously listed packages using `yum`, you
+    must use the RPMForge repo. To do so safely, `install yum-priorities`. On CentOS
+    5:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Edit each of the files under `/etc/yum.repos.d/*` and add the line `priority=N`,where
+    `N` is a number from 1 to 99 (lower number is greater priority). You want `base`,
+    `addons`, `updates`, and `extras` to be priority `1`; `centosplus` and `contrib`
+    to be priority `2`; and everything else to be priority `10` or higher.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, install RPMforge:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Of course, if your machine is x86_64, substitute the appropriate architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'then install `rpmforge` with:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, edit */etc/yum.repos.d/rpmforge.repo* and add `priority=10`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This will download the repo to a local directory (*xen-unstable.hg* in this
+    case). Next, `cd` into that directory and run `make world`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will build and install the Xen hypervisor, its supporting tools, and a
+    Linux kernel for dom0\. DomUs can use it as well. Often, this will be all you
+    need. However, if you want to change your kernel configuration, you can. To configure
+    the Linux kernel, run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will open the standard Linux kernel configurator. Configure the kernel
+    as usual.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*You probably want to leave the dom0 8250 serial driver disabled because it
+    conflicts with the Xen serial console. As usual, don''t forget the drivers for
+    your boot device*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This builds and installs the kernel. Now, if you are on CentOS, you probably
+    want to make an initrd:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*There is a bug in early releases of RHEL 5.3 that causes problems with this.
+    See* [https://bugzilla.redhat.com/show_bug.cgi?id=488991](https://bugzilla.redhat.com/show_bug.cgi?id=488991)
+    *for details. The solution is to add* *`--allow-missing`* *to the* *`mkinitrd`*
+    *command line, thus*: *`# mkinitrd /boot/initrd-2.6.18.8-xen.img 2.6.18.8-xen
+    --allow-missing`*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, you need to fix */boot/grub/menu.lst*. Add a stanza like this, but remember
+    to use appropriate devices, paths, and possibly filenames:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Reboot and enjoy your new Xen installation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[81](#CHP-14-FNOTE-1)]) Or at least, anyone who hasn't thrown this book out
+    the window must be extremely good at filling in vague directions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[82](#CHP-14-FNOTE-2)]) We've also included a more Debian-centric set of
+    compilation instructions in [paravirt_ops Dom0](ch14s03.html "paravirt_ops Dom0")
+    on [Alternate Kernels (Dom0 and DomU)](ch14s02.html#alternate_kernels_dom0_and_domu
+    "Alternate Kernels (Dom0 and DomU)") and [paravirt_ops DomU](ch14s04.html "paravirt_ops
+    DomU") on [paravirt_ops DomU](ch14s04.html "paravirt_ops DomU").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compile-Time Tuning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: That's the quick and easy way to build Xen, but the basic compilation with `make
+    world` is just the beginning. Compilation represents the first opportunity we
+    have to configure Xen, and there's a lot more that we can do with it now that
+    we've had some practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most of the compile-time tuning can be done by twiddling variables in *Config.mk*,
+    at the top level of the Xen source tree. This file is fairly extensively commented
+    and amenable to editing—take a look. You'll find that there's a brief section
+    where you can decide which optional Xen bits to build.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We usually turn on all of the optional components except for the Virtual Trusted
+    Platform Module (VTPM) tools, leading to a section like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Xen''s VTPM tools are interesting. They''ve been a subject of heavy development,
+    they have some interesting implications for signed code, and there''s the looming
+    specter of DRM, but we just haven''t gotten into them. If you decide to build
+    them, you can add virtual TPMs to domains via the* *`vtpm=`* *option in the domain
+    configuration*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you''re having trouble (trust us, you probably will at some point), it would
+    be a good idea to make a debug build. To do that, set the `DEBUG` variable at
+    the top of the file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Don''t worry: Xen will not run in debug mode unless you specifically instruct
+    it to do so at runtime.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These optional Xen components have a bunch of undocumented dependencies, some
+    of which aren't checked for by the Makefiles. In particular, the LIBXENAPI_BINDINGS
+    demand libxml2 and curl or the -devel versions of these packages, if you're using
+    a Red Hat derivative.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, if something doesn't work when you build the tools, it would probably
+    be a good idea to avoid running `make world` again because that takes a while.
+    Most likely, you can get by with just `make tools`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alternate Kernels (Dom0 and DomU)
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The default Xen Makefile will build a single kernel that can be used in both
+    the dom0 and domU. If saving memory is a high priority, you can build a separate
+    kernel for each. These kernels will each have a reasonable set of configuration
+    options: minimal for the domU, modular for the dom0\. Specify the `KERNELS` variable
+    on your `make` command line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The primary reason to do this, of course, is so that you can strip all the non-Xen
+    device drivers out of the domU kernel. This saves memory and—if you happen to
+    be testing a lot of kernels—compile time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: paravirt_ops Dom0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To understand why paravirt_ops gets treated as a separate piece, we have to
+    recall that a lot of the early Xen development took place before virtualization
+    went mainstream. The Xen developers, to paravirtualize the Linux kernel, made
+    sweeping changes that proved to be difficult to merge with mainline kernel development.
+  prefs: []
+  type: TYPE_NORMAL
+- en: paravirt_ops is a generic solution to this problem. It's a kernel-level framework
+    for adding code to enable Linux to run under various hypervisors, including Xen.
+    The idea is that, by making these interfaces part of the official kernel, we can
+    make Xen less invasive and easier to maintain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen has supported paravirt_ops domUs since version 3.1, and the official Linux
+    kernel has had domU support since version 2.6.23 for i386 and since version 2.6.26
+    for x86_64\. Unfortunately, the kernel.org kernel, as of this writing, only has
+    guest support.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But there is light at the end of the tunnel. With the latest patches from Jeremy
+    Fitzhardinge's paravirt_ops dom0 work and a Xen 3.4 hypervisor, it is, in fact,
+    possible to run a paravirt_ops dom0 based on Linux kernel version 2.6.30.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These directions represent a snapshot from a very long development process.
+    They work for us today. URLs may change. The status of the software certainly
+    will. With that in mind, though, here's how we set up a functioning paravirt_ops
+    dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, you''re going to need some development packages. This time we''re using
+    the Debian package names:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: mercurial
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: build-essential
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: libncurses5-dev
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: gawk
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: openssl
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: xorg-dev
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: gettext
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: python-dev
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: gitk
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: libcurl4-openssl-dev
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: bcc
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: libz-dev
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: libxml2-dev
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Next, check out Xen-unstable with Mercurial. We warned you that this stuff is
+    still in development.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then check out the current Linux patches from Jeremy Fitzhardinge''s git repo:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Configure the kernel. We copied the Ubuntu configuration to *.config* and used
+    that as a base.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Since we''re building a paravirt_ops dom0, make sure to turn on the appropriate
+    support:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Be sure to turn on the Xen block device frontend support, under:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, build the kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Add */proc/xen* to `fstab` and mount it so that tools like `xend` will be able
+    to communicate with the hypervisor:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create a GRUB entry to boot your new Xen paravirt_ops dom0:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Make sure that these are appropriate values for your setup, of course. That's
+    all there is to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: paravirt_ops DomU
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '"But what," you ask, "is all this about using a kernel.org kernel in a domU?"
+    If you just want to make your own domU kernel, this is a much less involved process,
+    supported without out-of-tree patches since version 2.6.23\. All of these directions
+    are presented from within a domU that boots using PV-GRUB or PyGRUB—no intervention
+    from the dom0 administrator should be necessary.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, download the kernel source you prefer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, install the packages normally required to build the kernel. This example
+    is for Debian, but it should be easy enough to find out what packages your favorite
+    distro needs to build the kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Untar and configure the kernel. Personally, we like `menuconfig`, but that''s
+    just a matter of taste:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Don''t forget to enable Xen support:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Don''t forget your network driver:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'or your disk driver:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Xenfs, which allows you to access the XenBus, is sometimes useful:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then customize to your heart's content. Remember, you can remove support for
+    just about all hardware now. We also leave out the balloon driver. RAM is cheap,
+    and we like having definite memory allocations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, make the kernel as usual:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Make your initrd as per the usual kernel build. Since we're using Debian for
+    this example, that means using `mkinitramfs`. If you compiled `xenblk` as a module,
+    make sure to include it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Set up GRUB as you normally would:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'One last thing before you reboot: Note that the device name for your console
+    will be hvc0, for *hypervisor console*. This takes the place of the Xen-specific
+    xvc0\. If your distro doesn''t do so already, you probably want to set up the
+    domain to start a `getty` on hvc0\. Now, simply restart your domain (halt it and
+    start it up if you are using PyGRUB) and enjoy your modern kernel.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The Xen API: The Way of the Future'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Xen API is an XML-RPC interface to Xen that replaces the old interface used
+    for communication with the hypervisor. It promises to provide a standard, stable
+    interface so that people can build Xen frontends without worrying about the interface
+    changing out from under them. It also extends the previous Xen command set so
+    that more of Xen's functionality can be harnessed in a standardized tool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In current versions of Xen, the API is an optional component, but that shouldn't
+    deter you from using it; the most recent Citrix Xen Server product, for example,
+    relies on the API exclusively for communication between the administration frontend
+    and the virtualization host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Xen API is enabled by setting the LIBXENAPI_BINDINGS flag at the top of
+    *Config.mk*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: When you've built Xen with support for the Xen API, the use of the API is controlled
+    by the `(xen-api-server)` directive in */etc/xen/xend-config.sxp*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: This directive turns on the API server and specifies how to connect to it. Each
+    list in parentheses is a connection method. In this case, we're using TCP port
+    9363 and a local Unix socket, each with no authentication whatsoever.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To specify that we want to authenticate using PAM, we can modify this configuration
+    a bit:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: Ordinarily, even when developing a Xen client, you won't need to interact with
+    the Xen API at a low level. Bindings exist for most of the popular languages,
+    including C and, of course, Python. The Xen.org API documentation, accessible
+    from [http://wiki.xensource.com/xenwiki/XenApi/](http://wiki.xensource.com/xenwiki/XenApi/),
+    is the last word on the subject.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing Memory with the Balloon Driver
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Moving on from compile time and installation issues to the serious day-to-day
+    business of running Xen, we encounter the problem of memory. As we've mentioned,
+    most Xen installations are limited in practice by physical memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen expends a great deal of effort on virtualizing memory; its approach is one
+    of the defining features of paravirtualization, and it usually "just works," on
+    a level low enough to ignore completely. However, it sometimes can benefit from
+    a bit of attention by the administrator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''ve been dancing around the subject of memory oversubscription for a long
+    time, and we''d better come clean: It is possible to assign a dynamic amount of
+    memory to a domU, but we don''t do it because it''s not suitable for our *virtual
+    private server* model. Also, the developers have historically been leery about
+    recommending it for production. However, it does exist, and there are some good
+    reasons to use it, which we''re sure you can imagine.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen's control over reallocating memory to virtual machines is somewhat indirect.
+    First, the value in the domU config file for memory is a *maximum*—conceptually,
+    the amount of memory that's physically accessible to the virtual machine. The
+    amount of memory in the config file is what the kernel sees at boot. Adding more
+    would require a reboot. This is being worked on, mostly from the direction of
+    Linux's memory hotplug. We confidently expect someone to provide a patch soon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Within this inflexible maximum, Xen can reduce this memory using the *balloon
+    driver*, which is nothing but a module that sits in the domU and *inflates* to
+    consume memory, which it then hands back to the hypervisor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because the dom0 is also a Xen domain, it also can have a memory balloon, which
+    Xen uses to reclaim dom0 memory for allocation to domUs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*We favor setting the dom0 memory directly with the* *`dom0_mem`* *boot option,
+    which actively hides memory from the dom0\. By setting* *`(dom0-min-mem 0)`* *and*
+    *`(enable-dom0-ballooning no)`* *in* xend-config.sxp, *we can ensure that dom0
+    doesn''t balloon out, and thus has a consistent memory reservation*.^([[83](#ftn.CHP-14-FNOTE-3)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can use `xm` to manually adjust the amount of memory used by the balloon:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: The domain treats this as a target, giving memory to the balloon as it becomes
+    free.^([[84](#ftn.CHP-14-FNOTE-4)]) Thus, it's possible that a heavily loaded
+    domain will take a while to give up memory to the balloon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can see the effect of the balloon in the list of VMs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can also see balloon-related information from within the domU via */proc/xen/balloon*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The balloon is pretty aggressive; it can cause an out-of-memory condition
+    in the domU. Use it with caution*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[83](#CHP-14-FNOTE-3)]) In newer versions of Xen, you really only need `(enable-dom0-ballooning
+    no)`, but that has no effect on older versions. Before the `enable-dom0-ballooning`
+    option was enabled, setting `dom0-min-mem` to 0 would disable ballooning. Really,
+    you could get away with just setting `dom0-min-mem` to 0; I tested it after embarrassing
+    myself on the xen-devel list, and it works, but `(enable-dom0-ballooning no)`
+    is nice and clear, and this sort of thing is important enough to specify twice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[84](#CHP-14-FNOTE-4)]) Although Linux does its best to keep memory in use
+    at all times, it'll give memory to the balloon rather than using it for buffers
+    or cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PCI Forwarding
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You can allow a domU to access arbitrary PCI devices and use them with full
+    privileges. Of course, there's no such thing as a free lunch; Xen can't miraculously
+    duplicate PCI hardware. For a domU to use a PCI device, it has to be hidden from
+    the dom0 and not forwarded to any other domUs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Xen PCI device forwarding](httpatomoreillycomsourcenostarchimages333249.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14-1. Xen PCI device forwarding
+  prefs: []
+  type: TYPE_NORMAL
+- en: As [Figure 14-1](ch14s07.html#xen_pci_device_forwarding "Figure 14-1. Xen PCI
+    device forwarding") shows, PCI forwarding uses a client/server model in which
+    the *pcifront driver* runs in the domU and communicates directly with the *pciback
+    driver*, which binds to the PCI device and hides it from the dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, consider the device that you want to forward to the domU. The test machine
+    that we're sitting in front of appears to have seven (!) USB controllers, so we'll
+    just take a couple of those.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use `lspci` to determine bus IDs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: We'll forward `00:1a.1` and `00:1a.7`, which are the second of the USB1 controllers
+    listed and the USB2 controller. Your device names will most likely vary from those
+    in this example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If pciback is compiled into the kernel, you can boot the dom0 with a `pciback.hide`
+    option on the kernel command line. For these two controllers, the option would
+    look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: If pciback is a module, it's a little more difficult. We need to detach the
+    PCI device from its driver and attach it to the pciback passthrough.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now put these devices into the domU config file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: On the next domU boot, these USB controllers should appear and be available
+    to the native drivers in the domU. Hardware devices on platforms without an IOMMU
+    can DMA to arbitrary memory regions. This can be a security problem if you're
+    giving PCI access to arbitrary domains. The moral is to treat all domains with
+    access to the PCI bus as privileged. Make sure you can trust them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: GRUB Configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Of course, we've dealt with GRUB in passing because it's one of the basic prerequisites
+    for Xen. However, there are a few more aspects of GRUB that are worth mentioning
+    in depth. A fair number of Xen's behavior knobs can be tweaked in GRUB at boot
+    time by adjusting the command-line parameters passed to the hypervisor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, the already-mentioned `dom0_mem` parameter adjusts the amount
+    of memory that Xen allows the dom0 to see:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To keep the system from rebooting if you have a kernel panic, which happens
+    more often than we would like, especially when trying to get machines initially
+    set up, add `noreboot` to the `kernel` line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'as well as `panic=0` to the Linux `module` line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is, of course, in addition to the plethora of options supported by the
+    Linux kernel, which you can then add to `vmlinuz`'s `module` line as you see fit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Serial Console
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One other important GRUB-related task is setting up your serial console. As
+    mentioned, we consider the serial console to be the gold standard for console
+    access to any sort of server. It's much simpler than any sort of graphical interface,
+    easy to access with a variety of devices, and is the output most likely to provide
+    useful information when the machine is crashing. Furthermore, because of the client/server
+    architecture inherent in the system, anything that a crashing machine manages
+    to print goes to another, physically separate machine, where it can be analyzed
+    at leisure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen comes with miniterm, a minimal serial client for this sort of thing, in
+    case you don't have access to a serial client. This is unlikely, but the client
+    is tiny, so why not?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Miniterm is in the *tools/misc/miniterm* subdirectory of the Xen source tree.
+    If you've built all the tools with Xen, it'll already be built and possibly even
+    installed; if not, you can simply type **`make`** in that directory and run the
+    resulting executable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Enabling Serial Output
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are four components that need to have their output redirected to the
+    serial port: GRUB, Xen, the Linux kernel, and Linux''s userland. Each of the first
+    three is a simple matter of adding a directive to GRUB''s *menu.lst*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, near the top of the file, add these lines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Edit the Xen kernel line to tell the hypervisor to use the first serial port
+    for output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Tell the Linux kernel to print its messages on `ttyS0`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, edit */etc/inittab* and add a line like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: You may also want to add `ttyS0` to */etc/securetty* so that root will be able
+    to log in, after the manner of a traditional console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Xen Hypervisor Console
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Xen adds another layer to the serial console by using it to access extra hypervisor
+    features. First, break into the hypervisor console by pressing CTRL-A three times
+    on the serial console. This won't work on the VGA console. You'll get a (XEN)
+    prompt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you're in the hypervisor console, there are several useful (or at least
+    interesting) commands you can give Xen. Try typing **`h`** for help or one of
+    the informational commands, like **`m`**. You can also crash the machine, reboot
+    it, or dump various pieces of information. Poke around and try it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To exit the hypervisor console, type CTRL-A three more times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen and LILO
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This section only applies to the real dinosaurs out there, but we sympathize.
+    In keeping with the feeling that you have vanished into the mysterious past, we
+    will present this example using Xen 3.0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're dead set on using LILO, rather than GRUB, you will be pleased to learn
+    that it is possible. Although it's generally thought that LILO's lack of an equivalent
+    to GRUB's `module` directive makes it impossible for it to boot Xen, it's possible
+    to get around that by combining the hypervisor, dom0 kernel, and initrd into one
+    file using `mbootpack`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consider the following entry in *grub.conf*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It loads the hypervisor, *xen-3.0.gz*, as the kernel then unpacks *vmlinuz-2.6-xen*
+    and *initrd.gz* into memory. To combine these files, first decompress:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note the change from *vmlinuz* to *vmlinux*. It's not important except that
+    it keeps you from overwriting the kernel at the beginning of the `gzcat` process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then combine the three files using `mbootpack`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The *grub.conf* entry then becomes a *lilo.conf* entry:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, run the `lilo` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: The Virtual Framebuffer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For as much as purists would like to claim that all administration should be
+    done via serial port, there's something to be said for all this newfangled graphical
+    technology that we've been using for, oh, around the last 25 years. Xen makes
+    a concession to these forward-thinking beliefs by including a facility for a *virtual
+    framebuffer*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You will need to edit your *Config.mk* file to build the VFB:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: At this point you'll also need libvncserver and libsdl-dev. Install them in
+    your chosen way. We installed CentOS's SDL-devel package and installed libvncserver
+    from source. Then we built Xen and installed it in the usual way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To actually use the framebuffer within a domain, you''ll need to specify it
+    in the config file. Recent versions of Xen have improved the syntax somewhat.
+    The `vfb=` option controls all aspects of the virtual framebuffer, just as the
+    `vif=` and `disk=` lines control virtual interfaces and virtual block devices.
+    For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here we specify a VNC VFB and tell the VNC server to listen on the first unused
+    port that''s over the given number. (We go into more detail on the options available
+    in [Appendix B](apb.html "Appendix B. THE STRUCTURE OF THE XEN CONFIG FILE").)
+    Or, if you''re feeling adventurous, there''s the SDL version:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: Simple.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use of the XenStore for Fun and Profit
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The XenStore is the configuration database in which Xen stores information on
+    the running domUs. Although Xen uses the XenStore internally for vital matters
+    like setting up virtual devices, you can also write arbitrary data to it from
+    domUs as well as from dom0\. Think of it as some sort of interdomain socket.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This opens up all sorts of possibilities. For example, domains could, in theory,
+    negotiate among themselves for access to shared resources. Or you could have something
+    like the *talk* system on the shared UNIX machines of yore—multiuser chat between
+    people running on the same host. You could use it to propagate host-specific messages,
+    for example, warning people of impending backups or migration. For the most part,
+    though, such applications remain to be written.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It's a little inconvenient to interact with the XenStore manually because no
+    one's gotten around to providing a handy shell-style interface. In the meantime,
+    we have to make do with tools that interrogate single keys.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To look at the XenStore, you can use the `xenstore-list` command. Here''s a
+    shell script from the Xen wiki that dumps keys from the xenstore recursively with
+    `xenstore-list`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You''ll see that we have three hard-coded top-level keys: `vm`, `local/domain`,
+    and `tool`. These each have a well-defined purpose to the hypervisor: `vm` stores
+    domain information by UUID; `local/domain` stores domain information by ID (one
+    might say that `vm` exports domain data in a form suitable for migration, and
+    `local/domain` stores it for local use); and `tool` stores tool-specific information.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Poke around, look at the keys and how they map the information that you already
+    know about the domain from other sources, like `xm list --long`. For example,
+    to get the memory usage target for the domain, run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: Many of the keys in the XenStore are also writable. Although we don't recommend
+    adjusting memory usage by writing to the XenStore, see the next section for an
+    example of interdomain communication via writable XenStore keys.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Automatically Connecting to the VNC Console on Domain Boot
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One neat feature of the Xen LiveCD is that Xen domains, when started, will automatically
+    pop up a VNC window when they've finished booting. The infrastructure that makes
+    this possible is a script in the domU, a listener in the dom0, and the XenBus
+    between them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The script in the domU, *vnc-advertiser*, fires off from the domU startup scripts
+    and waits for an Xvnc session to start. When it finds one, it writes to the XenStore:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the dom0, a corresponding script watches for writes to the XenStore. On
+    the LiveCD, it''s named *vnc-watcher.py*. This script is a good example of general-purpose
+    uses for the XenStore, so we''ve copied it wholesale here, with verbose annotations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: There are a couple of other sections that we would have loved to include here,
+    but that aren't ready as of this writing, for example, the ongoing open source
+    efforts to build an Amazon EC2 clone or the high-availability work being done
+    by Project Kemari.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Anyway, please visit our website ([http://prgmr.com/xen/](http://prgmr.com/xen/))
+    for more on the cool yet frightfully everyday things that we do with Xen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, if you've broken your system trying to upgrade Xen from source, there's
+    no better time than the present to take a look at the next chapter.
+  prefs: []
+  type: TYPE_NORMAL

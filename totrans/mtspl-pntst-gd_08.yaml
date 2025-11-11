@@ -1,0 +1,467 @@
+- en: Chapter 8. Exploitation Using Client-Side Attacks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Years of focus on defensive network perimeters have drastically shrunk the traditional
+    attack surfaces. When one avenue of attack becomes too difficult to penetrate,
+    attackers can find new and easier methods for attacking their targets. Client-side
+    attacks were the next evolution of attacks after network defenses became more
+    prominent. These attacks target software commonly installed on computers in such
+    programs as web browsers, PDF readers, and Microsoft Office applications. Because
+    these programs are commonly installed on computers out of the box, they are obvious
+    attack vectors for hackers. It’s also common for these applications to be out
+    of date on users’ machines because of irregular patching cycles. Metasploit includes
+    a number of built-in client-side exploits, which we’ll cover in depth in this
+    chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you can bypass all the protective countermeasures a company has in place
+    and infiltrate a network by tricking a user into clicking a malicious link, you
+    have a much better chance of achieving a compromise. Suppose, for example, that
+    you are performing a covert penetration test against a corporate target using
+    social engineering. You decide that sending a phishing email to targeted users
+    will present your best chance of success. You harvest email accounts, names, and
+    phone numbers; browse social-networking sites; and create a list of known employees.
+    Your malicious email instructs the email recipients that payroll information needs
+    to be updated; they need to click a link (a malicious link) in the email to do
+    this. However, as soon as the user clicks the link, the machine is compromised,
+    and you can access the organization’s internal network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This scenario is a common technique regularly leveraged in both penetration
+    tests and actual malicious attacks. It is often easier to attack via users than
+    it is to exploit Internet-facing resources. Most organizations spend a significant
+    amount of money protecting their Internet-facing systems with tools such as intrusion
+    prevention systems (IPSs) and web application firewalls, while not investing nearly
+    as much in educating their users about social-engineering attacks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In March 2011, RSA, a well-known security company, was compromised by an attacker
+    leveraging this same process. A malicious attacker sent an extremely targeted
+    (spear-phishing) email that was crafted specifically for an Adobe Flash zero-day
+    vulnerability. (*Spear-phishing* is an attack whereby users are heavily researched
+    and targeted rather than randomly chosen from a company address book.) In RSA’s
+    case, the email targeted a small group of users and was able to compromise RSA’s
+    internally connected systems and further penetrate its network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Browser-Based Exploits
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We’ll focus on browser-based exploits within Metasploit in this chapter. *Browser-based
+    exploits* are important techniques, because in many organizations, users spend
+    more time using their web browsers than using any other applications on their
+    computers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consider another scenario: We send an email to a small group at an organization
+    with a link that each user will click. The users click the link, and their browsers
+    open to our website, which has been specially crafted to exploit a vulnerability
+    in a certain version of Internet Explorer. The users’ browser application is susceptible
+    to this exploit and is now compromised simply by users visiting our malicious
+    website. On our end, access would be gained via a payload (Meterpreter, for example)
+    running within the context of the user who visited the site.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note one important element in this example: If the target user were running
+    as an administrator, the attacker (we) would do the same. Client-side exploits
+    traditionally run with the same permissions and rights as the target they exploit.
+    Often this is a regular user without administrative privileges, so we would need
+    to perform a *privilege-escalation attack* to obtain additional access, and an
+    additional exploit would be necessary to elevate privileges. We could also potentially
+    attack other systems on the network in hopes of gaining administrative-level access.
+    In other cases, however, the current user’s permission levels are enough to achieve
+    the infiltration. Consider your network situation: Is your important data accessible
+    via user accounts? Or is it accessible only to the administrator account?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How Browser-Based Exploits Work
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Browser exploits are similar to any traditional exploit but with one major
+    difference: the method used for shellcode delivery. In a traditional exploit,
+    the attacker’s entire goal is to gain remote code execution and deliver a malicious
+    payload. In browser exploits, the most traditional way to gain remote code execution
+    is through an exploitation technique called *heap spraying*. But before examining
+    heap spraying in detail, let’s talk about what the *heap* is and how it’s used.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The heap is memory that is unallocated and used by the application as needed
+    for the duration of the program’s runtime. The application will allocate whatever
+    memory is necessary to complete whatever task is at hand. The heap is based on
+    how much memory your computer has available and has used through the entire application’s
+    life cycle. The location of memory allocated at runtime is not known in advance,
+    so as attackers, we would not know where to place our shellcode. Hackers can’t
+    simply call a memory address and hope to land at the payload — the randomness
+    of memory allocated by the heap prevents this, and this randomness was a major
+    challenge before heap spraying was discovered.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before moving on, you also need to understand the concept of a *no-operation
+    instruction (NOP)* and *NOP slide*. NOPs are covered in detail in [Chapter 15](part0019.html#porting_exploits_to_the_metasploit_frame),
+    but we’ll cover the basics here because they are important to understanding how
+    heap spraying works. A NOP is an assembly instruction that says, “Do nothing and
+    move to the next instruction.” A NOP slide comprises multiple NOPs adjacent to
+    each other in memory, basically taking up space. If a program’s execution flow
+    encounters a series of NOP instructions, it will linearly “slide” down to the
+    end of them to the next instruction. A NOP, in the Intel x86 architecture, has
+    an opcode of 90, commonly seen in exploit code as `\x90`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The heap spraying technique involves filling the heap with a known repeating
+    pattern of NOP slides and your shellcode until you fill the entire memory space
+    with this known value. You’ll recall that memory in the heap is dynamically allocated
+    at program runtime. This is usually done via JavaScript, which causes the browser’s
+    allocated memory to grow significantly. The attacker fills large blocks of memory
+    with NOP slides and shellcode directly after them. When program execution flow
+    is altered and randomly jumps somewhere into memory, there is a good chance of
+    hitting a NOP slide and eventually hitting the shellcode. Instead of looking for
+    a needle in a haystack — that is, the shellcode in memory — heap spraying offers
+    an 85 to 90 percent chance of the exploit being successful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This technique changed the game in browser exploitation and in the reliability
+    of exploiting browser bugs. We will not be covering the actual code behind heap
+    spraying, because it’s an advanced exploitation topic, but you should know the
+    basics so that you can understand how these browser-based exploits work. Before
+    we begin launching our first browser exploit, let’s look at what actually happens
+    behind the scenes when an exploit is launched.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking at NOPs
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now that you understand the basics of a heap spray and a NOP, let’s take a look
+    at a generic NOP slide in an actual exploit. In the following listing, notice
+    the hexadecimal representation of `\x90`, the Intel x86 architecture opcode. A
+    *90* in Intel x86 assembly is a NOP. Here you see a series of `\x90`s that create
+    our NOP-slide effect. The rest of the code is the payload, such as a reverse shell
+    or a Meterpreter shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Using Immunity Debugger to Decipher NOP Shellcode
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Debuggers* offer a window into the running state of a program, including assembly
+    instruction flow, memory contents, and exception details. Penetration testers
+    leverage debuggers on a regular basis to identify zero-day vulnerabilities and
+    to understand how an application works and how to attack it. A number of debuggers
+    are out there, but our personal preference going forward (and used in later chapters)
+    is Immunity Debugger. We recommend that you take a look at the basics of Immunity
+    Debugger before proceeding.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To understand what a NOP slide does, let’s use a debugger to look at how the
+    NOP shellcode in the preceding example works. On your Windows XP target, download
+    and install Immunity Debugger from [http://www.immunityinc.com/](http://www.immunityinc.com/).
+    We’ll use the `msfpayload` command to generate sample shellcode for a simple TCP
+    bind shell, listening on port 443\. As you learned in previous chapters, a bind
+    shell simply listens on a port on a target machine to which we can connect.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: When these commands are executed, “stage 1” and “stage 2” shellcodes are created
+    in the output. We are concerned only with the stage 1 shellcode, because Metasploit
+    will handle sending the second stage for us when we connect to it. Copy and paste
+    the shellcode from stage 1 into a text editor of your choice. You’ll need to do
+    some minor editing before proceeding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that you have your basic shellcode, add as many NOPs as you want to the
+    beginning of it (such as `\x90\x90\x90\x90\x90`). Then remove all `\x` occurrences
+    so it looks similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: All this is necessary because you need to use a particular format so that Immunity
+    Debugger will accept your copy-and-paste of assembly instructions. Now you have
+    a bind shell with some NOPs in front of it for testing. Next, open up any executable
+    — let’s use *iexplore.exe* for this example. Open Immunity Debugger, choose **File**
+    ▸ **Open**, and point to an executable. You should see a number of assembly instructions
+    in the main window (the largest one). Left-click the first instruction on the
+    screen, and hold down shift while left-clicking to highlight about 300 instructions
+    below it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Copy the shellcode to the clipboard, and right-click in the Immunity Debugger
+    window and choose **Binary** ▸ **Binary paste**. This will paste the assembly
+    instructions from the example into the Immunity Debugger window. (Remember that
+    we are doing this to identify how NOPs work and how assembly instructions are
+    executed.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can see in [Figure 8-1](part0012.html#examples_of_multiple_nops_that_create_th)
+    that a number of NOPs are inserted; if you were to scroll down, you would see
+    your shellcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we first exported our shellcode in a `bind_tcp` format, the last instruction
+    through stage 1 ended with `ecc3`. Locate the last set of memory instructions
+    we added ending in `ecc3`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Right after the `ecc3`, press F2 to create a breakpoint. When you add a breakpoint,
+    once execution flow encounters it, program execution will pause and will not continue.
+    This is important here, because the code still has a lot of the old remnants of
+    the application we opened, and continuing would cause the application to crash,
+    because we already inserted our own code into it. We want to stop and investigate
+    what happened before the application crashes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Examples of multiple NOPs that create the NOP slide](../images/00036.jpeg)Figure 8-1. Examples
+    of multiple NOPs that create the NOP slide'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the example in [Figure 8-2](part0012.html#the_last_part_of_our_instruction_set_tha),
+    notice the last instruction set, which is a `C3`. That is the last instruction
+    set in our bind shell that we need.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After that `C3`, press F2, which sets up another breakpoint. Now we’re ready
+    to roll and see what happens. Go back to the very top, where you added your NOPs,
+    and press F7, which tells the debugger to execute the next assembly command, stepping
+    into your next assembly instruction. Notice that the highlight moves down one
+    line. Nothing happened because you added a NOP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, press F7 a few times to walk down the NOP slide. When you first arrive
+    at the memory instructions, open up a command prompt and type **`netstat -an`**.
+    Nothing should be listening on 443, and this is a good sign that your payload
+    hasn’t executed yet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Press F5 to continue running the rest of the application until it reaches the
+    breakpoint that you set. You should see the breakpoint indicated in the lower-left
+    corner of the Immunity Debugger window. At this point, you have executed your
+    payload within the debugger, and you should now be able to check `netstat -an`
+    and notice port 443 listening.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On a remote machine, try to telnet to the target machine on port 443\. You’ll
+    notice that nothing happens; this is because the listener hasn’t received the
+    second stage from Metasploit yet. On your Back|Track VM, go into Metasploit and
+    set up a multi-handler. This will tell Metasploit that a first-stage listener
+    is on port 443 on the target machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The last part of our instruction set that we need](../images/00037.jpeg)Figure 8-2. The
+    last part of our instruction set that we need'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: You have reached a basic command shell! As a good practicing technique, try
+    a stage 1 Meterpreter reverse and see if you can get a connection. When you are
+    finished, simply close the Immunity Debugger window and you’re all done. It’s
+    important that you get familiar with Immunity Debugger now, because we will be
+    leveraging it in later chapters. Now let’s launch our first browser exploit that
+    uses a heap spray.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the Internet Explorer Aurora Exploit
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You know the basics of how heap sprays work and how you can dynamically allocate
+    memory and fill the heap up with NOPs and shellcode. We’ll be leveraging an exploit
+    that uses this technique and something found in nearly every client-side exploit.
+    The browser exploit of choice here is the Aurora exploit (Microsoft Security Bulletin
+    MS10-002). Aurora was most notoriously used in the attacks against Google and
+    more than 20 other large technology companies. Although this exploit was released
+    in early 2010, it particularly resonates with us because it took down some major
+    players in the technology industry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll start by using the Aurora Metasploit module and then set our payload.
+    The following commands should be familiar, because we have used them in previous
+    chapters. You’ll also see a couple of new options that we’ll discuss in a bit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'First, notice that the default setting for `SRVHOST` ![](../images/00002.gif)
+    is 0.0.0.0: This means that the web server will bind to all interfaces. The `SRVPORT`
+    at ![](../images/00004.gif), 8080, is the port to which the targeted user needs
+    to connect for the exploit to trigger. We will be using port 80 instead of 8080,
+    however. We could also set up the server for SSL, but for this example, we’ll
+    stick with standard HTTP. `URIPATH` ![](../images/00005.gif) is the URL the user
+    will need to enter to trigger the vulnerability, and we set this to a slash (`/`)
+    at ![](../images/00006.gif).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With our settings defined, use your Windows XP virtual machine and connect to
+    the attacker using *http://*<*attacker’s IP address*>. You’ll notice the machine
+    becomes a bit sluggish. After a little waiting, you should see a Meterpreter shell.
+    In the background, the heap spray was performed and the jump into the dynamic
+    memory was executed, to hit your shellcode eventually. If you open Task Manager
+    in Windows before you run this exploit, you can actually see the memory for *iexplore.exe*
+    growing significantly based on the contact growth of the heap.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You now have a Meterpreter shell, but there’s a slight problem. What if the
+    targeted user closes the browser based on the sluggishness of her computer? You
+    would effectively lose your session to the target, and although the exploit is
+    successful, it would be cut off prematurely. Fortunately, there is a way around
+    this: Simply type **`run migrate`** as soon as the connection is established,
+    and hope that you make it in time. This Meterpreter script automatically migrates
+    to the memory space of a separate process, usually *lsass.exe*, to improve the
+    chances of keeping your shell open if the targeted user closes the originally
+    exploited process.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is a pretty manual process. You can automate this whole process using
+    some advanced options to migrate to a process automatically upon a successful
+    shell. Type **`show advanced`** to list the advanced features of the Aurora module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'By setting these options, you can fine-tune a lot of the payload and exploit
+    details. Now suppose you wanted to change the amount of tries a reverse connection
+    would do. The default is 5, but you might be concerned with timeouts and want
+    to increase the connection retries. Here, we set it to 10:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this case, you want to migrate automatically to a new process in case the
+    targeted user closes the browser right away. Under the `AutoRunScript`, simply
+    let Metasploit know to autorun a script as soon as a Meterpreter console is created.
+    Using the `migrate` command with the `-f` switch tells Meterpreter to launch a
+    new process automatically and migrate to it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now attempt to run the exploit and see what happens. Try closing the connection
+    and see if your Meterpreter session still stays active.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since this is a browser-based exploit, you will most likely be running as a
+    limited user account. Remember to issue the `use priv` and `getsystem` commands
+    to attempt privilege escalation on the target machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That’s it! You just successfully executed your first client-side attack using
+    a pretty famous exploit. Note that new exploits are frequently being released,
+    so be sure to search for all the browser exploits and find which one best suits
+    your needs for a particular target.
+  prefs: []
+  type: TYPE_NORMAL
+- en: File Format Exploits
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*File format bugs* are exploitable vulnerabilities found within a given application,
+    such as an Adobe PDF document. This class of exploit relies on a user actually
+    opening a malicious file in a vulnerable application. Malicious files can be hosted
+    remotely or sent via email. We briefly mentioned leveraging file format bugs as
+    a spear-phishing attack in the beginning of this chapter, and we’ll offer more
+    about spear-phishing in [Chapter 10](part0014.html#the_social-engineer_toolkit).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In traditional file format exploits, you could leverage anything to which you
+    think your target will be susceptible. This could be a Microsoft Word document,
+    a PDF, an image, or anything else that might be applicable. In this example, we’ll
+    be leveraging MS11-006, known as the Microsoft Windows CreateSizedDIBSECTION Stack
+    Buffer Overflow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Within Metasploit, perform a search for `ms11_006`. Our first step is to get
+    into our exploit through *msfconsole*, and type **`info`** to see what options
+    are available. In the next example, you can see that the file format is exported
+    as a document:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, you can see that we have a few targets available to use, but we’ll make
+    it automatic and leave everything at the default settings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We’ll need to set a payload as usual. In this case, we will select our first
+    choice, a reverse Meterpreter shell:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Sending the Payload
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Our file was exported as *msf.doc* ![](../images/00002.gif) and sent to the
+    */opt/* ![](../images/00004.gif) directory within Metasploit. Now that we have
+    our malicious document, we can craft up an email to our target and hope the user
+    opens it. At this point, we should already have an idea of the target’s patch
+    levels and vulnerabilities. Before we actually open the document, we need to set
+    up a multi-handler listener. This will ensure that when the exploit is triggered,
+    the attacker machine can receive the connection back from the target machine (reverse
+    payload).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We open the document on a Windows XP virtual machine, and we should be presented
+    with a shell (provided our VM is Windows XP SP3):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: We have successfully exploited a file format vulnerability by creating a malicious
+    document through Metasploit and then sending it to our targeted user. Looking
+    back at this exploit, if we had performed proper reconnaissance on our target
+    user, we could have crafted a pretty convincing email. This exploit is one example
+    of a number of file format exploits available in Metasploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Wrapping Up
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We covered how client-side exploits generally work by manipulating the heap
+    to work in the attacker’s favor. We covered how NOP instructions work within an
+    attack and how to use the basics of a debugger. You’ll learn more about leveraging
+    a debugger in [Chapter 14](part0018.html#creating_your_own_exploits) and [Chapter 15](part0019.html#porting_exploits_to_the_metasploit_frame).
+    MS11-006 was a stack-based overflow, which we will cover in depth in later chapters.
+    Note that your success rate with these types of attacks resides in how much information
+    you gain about the target before you attempt to perform the attacks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a penetration tester, every bit of information can be used to craft an even
+    better attack. In the case of spear-phishing, if you can talk the language of
+    the company and target your attacks against smaller business units within the
+    company that probably aren’t technical in nature, your chances of success greatly
+    increase. Browser exploits and file format exploits are typically very effective,
+    granted you do your homework. We’ll cover this topic in more detail in [Chapter 8](part0012.html#exploitation_using_client-side_attacks)
+    and [Chapter 10](part0014.html#the_social-engineer_toolkit).
+  prefs: []
+  type: TYPE_NORMAL

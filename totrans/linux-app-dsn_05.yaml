@@ -1,0 +1,695 @@
+- en: '![](../images/85-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[**THE LADDIE ALARM SYSTEM: A SAMPLE APPLIANCE**](toc.html#chapter5)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/as.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Previous chapters covered how to build and secure a daemon and how to communicate
+    with the daemon while it is running. We’ll tie these topics together in this chapter
+    by building *Laddie,* a Linux-based alarm system.¹
+  prefs: []
+  type: TYPE_NORMAL
+- en: Laddie uses the five status inputs on a standard PC parallel port as sensor
+    inputs to the alarm system. The heart of the Laddie appliance is the *ladd* (pronounced
+    *lad-dee)* daemon that polls the status lines and reports input transitions using
+    syslog(). An alarm system is a good choice for a sample application since most
+    readers will have some familiarity with alarm systems and because an alarm system
+    application is simple to write, understand, and modify.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This chapter includes the following five sections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduction to alarm systems
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A functional specification for Laddie
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Laddie hardware design
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Laddie software design
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building and testing Laddie
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As you read this chapter, keep in mind that the alarm system itself is not as
+    important as the techniques used to build it. Don’t let the implementation details
+    overshadow the design principles being taught.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Introduction to Alarm Systems**](toc.html#chapter5.1)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section presents the concepts and definitions used to describe alarm systems
+    in general and Laddie in particular.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Sensors***](toc.html#chapter5.2)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An alarm *sensor* is a small device or switch that detects movement in a room
+    or activity in an area. An *alarm system* monitors several alarm sensors and reports
+    any unexpected activity they pick up. The area that a sensor protects is called
+    a *zone.* Zones are given *names* that usually describe the area protected; typical
+    zone names might include *Garage, Second Floor Windows,* and *Refrigerator.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 5-1 shows an example arrangement of sensors and zones for a small business.
+    There are door sensors on the front and back doors and a motion detector that
+    looks for movement near the office and storeroom.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/86-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 5-1: An example alarm system*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Types of Sensors**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since an alarm system can only report what its sensors detect, it is important
+    to choose sensors carefully. Let’s consider the types of sensors that are available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Magnetic reed switches**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These are most often used to monitor doors; they are placed with the switch
+    on the doorframe and the magnet on the door.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**PIR motion detectors**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Passive Infrared (PIR)* motion detectors detect minute changes in the movement
+    of infrared (heat) sources. A person or animal can set off a PIR motion detector,
+    but, for example, a baseball cannot.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Acoustic sensors**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Acoustic sensors detect specific sounds. They are often used to detect the sound
+    of breaking glass, and are so sensitive that a single acoustic sensor can protect
+    all of the windows in a room.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Floor mat sensors**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Floor mat sensors have switches that can detect the weight of a person. They
+    are very thin and are usually placed under carpet at entryways.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Vibration sensors**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Vibration sensors can detect very slight physical motion. They are often used
+    to protect cars.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Smoke and carbon monoxide detectors**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These sensors are used to detect potential fires.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Temperature sensors**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thermostats and other temperature sensors trip at a certain temperature or simply
+    report the current temperature in the zone. They are often used to protect temperature-sensitive
+    equipment and supplies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Sensor Contact Type**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To the alarm system, most sensors look like switches. The switch contacts can
+    be either open when not in alarm (called *normally open* or *NO* sensors), or
+    closed when not in alarm (*normally closed* or *NC* sensors). When you install
+    a sensor, you have to tell the alarm system the *contact type* of the sensor—that
+    is, whether the contacts are normally open or normally closed. Most sensors are
+    normally closed. A normally closed sensor has the desirable property of triggering
+    an alarm if the wires to the sensor are cut.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another helpful feature of the sensor-and-zone setup is that it is possible
+    to cascade sensors within a zone, as long as the cascaded sensors are all of the
+    same contact type. Figure 5-2 shows how to cascade normally open sensors and Figure
+    5-3 shows how to cascade normally closed sensors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/87-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 5-2: How to cascade normally open sensors*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/88-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 5-3: How to cascade normally closed sensors*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Logically, the alarm system sees just one sensor in each zone, even if there
+    are actually several cascaded sensors there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Latching a Sensor**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most sensors return to the non-alarm or normal state when the detected condition
+    is removed—for example, when someone closes a door or steps off of a floor mat.
+    You usually want to configure the alarm system to latch alarms detected by these
+    sensors. *Latched* alarms remain in alarm, even if the detected condition is removed,
+    until they are manually cleared by a user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, you might not want to latch every sensor. For example, you might want
+    to automatically remove an alarm when the temperature in a thermostat-protected
+    room returns to normal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Think about the type of sensor you’re using and your specific needs when you
+    set alarms in a zone to be latching or non-latching.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Enabling a Zone***](toc.html#chapter5.3)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mark zones as *enabled* if the sensors in the zone are working and you want
+    to monitor the zone. Unused inputs can be ignored by disabling the zone. Also,
+    you may find it convenient to temporarily disable zones when you want to leave
+    a door or window open.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**A Functional Specification for Laddie**](toc.html#chapter5.4)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Laddie alarm system monitors up to five zones and raises an alarm when
+    a change occurs in one of the monitored zones. Alarms are reported to Laddie’s
+    five different user interfaces. In addition to being able to view the status of
+    the zones that Laddie monitors, the user interfaces allow you to test and clear
+    alarms, view logs, and configure zones. Configuration parameters include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Zone name
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Contact type
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Latching or non-latching
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Enabled or disabled
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Laddie’s functional specification is divided into two parts: one that allows
+    users to access alarm configuration and status and another that allows Laddie
+    to handle alarms.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*As a reminder,* Laddie *refers to the whole appliance, and* ladd *refers just
+    to the daemon that monitors the five input pins on the parallel port. It’s easy
+    to confuse the two, since they are pronounced the same.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***ladd’s Configuration and Status***](toc.html#chapter5.5)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'ladd has one configuration and status table, called *Zone*, that is visible
+    to all of the user interfaces as an RTA table. The Zone table has five rows, with
+    each row defined by the following data structure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/89-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Let’s consider each of these fields in turn.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**id (Configuration)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Zones are identified by a number between one and five. The id field is initialized
+    when ladd starts, and users cannot edit it. You can use the id field in user interface
+    programs to uniquely identify a particular zone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**name (Configuration)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field stores the brief mnemonic or name that the user assigns to the zone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**enabled (Configuration)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Only zones marked *enabled* cause the system to enter an alarm state. Zones
+    marked *disabled* do not generate log messages or cause alarm states. This field
+    holds an integer instead of a boolean, since RTA does not support a boolean data
+    type.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**edge (Configuration)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the hardware described in the next section, a normally closed sensor triggers
+    an alarm on a zero-to-one edge on the input pin. Normally open sensors on Laddie
+    trigger an alarm on a one-to-zero edge. “Laddie’s Hardware Design” on page 68
+    describes open and closed sensors in more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**latching (Configuration)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The user sets this field to 1 to have an alarm persist even after the sensor
+    pin returns to its normal state. The user must manually clear latched alarms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**input (Status)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field shows the most recent raw value of the input pin. This is a status
+    field, and the user is not able to edit it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**alarm (Status)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each zone is said to be in either an *alarm* condition or in a *safe* condition.
+    This field is set by the ladd daemon in response to detected edges on the input
+    pin. A write callback on this field lets a user test a zone by writing a 1 to
+    it. An alarm is cleared when the user sets this field to 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**count (Status)**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the number of input edges that have caused an alarm. This
+    field is incremented only when the zone is marked *enabled*; it is not incremented
+    by user-initiated tests of the zone. This is a readonly, statistic field that
+    is set to zero when ladd starts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You may recall that the advantage of RTA is that it gives all of the user interfaces
+    the same API for daemon configuration, status, and statistics. The API defined
+    by RTA is that of a PostgreSQL database. The advantages of PostgreSQL are that
+    SQL is widely used and understood and there are many bindings for PostgreSQL,
+    including C, PHP, Java, and Perl. Figure 5-4 illustrates Laddie’s use of RTA to
+    allow five different UIs to get status and set configuration using only one daemon-side
+    protocol.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/90-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 5-4: One daemon with many user interfaces*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s look at the SQL for some typical Laddie configuration changes and queries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To disable zone 2, type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: UPDATE Zone SET enabled = 0 WHERE id = 2
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To find out how many times zone 4 has gone into alarm, type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: SELECT count FROM Zone WHERE id = 4
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To clear all alarms in the system, type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: UPDATE Zone SET alarm = 0
+  prefs: []
+  type: TYPE_NORMAL
+- en: Any program that can issue commands like these can function as a user interface
+    for Laddie. Watch for commands like these later in the book as we go through the
+    five user interfaces currently available for Laddie.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***ladd’s Alarm Handling***](toc.html#chapter5.6)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'ladd responds to an alarm by sending a log message using syslog(). The text
+    of the log message depends on whether the alarm was detected by the hardware or
+    was a test alarm issued by a user. The text also depends on whether the alarm
+    was set or cleared. For a zone with ID *n* and the name *zone_name,* the four
+    log messages are:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alarm set on zone *n, zone_name*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Alarm cleared on zone *n, zone_name*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: User set alarm on zone *n, zone_name*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: User cleared alarm on zone *n, zone_name*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Some users do not care *which* zone is in alarm; they just want to know if
+    *any* zone is in alarm. To address this need, ladd provides two other log messages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Alarm system status: alarm'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Alarm system status: safe'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These messages are sent when the first zone goes into alarm and after the last
+    zone is cleared. Laddie also sets all four control pins on the parallel port to
+    1 (see Table 5-1) to indicate any alarm in the system. It sets the control pins
+    low when all alarms are cleared.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One nice aspect of our overall architecture for Laddie is that ladd itself does
+    not need to send signals to the UI, send email, or send SNMP traps. We leave all
+    of this to a separate process, greatly simplifying the design and implementation
+    of the ladd daemon. (The event processor is described in the next chapter.) Syslog-as-output
+    not only simplifies ladd, it makes debug and test easier too since we can easily
+    examine the log files for the messages we expect and we can use the logger command
+    to generate test events for the event processor. The data flow for an alarm response
+    is depicted in Figure 5-5.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/92-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 5-5: Processing alarm events in Laddie*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Laddie’s Hardware Design**](toc.html#chapter5.7)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section presents the hardware needed to use Laddie as a real alarm system.
+    You can skip over this section if you are uncomfortable with electronic circuits
+    or if you aren’t interested in seeing how the hardware works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The pins on the parallel port are divided into three main groups: data lines,
+    control lines, and status lines. Each group is controlled using a register, which
+    is available at a particular I/O address. The data lines are at the base address
+    of the parallel port, the status lines are at the base address plus one, and the
+    control lines are at the base address plus two. Table 5-1 shows how the pins on
+    a 25-pin parallel port connector relate to the printer port names, to the port
+    registers, and to the alarm system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Table 5-1:** Laddie’s Use of the PC Parallel Port'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/92-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The alarm daemon uses the data lines as output and the status lines as input.
+    Figure 5-6 shows a schematic for one alarm sensor. The daemon initializes the
+    parallel port by setting the output pins to 0xFF, making pin 2 a high level. When
+    the sensor S1 is open, no current flows through the 2K ohm resistor R1, and the
+    voltage at pin 15 is pulled high. When the sensor is closed, pin 15 is shorted
+    to ground through pin 21.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In other words, pin 15 is biased high when the alarm sensor is open and pulled
+    low when the sensor is closed. By reading the status lines, which includes pin
+    15, the daemon can detect whether the sensor is open or closed. This description
+    applies to all five of the status inputs on the parallel port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/93-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Figure 5-6: A normally open alarm sensor from Laddie*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Laddie’s Software Design**](toc.html#chapter5.8)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We used the empty daemon introduced in Chapter 4 to build the ladd daemon.
+    But whether we used the empty daemon, wrote a select()-based program, or wrote
+    a threads-based program, there would still be three main subroutines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**appInit()** Initialize hardware. Start timer. Register the Zone table with
+    RTA.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**poll_timeout()** Read the status lines. Log relevant changes.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**user_update()** Send logs for user changes to the alarm status.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These routines are described in more detail in the next few sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***The appInit() Callback Subroutine***](toc.html#chapter5.9)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The appInit() subroutine is the first callback subroutine the empty daemon invokes.
+    This callback subroutine is responsible for performing any application-specific
+    initialization, setting up any timer callback subroutines, and registering any
+    RTA tables. In ladd, the appInit() subroutine initializes the Zone array of ZONE
+    structures, calls rta_add_table() to register the Zone table with RTA, initializes
+    the parallel port, and starts a periodic 100-millisecond timer with poll_timeout()
+    as its callback subroutine. Note that once the appInit() subroutine returns, the
+    daemon is ready to accept connections from the user interfaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although the COLDEFs or TBLDEF for the Zone array are not shown, Table 5-2 should
+    give you an idea of what they contain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Table 5-2:** The Columns in Laddie’s Zone Table'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/94-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: All of the initialization code for ladd is in the appInit() routine given below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/94-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](../images/95-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[***The poll_timeout() Callback Subroutine***](toc.html#chapter5.10)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The poll_timeout() subroutine performs the bulk of the alarm daemon’s functions.
+    This subroutine reads the parallel port, processes the input pins, and modifies
+    the state of the appropriate ZONE data structure. This subroutine is invoked every
+    100 milliseconds, as specified by the call to add_timer(). Note the following
+    salient features of the poll_timeout() subroutine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The main responsibility of poll_timeout() is to set the alarm field for each
+    zone in the Zone table. As mentioned above, the alarm field shows whether or not
+    a particular zone is in an alarm condition.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The subroutine treats each zone independently of the other zones. That is, one
+    zone can be in alarm condition while another is in the safe condition.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The alarm field for a particular zone is modified only if the enabled field
+    is nonzero. This feature allows a user to disable a zone in cases where there
+    is either no sensor or where the user wishes to ignore a sensor.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When poll_timeout() detects that the zone has entered the alarm condition, it
+    sets the alarm field to 1 and sends a syslog message. In a later chapter, we’ll
+    show you how to convert syslog messages into email and SNMP traps.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Similarly, when this subroutine detects that the input pin transitions back
+    to the normal state, it clears the alarm variable, and, if the latching field
+    is set to zero, it sends a syslog message. This mechanism allows the user to configure
+    a zone so that once it enters the alarm condition, it must be cleared manually.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The poll_alarm() subroutine also maintains a global alarm variable, GlobalAlarm,
+    which is set to one if any zone is in alarm condition and is set to zero if all
+    zones are safe. The subroutine tracks when this GlobalAlarm variable changes states.
+    When the GlobalAlarm variable is set, the control pins of the parallel port are
+    set high. When the GlobalAlarm variable changes state, then an appropriate syslog
+    message is sent.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All of the polling for new alarms is done in the poll_timeout() routine given
+    below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/96-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](../images/96-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](../images/97-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[***The user_update() Callback Subroutine***](toc.html#chapter5.11)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The user_update() callback subroutine is invoked whenever the user manually
+    modifies the alarm field in a ZONE data structure. This callback subroutine is
+    responsible for sending a syslog message whenever the user manually clears the
+    alarm condition (for latched zones) or manually sets the alarm condition. In Chapter
+    7, we’ll show you how to use the syslog message to update the user interfaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This callback subroutine is included in the RTA COLDEF structure for our alarm
+    daemon. Take a look at the snippet of source code below, and you’ll see that the
+    user_update subroutine is included in the write callback entry. The user_update
+    subroutine is invoked whenever the user writes to the alarm variable in a ZONE
+    data structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/97-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The user_update() subroutine shown below checks to see if a user has set the
+    alarm variable and caused it to change. If the alarm variable has changed, the
+    user_update() subroutine writes a syslog message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/98-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the last two sections, we showed you the alarm daemon source code and explained
+    how the source code works. Did you notice how easy it was to implement the alarm
+    daemon? The next section shows you how to build and test the alarm daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Building and Testing ladd**](toc.html#chapter5.12)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You don’t need to install a whole set of alarm sensors to run this daemon—all
+    you need is a standard PC with a parallel port. Before running the daemon, you
+    must create the directory /opt/laddie/ladd/, because the alarm daemon creates
+    a PID file in this directory. Use these commands to create this directory as root:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: mkdir /opt/laddie/ladd
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The source code for ladd is on the companion CD in /Code/src/ladd. Compile
+    the alarm daemon and then run the daemon as root, as shown in the following commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: cd /Code/src/ladd
+  prefs: []
+  type: TYPE_NORMAL
+- en: make
+  prefs: []
+  type: TYPE_NORMAL
+- en: su
+  prefs: []
+  type: TYPE_NORMAL
+- en: ./ladd
+  prefs: []
+  type: TYPE_NORMAL
+- en: To make sure that the alarm daemon is running and responding to user requests,
+    invoke the psql SQL command shown below, and verify that the Zone table is displayed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/99-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Typically, you would add hardware sensors to your alarm appliance, but you can
+    simulate an alarm without the hardware sensors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consider zone 1\. Our approach is to invoke the alarm write callback using
+    this command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: UPDATE Zone SET name = "BackDoor", enabled=1, edge=0, WHERE id=1;
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we’ll simulate an alarm on the input of zone 1 with the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: UPDATE Zone SET alarm=1 WHERE id=1;
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Verify that ladd generated a log saying *User set alarm on zone 1.* Then manually
+    clear the alarm, as such:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: UPDATE Zone SET alarm=0 WHERE id=1;
+  prefs: []
+  type: TYPE_NORMAL
+- en: Again verify that ladd generates a message for syslog. We’ll show you how to
+    build more accessible user interfaces to the alarm daemon in future chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Summary**](toc.html#chapter5.13)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter tied the previous chapters together by showing you how to build
+    ladd, a simple alarm daemon, using RTA and the empty daemon. You saw the design
+    of ladd’s RTA table, the control point by which the user interfaces manage the
+    alarm daemon. You also saw the alarm daemon’s source code, including the three
+    subroutines used by the empty daemon to implement the alarm daemon’s run-time
+    behavior. Finally, you saw how to configure the alarm daemon and how to manually
+    set and clear an alarm from the command line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next chapter continues to develop Laddie’s design by showing you how to
+    handle events on an appliance, including events such as ladd sending messages
+    to syslog.
+  prefs: []
+  type: TYPE_NORMAL
+- en: __________________
+  prefs: []
+  type: TYPE_NORMAL
+- en: ¹ Laddie is a sample appliance used to illustrate the techniques and software
+    presented in this book. Laddie is *not* a commercially viable alarm system and
+    should never be used in place of a real alarm system.
+  prefs: []
+  type: TYPE_NORMAL

@@ -1,0 +1,586 @@
+- en: '![](../images/159-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[**DESIGNING A COMMAND LINE INTERFACE**](toc.html#chapter9)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/as.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: A command line interface (CLI) gives your customers a secure, low-bandwidth,
+    easily scripted way to configure and manage your appliance. As a Linux developer,
+    you are already familiar with bash, Linux’s most popular CLI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the same reasons that you would not want to manage a Linux box without a
+    bash command line, your customers might not want to manage your appliance without
+    a similarly easy-to-manage CLI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This chapter covers the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why you need a CLI
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Types of CLIs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Giving users access to a CLI
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Laddie CLI
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Code review for the test command
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[**Why You Need a CLI**](toc.html#chapter9.1)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Despite their age, CLIs are still one of the most-requested features for Linux
+    appliances, especially network appliances that will be installed in a server room
+    or network operations center. Let’s look in turn at each of the major reasons
+    to have a CLI on your appliance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Security
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Availability
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Bandwidth
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Scriptability
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Configuration backup and restore
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[***Security***](toc.html#chapter9.2)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many service providers will reject an appliance that places its control and
+    status protocol on the same wire as user data; the setup they prefer is an entirely
+    separate physical channel that is dedicated to management of the appliance. Historically,
+    this separate channel has been an RS-232 interface with a CLI on it. The RS-232
+    lines are routed to the control center using terminal servers or port concentrators.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When an appliance has a serial port, users expect it to also have a character
+    or command line interface. Of course, you could attach a PPP daemon to the serial
+    port and make it a network interface, but this is seldom done. Newer network appliances
+    feature a second (or even third) Ethernet interface to provide the separate physical
+    channel required for appliance control and status. Separate LANs that are dedicated
+    to secure control and status are starting to appear, but the installed base of
+    Network Management Systems (NMS) that deal with serial ports will make CLIs and
+    appliance serial ports standard requirements for some time to come.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Availability***](toc.html#chapter9.3)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network-based UIs, such as web interfaces, require that the network be correctly
+    configured and running before the UI becomes accessible. The problem with this
+    is that if something goes wrong with the network configuration, you can lose all
+    ability to fix the configuration. A serial port, on the other hand, does not need
+    an address, so a UI running on it is always available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is another popular solution for unavailability due to a miscon-figured
+    network. Many appliances have a hidden or difficult-to-reach switch that will
+    reset the appliance to its factory default configuration if it remains in the
+    closed position while the appliance boots up. If you don’t intend to use a serial
+    port, you should consider having a hidden switch or some other mechanism to allow
+    the user to reset the appliance’s configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Bandwidth***](toc.html#chapter9.4)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: CLIs are useful when you want to access an appliance over a low-bandwidth channel.
+    A low-bandwidth channel might be a slow radio link or an otherwise fast network
+    that is overloaded or failing. Low bandwidth capabilities can also be advantageous
+    if your appliances are to be dispersed geographically but managed centrally.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Scriptability***](toc.html#chapter9.5)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the biggest advantages of a CLI is that it usually allows you to collect
+    a series of command lines into a file, or *script*, and execute the commands as
+    if a user had interactively entered them. This can offer huge advantages over
+    web or other graphical UIs, which are difficult to automate. Scripts are particularly
+    useful to help automate repetitive or tedious tasks. A CLI can allow users to
+    build their own commands, using the commands in your CLI as their primitives or
+    base operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Not all CLIs are equal in their ability to be scripted. We’ll have more to say
+    about this later in the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Configuration Backup and Restore***](toc.html#chapter9.6)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the biggest problems you should anticipate as an appliance developer
+    is your customer’s need to preserve or migrate configuration data across a software
+    upgrade. We’ve approached this problem several ways, and the worst of our solutions
+    was to give users a web page where they could initiate an FTP transfer of a binary
+    file that contained the configuration data. This was a disaster for several reasons.
+    Customers objected to the hassle of setting up an FTP site to accept files, and
+    they *really* objected to not being able to see the configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Upgrades were a hassle, as well. We had to write and distribute programs to
+    read the binary file and convert it to the format required by the new software.
+    Paying attention to version numbers, finding a place to run the converter, and
+    getting the new file back onto the appliance was a real mess. Saving the configuration
+    as XML helped, but it didn’t help that much.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The solution that really worked was providing a web page that displayed the
+    entire configuration as a list of CLI commands. Our customers loved this. They
+    could see the configuration at a glance, and making a backup of the configuration
+    was as simple as visiting a web page and selecting Save As in the browser. Of
+    course, we also had a matching web form in which users could paste the CLI commands
+    of the saved configuration and so easily restore the original settings. Tools
+    such as wget allow configuration backups to be automated, too. You’ll see an example
+    later in the chapter when we review the Laddie CLI command that dumps Laddie’s
+    configuration as a series of CLI commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This approach made upgrades easier for us as well. The CLI was fairly stable,
+    and changes to it were almost always backward-compatible extensions. After switching
+    to this approach, we no longer had to write and distribute programs to convert
+    one version of a configuration file to the next version of the file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having the appliance configuration saved as a list of CLI commands in a script
+    has other advantages. One of our customers wanted the master copy of all his configurations
+    to reside in his NMS. He configured our appliances to use DHCP and set up his
+    DHCP and NMS to use wget to send the appropriate configuration to our appliances
+    as soon as he received an IP address from the DHCP server. In one instance, he
+    ordered 10 new servers, and we gave him the Ethernet MAC addresses before shipment.
+    He had the configurations for the 10 new servers ready for download before the
+    appliances arrived, and all of the new appliances were configured and running
+    within a few minutes of initial power on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Types of CLIs**](toc.html#chapter9.7)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The default CLI on most Linux systems is bash, but bash is just one type of
+    CLI. There are other types that might be more applicable to your needs, and your
+    CLI may switch from one type to another, as you choose the type to match the task
+    at hand. Let’s look at the different types of CLIs: sentences, menus, and wizards,
+    and at two CLI attributes: statefulness and whether the CLI is line- or character-oriented.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Sentences***](toc.html#chapter9.8)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The sentence CLI, the most common type of CLI, maps actions and objects in
+    the appliance into verbs and nouns. Consider a simple bash command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: rm -f backup.sxw
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, rm is the verb, -f is an adverb, and backup.sxw is the noun. The key to
+    a successful CLI of this type is to select the verbs and nouns that map well into
+    the customer’s understanding of the appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, you can use other sentence structures like verb-adverb-noun, verb-noun-adjective,
+    or noun-verb-adjective—it’s up to you. The idea is to make reading the CLI line
+    sound like a sentence. You’ll know that you’ve gotten it right when customers,
+    field support, and engineers all describe a configuration using the same vocabulary
+    and syntax as that of your CLI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Typically, you will need verbs to view status or statistics, to change the configuration,
+    and to initiate actions. For example, the verbs in the Laddie CLI are *view, set,
+    test,* and *clear.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: The big advantage of the sentence CLI is that it is the most easily and reliably
+    scripted type of CLI. The major disadvantage of this CLI is that there can be
+    a steep learning curve for it. The user has to remember a fair amount of vocabulary
+    and syntax in order to use this type of CLI effectively. However, users who spend
+    a lot of time in the CLI usually prefer the sentence CLI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Wizards***](toc.html#chapter9.9)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A *wizard* is a type of interface that prompts the user with a series of questions,
+    usually giving the user some descriptive text before asking the question. For
+    example, the following might appear as part of a wizard configuration for Laddie.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/163-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: If there is a reasonable default value, you should show it in the prompt for
+    the question. The convention is to show the default in all caps. You should also
+    give the user the ability to abort the wizard at any point in the series of questions.
+    Common abort sequences include q and ctrl-C. At the end of the series of questions,
+    you should display a summary of the responses and ask the user to confirm that
+    these are the values he or she wants.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here is a tip to help the user and yourself. Your web interface has forms with
+    fields that the user fills in before hitting the *Submit* button. If you are building
+    a wizard, map the same fields from the web form to the wizard. For example, if
+    the web form for network configuration asks for host name, boot protocol, and
+    default gateway, the network wizard should ask for host name, boot protocol, and
+    default gateway. This helps the user by letting him or her transfer training from
+    one interface (web) to another (CLI). It also helps you because your back-end
+    processing only needs to deal with one type of request, regardless of the source
+    of the request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Wizards are a great way to help a new or infrequent user through a configuration.
+    Wizards are also nice if you need a synchronous update of all of the fields presented
+    in the wizard. For example, you would probably want to change a static IP address
+    and its associated netmask with one atomic update.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since wizards are used only to collect configuration information, they are usually
+    used in conjunction with one of the other types of CLIs that offer better scriptability
+    and easier access to system status.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Menus***](toc.html#chapter9.10)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A menu CLI offers the user a well-defined list of commands or choices at each
+    step. For example, if we were to give Laddie a menu CLI, the top menu might look
+    like this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/163-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](../images/164-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Selecting one item in the menu might prompt the user with a sub-menu or drop
+    him into a wizard to collect configuration information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Menu CLIs have fallen from favor but remain the right choice if you expect your
+    CLI to be used infrequently or by untrained users. There is practically no learning
+    curve to using a menu CLI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Menu CLIs can be scripted, but the scripts are fragile since they can be broken
+    by even a small change to the menu layout.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Stateful***](toc.html#chapter9.11)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stateful CLIs maintain a sense of where the user is. For example, bash is stateful
+    in that it supports a current working directory with the cd verb to manipulate
+    its state. Another good example of a stateful CLI is the help system in the graphics
+    package gnuplot. However, statefulness may be more accurately described as a property
+    of CLIs rather than a separate type of them, since wizard, menu, and sentence
+    CLIs can all be stateful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stateful CLIs are nice if you expect your users to spend a lot of time in your
+    CLI. They help the user by presenting context-sensitive help (i.e., help based
+    on state or location) and by reducing how much typing the user has to do.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stateful CLIs require more documentation and training to explain the states
+    and state manipulation, and they can be a little tricky in scripts since it is
+    easy to forget to set the state as part of the script. (How many of us have forgotten
+    to put a cd at the top of a bash script?)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Character vs. Line Interfaces***](toc.html#chapter9.12)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A term coming into popular usage is *character interface,* which refers to an
+    interface that looks at each character as it is entered. In contrast, a classic
+    line interface looks at the command only when the newline is entered. The editor
+    vi has a character interface, while its precursor, ed, has a CLI in the classic
+    sense. Another common example of character interface is bash, with its tab-completion
+    and line-editing capabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Character interfaces, such as the one in vi, can greatly reduce the amount of
+    typing a user needs to do, and tab completion can be a great help to new and infrequent
+    users; however, character interfaces require a lot of work on the part of the
+    interface designers and coders.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Giving Users Access to a CLI**](toc.html#chapter9.13)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you have a CLI, you need to give your users access to it. One way to do
+    this is to let them log in and have them start the CLI from a bash prompt. This
+    can make scripting easier, but few appliances allow direct access to a Linux login.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Perhaps the most common type of access is to add the path to the CLI executable
+    to the /etc/shells file and to create a user with the login shell set to the CLI.
+    The advantage of this is that the CLI is equally accessible on the serial port,
+    over telnet, and over SSH. This is the approach we take for Laddie.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A very small appliance might not support logins. In this case you can tie standard-in
+    and standard-out of the CLI directly to a serial port. The security model here
+    is that of physical access to the serial port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we’ll see in the next section, a CLI can be useful even if it is used only
+    for configuration backup and is only accessible from a web page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**The Laddie CLI**](toc.html#chapter9.14)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Laddie’s CLI uses a verb-adjective-noun approach; it is not stateful, and it
+    is line oriented, not character oriented. Our commands allow the CLI user to view
+    status, view logs, set the configuration, and get help. Laddie’s CLI is not complete
+    in that it does not allow the user to configure, view, or set the appliance’s
+    network, SNMP, or logging configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can get to the Laddie CLI several ways. You can telnet to 192.188.1.11 as
+    user cli without a password. You can also telnet to Laddie as root and start Laddie’s
+    CLI from the bash prompt with the command cli.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Laddie Command Summary***](toc.html#chapter9.15)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here are all of the Laddie CLI commands with their syntax and brief descriptions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/165-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: You are already familiar with the configuration of Laddie, so we won’t give
+    a detailed explanation of every command. There are, however, a few commands that
+    deserve special mention.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***set logs on***](toc.html#chapter9.16)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the nice features of Laddie’s logger is that you can open a telnet connection
+    to it and have log messages sent to you over the connection. The set logs command
+    opens (or closes) a connection to the logger to receive these messages. A sample
+    session might make this more clear.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/166-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note that no log messages were displayed after the clear all command, since
+    we had closed the connection to the logger with the set logs off command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The system prints log messages as they occur, and the output of a log message
+    can appear in the middle of a command that is being entered. This can be annoying,
+    so you might suggest that your users open two xterm windows and start a CLI session
+    in each, using one for log messages and the other for interactive commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having log messages appear in a CLI session can be a plus for your appliance.
+    Your customers can use the CLI as a way to send log messages from the appliance
+    to their network management system. Also, having log messages appear in the CLI
+    is a big help to anyone trying to remotely manage the appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***dump***](toc.html#chapter9.17)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The dump command displays Laddie’s configuration as a list of CLI commands that
+    can be fed back into the CLI. The first line of output is a comment to identify
+    what is being displayed, and more importantly, when it was displayed. Although
+    we didn’t include the CLI version number in the top comment line, it would be
+    helpful to do so.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/166-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](../images/167-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: A few Linux commands, such as setserial, also have an option to print configuration
+    information in a way that can be fed back into the command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***help***](toc.html#chapter9.18)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Laddie CLI provides a help command to give the user a quick way to see which
+    commands are available. Without any parameters, help gives suggestions for other
+    help commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/167-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The help intro command gives a brief description of the Laddie alarm system,
+    and help commands gives a list of all CLI commands with a brief description for
+    each.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We initially tried to make our help *single source*—that is, we tried to make
+    the help system use the same source files for both CLI help and web help. While
+    we hope you succeed where we failed, we found that there were too many differences
+    in the body of the help text for each interface and that the code and libraries
+    that needed to use a shared file format were too big and too complex. Our CLI
+    help text is in a single file; it uses a file format built for the Laddie CLI.
+    Laddie’s help file format is pretty simple, leaving open the possibility of authoring
+    the help text with OpenOffice.org and writing a simple output filter to convert
+    it to the help file format. Since help text is meant to be read by end users,
+    we recommend that you give responsibility for the help text to the technical writers
+    in your group.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Code Review for the test Command**](toc.html#chapter9.19)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We implemented the Laddie CLI using lex, yacc, and RTA. The vocabulary of Laddie’s
+    verb-adjective-noun CLI is recognized by a parser generated by lex, and the grammar
+    of the CLI is recognized in a C file generated by yacc. A tutorial on lex or yacc
+    or a full code review of the CLI is beyond the scope of this book, but we can
+    give an overview of our code and look at all of the incremental code used to implement
+    one command. This review might make a nice introduction to yacc and lex if you’ve
+    never used them, as it will give you a sense of their power and elegance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The code is broken into four files: main.c, syntax.y, token.l, and commands.c.
+    The file main.c has the main() routine, which is select()-based, since the CLI
+    needs to listen for both user input and log messages. The file syntax.y is a yacc
+    input file that has the syntax of the CLI commands. The file to ken.l is a lex
+    file with the definitions of the key words used in the CLI vocabulary. The file
+    commands.c has the C code that actually implements the commands. Both yacc and
+    lex produce C files that are compiled into the CLI. Entering make in the source
+    directory uses the following commands to translate, compile, and link the four
+    source files.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/168-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[***CLI Vocabulary: token.l***](toc.html#chapter9.20)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The file token.l has a series of regular expressions which define the words
+    in the vocabulary of our CLI. The lex program translates the regular expressions
+    in token.l into a C program, which implements a finite state machine that recognizes
+    words in our vocabulary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The form of the Laddie test command is test [zone id], where the zone ID is
+    a number between one and five. Our lex input file, token.l, contains the following
+    code to define both a zone ID and the CLI verb *test.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/168-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The [1-5] indicates a number in the range of one to five, inclusive. The [ \t]
+    indicates either a space or a tab. The * following [ \t] indicates that there
+    can be zero or more spaces or tabs following the zone ID. The yytext variable
+    points into the command line at the start of the token, so (int) (*yytext - '0')
+    is the zone ID as an integer. The code sets the global variable Zone before returning
+    ZONE_ID to indicate that a valid zone ID was found.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The lex pattern test[ \t]+ indicates the word *test* followed by one or more
+    spaces or tabs. At least one space or tab is required to separate the test token
+    from the zone ID token.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***CLI Grammar: syntax.y***](toc.html#chapter9.21)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just as a grammar describes valid sentences in a language, a grammar defined
+    in the yacc file syntax.y defines valid command lines in our CLI. yacc converts
+    the grammar in syntax.y into a C-based state machine to recognize valid command
+    lines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The grammar for the test command is defined by the following lines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/169-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The token definitions for ZONE_ID and TEST are converted to #define statements
+    and passed into the lex file token.l. The syntax definition for the test command
+    requires a TEST token followed by a ZONE_ID token. If the command line has a valid
+    test command, the C subroutine test_zone() is called with the zone ID passed as
+    a parameter.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***C Code***](toc.html#chapter9.22)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The C subroutine test_zone(), in commands.c, is where the real work is done
+    to test a zone; it sets the alarm field in the Zone table to one. The routine,
+    test_zone(), is presented below in its entirety.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/169-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The update() subroutine is a utility routine that sends a PostgreSQL update
+    command to the ladd daemon. The code for this routine is almost identical to the
+    SQL update code presented in Chapter 5, so we will not present the code for the
+    routine here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Code Review Notes***](toc.html#chapter9.23)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: By our count, the incremental cost of adding the test command was about 15 lines
+    of code. Not bad. Clearly yacc, lex, and RTA can make building a CLI fairly straightforward.
+    The danger, in fact, might be the tendency to add a lot of CLI commands. Don’t
+    forget that each new command places a larger burden on your users to learn that
+    command, which can thus slow the adoption of your CLI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Summary**](toc.html#chapter9.24)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter we looked at the reasons to include a CLI in your appliance
+    and the types of CLIs available to you. We presented the CLI for Laddie and gave
+    a minimalist code review for the test command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Knowing that you would not want to use the Laddie CLI as is, the programmer
+    for our CLI was particularly careful to document the source code to make it easy
+    for you to modify. Also, the help system was built to easily port to your appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we continue our discussion of UIs by presenting techniques
+    for incorporating buttons, light-emitting diodes (LEDs), and simple text-based
+    liquid crystal displays (LCDs) into your appliance. While the next chapter won’t
+    call it a CLI, we consider the LCD interface to be a menu system with a character
+    interface.
+  prefs: []
+  type: TYPE_NORMAL

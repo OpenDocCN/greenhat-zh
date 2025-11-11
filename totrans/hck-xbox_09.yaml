@@ -1,0 +1,610 @@
+- en: Chapter 9 -
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Sneaking in the Back Door
+  prefs: []
+  type: TYPE_NORMAL
+- en: The full range of viable attacks on the Xbox are too numerous to describe in
+    this book. The Xbox is based on the PC architecture, a complex, evolved architecture
+    originally designed with no thought for security. Many of the classic hardware
+    security holes exploited by smart card hackers, such as power supply modulation,
+    sideband attacks, and clock glitching have not even been touched on the Xbox,
+    to the best of my knowledge. (You can find more information on these security
+    weaknesses in the proceedings of the Cryptographic Hardware in Embedded Systems
+    (CHES) conference, in the Lecture Notes in Computer Science series (Springer-Verlag).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, console and secure PC manufacturers are not concerned about hardware
+    security weaknesses, because hardware attacks are “too difficult for the average
+    consumer to execute” and therefore of little threat. While it is true that researching
+    an attack requires a skilled hacker with the correct tools, implementing an attack
+    can be very cheap and easy. I’m reminded of the parable where a mechanic, called
+    in to fix an important piece of broken machinery, spends an hour looking at the
+    situation and repairs the machine by tapping on it at just the right spot. Upon
+    receiving a bill for $1,000, the machine’s owners demand to know why a tap costs
+    so much. The mechanic responds with, “The tap costs a dime. Knowing where to tap
+    costs $999.90.” The corollary to this parable is that anyone could have executed
+    the tap to repair the machine, given specific instructions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Security attacks are often the same: difficult to figure out; easy to share
+    and implement. Secure hardware manufacturers should also be concerned about adopting
+    mainly reactive policies to hacker intrusions. Many hackers work in secret, and
+    keep their methods and results quiet so that vendors cannot develop proper countermeasures.
+    These hackers also maintain a library of known attacks and back doors, disclosing
+    only one at a time, so that vendors with reactive hardware security policies are
+    always playing catchup.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**A Commentary on Naming** **Conventions**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Hacking communities often invent their own terminology for important concepts,
+    which can vary from community to community and from industry standard terminology.
+    The following is the list of terminologies accepted by the Xbox-Linux community.
+    Any deviations from the terminology I use in this book are noted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**X-code:** Jam table opcodes; the opcodes used by the secret Southbridge (MCPX)
+    boot ROM to initialize the Xbox hardware'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**2BL:** Second boot loader. This is the code that is decrypted by the secret
+    boot ROM. It is called the second boot loader because this code’s primary responsibility
+    is to decrypt and decompress a kernel image.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Flash Boot Loader**: In version 1.1 security, this is an intermediate boot
+    loader in between the secret boot ROM and the 2BL. The FBL is verified by a lightweight
+    hash against a hard-coded value within the secret boot ROM. As a result, the FBL
+    cannot be changed without changing the MCPX silicon. The FBL is responsible for
+    verifying the digital signature on all critical portions of the FLASH ROM.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Kernel:** The Xbox kernel code. It is stored compressed and encrypted in
+    the FLASH ROM.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: V**ersion 1.0 security:** The original Xbox security system using RC-4 encryption
+    on the 2BL.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Version 1.1 security:** The second Xbox security system using the TEA hash
+    to verify regions of the FLASH ROM. The earliest manufacturing date seen on boxes
+    with version 1.1 security is around August 2002.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The previous chapter described my eavesdropping attack on the Xbox security
+    mechanism that eventually yielded the RC-4 key hidden in a block of secret code.
+    This chapter describes a few of the other attacks available on the Xbox that were
+    devised by my colleagues, as well as the attack that was mounted on the revised
+    Xbox security scheme, herein referred to as security version 1.1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Back Doors and Security Holes**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A class of back door attacks on the Xbox leverage a fundamental weakness in
+    the way the hardware is initialized by the secret boot code. This weakness stems
+    from the fact that hardware initialization is accomplished by way of a powerful
+    jam table opcode interpreter that stores its commands in unverified cleartext.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Visor Jam Table Attacks**'
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: One class of attacks on the Xbox involves modifying the hardware initialization
+    sequence. Recall that hardware initialization of the Xbox is accomplished by means
+    of an opcode interpreter that retrieves its commands from an unencrypted portion
+    of the FLASH ROM called the “jam table.” The relationship of the jam table entries
+    to the rest of FLASH ROM is illustrated in Figure 9-1\. Jam table entries are
+    stored as <opcode, arg1, arg2> tuples near the lowest FLASH ROM addresses. The
+    available opcodes include memory read and write functions to all the address spaces
+    in the x86 architecture. Since the jam tables are stored unencrypted and never
+    checked for modification, opcodes can be inserted into the jam table that can
+    “seed” the Xbox memory with rogue instructions or modified hardware state *before*
+    the RC-4 decryption of the FLASH ROM 2BL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One application of jam table modification is to recover the plaintext of the
+    kernel without knowledge of the RC-4 key. A hacker, known only as Visor, first
+    described this approach to me. Here is a summary of Visor’s approach:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Boot the Xbox normally. Part of the normal boot process will place a decrypted
+    kernel image into main memory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: While maintaining power to the Xbox, switch the contents of the FLASH ROM’s
+    jam table to an alternate table that copies regions of main memory to an easily
+    monitored location, such as the FLASH ROM’s bus.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Perform a soft-reset of the Xbox CPU. This forces a hardware re-initialization
+    without erasing the main memory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Record the contents of main memory as the modified jam table program is executed.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![figure_9-1](../Images/figure_9-1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '**Figure 9-1**: Jam table opcodes in relation to the rest of FLASH ROM.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dynamic switchover of the FLASH ROM contents, required in step 2, can be accomplished
+    by means of a ROM emulator, or by using an oversized ROM with the excess address
+    bits wired to a bank of switches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Visor also described how the jam table can be used as part of an elaborate hack
+    to gain control over the Xbox’s instruction pointer (IP). To better understand
+    this hack, we will further investigate how the secret boot code handles the case
+    of an invalid FLASH ROM image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After decrypting the 2BL in the FLASH ROM image, the secret boot code checks
+    for a magic number at a location near the end of the 2BL. For an invalid FLASH
+    ROM image, this number does not match, and causes the CPU to jump to a short sequence
+    of instructions located at 0xFFFF.FFFA. This set of instructions continues all
+    the way to the very last addressable location in physical memory, location 0xFFFF.FFFF.
+    Once the CPU executes this last instruction of the invalid ROM image, it should
+    crash and halt execution due to a code segment boundary error when the IP rolls
+    over from 0xFFFF.FFFF to 0x0000.0000\. However, this does not happen; rather,
+    the CPU happily attempts to execute whatever instruction, valid or invalid, is
+    located at location 0x0000.0000\. Nominally, this instruction is invalid and the
+    CPU halts anyway due to an instruction fault. However, a valid instruction can
+    be placed there during the Xbox jam table initialization sequence using a jam
+    table memory write opcode. Thus, by corrupting or erasing the encrypted FLASH
+    ROM image and by modifying the jam tables to insert a jump instruction to your
+    own unencrypted code in FLASH ROM, you can gain control of the Xbox CPU IP without
+    ever touching a cipher or any similar technological measure that effectively controls
+    access to a copyrighted work. Hence, this hack might be legal under the DMCA.
+    I say *might* because the DMCA is an oftentimes vague piece of legislation, and
+    there is little court precedent to clarify the ambiguities. The argument for the
+    legality of this approach lies in the fact that no significant Microsoft copyrighted
+    code is ever decrypted or executed. The only exception is the portion of the secret
+    boot ROM that must execute because they are hardwired into the Southbridge’s silicon.
+    See Chapter 12, “Caveat Hacker,” for a more in-depth discussion of the legal issues
+    that are facing the hacking community today.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**MIST Premature Unmap Attack¹**'
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In order to protect the secret boot code in the event that a hacker gains control
+    of the Xbox, the secret boot code in the Southbridge chip unmaps itself shortly
+    before it exits. In other words, it hides itself permanently from the system when
+    it is finished executing. Thus, a user program attempting to access any of the
+    top 512 bytes in memory will see the decoy block in FLASH memory instead of the
+    secret boot code. Michael Steil, the lead of the Xbox-Linux project, discovered
+    a way to leverage this feature.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The unmapping process is accomplished by writing to 0x8000.8008, a hardware
+    register in the PCI configuration space. The basic strategy is to include a jam
+    table opcode that writes to 0x8000.8008 and unmaps the secret boot code before
+    the initialization sequence is finished. Since the caches are off at this time,
+    the processor will start fetching and executing instructions from the decoy block.
+    Fortunately, since the decoy block can be freely modified since it is part of
+    the FLASH ROM. The catch, however, is that the jam table interpreter blocks writes
+    to location 0x8000.8008, so this shouldn’t work. However, a bug in the decoding
+    of the PCI configuration space in the Southbridge chipset makes the unmap instruction
+    respond to multiple aliased addresses. In particular, the “function” bitfield
+    is ignored. Thus, a write to 0x8000.8X08 where X is not equal to 0 also does the
+    trick, and these writes are *not* blocked by the jam table interpreter. Therefore,
+    to gain control of the CPU IP using the MIST hack, you must modify the decoy block
+    in FLASH to contain your code, then add the appropriate jam table opcode to unmap
+    the secret boot ROM during hardware initialization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Microsoft Retaliates**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The discovery of security holes prompted many to speculate that Microsoft would
+    be swift to rotate its security scheme. In August 2002, Xboxes with a new motherboard
+    quietly started to appear in Australia. The first official word of the new security
+    system came from an unlikely source: nVidia, the producer of the chipsets used
+    in the Xbox. Following an unspectacular second quarter in 2002, an nVidia spokesperson
+    cited this as the last of a few reasons why the quarter went poorly:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: “What we said about Xbox was that we reached a volume discount milestone, further
+    reducing the margins. And that we will be taking an inventory write off in Q2
+    related to the amount of Xbox MCPs that were made obsolete when MSFT transitioned
+    to a new security code (by way of the MIT hacker) and excess in nForce chipsets
+    that we built in anticipation of higher demand of Athlon-based PCs.” — Derek Perez,
+    PR Director, nVidia ²
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: '**Reverse Engineering v1.1 Security³**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The specifics of the security code changes were not revealed until October
+    2002, when a hacker named Andy Green began investigating the first version 1.1
+    Xboxes available in the United Kingdom. The outward physical differences between
+    Xbox version 1.1 and 1.0 on the motherboard were subtle: the GPU traded its fan
+    for a larger heat sink, the USB daughtercard was merged into the motherboard,
+    and a PLL clock synthesizer chip was missing. Also missing were filter capacitors
+    here and there, but nothing significant seemed to have changed. Further probing
+    revealed that the hole leveraged by the MIST attack was patched, but the jam table
+    opcodes were unchanged. The LPC bus, a key vector for gaining access to the Xbox,
+    was also present and unchanged.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Andy was able to extract the MCPX ROM in one day using a procedure thought up
+    by a fellow hacker named Asterisk. The procedure leveraged an undisclosed combination
+    of previously identified security holes and back doors. The initial analysis of
+    the ROM contents revealed that the security was implemented in a radically different
+    fashion. A cursory overview of the version 1.1 Xbox revealed that the old security
+    through obscurity scheme was tossed out, and replaced with a scheme that nominally
+    gets its security from the strength of public-key ciphers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![figure_9-2](../Images/figure_9-2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '**Figure 9-2:** Xbox Security Version 1.1\. Regions that cannot be changed
+    without replacing the MCPX silicon are shaded gray.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Microsoft’s implementation of the new security scheme was a bit counter-intuitive,
+    though. Because the secret boot ROM within the MCPX remained the same size, 512
+    bytes, they could not fit the full public-key digital signature algorithm within
+    the secret boot ROM. Instead, they chose to use a lightweight hash in the secret
+    boot ROM to verify a region of FLASH ROM dubbed the Flash Boot Loader (FBL). The
+    FBL contains the code (RSA cipher, SHA-1 hash, Microsoft’s public key, and the
+    driver program) for digital signature verification of the FLASH ROM. The FBL is
+    executed only if the FBL’s hash can be verified against a constant stored within
+    the secret boot ROM. Thus, the FBL is in theory as immutable as the secret boot
+    ROM, even though it is stored in the mutable FLASH ROM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although this scheme sounded fairly bulletproof, the hacking community did not
+    give up so easily. They examined the secret boot ROM’s hash in detail and discovered
+    that it is based on TEA, a Tiny Encryption Algorithm by David Wheeler and Roger
+    Needham at the Computer Laboratory of Cambridge University. Franz Lehner, a collaborator
+    in the effort, sent a query to the newsgroup sci.crypt regarding weaknesses in
+    the TEA hash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On Friday afternoon, October 11th, their query was answered. A paper written
+    by John Kelsey, Bruce Schneier, and David Wagner, presented in CRYPTO 1996 pointed
+    out that the TEA cipher has a weakness in its key scheduler where every key has
+    three related keys that can be generated by inverting certain pairs of bits (this
+    weakness, along with the TEA cipher, is discussed in more detail in Chapter 7).
+    On Saturday, Andy Green posted this to XboxHacker.net:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: In other words, the related-key weakness of the TEA cipher means that every
+    adjacent pair of double words in the FBL can be modified by one bit, the most
+    significant bit, without any change to the resulting hash. This weakness gave
+    Andy and his team enough breathing room to modify the target of a single jump
+    instruction to point to a location in main memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Profile: Andy Green**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Can you tell us a little bit more about yourself, and how you got into hacking?**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I am 37, living in England, near Kettering in the East Midlands, with my wife,
+    our four children and two cats.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I have been interested in computers from the age of 12 or so, when my brother
+    bought a Commodore Pet. This 1MHz 6502 kept me occupied for months and months
+    trying to write first BASIC code typed in from magazines, then games for it; eventually
+    I wrote a fantastic character-cell Space Invaders thing in machine code. Machine
+    code is where you are actually programming the CPU directly in hex; I still remember
+    the common 6502 opcodes in hex now. This was such a dificult effort that I decided
+    my next project would be an assembler written in machine code. 1978 was before
+    the days of the Internet: I couldn''t afford the commercial assemblers because
+    I was just a kid and there weren''t any people around us that I knew to warez
+    a copy from.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This was fairly pathetic as assemblers go, but it worked fine. I learned from
+    this the value of having the right tools, I could write far faster in Assembler,
+    and whole kinds of errors miscomputing relative branches by hand, for example)
+    went completely away. Next I had a BBC Model B computer, and again I was interested
+    to make tools and games. I was offered a scholarship at a public school, but turned
+    it down and instead left school at 16 with no further education. I was quite content
+    to teach myself anything that interested me.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I sold a few games for this and another 6502 platform called the Oric, and with
+    that money started up a company making Assemblers and other development tools.
+    On the way I learned C and C++, and each time I stepped up whole rafts of bugs
+    and timewasting miseries disappeared.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Its like that picture on the “Ascent of Man,” from Nethanderal relative branch
+    computation through to Homo Erectus with his virtual functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Alongside this I began to explore digital hardware design, again teaching myself
+    from experience. I discovered that hardware and software are two sides of the
+    same coin, although they are treated completely separately in education. It’s
+    really an implementation detail whether you choose to make your logical function
+    in software or in hardware, or some mixture of the two. Having a foot in both
+    camps gives greater insight into the nature of design: for example, C++ can be
+    said to borrow many concepts from electronics in terms of the importance of interfaces.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recently before becoming interested in the Xbox I had been working for a US-owned
+    company with an office in Oxford, doing many jobs but the last one was designing
+    smartcard silicon. Although the design was interesting and there were some great
+    people working in the trenches there, I became increasingly despondent about the
+    politics and problems with the management. Nor did it help that despite being
+    spread across several projects, I was paid 2/3rds the salary of staff in San Jose
+    simply because I was based in the UK. And don't get me started about the patents
+    they had from me with no reward. In December 2001 I discovered that integrity
+    was more important than money, resigned, and decided to go back to working for
+    myself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I had been rather tenderized by some unpleasant experiences on leaving this
+    company, while digesting these I found myself snagged by the vast difference in
+    outlook between the ugly, grabbing, controlling instincts of your average company
+    involved in Intellectual Property, and the nature of GPL projects and the people
+    involved in encouraging a reduction in the severity of patent and copyright laws.
+    As time went on I increasingly came to see Microsoft, and the previous company
+    I was working for in the same light.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It was after this that I read about bunnie's hack on Slashdot. I read about
+    bunnie's methods with some tart emotions. My main thoughts were that this was
+    something that I could have done, since I have been using the FPGAs that bunnie
+    used since 1989, admiration for the conciseness of the attack, and dismay with
+    myself that I had not been doing something equally cool and interesting — and
+    that matched with my philosophical predilictions — with my time. Instead I was
+    sitting there reading Slashdot, drinking coffee, contributing nothing. (An aside,
+    I think this is a fairly common experience for many Slashdot readers, to be a
+    little jealous and challenged when they read about someone else's cool hacks.
+    I think it explains the constant background noise there of jeering and questioning
+    why someone would want to do such a thing.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Over the next few weeks I gathered as much information as I could on the internals
+    of the Xbox; Xboxhacker.net was crucial for this. It’s also where I met Michael
+    Steil as the Xbox Linux project was starting. Pretty soon I was able to identify
+    interesting projects that I could contribute to, for example the Milksop project.
+    Again from this, with Surferdude's help, it became possible for me to put together
+    the very first clean ROM which was able to boot and keep up the Xbox without being
+    reset. This later became the basis of the crom 1MB Linux and cromwell, the Xbox
+    Linux clean ROM. After the initial hacks and designs, I decided to work almost
+    entirely towards the Xbox Linux goal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Can you tell us why you hack the Xbox?**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why? Everyone has different reasons, but for me it was my comprehension of Microsoft's
+    outrageous antitrust behaviour — deny everything, appeal everything, delay everything,
+    and in the meanwhile, create and dump (for they are sold at below cost) on the
+    market millions of Microsoft-only PCs — the Xbox. Since our representatives here
+    in Europe and the U.S. don't seem to care (perhaps, as was the case recently in
+    the EU, because they plan to go work for Microsoft and take their silver pieces),
+    it would be an honour to be part of pricking this evil plan of a bloated monopoly
+    using the weapons of the GPL and Linux. I know that people shut their eyes and
+    think of their share options, but it must be hard for decent people — and surely
+    most of the people working there are this — to work for such a monster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I was lucky enough to get a couple of contracts through 2002 that allowed me
+    to spend the latter part of the year working exclusively on getting the first
+    Linux kernel up in crom and bringing Cromwell up so it was able to control the
+    main peripherals of the box and boot Linux from HDD or CD. Since then my share
+    of the Project A prize money (thanks to donor Michael Robertson) wil allow me
+    to continue working full time, for the next few months at least.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Do you have any advice you’d like to share?**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: My final thought is to encourage people, especially young people, to listen
+    to their brain when it comes to things that interest them. Don't be afraid to
+    dig around and try to learn about things that snag your attention. That feeling
+    you get when you wish you understood something, a kind of yearning, is your brain's
+    way of telling you that it thinks the knowledge might be useful later. If you
+    listen to it enough, you stand a good chance of knowing the right thing at the
+    right time to make some small difference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That single location can be pre-loaded with a follow-up jump instruction back
+    into any piece of user code using the previously discussed jam table codes. The
+    Xbox hacking community had come together in a heroic effort and cracked Xbox security
+    version 1.1 in three days. A separate effort, no less valiant, by Xecuter had
+    also cracked the security in the same time frame.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first moral of this story is that security is only as strong as its weakest
+    link. While there is little doubt about the robustness of the RSA cipher and the
+    SHA-1 hash for digital signature purposes, these were not the only elements of
+    the security system. The TEA cipher used to extend the secure boot ROM’s trust
+    sphere into the FLASH ROM had flaws that allowed hackers to walk around the strong
+    digital signature algorithms. This leads us to our second moral: complexity breeds
+    weaknesses. Complex systems are difficult to design, test, and analyze. The version
+    1.1 security for the Xbox was probably implemented on a short fuse, so there was
+    insufficient time to analyze the system for weaknesses. Either that, or Microsoft
+    knew about the TEA weakness and designed this back door into the system to mitigate
+    the risk of locking their FBL into silicon. It seems rather doubtful that Microsoft
+    intentionally included this back door, since modifying the MCPX silicon is a very
+    expensive proposition (although the expense ended up on nVidia’s books). On the
+    other hand, complexity is hard to avoid. My advisor at MIT, Tom Knight, once told
+    me, “There are two kinds of designs in this world: those that are useful, and
+    those that you can formally prove to be correct.” To some extent, the only way
+    to ensure the security of a real-world system is to make its details open (no
+    security through obscurity!) and subject the system to analysis from all angles.
+    In a way, a thorough analysis of Xbox security is being conducted at no expense
+    to Microsoft, thanks to the hacker community.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even if Microsoft had used a stronger hash function in the secret boot ROM,
+    there are still a number of viable attacks on the Xbox that have yet to be tried.
+    One can mount a man-in-the-middle attack on the HyperTransport bus (see Chapter
+    8) by overdriving the signals with carefully timed pulses. This attack is fairly
+    simple to implement, since each HyperTransport bus trace has a test point visible
+    from the component side of the motherboard. A complete hardware solution would
+    involve an FPGA on a board with “pogo pin” bed-of-nails style test connectors.
+    This board can be impressed upon these test points without any solder. Another
+    attack, suggested by Adi Shamir to me at the CHES conference, is to employ a timed
+    glitch in the CPU clock or power supply to upset the calculation of a jump target
+    address. This kind of attack has been applied with success to the processors in
+    cryptographic smart cards. Again, this kind of attack can be implemented fairly
+    easily and cheaply as a user-installable module. (Keep in mind that a much broader
+    range of attacks is available to hackers if the goal is a onetime defeat of the
+    security to recover, for example, a secret key or a block of critical code.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The Threat of Back Doors**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As this chapter has demonstrated, searching for back doors is a practical method
+    for attacking cryptographically secured hardware. The relatively high success
+    rate of finding back doors in the Xbox is partially because the Xbox represents
+    the first significant attempt made by a vendor to cryptographically secure a PC.
+    Despite the lessons learned from the Xbox experience, future secure PC implementations
+    are still at risk of having hardware security weaknesses, since the legacy of
+    the PC is an open and unsecured hardware architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Profile: Franz Lehner**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Franz Lehner, 29, lives in Austria with his girlfriend. He studied Electrical
+    Engineering for 5 years. Now, he programs “automated solutions” while running
+    an ISP. In his spare time, he searches for projects that are fun and educational.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After finding bunnie’s Xbox hacking document, he met the Xbox-Linux team on
+    sourceforge.net. He joined the Xbox-Linux project to learn about team programming,
+    Linux kernel hacking and debugging, and cryptographic systems. He also joined
+    the Xbox-Linux project to develop a better understanding of related systems, such
+    as Palladium.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PC hardware is complex yet fragile, and building a chain of trust out of it
+    is difficult because of this brittleness. Fundamentally, each component in a PC
+    is designed to be “trusting” of its physical environment. The specifications for
+    any commercial integrated circuit component clearly state that the IC is guaranteed
+    to operate over a bounded range of temperatures, voltages, frequencies, and other
+    conditions. If these maximum ratings are violated, then the behavior of the device
+    is “undefined,” and al bets are off. Most chip engineers do not even consider
+    trying to make their circuits recover gracefully from an out-of-range condition,
+    as it is already hard enough to get a chip to work under the specified operating
+    conditions. Furthermore, most consumer applications are very cost-sensitive, and
+    the overhead of building in robust fault tolerance measures results in a product
+    that is not price-competitive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thus, chips are typically implemented with no internal error-checking. If, for
+    some reason, the Arithmetic Logic Unit (ALU, the computational “brains” of a CPU)
+    adds two numbers incorrectly, the problem will only manifest itself symptomatically;
+    you can observe only the effects of such an error, sometimes long after the error-causing
+    event. One can think of attacks that take advantage of faults induced by out-of-range
+    conditions as the analogy of buffer overruns in the software world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another problem with the PC architecture is that the processor is too trusting
+    of its code environment. The Pentium processor architecture has no provision in
+    hardware for discriminating between code that is insecure or secure. If the instruction
+    pointer happens to find its way into an insecure code segment through a bug or
+    an induced failure, the processor will happily execute this code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '![](../Images/index-167_1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '**Code compartmentalization based on hardware security** **levels is a different
+    technique from sand-boxing. Sand****boxing does not provide an adequate solution
+    for situa****tions where a user program requires direction from or in****teraction
+    with secret or protected code or data. Lately,** **new processor architectures
+    have been proposed that can** **solve this problem through the use of data tags
+    that embed** **a sort of security audit log.⁵**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another source of back doors are the design bugs that exist in every complex
+    chip. It is common practice to ship chips with plenty of known bugs, also known
+    as errata. For example, the Intel i860 XP processor (first released in 1991, not
+    to be confused with the recently released i860 chipset for the Pentium4 processor)
+    shipped with a book of errata that was comparable in size to the processor’s data
+    sheet. Another example closer to home is the bug in the nVidia MCPX’s address
+    space decoder that made the MIST Premature Unmap attack possible. Most of these
+    errata have simple work-arounds or have minor implications for the functionality
+    of the chip under nominal conditions. However, some errata, such as those dealing
+    with cache coherence, address decoding, and memory management can result in major
+    *software* security holes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the case of the Xbox, the business impact of a hardware back door is probably
+    small. Perhaps Microsoft loses some small fraction of game sales revenue, but
+    the losses due to piracy are dwarfed by the losses Microsoft takes on hardware
+    sales. Also, the Xbox is just a game console — grandma’s bank account is not being
+    tapped dry or credit card numbers stolen as a result of security weaknesses in
+    the Xbox. However, more than game revenues will be at risk with the trusted PC.
+    Unless the trusted PC architecture is a fundamental change from legacy PCs, people
+    will be blindly trusting financial secrets and personal data security to untrustworthy
+    hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Like most things in life, the first step is education. The more we learn about
+    hardware security, even if it involves poking around a game console, the better
+    our security systems will be tomorrow. Now, on with the lesson . . .
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ¹ From Andy Green’s 19th Annual Chaos Communication Congress presentation on
+    Xbox security hacking.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ² From an article by the Inquirer, http://www.theinquirer.net/?article=4735
+  prefs: []
+  type: TYPE_NORMAL
+- en: ³ From Andy Green’s 19th Annual Chaos Communication Congress presentation on
+    Xbox security hacking.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ⁴ Posting from www.xboxhacker.net under the Xbox Hacker BBS- > Xbox Hacking
+    (TECHNICAL) -> BIOS/Flash ROM/Firmware -> News from the Xbox Linux Team, MS ‘made
+    a hash of it,’ guts exposed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ⁵ http://www.ai.mit.edu/projects/aries/Documents/Memos/ARIES-15.pdf. “A Minimal
+    Trusted Computing Base for Dynamically Ensuring Secure Information Flow,” by Tom
+    Knight and Jeremy Brown.
+  prefs: []
+  type: TYPE_NORMAL

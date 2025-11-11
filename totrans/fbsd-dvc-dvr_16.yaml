@@ -1,0 +1,519 @@
+- en: 'Chapter 16. Network Drivers, Part 1: Data Structures'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*Network devices*, or *interfaces*, transmit and receive data packets that
+    are driven by the network subsystem (Corbet et al., 2005). In this chapter, we’ll
+    examine the data structures used to manage these devices: `ifnet`, `ifmedia`,
+    and `mbuf`. You’ll then learn about Message Signaled Interrupts, which are an
+    alternative to traditional interrupts and are commonly used by network devices.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To keep things simple, we’ll examine only Ethernet drivers. Also, I won’t provide
+    a discussion on general networking concepts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network Interface Structures
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'An `ifnet` structure is the kernel’s representation of an individual network
+    interface. It is defined in the `<net/if_var.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: I’ll demonstrate how `struct ifnet` is used in [Hello, world!](ch16s05.html
+    "Hello, world!") in [Hello, world!](ch16s05.html "Hello, world!"). For now, let’s
+    look at its method fields.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137507.png) `if_init` field identifies
+    the interface’s init routine. *Init routines* are called to initialize their interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137505.png) `if_ioctl` field
+    identifies the interface’s ioctl routine. Characteristically, ioctl routines are
+    used to configure their interface (for example, for setting the maximum transmission
+    unit).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137501.png) `if_input` field
+    identifies the interface’s input routine. An interface sends an interrupt whenever
+    it receives a packet. Its driver-defined interrupt handler then calls its *input
+    routine* to process the packet. Note that this is a departure from the norm. Input
+    routines are called by a driver, while the other routines are called by the network
+    stack. The `if_input` field generally points to a link layer routine (for example,
+    `ether_input`) rather than a driver-defined routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Obviously, link layer routines are kernel defined. Method fields that expect
+    a link layer routine should be defined by an `*ifattach` function (such as `ether_ifattach`),
+    not directly by a driver. `*ifattach` functions are described in [Network Interface
+    Structure Management Routines](ch16s02.html "Network Interface Structure Management
+    Routines") in [Network Interface Structure Management Routines](ch16s02.html "Network
+    Interface Structure Management Routines").
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137499.png) `if_output` field
+    identifies the interface’s output routine. *Output routines* are called by the
+    network stack to prepare an upper-layer packet for transmission. Every output
+    routine ends by calling its interface’s ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    transmit routine. If an interface lacks a transmit routine, its ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    start routine is called instead. Typically, when a network driver defines a transmit
+    routine, its start routine is undefined, and vice versa. The `if_output` field
+    generally points to a link layer routine (for example, `ether_output`) rather
+    than a driver-defined routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137503.png) `if_start` field
+    identifies the interface’s start routine. Before I describe start routines, it’s
+    important to discuss ![](httpatomoreillycomsourcenostarchimages1137517.png) send
+    queues. Send queues are filled by output routines. *Start routines* remove one
+    packet from their send queue and deposit it in their interface’s transmit ring.
+    They repeat this process until the send queue is empty or the transmit ring is
+    full. Transmit rings are simply ring buffers used for transmission. Network interfaces
+    use ring buffers for transmission and reception.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137513.png) `if_transmit` field
+    identifies the interface’s transmit routine. Transmit *routines* are an alternative
+    to start routines. Transmit routines maintain their own send queues. That is,
+    they forego the ![](httpatomoreillycomsourcenostarchimages1137517.png) predefined
+    send queue, and output routines push packets directly to them. Transmit routines
+    can maintain multiple send queues, which makes them ideal for interfaces with
+    multiple transmit rings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137511.png) `if_qflush` field
+    identifies the interface’s qflush routine. *Qflush routines* are called to flush
+    the send queues of transmit routines. Every transmit routine must have a corresponding
+    qflush routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137509.png) `if_resolvemulti`
+    field identifies the interface’s resolvemulti routine. *Resolvemulti routines*
+    are called to resolve a network layer address into a link layer address when registering
+    a multicast address with their interface. The `if_resolvemulti` field generally
+    points to a link layer routine (for example, `ether_resolvemulti`) rather than
+    a driver-defined routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137515.png) `if_reassign` field
+    identifies the interface’s reassign routine. Reassign *routines* are called before
+    their interface is moved to another virtual network stack (vnet). They perform
+    any tasks necessary before the move. The `if_reassign` field generally points
+    to a link layer routine (for example, `ether_reassign`) rather than a driver-defined
+    routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `if_watchdog` field is deprecated and must *not* be defined. In FreeBSD
+    version 9, `if_watchdog` will be removed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network Interface Structure Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following functions for working with `ifnet`
+    structures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: An `ifnet` structure is a dynamically allocated structure that’s owned by the
+    kernel. That is, you cannot allocate a `struct ifnet` on your own. Instead, you
+    must call `if_alloc`. The ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    type argument is the interface type (for example, Ethernet devices are `IFT_ETHER`).
+    Symbolic constants for every interface type can be found in the `<net/if_types.h>`
+    header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Allocating an `ifnet` structure does not make the interface available to the
+    system. To do that, you must initialize the structure (by defining the necessary
+    fields) and then call `if_attach`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `if_initname` function is a convenient function for setting an ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    interface’s ![](httpatomoreillycomsourcenostarchimages1137503.png) name and ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    unit number. (Needless to say, this function is used before `if_attach`.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: When an `ifnet` structure is no longer needed, it should be deactivated with
+    `if_detach`, after which it can be freed with `if_free`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ether_ifattach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `ether_ifattach` function is a variant of `if_attach` that’s used for Ethernet
+    devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This function is defined in the */sys/net/if_ethersubr.c* source file as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function takes an ifnet structure, ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    ifp, and a link layer address, ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    lla, and sets up `ifp` for an Ethernet device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, it assigns certain values to `ifp`, including assigning the
+    appropriate link layer routine to ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `if_output`, ![](httpatomoreillycomsourcenostarchimages1137505.png) `if_input`,
+    ![](httpatomoreillycomsourcenostarchimages1137507.png) `if_resolvemulti`, and
+    ![](httpatomoreillycomsourcenostarchimages1137509.png) `if_reassign`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ether_ifdetach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `ether_ifdetach` function is a variant of `if_detach` that’s used for Ethernet
+    devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function is used to deactivate an `ifnet` structure set up by `ether_ifattach`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network Interface Media Structures
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'An `ifmedia` structure catalogs every media type that is supported by a network
+    interface (for example, 100BASE-TX, 1000BASE-SX, and so on). It is defined in
+    the `<net/if_media.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Network Interface Media Structure Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following functions for working with ifmedia
+    structures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: An `ifmedia` structure is a statically allocated structure that’s owned by a
+    network driver. To initialize an `ifmedia` structure, you must call `ifmedia_init`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137499.png) `dontcare_mask` argument
+    marks the bits in ![](httpatomoreillycomsourcenostarchimages1137507.png) ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    `mword` that can be ignored. Usually, `dontcare_mask` is set to `0`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The ![](httpatomoreillycomsourcenostarchimages1137501.png) `change_callback`
+    argument denotes a callback function. This function is executed to change the
+    media type or media options. Here is its function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Users can change an interface’s media type or media options with `ifconfig(8)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The ![](httpatomoreillycomsourcenostarchimages1137503.png) `status_callback`
+    argument denotes a callback function. This function is executed to return the
+    media status. Here is its function prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Users can query an interface’s media status with `ifconfig(8)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `ifmedia_add` function adds a media type to ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `ifm`. The ![](httpatomoreillycomsourcenostarchimages1137507.png) `mword` argument
+    is a 32-bit “word” that identifies the media type. Valid values for `mword` are
+    defined in `<net/if_media.h>`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the `mword` values for Ethernet devices:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As an example, the `mword` value for 100BASE-TX is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[Table 16-1](ch16s04.html#bit-by-bit_breakdown_of_mword "Table 16-1. Bit-by-Bit
+    Breakdown of mword") describes how each bit in `mword` is used. It also displays
+    the bitmasks that can be passed to `dontcare_mask` to ignore those bits.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 16-1. Bit-by-Bit Breakdown of `mword`
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Bits | Purpose of Bits | Mask to Ignore Bits |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 00–04 | Denotes the media type variant (for example, 100BASE-TX) | `IFM_TMASK`
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 05–07 | Denotes the media type (for example, Ethernet) | `IFM_NMASK` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 08–15 | Denotes the media type specific options | `IFM_OMASK` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 16–18 | Denotes the media type mode (for multimode media only) | `IFM_MMASK`
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 19 | Reserved for future use | n/a |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 20–27 | Denotes the shared options (for example, force full-duplex) | `IFM_GMASK`
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 28–31 | Denotes the `mword` instance | `IFM_IMASK` |'
+  prefs: []
+  type: TYPE_TB
+- en: The ![](httpatomoreillycomsourcenostarchimages1137509.png) `data` and ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `aux` arguments allow drivers to provide metadata about `mword`. Because drivers
+    typically have no metadata to provide, `data` and `aux` are frequently set to
+    `0` and `NULL`, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `ifmedia_set` function sets the default ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    media type for ![](httpatomoreillycomsourcenostarchimages1137513.png) `ifm`. This
+    function is used only during device initialization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `ifmedia_removeall` function takes an ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    `ifmedia` structure and removes every media type from it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hello, world!
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that you’re familiar with the if* structures and their management routines,
+    let’s go through an example. The following function, named `em_setup_interface`
+    and defined in */sys/dev/e1000/if_em.c*, sets up `em(4)`’s `ifnet` and `ifmedia`
+    structures. (The `em(4)` driver is for Intel’s PCI Gigabit Ethernet adapters.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can be split into three parts. The first ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    allocates an ![](httpatomoreillycomsourcenostarchimages1137503.png) Ethernet-specific
+    `ifnet` structure and stores it in ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `adapter->ifp`. Then `adapter->ifp` is defined and ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    activated. (Here, adapter is the name for em(4)’s softc structure.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second part ![](httpatomoreillycomsourcenostarchimages1137507.png) outlines
+    and ![](httpatomoreillycomsourcenostarchimages1137509.png) enables the interface’s
+    features, such as ![](httpatomoreillycomsourcenostarchimages1137511.png) Wake-on-LAN
+    (WOL). (*WOL* is an Ethernet standard that allows a computer to be turned on,
+    or woken up, by a network message.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third part ![](httpatomoreillycomsourcenostarchimages1137513.png) initializes
+    an `ifmedia` structure, ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    adds the interface’s supported media to it, and ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    defines the default media type as *automatically select the best media*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Of course, `em_setup_interface` is called during `em(4)`’s `device_attach` routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: mbuf Structures
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An `mbuf` structure is a memory buffer for network data. Commonly, this data
+    spans multiple `mbuf` structures, which are arranged into a linked list known
+    as an *mbuf chain*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`struct mbuf` is defined in the `<sys/mbuf.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Every `mbuf` structure contains a ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    buffer for data and a ![](httpatomoreillycomsourcenostarchimages1137499.png) header,
+    which looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We’ll walk through an example that uses mbufs in [Chapter 17](ch17.html "Chapter 17. Network
+    Drivers, Part 2: Packet Reception and Transmission"). For more on mbufs, see the
+    `mbuf(9)` manual page.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Message Signaled Interrupts
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Message Signaled Interrupts (MSI) and Extended Message Signaled Interrupts (MSI-X)
+    are alternative ways to send interrupts. Traditionally, devices include an interrupt
+    pin that they assert in order to generate an interrupt, but MSI- and MSI-X-enabled
+    devices send some data, known as an *MSI message* or *MSI-X message*, to a particular
+    memory address in order to generate an interrupt. MSI- and MSI-X-enabled devices
+    can define multiple unique messages. Subsequently, drivers can define multiple
+    unique interrupt handlers. In other words, MSI- and MSI-X-enabled devices can
+    issue different interrupts, with each interrupt specifying a different condition
+    or task. MSI- and MSI-X-enabled devices can define up to 32 and 2,048 unique messages,
+    respectively. (MSI and MSI-X are not exclusive to network devices. They are, however,
+    exclusive to PCI and PCIe devices.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing MSI
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Unlike with previous topics, I’m going to take a holistic approach here. Namely,
+    I’m going to show an example first, and then I’ll describe the MSI family of functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following function, named `ciss_setup_msix` and defined in */sys/dev/ciss/ciss.c*,
+    sets up MSI for the `ciss(4)` driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This function was chosen solely because it’s simple. The fact that it’s from
+    `ciss(4)` is irrelevant.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function is composed of four parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    ensures that the device actually supports MSI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second part determines the number of unique ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    MSI-X or ![](httpatomoreillycomsourcenostarchimages1137503.png) MSI messages the
+    device maintains, and stores the answer in `count`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third part allocates `count` ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    *MSI-X* or ![](httpatomoreillycomsourcenostarchimages1137507.png) *MSI vectors*,
+    which connect each message to a `SYS_RES_IRQ` resource with a rid of 1 through
+    count. Thus, in order to assign an interrupt handler to the eighth message, you’d
+    call `bus_alloc_resource_any` (to allocate a `SYS_RES_IRQ` resource) and pass
+    8 as the `rid` argument. Then you’d call `bus_setup_intr` as usual.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lastly, the fourth part ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    saves the `rid` of each MSI-X or MSI message in the `ciss_irq_rid` array.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Naturally, this function is called during `ciss(4)`’s `device_attach` routine,
+    like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how MSI is ![](httpatomoreillycomsourcenostarchimages1137499.png) ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    set up before ![](httpatomoreillycomsourcenostarchimages1137503.png) acquiring
+    an IRQ. Additionally, notice how the ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `rid` argument is `ciss_irq_rid`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As of this writing, `ciss(4)` supports only the first MSI-X or MSI message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MSI Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following functions for working with MSI:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `pci_msix_count` and `pci_msi_count` functions return the number of unique
+    MSI-X or MSI messages maintained by the device `dev`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `pci_alloc_msix` and `pci_alloc_msi` functions allocate `count` MSI-X or
+    MSI vectors based on `dev`. If there are not enough free vectors, fewer than `count`
+    vectors will be allocated. Upon a successful return, count will contain the number
+    of vectors allocated. (MSI-X and MSI vectors were described in [Implementing MSI](ch16s08.html
+    "Implementing MSI") in [Message Signaled Interrupts](ch16s07.html "Message Signaled
+    Interrupts").)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `pci_release_msi` function releases the MSI-X or MSI vectors that were allocated
+    by `pci_alloc_msix` or `pci_alloc_msi`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter examined `ifnet`, `ifmedia`, and `mbuf` structures, as well as
+    MSI and MSI-X. In [Chapter 17](ch17.html "Chapter 17. Network Drivers, Part 2:
+    Packet Reception and Transmission"), you’ll use this information to analyze a
+    network driver.'
+  prefs: []
+  type: TYPE_NORMAL

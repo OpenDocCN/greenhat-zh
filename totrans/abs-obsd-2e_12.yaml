@@ -1,0 +1,987 @@
+- en: Chapter 12. Connecting to the Network
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*My tunnel is now up.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*I can do IPv6.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Me and three others.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages1616079.png) All that theory of IPv4
+    and IPv6 is fine. Now let’s do something with it, and actually connect to a network.
+    While dial-up connections work with OpenBSD, they’re not used much these days,
+    so we’ll focus on Ethernet connections. Ethernet is the most common network type
+    today, and the most common network interface on OpenBSD systems.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most people have IPv4 connectivity, but IPv6 is increasingly important. If you
+    can’t get native IPv6 to your network, you can use a tunnel to reach IPv6 address
+    space and provide IPv6 to your clients. I’ll cover acquiring and configuring such
+    a tunnel in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, OpenBSD can combine network connections into trunks or split them into
+    virtual local area networks (VLANs). This chapter covers both approaches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DNS Resolution
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You’ll probably want to use hostnames rather than IP addresses, so that you’ll
+    be able to browse to *[http://www.cnn.com/](http://www.cnn.com/)* instead of *[http://157.166.255.18](http://157.166.255.18)*.
+    Unix-like systems use the *resolver* to accomplish this feat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Most hosts use two tools to map between IP addresses and hostnames: the *hosts*
+    file and DNS. (Different operating systems support additional name services, such
+    as YP, LDAP, NIS, and so on, but dang near every system supports these two.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The *hosts* file is a text file on the local machine that contains static IP
+    address and hostname lists. DNS is a more dynamic service that reaches across
+    the network to find information. You can specify DNS servers by IP address, but
+    we’ll look at the *hosts* file in a little more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What if you prefer IPv4 or IPv6 addresses? Or you want the *hosts* file to override
+    DNS? Maybe you have a default domain that your queries should use. The resolver
+    searches until it either finds the first answer or has exhausted its information
+    sources, so these questions matter. Tell your resolver your needs in */etc/resolv.conf*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/resolv.conf File
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You configure the resolver behavior in */etc/resolv.conf*. A system without
+    */etc/resolv.conf* can find only hostnames listed in the *hosts* file. Because
+    the *hosts* file starts off empty, that’s probably not what you want. Start by
+    specifying domain names.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Default Search Domains
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: If you wanted to ping a host on a remote network, you might expect to need to
+    specify the whole domain. Entering **`ping www.openbsd.org`** should work. But
+    if you wanted to ping your company’s web server, it would make more sense to just
+    type **`ping www`**. And you can, because OpenBSD allows you to specify default
+    domains, so that when you type in a short hostname, it will try to find the proper
+    host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, if you have only one local domain, you would list the domain keyword
+    in */etc/resolv.conf* like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, when I enter `ping ftp`, the resolver should get the IP address of the
+    host *ftp.michaelwlucas.com*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you have more than one local domain, use the `search` keyword and a list
+    of domains, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: If I enter `ping ftp` now, the resolver should get the IP of the host *ftp.michaelwlucas.com*.
+    Once the resolver learns that no such host exists, it will check for *ftp.openbsd.org*.
+    Because that host exists, `ping` will start to work. The `search` keyword can
+    have up to six domains, and can be no longer than 1024 characters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Domain and Search
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'You can only use either `domain` or `search`. If you use both, the last entry
+    in the file wins. If you list multiple search or domain lines, the last one in
+    the file takes effect. Here’s how not to do it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: You might as well get rid of the two `search` statements. The resolver will
+    never go through those domain lists; it will use only the `domain` list because
+    it’s the last one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Name Servers
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Now that the resolver knows which domains to check by default, tell it which
+    name servers to use. List each name server on its own line, by IP address, in
+    order of preference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can list up to three name servers, by IP address. (Hostnames in a `nameserver`
+    entry won’t work, for fairly obvious reasons.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your *resolv.conf* doesn’t list a name server, the resolver should check
+    for a name server on the local machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lookup Order
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: You might get host information from DNS or from the *hosts* file. The resolver
+    should stop once it finds an answer to a query. If you check the *hosts* file
+    and then DNS, entries in the *hosts* file override the name server. If you check
+    the name server before the *hosts* file, the *hosts* file is used only when no
+    DNS record is available. Either approach has its uses, but by default, the resolver
+    checks the *hosts* file, and then checks DNS. To reverse this, use the `lookup`
+    keyword.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `file` option represents */etc/hosts*, while due to a historical accident,
+    `bind` represents DNS. (The first DNS server software was the Berkeley Internet
+    Name Domain server, or BIND.)The reverse (`file bind`) is the default, so there’s
+    no need to explicitly specify it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preferred IP Protocol
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: The resolver defaults to searching for IPv4 records first, and then looking
+    for IPv6 records. To reverse this, use the `family` keyword.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, the reverse is the default, so there’s no need to use this keyword in
+    that case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The /etc/hosts File
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The */etc/hosts* file matches IP addresses to hostnames. While the *hosts* file
+    is very simple, its contents are available only on the local machine. A *hosts*
+    file is most useful on a small private network, such as in your home or test lab.
+    You can also use a *hosts* file to override data from the DNS server, such as
+    when you want to test a new system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each line in */etc/hosts* represents one host. The first entry on each line
+    is an IP address. The second is the fully qualified domain name of the host. Following
+    these two entries, you can have an arbitrary number of aliases for that host.
+    I often add comments at the end of the line, prefixed with a hash mark (`#`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There was a time when I had a small network at home with only four machines:
+    the proxy/firewall, the wife’s desktop, my laptop, and the crash machine where
+    I did stupid things. The *hosts* file looked like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The machine `nat.blackhelicopters.org` at **1** also had the names `firewall`
+    and `gateway` at **2**. I added a note to remind myself at **3** not to run security
+    scanners against my wife’s desktop. (The machine `crashbox` is also called `test`.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Any machine with this *hosts* table could find any machine listed in the *hosts*
+    table by name. For example, I could run `ping boss` or `ssh crashbox` and reach
+    the desired machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The *hosts* file works just fine for finding networked hosts, but whenever you
+    add, remove, or change a machine, you must edit */etc/hosts* on every computer.
+    And every time you change an IP address, you must edit */etc/hosts* on every machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Unfortunately, */etc/hosts* does not scale. When I got a fifth machine, I added
+    an internal-only DNS server and emptied the *hosts* file on all of my systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Resolver vs. Dynamic Configuration
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If your OpenBSD system roams between networks, like a laptop, you probably use
+    DHCP to configure your network connection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DHCP overwrites */etc/resolv.conf* with the information for its network. This
+    is appropriate for most users, but if you’re carrying an OpenBSD laptop, you’re
+    not normal. You probably want some of your resolver configuration, such as your
+    domain search list, to remain in effect no matter what network you’re on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD supports permanent resolver configuration in the file */etc/resolv.conf.tail*.
+    When OpenBSD’s DHCP client gets */etc/resolv.conf* information from the server,
+    it writes to */etc/resolv.conf* and adds `/etc/resolv.conf.tail` to the end.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember how only the last `search` or `domain` keyword works? *resolv.conf.tail*
+    takes advantage of that, allowing you to override your network administrator’s
+    search order.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ethernet
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Ethernet is a shared network, meaning that many different machines can connect
+    to the same Ethernet and can communicate directly with each other. I’m going to
+    assume that you’re using Ethernet as found in an average office or datacenter.
+    Also, although Ethernet has been implemented over many different physical media,
+    I’ll assume you’re working with CAT5 or better cable—today’s most popular choice.
+    If you use some unusual media type, or your card supports multiple media, you
+    might need to manually set your preferred media on your interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Protocol and Hardware
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Ethernet is a *broadcast protocol*, which means that every packet you transmit
+    can be sent to every host on the network (although most Ethernet hardware limits
+    recipients). Either your network card or your device driver separates the data
+    intended for your computer from the data meant for other computers. A section
+    of Ethernet where all hosts can communicate directly with all other hosts, without
+    involving a router, is called a *collision domain* or *segment*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You connect Ethernet segments with *hubs*, which are hardware items that can
+    physically connect many Ethernet hosts. Network hubs forward all received frames
+    to all other network devices, and each host is responsible for filtering traffic.
+    This is old-school Ethernet, which can be useful for debugging network issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Switches* have largely supplanted hubs. Every Ethernet connection needs a
+    unique identifier, called a *MAC address* (or sometimes an *Ethernet address*),
+    which is a 48-bit number. Switches control the traffic sent to each host by filtering
+    on the MAC and IP address of attached devices and (mostly) forwarding frames only
+    to the devices they are meant for. Switching reduces the amount of traffic and
+    load on each individual system by decreasing the amount of traffic each host must
+    sort through.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: On i386 and amd64 hardware, the MAC address is a property of the card. On some
+    other platforms, such as SPARC, the MAC address is a property of the server itself.
+    Both IPv4 and IPv6 use the MAC address to find other hosts on the local network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: IPv4 and ARP
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: When a system needs to transmit data to another IP-based host on the local Ethernet,
+    it first broadcasts an Ethernet request asking, “Which MAC address is responsible
+    for this IP address?” If a host responds, further data for that IP is transmitted
+    to that MAC address. This process is handled by ARP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use `arp(8)` to view your system’s ARP table, which is the list of hosts that
+    your system knows. Enter `arp -a` to show all of the MAC addresses and IPv4 hostnames
+    your computer knows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, you see the three hosts on my Ethernet network that this host has communicated
+    with. I have more hosts, but because this machine hasn’t spoken with them lately,
+    they aren’t in the local ARP table.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If a MAC address shows up as `incomplete`, your machine has attempted to communicate
+    with this host but cannot get its MAC address. In this example, I’ve tried to
+    send data to the host `salmon`, but my computer can’t reach it. (Turning `salmon`
+    back on would help.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: IPv6 and Neighbor Discovery
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: IPv6 hosts also use MAC addresses to find each other through ND, an IPv6 protocol
+    introduced in the previous chapter. Interrogate your ND cache with `ndp(8)`. The
+    command-line flags used for `ndp` are intentionally similar to those for `arp`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Like the ARP cache, the ND cache shows an IPv6 address, a physical address,
+    the interface, and other details for each host. You’ll see more ND entries than
+    ARP entries because all of the link local addresses show up in the ND cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you try to reach a host that is directly attached to your local network and
+    it doesn’t respond, check the ND cache. If an ND cache entry shows up as `(incomplete)`,
+    as with ARP, there’s some sort of basic connectivity issue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Speed and Duplex
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Ethernet supports a variety of speeds. The slowest speed you’re likely to find
+    today is 10 megabits per second (Mbps), but it’s quickly disappearing. Most people
+    use either 10/100Mbps or 1 gigabit per second (Gbps), although you’ll see 10Gbps,
+    40Gbps, and 100Gbps Ethernet emerging.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The hosts and switch it’s connected to on your network must agree on the speed
+    of their connection. If the OpenBSD host thinks that it’s connected at 100Mbps,
+    but the switch thinks that the connection is 1Gbps, the connection will be flaky.
+    While *autonegotiation* usually makes both sides agree on common settings (and
+    is absolutely required for gigabit connections), you can manually set duplex and
+    speed for 10/100Mbps connections. Although some switch vendors are notorious for
+    poor autonegotiation, you should let your Ethernet configure itself whenever possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Duplex* determines if a card can both transmit and receive data simultaneously.
+    A *half-duplex* connection means that the Ethernet card is either transmitting
+    or receiving at a given instant; it cannot do both. A *full-duplex* connection
+    can both send and receive simultaneously. As with connection speed, if the switch
+    and host disagree on the duplex setting, the connection will be flaky. Gigabit
+    Ethernet connections involve much more than speed and duplex, and they *must*
+    be autonegotiated.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just because a device says that it can use the protocol defined as 10/100Mbps
+    Ethernet doesn’t mean that it can use that protocol with any speed. Also, a card
+    labeled “1Gbps” might not actually pass a gigabit per second. Some network cards
+    will pass their stated amount of traffic, while others will stagger and stumble
+    at a few percent of that. Switch quality varies widely, too.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This may make more sense if you think of an Ethernet’s stated speed as a language.
+    For example, I could claim that I speak Russian and German, but I stopped studying
+    foreign languages in 1985\. When I went to Germany in 2007, I managed about three
+    words a minute—with the aid of a translation card and phrase book. If I were an
+    Ethernet card, the manufacturer would claim I spoke German and Russian, and ship
+    me to Siberia.^([[33](#ftn.id309258)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Get decent hardware. Don’t ask on the OpenBSD mailing list, though. Someone
+    has asked about hardware recommendations in the past few months. Check the archives.
+    The advice hasn’t changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring Ethernet
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When configuring Ethernet for client computers, if your IPv4 network offers
+    DHCP, you should be able to plug right in. If you’re using IPv6, you should be
+    able to attach the cable and let autoconfiguration take over.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If a particular machine will be a server, a static IP address probably makes
+    more sense. Before assigning a static address, you’ll need the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An IP address (IPv4, IPv6 or both)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The netmask/prefix length(s)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The IP address(es) of the default gateway
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Armed with this information, attach your system to the network and keep reading.
+    I’ll first discuss using `ifconfig(8)` and `route(8)` to perform changes manually,
+    and then review how to set these automatically at boot. In any case, you must
+    configure the resolver as discussed at the beginning of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using ifconfig(8)
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you installed OpenBSD over a network, your Ethernet connection should already
+    be working, but it might not be set up exactly the way you like. To manage your
+    network interfaces, use the `ifconfig(8)` tool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s look at your Ethernet card and see what it has to say. Start by asking
+    your system about all of the interfaces it has installed, by running `ifconfig`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'All OpenBSD systems have three logical interfaces out of the box: `lo0`, `enc0`,
+    and `pflog0`. The `lo0` interface is the loopback interface, referring to the
+    local machine. The `enc0` interface is an encapsulation interface, intended for
+    IPsec traffic. Finally, `pflog0` is for logging PF traffic, as discussed in [Chapter 22](ch22.html
+    "Chapter 22. Advanced PF"). The rest of the interfaces are physical ones.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Unlike some operating systems, OpenBSD network interfaces are named after the
+    device driver of the underlying hardware. Here’s a sample list:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The interface `fxp0` uses the `fxp(4)` device driver, which the man page says
+    is an Intel EtherExpress PRO 10/100 card. As you can see at **1**, the interface
+    is up, meaning that it’s active and ready to use. The `lladdr` is the link local
+    address, or the MAC address of the card. This card is in the `egress` group. OpenBSD
+    uses interface groups in several places, including the packet filter, as discussed
+    in [Chapter 22](ch22.html "Chapter 22. Advanced PF").
+  prefs: []
+  type: TYPE_NORMAL
+- en: To see the type of physical media underlying the connection, check the `media`
+    line. This particular connection runs at 100Mbps full-duplex. The connection is
+    active, as shown at **2**; the physical layer has not only been configured, but
+    it also has a link light and is ready to go. The connection has been assigned
+    an IPv4 address and netmask, as shown at **3**. You can see on the two lines that
+    follow that both an IPv6 address and a link local IPv6 address have been assigned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use `ifconfig` to assign, change, or remove IP addresses from a network interface.
+    The OpenBSD installer offers to configure your network cards at boot, but if you
+    didn’t configure all of your interfaces during installation, or if you add or
+    remove network interfaces after installation, you will need to do so manually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding an IP Address
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: To add an IP address for IPv4, start with the interface’s assigned IP address
+    and netmask.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For example, if your network card is `fxp0`, your IP address is 192.0.2.55,
+    and the netmask is 255.255.255.128, you would run this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Specify the netmask in dotted-quad notation, hexadecimal, or even slash notation,
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: You don’t need to specify a netmask separately if you use a slash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Adding an IP address with IPv6 is a little different. Specify the address,
+    a slash, and the prefix length, but don’t try to add a separate netmask; just
+    use the slash that’s part of the address. Here’s an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Removing IP Addresses
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: If you need to remove an IP address from an interface, use the `delete` option
+    of `ifconfig` for both IPv4 and IPv6 addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The effect is immediate, so be sure you don’t lock yourself out of the system
+    by removing all of its reachable IP addresses, or by removing the only address
+    your SSH daemon is attached to. (In certain rare cases, existing connections to
+    deleted addresses might continue to work, but they probably won’t, so don’t count
+    on it.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multiple IP Addresses on One Ethernet Card
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: One network interface can respond to requests for multiple IP addresses, which
+    is important because a server might support hundreds or thousands of domains and
+    need an IP address for each. (This isn’t so important for plain websites, but
+    it can be important for SSL-based websites and protocols that rely on reverse
+    DNS.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: To add extra IP addresses to an interface, use *IP aliases*. IP aliases tell
+    a network card to “answer requests for this IP address as well as your own.” To
+    add aliased IP addresses, use `ifconfig` with the keyword `alias` after the interface
+    name to tell `ifconfig` this is an alias. Be sure to always use a netmask of 255.255.255.255,
+    or /32, for alias addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The interface listed here has a main IP address of 192.0.2.226 and an alias
+    IP address of 192.0.2.230.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When working with IPv6, add the `inet6` keyword, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: It’s important to realize that all outgoing connections on a host with one network
+    connection use the host’s primary IP address. For example, you might have 2000
+    IP addresses bound to one interface, but when you `ssh` out, the connection comes
+    from the primary address. Remember this when writing firewall rules and access
+    control lists, because while some programs have an option to set a different source
+    IP address, they’re the exception.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The OpenBSD kernel doesn’t really differentiate between the primary IP addresses
+    and aliases—it just keeps a list of IP addresses—but it will use the first address
+    on its list as the source address unless told otherwise. If a host has multiple
+    network connections, the source address of outgoing connections is the main IP
+    address of the network interface on which packets leave the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To remove an alias, use the `delete` option of `ifconfig` and give the IP address,
+    without the netmask.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: For IPv6, use `inet6 delete` instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you delete the main IP address on an interface, the first alias becomes the
+    main IP address. If you have no IP address aliases remaining and you remove the
+    interface’s main IP address, that interface stops passing IP traffic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring Default Routes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Use `route(8)` to configure the default route for each protocol.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: An IPv6 default route is almost identical, but you must add the `-inet6` modifier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Once you add IP addresses and default routes to your host, you should be able
+    to reach the rest of your network and the Internet. Now let’s see how to make
+    those changes across reboots.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Dynamic Configuration
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To have OpenBSD get an IPv4 address from a DHCP server, run `dhclient(8)` and
+    give it the name of the interface you want to configure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`dhclient` gets an IP address, overwrites */etc/resolv.conf*, and configures
+    the default route.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For IPv6, run `rtsol(8)` instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Remember that IPv6 autoconfiguration will not configure your resolver. You’ll
+    need to piggyback off your IPv4 DNS servers or manually configure */etc/resolv.conf*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring the Network at Boot
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: While `ifconfig(8)` is fine for changes on the fly, your system should configure
+    its interfaces correctly at boot, including any aliases on the interface, any
+    routes added when the interface comes up, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each interface has a configuration file, */etc/hostname.interfacename*, generically
+    called *hostname.if*. The `fxp0` interface on my desktop uses a configuration
+    file */etc/hostname.fxp0*, my wireless interface `wpi0` uses */etc/hostname.wpi0*,
+    and so on. At boot, OpenBSD’s */etc/netstart* script reads all of the *hostname.if*
+    files and, if it finds a matching physical interface or can create a matching
+    logical interface, it configures the interface accordingly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To configure an interface’s IPv4 address, enter a line in *hostname.if* in
+    this format:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: The broadcast address and options are optional. To use options but not specify
+    a broadcast address, use `NONE` for the broadcast address. You can also use a
+    slash for the netmask instead of the decimal equivalent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Similarly, add an IPv6 address with the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To give `fxp0` the IPv4 address of 192.0.2.226 255.255.255.240 and the IPv6
+    address of 2001:db8:0:12::2/64 at boot, use the following in */etc/hostname.fxp0*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, I also define an interface description that will show up in `ifconfig`
+    output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To create an IP address alias at boot, use the `alias` keyword in *hostname.if*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: To run a command when the interface comes up, put an exclamation point in front
+    of the command. Any commands run must be available on the root partition (for
+    example, in */bin* or */sbin*). This feature is most commonly used for routing,
+    but you could use other commands as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: To configure an interface dynamically, via DHCP (IPv4) or `rtsol` (IPv6), put
+    the string `dhcp` or `rtsol` on a line by itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Anything that’s not formatted as shown here is passed unedited to `ifconfig(8)`.
+    For example, to run a specific `ifconfig` command, put the arguments on their
+    own line in *hostname.if*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you simply want to activate a card, but not configure it, use the word `up`
+    on a line by itself to activate the interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And remember, you can test *hostname.if* changes with */etc/netstart*, specifying
+    an interface name if appropriate, like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Not including the interface name reconfigures all interfaces on the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Trunking
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Servers can have redundant hard drives, power supplies, and so on. OpenBSD supports
+    redundant network connections by combining multiple Ethernet links into a single
+    virtual link, or *trunk*. You might also know of this as *link aggregation*, *network
+    adapter teaming*, or *bonding*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Cisco people know of *trunks* as Ethernet links that support multiple concurrent
+    VLANs. Most vendors, including OpenBSD, don’t use the word *trunk* in that way.
+    OpenBSD supports sending multiple VLANs over a single link outside the `trunk(4)`
+    functionality.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Link Aggregation Protocols
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To use multiple physical links as a single large link, you need a way to distribute
+    traffic between the links. OpenBSD supports five different ways to distribute
+    frames between trunk members, though not all will work in all environments. For
+    a complete list see `trunk(4)`, but the protocols I recommend for real-world use
+    are Link Aggregation Control Protocol (LACP), roundrobin, and failover. LACP is
+    the industry standard for link aggregation. The physical interfaces are bonded
+    into a single virtual interface with roughly the same bandwidth as the sum of
+    the individual interfaces. LACP is very fault-tolerant, and just about every high-end
+    managed switch should support it. If your switch supports LACP, use it, but you
+    must configure LACP on the switch ports before this kind of trunk will pass traffic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the roundrobin method, OpenBSD sends frames across the trunk’s active connections
+    using a roundrobin scheduler. The trunk accepts incoming packets on any port,
+    and a roundrobin scheduler rotates between the trunk connections, with error and
+    edge handling added on top. Roundrobin trunks don’t need any special switch configuration;
+    they just need two ports in the same VLAN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the case of failover, OpenBSD sends and receives all traffic over the first
+    port in the trunk, and if that port fails, it switches to another active port.
+    The failover method doesn’t give you any additional bandwidth, but requires absolutely
+    no support from the switch, and it even works on old-fashioned hubs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Trunk Configuration
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As an example, let’s configure ports `em0` and `em1` into failover trunk `trunk0`.
+    The underlying ports have never been configured before, so begin by activating
+    these interfaces without any configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now create the failover trunk with `ifconfig(8)` and add these ports to it to
+    make the `trunk0` interface usable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: You could do this all in one long `ifconfig` command, but I find simpler, shorter
+    commands easier to understand when learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assign the interface an IP address just as you would a physical interface, and
+    add a default gateway to your system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should now have a failover trunk attached to your local network. To configure
+    another trunk protocol, just specify the desired trunk protocol when you create
+    the trunk. You’ll find a complete list of trunk protocols in `trunk(4)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Trunks at Boot
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Configure your trunk in */etc/hostname.if*. For example, suppose you need to
+    edit *hostname.em0*, *hostname.em1*, and *hostname.trunk0*. Both of the *em* files
+    contain only a single word:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: This activates the interfaces, but does no configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*hostname.trunk0* is more complicated.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can put all of these entries in a single line, just as you can configure
+    the trunk with a single `ifconfig` command, but again, I find multiple lines easier
+    to read and understand.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Your trunk should now start at boot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that trunks do not necessarily need to consist of interfaces that use
+    the same type of physical medium. If you’re feeling adventurous, you could try
+    to replicate what some OpenBSD developers and users have been known to do: Trunk
+    together a wired and a wireless network interface, and have all your connections
+    survive (graceful failover, remember?) when you yank the plug out of your Ethernet
+    port, or if you plug yourself back in and take your access point down for maintenance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: VLANs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: VLANs are a way to get multiple Ethernet segments on a single piece of wire.
+    You’ll sometimes see this referred to as *802.1q*, *tagging*, or a combination
+    of these terms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In OpenBSD terms, one wire can carry multiple networks, and by configuring an
+    additional interface, you can talk to those additional networks as if they had
+    their own private wire. The wire can still carry only so much data, however, so
+    all VLANs and the regular network (or *native VLAN*) that share the wire share
+    the same pool of bandwidth.
+  prefs: []
+  type: TYPE_NORMAL
+- en: VLAN frames that arrive at your network card are like regular Ethernet frames,
+    with an additional header before the Ethernet frame that says “This is part of
+    VLAN number such-and-such.” Each VLAN is identified by a number. VLAN number 1
+    is usually the native VLAN—the VLAN that arrives without any tagging whatsoever.
+    For convenience, I’ll use the word “tagged” to describe how the VLAN is delivered
+    to your host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How would you use VLANs in OpenBSD? Perhaps you have a network divided into
+    multiple Ethernet segments, such as outside the firewall, server area, and desktop
+    clients. Or you might have one OpenBSD host that needs direct access to all of
+    these segments. You could route all of these networks over a single physical wire.
+    You might eventually hit bandwidth problems, but if you’re pushing more than 1Gpbs
+    through your server, you can afford a second network card.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring Switches
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You must configure your switch to send the VLANs to your OpenBSD box as 802.1q
+    or tagged, depending on the switch’s syntax. Cisco uses *802.1q*, HP’s Procurve
+    switches use *tagged*, and other vendors use whatever their prejudices dictate.
+    There are dozens of different syntaxes to do this, so I won’t give a specific
+    example. If the switch can’t send tagged VLANs to your server, you cannot use
+    VLANs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring VLAN Devices
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: OpenBSD creates `vlan(4)` interfaces upon request. To create the device, you
+    need to know which physical device you want to attach the VLAN to and the number
+    of the VLAN you’re expecting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Create the `vlan` interface with `ifconfig`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: I number my `vlan` interfaces after the VLAN number they’re used for. (You could
+    create interface `vlan0` and attach it to VLAN 3, but that’s too confusing for
+    my feeble brain.) If you don’t specify the VLAN number, OpenBSD assigns the VLAN
+    number from the number on the interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, here I create interface `vlan3` and use it to access VLAN 3 over
+    interface `fxp0`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'That’s really all there is to it. Now you can use `ifconfig` to display your
+    new interface:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: This looks exactly like any physical interface, and from your point of view,
+    it is. You can add IP addresses just as you would to any other interface, assign
+    routes, and get on with your life.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring VLANs at Boot
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To configure a VLAN interface at boot time, create a *hostname.if* file for
+    it. For example, here’s the contents of a */etc/hostname.vlan3* that creates the
+    `vlan3` interface demonstrated in the previous section, assigns it to VLAN 3,
+    and configures it automatically for both IPv4 and IPv6:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: OpenBSD should find this file at boot and create the interface according to
+    your commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: IPv6 Over Tunnels
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let’s say you’ve taken my badgering to heart and decided to experiment with
+    IPv6, but your ISP doesn’t offer IPv6\. How can you play with IPv6 when all you
+    get is an IPv4 feed?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many companies offer a free IPv6 tunnel service, where they will route you through
+    an IPv6 tunnel over IPv4\. They will even give you an IPv6 /64 at no charge, so
+    you can configure your home network for IPv6.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While I generally avoid recommending vendors in this book, I do recommend Hurricane
+    Electric’s IPv6 tunnel service at *[http://www.tunnelbroker.net/](http://www.tunnelbroker.net/)*.
+    Its web interface is intuitive, and it even provides configurations for OpenBSD
+    clients.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You should now have some understanding of managing IPv4 and IPv6 on OpenBSD.
+    While your brain is recovering from all this stuff, we’ll turn to the topic of
+    managing add-on software in OpenBSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[33](#id309258)]) Many people offer to ship me to Siberia. But they all forget
+    to include a return ticket. Strange.
+  prefs: []
+  type: TYPE_NORMAL

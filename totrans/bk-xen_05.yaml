@@ -1,0 +1,828 @@
+- en: Chapter 5. NETWORKING
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: So you've got your nice, shiny Xen box all set up and running, and now you want
+    it to talk to the outside world. This seems eminently reasonable. After all, Xen's
+    primary use is server consolidation—and a non-networked server is a contradiction
+    in terms. Well, you're in luck. Xen has a robust and well-tested network foundation,
+    which is versatile and easy to set up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Like much of the rest of Xen, the networking infrastructure reuses as many standard
+    tools as possible. In this case, Xen uses the standard bridge utilities and the
+    `ip` command^([[33](#ftn.CHP-5-FNOTE-1)]) all glued together with some clever
+    bash and Python scripts to handle traffic between the dom0 and domU network interfaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As an administrator, your primary interaction with Xen virtual net devices is
+    through the various config files. As you might expect, global parameters and initial
+    setup are mostly handled by directives in *xend-config.sxp*. Domain-specific configuration
+    is done within the domain's config file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: More advanced configuration can be done by modifying Xen's network scripts,
+    stored in */etc/xen/scripts*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are the sort that avoids a reboot at all costs, you can often directly
+    manipulate Xen's network infrastructure while the VM is running through `brctl,
+    iptables`, and the `xm` command, but these changes don't always successfully propagate
+    to the domU. We will focus on the "manipulate the config file and reboot the domU"
+    method here because it works in all situations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen's Network Setup Process
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Xen runs its network scripts at two points: at `xend` startup and at domain
+    startup. (There are corresponding scripts for domain shutdown and `xend` stop.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The role of the script run at `xend` startup (usually either `network-bridge`
+    or `network-route`) is to switch from standard, non-Xen networking to Xen-based
+    networking. In the case of `network-bridge`, for example, this script creates
+    a bridge and assigns the physical Ethernet device to it. Then it initializes dom0's
+    networking, creates a virtual interface, adds it to the bridge, and copies the
+    configuration over to the bridged network device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When Xen starts a domain, it executes the appropriate `vif-*` script—for example,
+    `vif-bridge` in the case of `network-bridge`. The following shows the various
+    scripts that would be run with the default setup.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Most of these scripts aren't terribly important to our purposes at the moment.
+    For example, *logging.sh* is just sourced to provide a `log()` function. The main
+    points we're interested in are the ones marked with ![](httpatomoreillycomsourcenostarchimages333215.png.jpg).
+    These are good scripts to edit or good places to introduce a wrapper script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These scripts are bash shell scripts (rather than Python, as one might expect
+    from the fact that many of the other Xen configuration files are in Python). They
+    all live in the */etc/xen/scripts* directory by default, alongside scripts to
+    support the other classes of Xen virtual devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[33](#CHP-5-FNOTE-1)]) The IP command */sbin/ip* is the modern (unfortunately
+    named) replacement for `ifconfig`. Get it as part of the iproute2 tool set, which
+    offers similar functionality to net-tools but with added features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining Virtual Interfaces
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: All of the Xen networking options work by creating virtual interfaces in dom0
+    to serve as targets for bridging, `iptables` rules, and so on. Each virtual interface
+    is defined by a section in the `vif=` line of the config file, delimited by a
+    pair of single quotes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen 3 supports up to eight virtual interfaces per domain (three prior to 3.1.)
+    For example,
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: defines three virtual interfaces and tells Xen to configure them with sensible
+    defaults. Note that they're comma-separated *and* delimited, in accord with Python
+    array syntax.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can examine these virtual interfaces from the dom0 by typing
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will output information for a bunch of devices of the form
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: where *`x`* and *`y`* are numbers. (You might see `tap` devices as well if you're
+    using HVM. Just treat them like vifs for now.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Under recent Red Hat–derived distros (including CentOS 5.1 and Fedora 8),
+    libvirt will create another bridge called* *`virbr0`*. *This bridge is set up
+    for NAT by default and should be considered part of libvirt, rather than Xen.
+    It functions much like Xen''s* *`network-nat`* *implementation: dom0 runs a dnsmasq
+    server on* *`virbr0`* *and NAT''s packets for domUs. It''s a sensible default
+    for a desktop, but probably ill-suited to a server. Specify* *`bridge=xenbr0`*
+    *to use Xen''s bridge, rather than libvirt''s. For the curious*, *`virbr`* *is
+    configured by* /etc/libvirt/qemu/networks/default.xml. *You can disable the* *`virbr`*
+    *devices by removing the symlink in* /etc/libvirt/qemu/networks/autostart.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen's default behavior is to give each virtual interface a name based on the
+    domain number, where *`x`* is the domain number and *`y`* is the sequential number
+    of the interface in the domU. For example, `vif2.0` is `eth0` in domain 2; `vif2.1`
+    is `eth1` in domain 2\. In addition, each physical network card in the machine
+    will show up as a `peth` device (for *physical Ethernet*). `xend` creates these
+    virtual interfaces on behalf of domains on domain startup. Thus, you'll see a
+    varying number of them, depending on how many domains are running and how many
+    network devices they have.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we've stated before, the dom0 is a domain just like the rest, except for
+    its ability to perform control-plane functions and its access to PCI devices.
+    Therefore, `vif0.0` is domain 0's virtual `eth0` interface, and `vif0.1` is `eth1`
+    in the dom0\. (Xen conveniently creates an alias from `eth`*`X`* to `vif0.`*`x`*.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*`veth`* *devices also show up in the dom0\. Don''t worry about them. They''re
+    just used as scratch paper while* *`xend`* *copies information around*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Ordinarily you can ignore the vifs while interacting with dom0\. However, there
+    are a few things to note: Because `eth0` in dom0 is actually an alias for a virtual
+    interface, it only sees traffic directed at dom0—domU traffic never reaches the
+    alias. If you want to see the traffic going to the domUs with `tcpdump` or similar
+    in dom0, you must look at the physical Ethernet card—that is, the appropriate
+    `peth` interface.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, the `peth` might have a strange MAC, usually FF:FF:FF:FF:FF:FF. Because
+    no packets actually originate or terminate at the `peth` device, it doesn't need
+    an actual MAC address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, the virtual devices are provided by the netloop driver, and it defaults
+    to only allowing eight virtual devices at a time. This value can be raised by
+    increasing the value of the `nloopbacks` parameter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: If it's built into the kernel, you can boot the dom0 kernel with a higher value
+    for `loopback.nloopbacks`. Simply append `netloop.nloopbacks=128` (or a similarly
+    large value) to the `module` line that loads the Linux kernel in */boot/grub/menu.lst*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Naming Virtual Interfaces
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Accounting for bandwidth usage with this elaborate scheme of virtual interfaces
+    can be tricky. Because the interface names are based on the domain number, and
+    the domain number changes each time the domain reboots, it''s impractical to simply
+    monitor bandwidth using the dom0''s internal counters—you''ll wind up with stuff
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: RE-INDEXING NAMES
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you decide to use vifnames, you should probably note that the `mib` number
+    of the interface might change on every reboot of the domU, though the symbolic
+    name will remain the same.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some SNMP monitoring software expects mib numbers to remain the same. When they
+    change, the software interprets this as a new interface of the same name, which
+    makes collecting cumulative statistics … difficult. You can often fix the madness
+    by configuring your SNMP software to aggressively reindex names to numbers, rather
+    than relying on its cache. It's just something to watch out for—not unfixable,
+    but annoying. Check your specific monitoring software for details.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One way around this is to name the virtual interfaces so that the name becomes
+    independent of the domain number. You can name virtual interfaces from within
+    the domU config file by specifying the `vifname` parameter as part of the `vif=`
+    configuration directive. For example,
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'would cause the `vif` in the dom0 to become `http` rather than `vif`*`x`*`.`*`y`*.
+    (Within the domain, of course, it just shows up as `eth0`.) If the domain has
+    multiple interfaces, specify them as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: As of this writing, you'll then need to stop and start the domain to force it
+    to reread the config file; a simple reboot won't work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With the `vifname` specified, we can stop and start the domain. Here we shut
+    down a domain:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the device is simply `vif6.0`. Now start it up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: TRUNCATED VIFNAMES
+  prefs: []
+  type: TYPE_NORMAL
+- en: Linux silently truncates the `vifname` to 15 characters—it'll ignore any input
+    beyond that without raising an error. Thus, for a `vif named wiki.xen.prgmr.com`,
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: first 15 characters, including the dot) or
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: or
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: will work, but
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: will fail with an `ENODEV` (a "no such device" or "device not found" error).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that 15-character vifnames cause problems with some versions of iptables.
+    Keep your vifnames to 8 characters to be safe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Autoconfiguration
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'You can just leave the `vif=` line blank and let `xm` generate the entire configuration
+    automatically, like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: This scenario has the advantage of allowing the domU administrator to configure
+    the network with complete freedom from within the domU, using whatever tools are
+    most convenient. This is the most accurate way of simulating a physical machine.
+    Xen can generate IP and MAC addresses itself, if need be, and configure them to
+    work without administrator intervention.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, we don't recommend this because it leaves configuration of the network
+    interface up to the users. At a minimum, you should specify the IP address so
+    that Xen can set up the antispoofing rules to prevent an attacker with a Xen instance
+    faking the source or destination address in his IP header, and specify a MAC address
+    to avoid the possiblity of conflict. An IP or MAC address conflict can take down
+    your network! Avoid it if at all possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MYSTERIOUS INCREASING INTERFACE NUMBERS
+  prefs: []
+  type: TYPE_NORMAL
+- en: One other problem that you can avoid by specifying a MAC address is the domU
+    becoming confused when the address changes on each boot—on some systems it'll
+    believe that each new address is a new card, so that it uses eth1 on the second
+    boot, eth2 on the third, and so on. Upon seeing the new MAC address, udev believes
+    it's found a new card.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The easy solution is to specify a MAC address in the domain config file, and
+    clear out udev's cache in */etc/udev/rules.d/z25_persistent-net.rules*. This should
+    cause the device to come up as eth0 on the next boot and stay eth0, since it's
+    not getting a random address anymore.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Specifying a MAC Address
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Ordinarily, in the absence of virtualization, hardware manufacturers do a good
+    job of ensuring that each Ethernet device has a unique MAC address. With Xen,
+    however, it becomes the administrator's responsibility to ensure that each virtual
+    interface has a unique hardware address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, think back for a moment to the 7-layer OSI network model. Xen interacts
+    with this model at layers 2 and 3; that is, it provides a virtual layer 2 switch
+    with `network-bridge` and functions as an IP router with `network-route`. Both
+    of these layers require the Xen domain to have a unique address. The antispoof
+    rules and `ip` directive can take care of that for layer 3; however, you are also
+    likely going to want to specify a MAC address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Xen can simply make one up, but this results in a relatively high probability
+    of a collision. When Xen picks a MAC for you, it starts with the 00:16:3e prefix
+    assigned to Xen by the IEEE registration authority, and it picks the remaining
+    three bytes at random; this means you have 3 bytes of entropy. At 1,000 hosts
+    on one network (most of a /22) this gives you something like a 3 percent chance
+    of a collision. (You can calculate this using the birthday paradox—a good use
+    for your obscure math trivia.) Considering the huge yuckiness of a MAC address
+    conflict, we suggest always manually specifying the MAC address. Do this by changing
+    your `vif=` line to include a `mac=` section, like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here at prgmr.com, we pick a 2-byte prefix and append the IP address in hex
+    because the IP address is already unique. There are some important rules when
+    doing this, though: First, the most significant bit should be zero; second, the
+    address should be part of the "locally assigned" block to avoid possible conflicts
+    with real Ethernet hardware. Fortunately, these rules can be distilled into a
+    basic formula: Make the second hex digit of the first octet (*e* in the above
+    example) one of 2, 6, A, or E. (Of course, you can avoid having to worry about
+    this by using the Xen prefix mentioned above.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Manipulating vifs with xm
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Although we ordinarily modify networking settings indirectly through the config
+    files, it's also possible to make changes directly using `xm`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The relevant commands are `network-attach` and `network-detach`. Using `network-attach`,
+    you can create a new virtual NIC as if it had been specified in the config file,
+    with options specified on the command line. For example,
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you don't specify the various parameters, Xen will supply default values,
+    just as if they'd been unspecified in the `vif=` line of the config file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Similarly, `network-detach` will detach a `vif` from the domU and destroy it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding command will remove `eth0` from the domain [wiki.xen.prgmr.com](http://wiki.xen.prgmr.com).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Securing Xen's Virtual Network
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: From a security standpoint, there are two aspects of Xen networking that bear
+    mentioning. First, we want to make sure that the users can't pretend to be someone
+    they're not. This is addressed by specifying an IP address and enabling the antispoofing
+    rules. Second, we want to protect the dom0 while letting traffic through to the
+    domUs. This is easily handled by appropriate `iptables` rules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Specifying an IP Address
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The antispoofing rules use `iptables` to ensure that the Xen box will drop packets
+    that don't match the expected address for the `vif` that they're coming from,
+    thus protecting your network from a rogue domU. The network scripts set this up
+    using `iptables` to add a rule to the FORWARD chain allowing packets that match
+    that IP address to pass to the domU's network device. (The function that does
+    this is in *vif-common.sh*, for the curious.) For this to work, your FORWARD chain
+    should have a policy of DROP—`network-bridge` should handle that automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We use antispoofing with `network-bridge. network-route` adds similar rules.
+    It's known to not work with `network-nat`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Add the following to */etc/xen/xend-config.sxp*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'and set the following in the domain config file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: (Use an appropriate IP and bridge for your site, obviously.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also specify a range of IP addresses in CIDR format (*CIDR* stands for
+    *Classless Inter-Domain Routing*); that is, with a slash and the number of bits
+    set in the netmask, in decimal. For example, to allow 10\. anything, the previous
+    line could be rewritten as
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: This doesn't keep the domU administrator from changing the domU's IP address,
+    but it does block any packets from that changed IP address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Firewalling the Dom0
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: With Xen's networking, the INPUT and OUTPUT chains don't affect packets aimed
+    at the domUs. Thus, standard firewalls on the INPUT chain, like Red Hat's, won't
+    affect domU packets. (domUs themselves, of course, can firewall their own virtual
+    network devices as needed.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Many systems, by default, don''t send bridge traffic through the FORWARD chain
+    as you would expect—RHEL/CentOS 5.1 is an example of this problem. This causes
+    the antispoofing rules to not work. A simple* *`echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables`*
+    *solves the problem. Add that line to* /etc/xen/scripts/network-bridge *to have
+    it run automatically when Xen sets up its networking*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The only problem that we''ve seen with sending domU packets through the FORWARD
+    chain is that, by default, the dom0 includes them in its connection tracking.
+    On heavily loaded machines, the connection table will fill up, and the machine
+    will drop packets. Our solution is to edit the `frob_iptable()` function in `vif-bridge`
+    to include a rule like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: This lets antispoof work and keeps the domU traffic from interfering with the
+    dom0, while allowing the domUs to have unhindered access to their packets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Networking with network-route
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '`network-route` is the original option chosen by the Xen team (and few have
+    used it since). It works by creating an internal IP router, which forwards traffic
+    to and from the guest domains. Note that it doesn''t do address translation—for
+    that you''ll want `network-nat`, or `virbr`. It has largely been superseded by
+    `network-bridge`, which allows considerably more flexibility.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`network-route` does have its place, however. For one thing, it is transparent
+    to the upstream network hardware, unlike `network-bridge`. For another thing,
+    it''s much simpler. `network-route` simply enables IP forwarding and then creates
+    `iptables` rules in the dom0 to forward traffic to the correct virtual interfaces.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To use `network-route`, just uncomment the lines
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'and comment out the corresponding `network-bridge` and `vif-bridge` lines.
+    That''s really all there is to it. Restart `xend`, and `iptables` will show a
+    new rule that handles forwarding to the `vif`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'One common "gotcha" with `network-route` is that it only works if the IP address
+    is specified in the `vif=` line—otherwise the script doesn''t know what rules
+    to add. So, at minimum, the interface definition for the example above should
+    look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Networking with network-bridge
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '`network-bridge` is the currently accepted standard way of handling networking
+    for guest domains in Xen. It uses the bridge tools in Linux to create a virtual
+    layer 2 switch, to which it "plugs in" Xen virtual interfaces, as shown in [Figure 5-1](ch05s06.html#some_of_network-bridges_capabilities
+    "Figure 5-1. Some of network-bridge''s capabilities"). It has the advantage of
+    working with protocols that expect unadulterated Ethernet frames. This includes
+    AoE, the pre-TCP/IP version of AppleTalk, NetBEUI, IPX, and a host of other protocols
+    that date from the dark ages. It''ll also work seamlessly with DHCP, which relies
+    on broadcast packets. It''s simple, logical, and robust.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The biggest disadvantage of `network-bridge` (apart from its complexity) is
+    that it tears down and rebuilds the real network interface when `xend` starts.
+    In some scenarios (for example, when dom0 has an NFS root) this can be unacceptable.
+    This isn't a limitation of bridging, per se, only of attaching the bridge to the
+    dom0 network device using the Xen scripts—if a dedicated physical device is used
+    for the bridge, the problem goes away.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another issue with `network-bridge` is that it places the physical Ethernet
+    device into promiscuous mode. This can be a tremendous resource hog on busy networks
+    because the CPU has to intercept all packets rather than just those intended for
+    its address. Finally, outgoing packets will have a different MAC address from
+    the one on the physical card, which can lead to trouble with, for example, certain
+    wireless networking hardware. This also throws many layer 2 http load balancers
+    through a loop—anything that expects only one MAC address down each Ethernet port
+    will be sorely confused.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Some of network-bridge''s capabilities](httpatomoreillycomsourcenostarchimages333217.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-1. Some of network-bridge's capabilities
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even with these caveats, we recommend `network-bridge` for most Xen servers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can start the `network-bridge` script by hand if you like. For example,
+    to manually create a bridge with the default name `xenbr0` attached to `eth0`,
+    type the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*If you have* *`vifnum`* *set above* *`nloopbacks`*, *even if you only have
+    one bridge, Linux will complain as if you had more bridges than loopbacks. This
+    is because Xen uses the* *`vifnum`* *to determine the number of the virtual device
+    it uses for the frontend, which presupposes the existence of the preceding virtual
+    devices. Increase* *`nloopbacks`*, *and everyone is happy*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`network-bridge` is the default networking option, thus `xend` shouldn''t need
+    any configuration to use it. However, for completeness—to configure Xen to use
+    `network-bridge`, modify *xend-config.sxp* to include the line'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*OpenSUSE users might find that NetworkManager interferes with Xen''s bridging.
+    To fix this problem, go to* YaST ► Network Devices ► Network Card *and select
+    the* Traditional Method with ifup *option*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This script causes Xen to use a bridge setup much like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`xenbr0` is, obviously, the name of the bridge. It bridges dom0''s virtual
+    Ethernet interface (`vif0.0`), the physical Ethernet card, and a domU''s virtual
+    interface. We can also see that STP (Spanning Tree Protocol) is disabled. In the
+    default configuration, further domUs will simply have their interfaces added to
+    this bridge.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: STP is aimed at preventing loops in the network. You may want to turn STP on
+    if you're doing anything complex with the virtual bridges. If you have multiple
+    bridges and multiple network ports that you're using with Xen, it would probably
+    be a good idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To rename the bridge, you can specify the bridge name as an option to the `network-bridge`
+    script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note also that `network-bridge` defaults to binding `eth0` to the bridge. To
+    change the physical network card, use
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then the bridge setup becomes
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Networking with network-nat
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '`network-nat` is an extension of `network-route` that incorporates network
+    address translation (NAT for short, or IP masquerade in some contexts).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `network-nat` script supplied with Xen works around `network-route`''s
+    problem with DHCP in two ways. First, it can start a local DHCP server (so that
+    guest domains can get addresses because they''re now behind a router). If that''s
+    undesirable, it can create locally unique IP addresses using the domain ID. Then
+    it sets up a standard `iptables` rule for IP `masq`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: When a domain starts, it gets an IP address and adds appropriate `iptables`
+    rules for itself. Xen passes the address to the kernel using the kernel-level
+    IP autoconfiguration mechanism at boot (and isn't that a mouthful). `network-nat`
+    can also integrate with your DHCP server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: This shows the default configured IP address for `eth0` in domain 2\. Actual
+    numbers will vary depending on your setup, of course.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuration Variables
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As we''ve mentioned, the two basic places where the administrator interacts
+    with Xen''s networking are in */etc/xen/xend-config.sxp* and in the domain config
+    file. In each of these, you focus on one line: the `(network-script)` line in
+    the former case and the `vif=` line in the latter.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each of these will fail horribly, without explanation, over trivial errors in
+    syntax. (This is Python, after all. You can put arbitrary Python code right in
+    your config files, if you like. Configuration files should always be written in
+    a language that's Turing-complete. Just ask Eric Allman.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `network-script` line is wrapped in parentheses, with arguments in quotes
+    and separated by spaces. For example, the following is valid:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We''ve already discussed the `vif=` line a bit. Note that the `vif` configuration
+    uses a completely different syntax from the network script setting, though: brackets
+    with commas between arguments.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: This line configures three interfaces, the first with default parameters, the
+    second with a bridge argument, the third with bridge and IP. Note the commas between
+    both separate interfaces and separate arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, in some examples you will see a `dhcp=yes` line. The `dhcp=` line isn't
+    necessary unless the kernel needs to get its address at boot—for example, if it's
+    mounting its root filesystem over NFS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Custom Network Scripts
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'You might be thinking at this point that it''s overkill to specify a configuration
+    script in the Xen config file rather than simply selecting among built-in options.
+    Take our word for it: The ability to specify your own network script is fantastically
+    useful. Because Xen''s networking is built on standard tools, the scripts are
+    easy to understand and tailor to your particular needs.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The easiest way to do this, and a sufficient method for most configurations,
+    is to create a small wrapper script that calls the standard Xen scripts with appropriate
+    arguments. You can also modify the standard scripts to source additional functions
+    and call those as necessary—for example, to modify firewall rules or attach monitoring
+    scripts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multiple-Bridge Setups
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Consider a scenario where you want inter-domU communication to occur on a purely
+    virtual network, with a separate interface in each domain to communicate with
+    the outside world.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In that case, you would create a pair of bridges, one with the default Xen setup,
+    bridging the physical interface with the virtual ones, and one that bridges only
+    virtual interfaces. Then you would specify both interfaces in the domain config
+    file and configure them as normal from within the domain or the config file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The wrapper would look something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: This calls `network-bridge` twice, the first time as normal and the second time
+    with a `netdev` argument, causing `network-bridge` to use a dummy network device
+    rather than a real one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To tell `xend` to run this script at startup, change the `network-script` line
+    in *xend-config.sxp* as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: Make sure that the `my-wrapper` script is executable, or else nothing will work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To use these bridges from the domUs, specify the correct bridge in the `vif=`
+    line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Bridged and Routing
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A slight modification to this scenario puts the domU communication on its own
+    bridge, which is then routed via `iptables` rules in the dom0, as shown in [Figure 5-2](ch05s09.html#combining_bridging_and_routing
+    "Figure 5-2. Combining bridging and routing"). (Arjen Runsink, who wrote a script
+    that does this, calls this a *brouter*—a portmanteau of bridge and router.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Combining bridging and routing](httpatomoreillycomsourcenostarchimages333219.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-2. Combining bridging and routing
+  prefs: []
+  type: TYPE_NORMAL
+- en: This creates a standard bridge, but it doesn't attach the physical device to
+    it. Instead the bridge gets an IP address and a route. When a domU starts, its
+    `vif` is attached to the bridge by the ordinary `vif-bridge` script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Omitting the standard functions and such, the script looks something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: We've cut out the `show_status` function to save space; the full version of
+    this script is available at [http://en.opensuse.org/Xen3_and_a_Virtual_Network](http://en.opensuse.org/Xen3_and_a_Virtual_Network).
+    We've also removed the default values for parameters like `$bridgeip` because
+    that's site specific, and we removed the declarations for `create_bridge` and
+    `add_to_bridge` because those are provided by `xen-network-common`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Call this script with a pair of lines like the following in */etc/xen/xend-config.sxp*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: Further Thoughts
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Variants of this same technique can be used to provide logging and accounting
+    on a per-domain basis, or they can set up domain-specific firewall rules just
+    by editing the network scripts. Ultimately, Xen's networking infrastructure is
+    so flexible that you're able to do anything with a domU that you can with the
+    dom0 (or, for that matter, with a non-Xen system), and there are enough script
+    hooks to do it in an automated fashion.
+  prefs: []
+  type: TYPE_NORMAL

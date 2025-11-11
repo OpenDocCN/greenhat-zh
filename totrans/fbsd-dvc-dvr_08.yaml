@@ -1,0 +1,457 @@
+- en: Chapter 8. Interrupt Handling
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Hardware devices often have to perform (or deal with) external events, such
+    as spinning disk platters, winding tapes, waiting for I/O, and so on. Most of
+    these external events occur in a timeframe that is much slower than the processor’s—that
+    is, if the processor were to wait for the completion (or arrival) of these events,
+    it would be idle for some time. To avoid wasting the processor’s valuable time,
+    interrupts are employed. An *interrupt* is simply a signal that a hardware device
+    can send when it wants the processor’s attention (Corbet et al., 2005). For the
+    most part, a driver only needs to register a handler function to service its device’s
+    interrupts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Registering an Interrupt Handler
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following functions, declared in `<sys/bus.h>`, register or tear down an
+    interrupt handler:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `bus_setup_intr` function registers an interrupt handler with an IRQ. This
+    IRQ must be allocated beforehand with `bus_alloc_resource`, as described in [Hardware
+    Resource Management](ch07s03.html "Hardware Resource Management") in [Don’t Panic](ch07s02.html#donat_panic-id6
+    "Don’t Panic").
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bus_setup_intr` function is normally called during `device_attach`. The
+    arguments for this function are described in the next few paragraphs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `dev` argument is the device whose interrupts are to be handled. This device
+    must have an IRQ.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `r` argument demands the return value from the successful `bus_alloc_resource`
+    call that assigned an IRQ for `dev`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `flags` argument classifies the interrupt handler and/or the interrupt.
+    Valid values for this argument are defined in the `intr_type` enumeration, found
+    in `<sys/bus.h>`. [Table 8-1](ch08.html#bus_underscore_setup_underscore_intr_sym
+    "Table 8-1. bus_setup_intr Symbolic Constants") describes the more commonly used
+    values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 8-1. bus_setup_intr Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `INTR_MPSAFE` | Indicates that the interrupt handler is multiprocessor safe
+    and does not need to be protected by `Giant`—that is, any race conditions are
+    to be handled by the interrupt handler itself; contemporary code should always
+    pass this flag |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `INTR_ENTROPY` | Indicates that the interrupt is a good source of entropy
+    and may be employed by the entropy device `/dev/random` |'
+  prefs: []
+  type: TYPE_TB
+- en: The `filter` and `ithread` arguments specify the filter and ithread routines
+    for the interrupt handler. For now, don’t worry about these arguments; I’ll discuss
+    them in the following section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `arg` argument is the sole argument that gets passed to the interrupt handler.
+    Generally, you’ll always set `arg` to `dev`’s software context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `cookiep` argument expects a pointer to void *. If `bus_setup_intr` is successful,
+    a cookie is returned in `cookiep`; this cookie is needed to destroy the interrupt
+    handler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you would expect, the `bus_teardown_intr` function tears down an interrupt
+    handler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Interrupt Handlers in FreeBSD
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that you know how to register an interrupt handler, let’s discuss how interrupt
+    handlers are implemented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In FreeBSD, interrupt handlers are composed of a filter routine, an ithread
+    routine, or both. A *filter routine* executes in primary interrupt context (that
+    is, it does not have its own context). Thus, it cannot block or context switch,
+    and it can use only spin mutexes for synchronization. Due to these constraints,
+    filter routines are typically used only with devices that require a nonpreemptive
+    interrupt handler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A filter routine may either completely handle an interrupt or defer the computationally
+    expensive work to its associated ithread routine, assuming it has one. [Table 8-2](ch08s02.html#filter_routine_return_values
+    "Table 8-2. Filter Routine Return Values") details the values that a filter routine
+    can return.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 8-2. Filter Routine Return Values
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `FILTER_STRAY` | Indicates that the filter routine can’t handle this interrupt;
+    this value is equivalent to an error code. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `FILTER_HANDLED` | Indicates that the interrupt has been completely handled;
+    this value is equivalent to a success code. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `FILTER_SCHEDULE_THREAD` | Schedules the ithread routine to execute; this
+    value can be returned if and only if the filter routine has an associated ithread
+    routine. |'
+  prefs: []
+  type: TYPE_TB
+- en: An *ithread routine*, unlike a filter routine, executes in its own thread context.
+    You can do whatever you want in an ithread routine, except voluntarily context
+    switch (that is, sleep) or wait on a condition variable. Because filter routines
+    are nonpreemptive, most interrupt handlers in FreeBSD are just ithread routines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing an Interrupt Handler
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 8-1](ch08s03.html#pint.c "Example 8-1. pint.c") is a contrived Newbus
+    driver designed to demonstrate interrupt handlers. [Example 8-1](ch08s03.html#pint.c
+    "Example 8-1. pint.c") sets up an interrupt handler on the parallel port; on read,
+    it sleeps until it receives an interrupt.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take a quick look at this code and try to discern some of its structure. If
+    you don’t understand all of it, don’t worry; an explanation follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 8-1. pint.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: To make things easier to understand, I’ll describe the functions in [Example 8-1](ch08s03.html#pint.c
+    "Example 8-1. pint.c") in the order they were written, instead of in the order
+    they appear. To that end, I’ll begin with the `pint_identify` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pint_identify Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `pint_identify` function is the `device_identify` implementation for this
+    driver. Logically, this function is required because the parallel port cannot
+    identify its children unaided.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `pint_identify` (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) determines
+    whether the parallel port has (ever) identified a child device named ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `PINT_NAME`. If it has not, then `pint_identify` ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    adds `PINT_NAME` to the parallel port’s list of identified children.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pint_probe Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `pint_probe` function is the `device_probe` implementation for this driver.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, this function always ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    returns the success code `BUS_PROBE_SPECIFIC`, so [Example 8-1](ch08s03.html#pint.c
+    "Example 8-1. pint.c") attaches to every device it probes. This may seem erroneous,
+    but it is the correct behavior, as devices identified by a `device_identify` routine,
+    using `BUS_ADD_CHILD`, are probed only by drivers with the same name. In this
+    case, the identified device and driver name is `PINT_NAME`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pint_attach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `pint_attach` function is the `device_attach` implementation for this driver.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This function first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    allocates an IRQ. If unsuccessful, the error code `ENXIO` (which stands for *error:
+    device not configured*) is ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    returned. Next, the ![](httpatomoreillycomsourcenostarchimages1137505.png) `pint_intr`
+    function is ![](httpatomoreillycomsourcenostarchimages1137503.png) set up as the
+    interrupt handler for `dev` (in this case, the interrupt handler is just an ithread
+    routine). Afterward, a buffer of `BUFFER_SIZE` bytes is ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    allocated. Then `sc->sc_device` is ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    set to `dev`, [Example 8-1](ch08s03.html#pint.c "Example 8-1. pint.c")’s character
+    device node is ![](httpatomoreillycomsourcenostarchimages1137511.png) created,
+    and a pointer to the software context (`sc`) is ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    saved in `sc->sc_cdev->si_drv1`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: pint_detach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `pint_detach` function is the `device_detach` implementation for this driver.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function starts by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    destroying [Example 8-1](ch08s03.html#pint.c "Example 8-1. pint.c")’s device node.
+    Once this is done, it ![](httpatomoreillycomsourcenostarchimages1137501.png) tears
+    down `dev`’s interrupt handler, ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    releases `dev`’s IRQ, and ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    frees the allocated memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pint_open Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `pint_open` function is defined in `pint_cdevsw` (that is, [Example 8-1](ch08s03.html#pint.c
+    "Example 8-1. pint.c")’s character device switch table) as the `d_open` operation.
+    Recall that `d_open` operations prepare the device for I/O.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `pint_open` (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) acquires
+    the parallel port mutex. Then the value of `sc->sc_state` is ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    examined. If it does not equal 0, which indicates that another process has opened
+    the device, the error code `EBUSY` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    returned; otherwise, `pint_open` ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    “opens” the device. Opening the device, in this case, means setting `sc->sc_state`
+    to `PINT_OPEN`. Afterward, the `ppb_request_bus` function is ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    called to mark `pint_device` as the owner of the parallel port. Naturally, `pint_device`
+    is our device (that is, it points to dev from `pint_attach`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Owning the parallel port lets a device transfer data to and from it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, before ![](httpatomoreillycomsourcenostarchimages1137511.png) enabling
+    interrupts, `pint_open` ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    clears the parallel port’s control register.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pint_close Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `pint_close` function is defined in `pint_cdevsw` as the `d_close` operation.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) acquires
+    the parallel port mutex. Then interrupts on the parallel port are ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    disabled (for all intents and purposes, clearing the control register, which is
+    what the above code does, disables interrupts). Next, the `ppb_release_bus` function
+    is ![](httpatomoreillycomsourcenostarchimages1137503.png) called to relinquish
+    ownership of the parallel port. Finally, `sc->sc_state` is ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    zeroed, so that another process can open this device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pint_write Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `pint_write` function is defined in `pint_cdevsw` as the `d_write` operation.
+    This function acquires a character string from user space and stores it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `pint_write` (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function is fundamentally identical to the `echo_write` function described
+    in [echo_write Function](ch03s03.html#echo_underscore_write_function-id1 "echo_write
+    Function"). Consequently, I won’t walk through it again here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pint_read Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `pint_read` function is defined in `pint_cdevsw` as the `d_read` operation.
+    This function sleeps on entry. It also returns the stored character string to
+    user space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `pint_read` (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    acquiring the parallel port mutex. Then it ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    sleeps on the channel ![](httpatomoreillycomsourcenostarchimages1137503.png) `pint_device`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `ppb_sleep` function releases the parallel port mutex before sleeping. Of
+    course, it also reacquires the parallel port mutex before returning to its caller.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remnants of this function are basically identical to the `echo_read` function
+    described in [echo_read Function](ch01s06.html#echo_underscore_read_function "echo_read
+    Function"), so we won’t discuss them again here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pint_intr Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `pint_intr` function is the interrupt handler for [Example 8-1](ch08s03.html#pint.c
+    "Example 8-1. pint.c"). Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, this function simply ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    wakes up every thread sleeping on `pint_device`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Parallel port interrupt handlers are unique, because they get invoked with the
+    parallel port mutex already held. Conversely, normal interrupt handlers need to
+    explicitly acquire their own locks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t Panic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now that we’ve walked through [Example 8-1](ch08s03.html#pint.c "Example 8-1. pint.c"),
+    let’s give it a try:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Apparently it works. But how do we generate an interrupt to test our interrupt
+    handler?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating Interrupts on the Parallel Port
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Once interrupts are enabled, the parallel port generates an interrupt whenever
+    the electrical signal at pin 10, dubbed the *ACK bit*, changes from low to high
+    (Corbet et al., 2005).
+  prefs: []
+  type: TYPE_NORMAL
+- en: To toggle the electrical signal at pin 10, I connected pin 10 to pin 9 (using
+    a resistor) and then I executed the program shown in [Example 8-2](ch08s04.html#tint.c
+    "Example 8-2. tint.c").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 8-2. tint.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `BASE_ADDRESS`
+    denotes the base address of the parallel port. On most contemporary PCs, `0x378`
+    is the base address of the parallel port. However, you can check your machine’s
+    BIOS to be sure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This program changes the electrical signal at pin 9 of the parallel port from
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) low to ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    high.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you’re curious, pin 9 is the most significant bit of the parallel data byte
+    (Corbet et al., 2005).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the results from executing [Example 8-2](ch08s04.html#tint.c "Example 8-2. tint.c"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter focused primarily on implementing an interrupt handler. In [Chapter 9](ch09.html
+    "Chapter 9. Case Study: Parallel Port Printer Driver"), we’ll build upon the concepts
+    and code described here to write a nontrivial, interrupt-driven driver.'
+  prefs: []
+  type: TYPE_NORMAL

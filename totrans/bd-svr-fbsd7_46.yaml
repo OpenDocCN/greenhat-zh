@@ -1,0 +1,736 @@
+- en: Chapter 19\. OPENVPN SERVER 2.0.6
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '[HTTP://OPENVPN.NET](HTTP://OPENVPN.NET)'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 19.1\. SUMMARY
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: OpenVPN is an open source VPN implementation that uses the OpenSSL library to
+    encrypt data traveling over a public network. A VPN (virtual private network)
+    is a private connection from one point to another that utilizes an existing network
+    as a transport medium. VPNs are popular with businesses because they allow secure
+    communication between sites or employees without the need to lease dedicated WAN
+    (wide area network) lines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: James Yonan began developing OpenVPN in early 2002\. Yonan's employer at the
+    time afforded him the freedom to telecommute. As a result, he became interested
+    in telecommunication tools. His examination of the open source VPN community revealed
+    a divide between security-conscious and usability-based software projects. Yonan's
+    OpenVPN has grown into a very popular and complete VPN solution that addresses
+    both security and usability issues. Yonan continues development of OpenVPN as
+    project leader.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are several VPN implementations, each of which offers various levels of
+    security and functionality.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PPTP (Point to Point Tunneling Protocol) is used to implement some VPNs. It
+    is considered insecure due to a publicly known security exploit.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: L2TP/IPsec (Layer 2 Tunneling Protocol with Internet Protocol Security) is a
+    reasonably secure VPN solution. However, it has problems traversing many basic
+    NAT routers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: OpenVPN is a cross-platform VPN solution that has proven to be secure, sustainable
+    across NAT routers, and scalable. OpenVPN does require client software installation
+    to function and can be complicated to set up initially.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: OpenVPN supports routed or bridged VPNs. A routed VPN creates a virtual subnet
+    for the client and routes traffic over the VPN if addressed to a system on the
+    remote side. A bridged VPN connects clients to an existing network subnet. Data
+    is broadcast through the bridge like a virtual Ethernet hub. A bridged VPN tunnel
+    can provide a client with the same network functionality as being connected locally
+    to that network. This guide outlines the setup of a bridged VPN rather than the
+    default routed method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A bridged VPN joins remote clients to a local network as if they were onsite,
+    with all of the benefits of being on that local network. Also, bridged VPNs can
+    use non-routable protocols (required by Windows file shares, broadcast traffic,
+    LAN games, and so on) that small office and home office users may find useful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 19.2\. RESOURCES
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: OpenVPN Articles
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[http://openvpn.net/articles.html](http://openvpn.net/articles.html)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 19.3\. REQUIRED
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '![](OWlnMmQvN2ZtYXI4dGMvaWVnL3MxOTU5MzE0NTdwc3BuVTAvLjNnMA--.jpg) FreeBSD 7.0-RELEASE
+    (see "[FreeBSD 7.0](freebsd_7.0_split_000.html#freebsd_7.0)")'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](OWlnMmQvN2ZtYXI4dGMvaWVnL3MxOTU5MzE0NTdwc3BuVTAvLjNnMA--.jpg) Updated ports
+    collection (see "[FreeBSD Ports Collection](freebsd_ports_collection.html#freebsd_ports_collection)")'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](OWlnMmQvN2ZtYXI4dGMvaWVnL3MxOTU5MzE0NTdwc3BuVTAvLjNnMA--.jpg) Internet
+    connection'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](OWlnMmQvN2ZtYXI4dGMvaWVnL3MxOTU5MzE0NTdwc3BuVTAvLjNnMA--.jpg) OpenSSL (see
+    "[OpenSSL 0.9.8g](openssl_0.9.8g.html#openssl_0.9.8g)")'
+  prefs: []
+  type: TYPE_IMG
+- en: 19.4\. OPTIONAL
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '![](OWlnMmQvN2ZtYXI4dGMvaWVnL3MxOTU5MzE0NTdwc3BuVTAvLjNnMA--.jpg) Local DNS
+    server (see "[ISC BIND DNS Server 9.4.2](isc_bind_dns_server_9.4.2.html#isc_bind_dns_server_9.4.2)")
+    for resolving hostnames of systems on the local network and resolving VPN client
+    DNS queries'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 19.5\. PREPARATION
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You'll need to determine your local network's default gateway, default DNS servers,
+    and the device name of your server's network interface. The commands shown below
+    will help you obtain these addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To display the IP address of the local network''s default gateway and the device
+    name, become root and enter:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, the default gateway is `192.168.1.1`. The device name of the network interface
+    is `ed0`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'To display the DNS servers currently configured for use on your system, enter:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 19.6\. INSTALL
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To begin the OpenVPN installation process, enter the following commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: A menu should appear with an option for OpenVPN. We will leave this option at
+    its default (off), so press [tab] to select OK and then [enter] to continue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 19.7\. CONFIGURE
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Once the installation process completes, it is time to configure OpenVPN for
+    use on your system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create a directory named openvpn in /usr/local/etc and copy the sample configuration
+    file to it with the following commands (we''ll edit this file later):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Begin creating the SSL Certificates and keys that are necessary for OpenVPN
+    to function. Create a subdirectory of the openvpn directory named keys, for use
+    as your working directory. The following commands will create the keys directory
+    and copy the appropriate OpenSSL and script files to it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create a CA certificate and key using the CA.pl script:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: When prompted for a CA certificate filename, simply press [enter] to create
+    the file.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When asked for a PEM passphrase, enter one, and be sure to remember it. You
+    will need it later.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When prompted for Country Name, State, Locality, and so on, enter the appropriate
+    responses. Enter `**OpenVPN-CA**` for the Common Name.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: After entering an email address, you will be prompted for a challenge password.
+    Just press [enter] twice; the challenge password and company name are optional.
+    You will be returned to the command prompt once you enter the PEM passphrase you
+    created in step 5.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Generate a certificate request. Enter the following command to begin this process:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: When asked for a passphrase, enter the same one you used earlier for the sake
+    of simplicity.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Enter the same information you entered earlier, but enter `**server**` for the
+    Common Name.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: After entering an email address, you will be prompted for a challenge password.
+    Just press [enter] twice; the challenge password and company name are optional.
+    You will be returned to the command prompt.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Create the signed certificate from the request and certificate authority files
+    we produced above. Begin the certificate signing process with:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Enter the password you assigned earlier.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Answer yes to the Sign the certificate and commit prompts to create a signed
+    SSL Certificate.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The signed SSL Certificate is in the current working directory and is named
+    newcert.pem. To make it easily identifiable, we'll copy this file to openvpn-cert.pem
+    and our private key to openvpn-encrypted-key.pem below. The CA certificate and
+    key are in the demoCA directory. We will copy them to the current working directory
+    and rename them openvpn-CAcert.pem and openvpn-encrypted-CAkey.pem respectively.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Enter the following commands to organize your SSL Certificates as mentioned
+    above:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The openvpn-encrypted-key.pem file is encrypted with the password you entered
+    earlier. We will remove this encryption so OpenVPN can use the file. The following
+    commands will remove the encryption and make the file readable by the root user:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Code View:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now we begin producing client certificates with private keys for use with OpenVPN.
+    In this example, we will use the names client01, client02, and so on. (You may
+    use a different naming convention that helps you to identify clients easily.)
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'To create the private key and certificate request for client01, enter the following
+    commands:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: When prompted for the Country Name, State, Locality, and so on, enter the appropriate
+    responses.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You must enter client01 for the Common Name because each client must have a
+    unique Common Name. You may replace `*client01*` with another name if you used
+    a different naming convention, as long as each new client name is unique.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '***Note:*** You may press [enter] at the optional challenge password and company
+    name prompts to bypass them; they are not necessary.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Create a signed client certificate using the OpenVPN certificate authority
+    we created earlier:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: When prompted, enter the password you assigned earlier.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Answer yes to the Sign the certificate and commit prompts to continue.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: To create additional certificates and keys for additional clients, repeat steps
+    17 through 22 above, substituting client02, client03, and so on for client01\.
+    (Be sure to change the Common Name to reflect the iteration of the client you
+    are creating.)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once you have created your client certificates, transfer the appropriate certificate
+    (client01-cert.pem) and key (client01-key.pem) to your client system using a secure
+    medium (SFTP, removable media, etc.). Do not expose the client01-key.pem file
+    to the public!
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'You need to create a Diffie-Hellman parameter in order for OpenVPN to function
+    correctly. To do so, ensure that you are still in the /usr/local/etc/openvpn/keys
+    working directory, then enter the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Edit the openvpn.conf file that you created in step 1\. First, open openvpn.conf:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Uncomment the `dev tap` declaration (~52) by removing the semicolon (`;`) from
+    the beginning of the line. Comment the `dev tun` declaration by inserting a semicolon
+    at the beginning of the line. This tells OpenVPN to use the `tap` device, which
+    is needed for Ethernet bridging. These two lines should now appear like this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Tell OpenVPN where to find the CA certificate, server certificate, and server
+    private key. Scroll down to the `ca` declaration (~78) and replace `ca.crt` with
+    the relative path (relative to the openvpn directory) and filename of your CA
+    certificate file. Do the same for the `cert` and `key` declarations. The lines
+    should appear as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Tell OpenVPN where the Diffie-Hellman parameter file resides. Modify the `dh`
+    declaration (~87) to point to dh2048.pem in the openvpn directory. It should now
+    appear as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Comment out the `server` declaration (~96) by inserting a semicolon (`;`) at
+    the beginning of the line. This line should now appear as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Uncomment the `server-bridge` statement (~115) by removing the semicolon from
+    the beginning of the line. Modify the IP addresses on this line to reflect your
+    network: The first IP address should be your local network''s default gateway;
+    the second is the netmask of the local network; the third defines the lower limit
+    of the client IP address pool; and the fourth defines the upper limit of the client
+    IP address pool. This line should appear something like this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](OWlnMmQvN2ZtYXI4dGMvaWVnL3MxOTU5MzE0NTdwc3BuVTAvLjVnMA--.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '***Note:*** If you are using a local DHCP server (common in NAT routers) be
+    sure the range you specify here doesn''t overlap the range of IP addresses used
+    by the DHCP server. If you are using a DHCP server built into a NAT router, check
+    its configuration interface for this range. For example, if the DHCP server has
+    a starting IP address of 192.168.1.10 with a maximum of 50 users, you would have
+    a range from 192.168.1.10 to 192.168.1.60, and you could safely use a range of
+    192.168.1.61 to 192.168.1.69 for VPN clients (assuming there are no static IP
+    assignments in this range).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Uncomment the `push redirect-gateway` declaration (~181). This line should
+    appear as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '***Note:*** This option changes the default gateway of the VPN client to that
+    of the gateway on the OpenVPN server side network. It is useful when you are on
+    an untrusted remote network (such as those found in hotel rooms, Wi-Fi hotspots,
+    etc.) and want to eliminate the risk of exposing your data to potential attackers.
+    You may leave this line untouched if you do not wish to enable this feature, and
+    skip to step 34 below.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Uncomment the `push dhcp-option` statement (~187). This option instructs VPN
+    clients to use the specified DNS server for hostname lookups. This line should
+    now appear as follows, with your default DNS server IP substituted for the one
+    shown here in italics.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '***Note:*** As of this writing the above feature functions on GUI OpenVPN clients
+    running Windows (OpenVPN GUI) or Macintosh (Tunnelblick). If you have clients
+    on other platforms, visit their client software vendor for updates or manually
+    set their DNS server IP after their VPN connection is established.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'To enable communication between VPN clients (two users connected simultaneously),
+    uncomment the `client-to-client` declaration (~196). The line should appear as
+    follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Uncomment `user nobody` and `group nobody` (~254). This reduces OpenVPN''s
+    privileges after initialization. These two lines should appear like this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Save and exit.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 19.8\. TESTING
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In this section, we'll perform some tests to confirm that OpenVPN answers requests
+    properly. You'll need a computer with an OpenVPN client installed and configured
+    before continuing. (See "[Notes](notes.html#notes)" of page 143 for information
+    on client setup.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The kernel modules `if_bridge` and `if_tap` must be loaded in order to allow
+    traffic on a remote client to bridge into the local network. Load these two modules
+    like this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create the virtual bridge and tap network interfaces that will act as a virtual
+    hub between remote clients and the local network, as follows (replace `*ed0*`
+    with the device name of your network interface):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Start OpenVPN and watch for incoming connections from your OpenVPN client.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'You should see output similar to this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Code View:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '***Note:*** If possible, try connecting a client to the server from outside
+    the local network. (Remember to forward UDP port 1194 to the server if it is behind
+    a NAT router.) Once a connection is initiated, you should see status messages
+    scroll by in real time.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: When you have completed testing, press [ctrl-C] at the console to shut down
+    OpenVPN. Assuming the test was successful, configure OpenVPN and the necessary
+    bridge and tap interfaces to start automatically at system startup.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Enable the `if_bridge` and `if_tap` kernel modules at startup by first opening
+    loader.conf in /boot like this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Carefully add the following lines and double-check for typos:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Save and exit.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Add a single line to the sysctl.conf file in /etc to automatically apply the
+    `up` flag to the `tap0` interface when the OpenVPN daemon opens it. To do so,
+    open sysctl.conf like so:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'and add the following line:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Save and exit.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Add the OpenVPN startup lines and bridge statements to the rc.conf file in
+    /etc. Open rc.conf:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'and add the following lines (replace `*ed0*` with the device name of your network
+    interface):'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Save, exit, and reboot.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Retest OpenVPN by reconnecting with a client system to confirm that it starts
+    properly.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 19.9\. CONFIG FILES
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: /usr/local/etc/openvpn/openvpn.conf
+  prefs: []
+  type: TYPE_NORMAL
+- en: Main configuration file
+  prefs: []
+  type: TYPE_NORMAL
+- en: 19.10\. LOG FILES
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: /var/log/messages
+  prefs: []
+  type: TYPE_NORMAL
+- en: Contains output from OpenVPN
+  prefs: []
+  type: TYPE_NORMAL
+- en: /usr/local/etc/openvpn/openvpn-status.log
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shows the status of current connections updated every minute
+  prefs: []
+  type: TYPE_NORMAL
+- en: /usr/local/etc/openvpn/ipp.txt
+  prefs: []
+  type: TYPE_NORMAL
+- en: Records client virtual IP addresses
+  prefs: []
+  type: TYPE_NORMAL
+- en: 19.11\. NOTES
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'When you are ready to configure an OpenVPN client, you will need these four
+    files on the client system:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The OpenVPN public CA certificate file (openvpn-CAcert.pem)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The client certificate (client01-cert.pem)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The client private key (client01-key.pem)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A client OpenVPN configuration file (example below)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You should already have the first three files (we created them earlier). The
+    fourth file is a modification of the openvpn.conf file we used to configure the
+    server above.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Listed below is a copy of a client version of the openvpn.conf that would work
+    with the server configuration in this chapter (change the items shown in italics
+    to match your configuration):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should keep these four files in the same directory on the client system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See the documentation from your specific client application for additional installation
+    details. The OpenVPN website has a list of popular OpenVPN client GUIs for different
+    platforms at [http://openvpn.net/gui.html](http://openvpn.net/gui.html).
+  prefs: []
+  type: TYPE_NORMAL

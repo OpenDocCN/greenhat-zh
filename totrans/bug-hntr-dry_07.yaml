@@ -1,0 +1,700 @@
+- en: Chapter 7. A Bug Older Than 4.4BSD
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Saturday, March 3, 2007*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Dear Diary*,'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Last week my Apple MacBook finally arrived. After getting acquainted with the
+    Mac OS X platform, I decided to take a closer look at the XNU kernel of OS X.
+    After a few hours of digging through the kernel code, I found a nice bug that
+    occurs when the kernel tries to handle a special TTY IOCTL. The bug was easy to
+    trigger, and I wrote a POC code that allows an unprivileged local user to crash
+    the system via kernel panic. As usual, I then tried to develop an exploit to see
+    if the bug allows arbitrary code execution. At this point, things got a bit more
+    complicated. To develop the exploit code, I needed a way to debug the OS X kernel.
+    That’s not a problem if you own two Macs, but I only had one: my brand-new MacBook.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.1 Vulnerability Discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'First I downloaded the latest source code release of the XNU kernel,^([[75](ch07s05.html#ftn.CHP-7-FN-1)])
+    and then I searched for a vulnerability in the following way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*I used an Intel Mac with OS X 10.4.8 and kernel version xnu-792.15.4.obj~4/
+    RELEASE_I386 as a platform throughout this chapter*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: List the IOCTLs of the kernel.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 2: Identify the input data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 3: Trace the input data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These steps will be detailed in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: List the IOCTLs of the Kernel'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To generate a list of the IOCTLs of the kernel, I simply searched the kernel
+    source code for the usual IOCTL macros. Every IOCTL is assigned its own number,
+    which is usually created by a macro. Depending on the IOCTL type, the XNU kernel
+    of OS X defines the following macros: `_IOR`, `_IOW`, and `_IOWR`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I now had a list of IOCTLs supported by the XNU kernel. To find the source
+    files that implement the IOCTLs, I searched the whole kernel source for each IOCTL
+    name from the list. Here’s an example of the `BIOCGRSIG` IOCTL:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 2: Identify the Input Data'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To identify the user-supplied input data of an IOCTL request, I took a look
+    at some of the kernel functions that process the requests. I discovered that such
+    functions typically expect an argument called `cmd` of type `u_long` and a second
+    argument called `data` of type `caddr_t`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are some examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*xnu-792.13.8/bsd/netat/at.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*xnu-792.13.8/bsd/net/if.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*xnu-792.13.8/bsd/dev/vn/vn.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The names of these function arguments are quite descriptive: The `cmd` argument
+    holds the requested IOCTL code, and the `data` argument holds the user-supplied
+    IOCTL data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On Mac OS X, an IOCTL request is typically sent to the kernel using the `ioctl()`
+    system call. This system call has the following prototype:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: If an IOCTL request is sent to the kernel, the argument `request` has to be
+    filled with the appropriate IOCTL code, and `argp` has to be filled with the user-supplied
+    IOCTL input data. The `request` and `argp` arguments of `ioctl()` correspond to
+    the kernel function arguments `cmd` and `data`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I had found what I was looking for: Most kernel functions that process incoming
+    IOCTL requests take an argument called `data` that holds, or points to, the user-supplied
+    IOCTL input data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Trace the Input Data'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: After I found the locations in the kernel where IOCTL requests are handled,
+    I traced the input data through the kernel functions while looking for potentially
+    vulnerable locations. While reading the code, I stumbled upon some locations that
+    looked intriguing. The most interesting potential bug I found happens if the kernel
+    tries to handle a special TTY IOCTL request. The following listing shows the relevant
+    lines from the source code of the XNU kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*xnu-792.13.8/bsd/kern/tty.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If a `TIOCSETD` IOCTL request is sent to the kernel, the switch case in line
+    1089 is chosen. In line 1090, the user-supplied `data` of type `caddr_t`, which
+    is simply a typedef for `char *`, is stored in the signed int variable `t`. Then
+    in line 1093, the value of `t` is compared with `nlinesw`. Since `data` is supplied
+    by the user, it’s possible to provide a string value that corresponds to the unsigned
+    integer value of `0x80000000` or greater. If this is done, `t` will have a negative
+    value due to the type conversion in line 1090\. [Example 7-1](ch07.html#example_program_that_demonstrates_the
+    "Example 7-1. Example program that demonstrates the type conversion behavior (conversion_bug_example.c)")
+    illustrates how `t` can become negative:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 7-1. Example program that demonstrates the type conversion behavior
+    (*conversion_bug_example.c*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Lines 30, 31, and 33 are nearly identical to lines in the OS X kernel source
+    code. In this example, I chose the hardcoded value `0xffffffff` as IOCTL input
+    data (see line 30). After the type conversion in line 33, the bit patterns, as
+    well as the decimal value of `t`, are printed to the console. The example program
+    results in the following output when it’s executed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The output shows that `t` gets the value −1 if a character string consisting
+    of 4 `0xff` byte values is converted into a signed int. See Section A.3 for more
+    information on type conversions and the associated security problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If `t` is negative, the check in line 1093 of the kernel code will return `FALSE`
+    because the signed int variable `nlinesw` has a value greater than zero. If that
+    happens, the user-supplied value of `t` gets further processing. In line 1098,
+    the value of `t` is used as an index into an array of function pointers. Since
+    I could control the index into that array, I could specify an arbitrary memory
+    location that would be executed by the kernel. This leads to full control of the
+    kernel execution flow. Thank you, Apple, for the terrific bug. ![](httpatomoreillycomsourcenostarchimages939227.png)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the anatomy of the bug, as diagrammed in [Figure 7-1](ch07.html#description_of_the_vulnerability_that_i
+    "Figure 7-1. Description of the vulnerability that I discovered in the XNU kernel
+    of OS X"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The function pointer array `linesw[]` gets referenced.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The user-controlled value of `t` is used as an array index for `linesw[]`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: A pointer to the assumed address of the `l_open()` function gets referenced
+    based on the user-controllable memory location.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The assumed address of `l_open()` gets referenced and called.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The value at the assumed address of `l_open()` gets copied into the instruction
+    pointer (`EIP` register).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Description of the vulnerability that I discovered in the XNU kernel of OS
+    X](httpatomoreillycomsourcenostarchimages939323.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7-1. Description of the vulnerability that I discovered in the XNU kernel
+    of OS X
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because the value of `t` is supplied by the user (see (2)), it is possible to
+    control the address of the value that gets copied into `EIP`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.2 Exploitation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'After I found the bug, I did the following to gain control over `EIP`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Trigger the bug to crash the system (denial of service).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 2: Prepare a kernel-debugging environment.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 3: Connect the debugger to the target system.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 4: Get control over `EIP`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 1: Trigger the Bug to Crash the System (Denial of Service)'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Once I had found the bug, it was easy to trigger it and cause a system crash.
+    All I had to do was send a malformed `TIOCSETD` IOCTL request to the kernel. [Example 7-2](ch07s02.html#poc_code_open_parenthesis-id1
+    "Example 7-2. POC code (poc.c) I wrote to trigger the bug I found in the kernel
+    of OS X") shows the source code of the POC I developed to cause a crash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 7-2. POC code (*poc.c*) I wrote to trigger the bug I found in the kernel
+    of OS X
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'A brand-new MacBook: $1,149\. An LED Cinema Display Monitor: $899\. Crashing
+    a Mac OS X system with only 11 lines of code: priceless.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I then compiled and tested the POC code as an unprivileged user:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Immediately after executing the POC code, I got the standard crash screen of
+    Mac OS X,^([[76](ch07s05.html#ftn.CHP-7-FN-2)]) as shown in [Figure 7-2](ch07s02.html#mac_os_x_kernel_panic_message
+    "Figure 7-2. Mac OS X kernel panic message").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Mac OS X kernel panic message](httpatomoreillycomsourcenostarchimages939325.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7-2. Mac OS X kernel panic message
+  prefs: []
+  type: TYPE_NORMAL
+- en: If such a kernel panic occurs, the details of the crash are added to a log file
+    in the folder */Library/Logs/*. I rebooted the system and opened that file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: It appeared that I could crash the system as an unprivileged user. Could I also
+    execute arbitrary code in the privileged context of the OS X kernel? To answer
+    that question, I had to peer inside the inner workings of the kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 2: Prepare a Kernel-Debugging Environment'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: At this point I needed to be able to debug the kernel. As I mentioned earlier,
+    this is no problem if you own two Macs, but I had only one MacBook at hand. Therefore,
+    I had to find another way to debug the kernel. I solved the problem by building
+    and installing Apple’s GNU debugger on a Linux host and then connecting the host
+    to my MacBook. Instructions for building such a debugger host system are described
+    in Section B.5.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Connect the Debugger to the Target System'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: After I had built Apple’s gdb on a Linux host, I linked the systems with an
+    Ethernet crossover cable, as shown in [Figure 7-3](ch07s02.html#my_setup_for_remotely_debugging_the_kern
+    "Figure 7-3. My setup for remotely debugging the kernel of Mac OS X").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![My setup for remotely debugging the kernel of Mac OS X](httpatomoreillycomsourcenostarchimages939327.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7-3. My setup for remotely debugging the kernel of Mac OS X
+  prefs: []
+  type: TYPE_NORMAL
+- en: I then started the Mac OS X target system, enabled remote kernel debugging,
+    and rebooted the system so that the changes could take effect:^([[77](ch07s05.html#ftn.CHP-7-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After the Mac OS X target machine had restarted, I booted the Linux host and
+    made sure that I could connect to the target machine:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I added a permanent ARP entry for the target on the Linux system to establish
+    a robust connection between the two machines, ensuring that the connection wouldn’t
+    be dropped while the kernel of the target machine was being debugged:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I then logged in to the Mac OS X system as an unprivileged user and generated
+    a nonmaskable interrupt (NMI) by tapping the system’s power button. That gave
+    me the following output on the screen of the MacBook:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Back on the Linux host, I started the kernel debugger (see Section B.5 for
+    more information on how to build this gdb version):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I then instructed the debugger to use Apple’s kernel debug protocol (kdp):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the debugger was running, I attached to the kernel of the target system
+    for the first time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As the debugger output shows, it seemed to work! The OS X system was frozen
+    at that time, so I continued the execution of the kernel with the following debugger
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now everything was set up for remotely debugging the kernel of the Mac OS X
+    target system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 4: Get Control over EIP'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'After I had successfully connected the debugger to the kernel of the target
+    system, I opened a terminal on the Mac OS X machine and again executed the POC
+    code described in [Example 7-2](ch07s02.html#poc_code_open_parenthesis-id1 "Example 7-2. POC
+    code (poc.c) I wrote to trigger the bug I found in the kernel of OS X"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The OS X system froze immediately, and I got the following debugger output
+    on the Linux host:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To see what exactly caused the `SIGTRAP` signal, I looked at the last executed
+    kernel instruction (see Section B.4 for a description of the following debugger
+    commands):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Apparently, the crash occurred when the kernel tried to call an address referenced
+    by the `EAX` register. Next, I looked at the register values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The debugger output shows that `EAX` had a value of `0xe0000000`. It wasn’t
+    apparent to me where this value came from, so I disassembled the instructions
+    around `EIP`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Note that the disassembly is in AT&T style*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At address `0x35573d`, the value of `EBX` is copied into `EAX`. The next instruction
+    modifies this value by a left shift of 5 bits. At address `0x35574c`, the value
+    is used to calculate the operand of the `call` instruction. So where did the value
+    of `EBX` come from? A quick look at the register values revealed that `EBX` was
+    holding the value `0xff000000`, the value I had supplied as input data for the
+    `TIOCSETD` IOCTL. The value `0xe0000000` was the result of a left shift of my
+    supplied input value by 5 bits. As expected, I was able to control the memory
+    location used to find the new value for the `EIP` register. The modification of
+    my supplied input data can be expressed as
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I could get an appropriate `TIOCSETD` input data value for a specific memory
+    address in either of two ways: I could try to solve the mathematical problem,
+    or I could brute force the value. I decided to go with the easy option and wrote
+    the following program to brute force the value:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 7-3. Code that I wrote to brute force the `TIOCSETD` input data value
+    (*addr_brute_force.c*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I wrote this program to answer this question: What `TIOCSETD` input data do
+    I have to send to the kernel in order to get the value at memory address `0x10203040`
+    copied into the `EIP` register?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: If `0x10203040` pointed to the value I wanted copied into `EIP`, I had to supply
+    the value `0x807ed63f` as an input for the `TIOCSETD` IOCTL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I then tried to manipulate `EIP` to make it point to address `0x65656565`.
+    To achieve this, I had to find a memory location in the kernel that pointed to
+    that value. To find suitable memory locations in the kernel, I wrote the following
+    gdb script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 7-4. A script for finding memory locations in the kernel that point
+    to a special byte pattern (*search_memloc.gdb*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The gdb script from [Example 7-4](ch07s02.html#a_script_for_finding_memory_locations
+    "Example 7-4. A script for finding memory locations in the kernel that point to
+    a special byte pattern (search_memloc.gdb)") takes two arguments: the address
+    from where to start the search and the pattern to search for. I wanted to find
+    a memory location that pointed to the value `0x65656565`, so I used the script
+    in the following way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output shows the memory locations found by the script that point to the
+    value `0x65656565`. I picked the first one from the list, adjusted the `MEMLOC`
+    defined in line 3 of [Example 7-3](ch07s02.html#code_that_i_wrote_to_brute_force_the
+    "Example 7-3. Code that I wrote to brute force the TIOCSETD input data value (addr_brute_force.c)"),
+    and let the program determine the appropriate `TIOCSETD` input value:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I then changed the IOCTL input value in the POC code illustrated in [Example 7-2](ch07s02.html#poc_code_open_parenthesis-id1
+    "Example 7-2. POC code (poc.c) I wrote to trigger the bug I found in the kernel
+    of OS X"), connected the kernel debugger to OS X, and executed the code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The OS X machine froze again, and the debugger on the Linux host displayed
+    the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: As the debugger output shows, the `EIP` register now had a value of `0x65656565`.
+    At this point I was able to control `EIP`, but exploiting the bug to achieve arbitrary
+    code execution at the kernel level was still a challenge. Under OS X, including
+    Leopard, the kernel isn’t mapped into every user space process; it has its own
+    virtual address space. It’s therefore impossible to return to a user space address
+    using common strategies for Linux or Windows. I solved this problem by heap spraying
+    the kernel with my privilege escalation payload and a reference to this payload.
+    I achieved this by exploiting a memory leak in the kernel of OS X. Then I calculated
+    an appropriate `TIOCSETD` input value that pointed to the payload reference. This
+    value was then copied into `EIP` and . . . bingo!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Providing you with a full working exploit would be against the law, but if you
+    are interested, you can watch a short video I recorded that shows the exploit
+    in action on the book’s website.^([[78](ch07s05.html#ftn.CHP-7-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.3 Vulnerability Remediation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Wednesday, November 14, 2007*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After I informed Apple about the bug, Apple fixed it by adding an extra check
+    for the user-supplied IOCTL data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*xnu-792.24.17/bsd/kern/tty.c*^([[79](ch07s05.html#ftn.CHP-7-FN-5)])'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Line 1085 now checks whether the value of `t` is negative. If so, the user-derived
+    data will not be processed any further. This little change was enough to successfully
+    rectify the vulnerability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.4 Lessons Learned
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As a programmer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Avoid, where possible, using explicit type conversions (casts).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Always validate input data.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 7.5 Addendum
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Thursday, November 15, 2007*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the vulnerability has been fixed and a new version of the XNU kernel of
+    OS X is available, I released a detailed security advisory on my website today.^([[80](ch07s05.html#ftn.CHP-7-FN-6)])
+    The bug was assigned CVE-2007-4686.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After I published the advisory, Theo de Raadt (the founder of OpenBSD and OpenSSH)
+    hinted that this bug is older than 4.4BSD and was fixed roughly 15 years ago by
+    everyone but Apple. In the initial revision of FreeBSD from 1994, the implementation
+    of the `TIOCSETD` IOCTL looks like this:^([[81](ch07s05.html#ftn.CHP-7-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since `t` gets cast into an unsigned int in line 808, it can never become negative.
+    If the user-derived data is greater than `0x80000000`, the function returns with
+    an error (see line 809). So Theo was right—the bug was indeed already fixed in
+    1994\. [Figure 7-4](ch07s05.html#timeline_from_the_time_i_notified_apple "Figure 7-4. Timeline
+    from the time I notified Apple until I released a security advisory") shows the
+    timeline of the bug’s fix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Timeline from the time I notified Apple until I released a security advisory](httpatomoreillycomsourcenostarchimages939329.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7-4. Timeline from the time I notified Apple until I released a security
+    advisory
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ^([[75](#ftn.CHP-7-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[76](#ftn.CHP-7-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[77](#ftn.CHP-7-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[78](#ftn.CHP-7-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[79](#ftn.CHP-7-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[80](#ftn.CHP-7-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[81](#ftn.CHP-7-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[75](#CHP-7-FN-1)]) The vulnerable source code revision 792.13.8 of XNU can
+    be downloaded at [http://www.opensource.apple.com/tarballs/xnu/xnu-792.13.8.tar.gz](http://www.opensource.apple.com/tarballs/xnu/xnu-792.13.8.tar.gz).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[76](#CHP-7-FN-2)]) See “‘You need to restart your computer’ (kernel panic)
+    message appears (Mac OS X v10.5, 10.6)” at [http://support.apple.com/kb/TS3742](http://support.apple.com/kb/TS3742).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[77](#CHP-7-FN-3)]) See “Kernel Extension Programming Topics: Debugging
+    a Kernel Extension with GDB” in *Mac OS X Developer Library* at [http://developer.apple.com/library/mac/#documentation/Darwin/Conceptual/KEXTConcept/KEXTConceptDebugger/debug_tutorial.html](http://developer.apple.com/library/mac/#documentation/Darwin/Conceptual/KEXTConcept/KEXTConceptDebugger/debug_tutorial.html)
+    and “Kernel Programming Guide: When Things Go Wrong; Debugging the Kernel” in
+    *Mac OS X Developer Library* at [http://developer.apple.com/library/mac/documentation/Darwin/Conceptual/KernelProgramming/build/build.html#//apple_ref/doc/uid/TP30000905-CH221-CIHBJCGC](http://developer.apple.com/library/mac/documentation/Darwin/Conceptual/KernelProgramming/build/build.html#//apple_ref/doc/uid/TP30000905-CH221-CIHBJCGC).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[78](#CHP-7-FN-4)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[79](#CHP-7-FN-5)]) The source code of the fixed XNU version 792.24.17 is
+    available at [http://www.opensource.apple.com/tarballs/xnu/xnu-792.24.17.tar.gz](http://www.opensource.apple.com/tarballs/xnu/xnu-792.24.17.tar.gz).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[80](#CHP-7-FN-6)]) My security advisory that describes the details of the
+    Mac OS X kernel vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2007-001.txt](http://www.trapkit.de/advisories/TKADV2007-001.txt).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[81](#CHP-7-FN-7)]) The initial FreeBSD version of *tty.c* from 1994 can
+    be found at [http://www.freebsd.org/cgi/cvsweb.cgi/src/sys/kern/tty.c?rev=1.1;content-type=text/plain](http://www.freebsd.org/cgi/cvsweb.cgi/src/sys/kern/tty.c?rev=1.1;content-type=text/plain).
+  prefs: []
+  type: TYPE_NORMAL

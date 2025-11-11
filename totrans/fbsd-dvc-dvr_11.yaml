@@ -1,0 +1,215 @@
+- en: 'Chapter 11. Case Study: Intelligent Platform Management Interface Driver'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This chapter examines parts of `ipmi(4)`, the Intelligent Platform Management
+    Interface (IPMI) driver. The IPMI specification defines a standard for monitoring
+    and managing system hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For our purposes, this description of IPMI is sufficient, as the point of this
+    chapter is to demonstrate how PCI drivers such as `ipmi(4)` employ PMIO and MMIO.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code base for `ipmi(4)` is composed of 10 source files and 1 header file.
+    In this chapter, we’ll walk through one of these files, *ipmi_pci.c*, which contains
+    code that’s related to the PCI bus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Code Analysis
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 11-1](ch11.html#ipmi_underscore_pci.c "Example 11-1. ipmi_pci.c")
+    provides a terse, source-level overview of *ipmi_pci.c*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 11-1. ipmi_pci.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Before I describe the functions in [Example 11-1](ch11.html#ipmi_underscore_pci.c
+    "Example 11-1. ipmi_pci.c"), note that it contains two ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) `DRIVER_MODULE` calls.
+    In other words, [Example 11-1](ch11.html#ipmi_underscore_pci.c "Example 11-1. ipmi_pci.c")
+    declares two Newbus drivers; each designed to handle a distinct group of devices
+    (as you’ll soon see).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now let’s discuss the functions found in [Example 11-1](ch11.html#ipmi_underscore_pci.c
+    "Example 11-1. ipmi_pci.c").
+  prefs: []
+  type: TYPE_NORMAL
+- en: ipmi_pci_probe Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ipmi_pci_probe` function is the `device_probe` implementation for the
+    first Newbus driver found in [Example 11-1](ch11.html#ipmi_underscore_pci.c "Example 11-1. ipmi_pci.c").
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137501.png) checks
+    the value of the global variable `ipmi_attached`. If it is nonzero, which signifies
+    that `ipmi(4)` is currently in use, the error code ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `ENXIO` is returned; otherwise, ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `ipmi_pci_match` is called to determine whether this driver can handle ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `dev`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ipmi_pci_match Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ipmi_pci_match` function takes in a PCI Vendor ID/Device ID (VID/DID)
+    pair and verifies whether it recognizes those IDs. Before I define (and subsequently
+    walk through) this function, a description of the `ipmi_identifiers` array is
+    needed. This array is defined near the beginning of [Example 11-1](ch11.html#ipmi_underscore_pci.c
+    "Example 11-1. ipmi_pci.c") like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the `ipmi_identifiers` array is composed of `ipmi_ident` structures.
+    Each `ipmi_ident` structure includes a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) VID/DID pair and a ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    description of the PCI device. As you may have guessed, `ipmi_identifiers` lists
+    the devices that the first Newbus driver in [Example 11-1](ch11.html#ipmi_underscore_pci.c
+    "Example 11-1. ipmi_pci.c") supports.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve discussed `ipmi_identifiers`, let’s walk through `ipmi_pci_match`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function determines whether a specific ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    VID/DID pair is listed in ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `ipmi_identifiers`. If so, its ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    description is returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ipmi_pci_attach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ipmi_pci_attach` function is the `device_attach` implementation for the
+    first Newbus driver found in [Example 11-1](ch11.html#ipmi_underscore_pci.c "Example 11-1. ipmi_pci.c").
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    retrieving the IPMI data structure stored in the computer’s *System Management
+    BIOS (SMBIOS)*, which is responsible for maintaining hardware configuration information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Based on the SMBIOS data, `ipmi_pci_attach` determines `ipmi(4)`’s ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    mode of operation and whether it requires ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    I/O port or ![](httpatomoreillycomsourcenostarchimages1137505.png) I/O memory
+    access. Currently, `ipmi(4)` supports only Keyboard Controller Style (KCS) and
+    Server Management Interface Chip (SMIC) modes. These modes dictate how IPMI messages
+    are transferred. For our purposes, you won’t need to understand the specifics
+    of either mode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next block of code acquires I/O region access for `ipmi(4)`. Before I describe
+    this code, some background on PCI devices is needed. After bootup, PCI devices
+    can remap their device registers to a different location, thus avoiding address
+    conflicts with other devices. Because of this, PCI devices store the size and
+    current location of their I/O-mapped registers in their base address registers
+    (BARs). Thus, this block of code first calls ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `PCIR_BAR(0)` to get the address of the first BAR. Then it passes that address
+    as the ![](httpatomoreillycomsourcenostarchimages1137509.png) `rid` argument to
+    `bus_alloc_resource_any`, thereby acquiring I/O access to the device’s registers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To be accurate, the `PCIR_BAR(x`) macro returns the RID of the `x`th BAR.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remainder of `ipmi_pci_attach` ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    acquires an IRQ, starts up ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    KCS or ![](httpatomoreillycomsourcenostarchimages1137515.png) SMIC mode, and calls
+    ![](httpatomoreillycomsourcenostarchimages1137517.png) `ipmi_attach` to finish
+    initializing the device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ipmi2_pci_probe Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ipmi2_pci_probe` function is the `device_probe` implementation for the
+    second Newbus driver found in [Example 11-1](ch11.html#ipmi_underscore_pci.c "Example 11-1. ipmi_pci.c").
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function determines if `dev` is a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    generic IPMI device on the PCI bus. If so, its verbose description is ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    set, and the success code ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `BUS_PROBE_GENERIC` is returned. In short, this driver handles any standard IPMI
+    device on the PCI bus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you may have guessed, the first Newbus driver is a hack (that is to say,
+    a workaround) for the Dell PE2650, because it does not adhere to the IPMI specification.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ipmi2_pci_attach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `ipmi2_pci_attach` function is the `device_attach` implementation for the
+    second Newbus driver found in [Example 11-1](ch11.html#ipmi_underscore_pci.c "Example 11-1. ipmi_pci.c").
+    Here is its function definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    examining `dev`’s programming interface to determine `ipmi(4)`’s mode of operation
+    (either SMIC or KCS). Then ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `PCIR_BAR(0)` is called to obtain the address of the first BAR. From this BAR,
+    `ipmi2_pci_attach` ![](httpatomoreillycomsourcenostarchimages1137503.png) identifies
+    whether `ipmi(4)` requires ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    I/O port or ![](httpatomoreillycomsourcenostarchimages1137507.png) I/O memory
+    access before ![](httpatomoreillycomsourcenostarchimages1137509.png) acquiring
+    it. Lastly, `ipmi2_pci_attach` ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    obtains an IRQ, starts up ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    KCS or ![](httpatomoreillycomsourcenostarchimages1137515.png) SMIC mode, and calls
+    ![](httpatomoreillycomsourcenostarchimages1137517.png) `ipmi_attach` to finish
+    initializing `dev`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter examined the PCI code base for `ipmi(4)` and introduced two fundamentals.
+    First, a single source file can contain more than one driver. Second, to acquire
+    I/O region access, PCI drivers must first call `PCIR_BAR`.
+  prefs: []
+  type: TYPE_NORMAL

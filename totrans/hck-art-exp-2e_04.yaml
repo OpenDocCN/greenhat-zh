@@ -1,0 +1,2581 @@
+- en: Chapter 0x400. NETWORKING
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Communication and language have greatly enhanced the abilities of the human
+    race. By using a common language, humans are able to transfer knowledge, coordinate
+    actions, and share experiences. Similarly, programs can become much more powerful
+    when they have the ability to communicate with other programs via a network. The
+    real utility of a web browser isn't in the program itself, but in its ability
+    to communicate with webservers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Networking is so prevalent that it is sometimes taken for granted. Many applications
+    such as email, the Web, and instant messaging rely on networking. Each of these
+    applications relies on a particular network protocol, but each protocol uses the
+    same general network transport methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many people don't realize that there are vulnerabilities in the networking protocols
+    themselves. In this chapter you will learn how to network your applications using
+    sockets and how to deal with common network vulnerabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OSI Model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When two computers talk to each other, they need to speak the same language.
+    The structure of this language is described in layers by the OSI model. The OSI
+    model provides standards that allow hardware, such as routers and firewalls, to
+    focus on one particular aspect of communication that applies to them and ignore
+    others. The OSI model is broken down into conceptual layers of communication.
+    This way, routing and firewall hardware can focus on passing data at the lower
+    layers, ignoring the higher layers of data encapsulation used by running applications.
+    The seven OSI layers are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Physical layer** This layer deals with the physical connection between
+    two points. This is the lowest layer, whose primary role is communicating raw
+    bit streams. This layer is also responsible for activating, maintaining, and deactivating
+    these bit-stream communications. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Data-link layer** This layer deals with actually transferring data between
+    two points. In contrast with the physical layer, which takes care of sending the
+    raw bits, this layer provides high-level functions, such as error correction and
+    flow control. This layer also provides procedures for activating, maintaining,
+    and deactivating data-link connections. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Network layer** This layer works as a middle ground; its primary role is
+    to pass information between the lower and the higher layers. It provides addressing
+    and routing. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Transport layer** This layer provides transparent transfer of data between
+    systems. By providing reliable data communication, this layer allows the higher
+    layers to never worry about reliability or cost-effectiveness of data transmission.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Session layer** This layer is responsible for establishing and maintaining
+    connections between network applications. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Presentation layer** This layer is responsible for presenting the data
+    to applications in a syntax or language they understand. This allows for things
+    like encryption and data compression. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Application layer** This layer is concerned with keeping track of the requirements
+    of the application. |'
+  prefs: []
+  type: TYPE_TB
+- en: When data is communicated through these protocol layers, it's sent in small
+    pieces called packets. Each packet contains implementations of these protocol
+    layers. Starting from the application layer, the packet wraps the pre-sentation
+    layer around that data, which wraps the session layer, which wraps the transport
+    layer, and so forth. This process is called encapsulation. Each wrapped layer
+    contains a header and a body. The header contains the protocol information needed
+    for that layer, while the body contains the data for that layer. The body of one
+    layer contains the entire package of previously encapsulated layers, like the
+    skin of an onion or the functional contexts found on a program's stack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, whenever you browse the Web, the Ethernet cable and card make up
+    the physical layer, taking care of the transmission of raw bits from one end of
+    the cable to the other. The next later is the data link layer. In the web browser
+    example, Ethernet makes up this layer, which provides the low-level communications
+    between Ethernet ports on the LAN. This protocol allows for communication between
+    Ethernet ports, but these ports don't yet have IP addresses. The concept of IP
+    addresses doesn't exist until the next layer, the network layer. In addition to
+    addressing, this layer is responsible for moving data from one address to another.
+    These three lower layers together are able to send packets of data from one IP
+    address to another. The next layer is the transport layer, which for web traffic
+    is TCP; it provides a seamless bidirectional socket connection. The term *TCP/IP*describes
+    the use of TCP on the transport layer and IP on the network layer. Other addressing
+    schemes exist at this layer; however, your web traffic probably uses IP version
+    4 (IPv4). IPv4 addresses follow a familiar form of *XX.XX.XX.XX.*. IP version
+    6 (IPv6) also exists on this layer, with a totally different addressing scheme.
+    Since IPv4 is most common, *IP* will always refer to IPv4 in this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The web traffic itself uses HTTP (Hypertext Transfer Protocol) to communicate,
+    which is in the top layer of the OSI model. When you browse the Web, the web browser
+    on your network is communicating across the Internet with the webserver located
+    on a different private network. When this happens, the data packets are encapsulated
+    down to the physical layer where they are passed to a router. Since the router
+    isn't concerned with what's actually in the packets, it only needs to implement
+    protocols up to the network layer. The router sends the packets out to the Internet,
+    where they reach the other network's router. This router then encapsulates this
+    packet with the lowerlayer protocol headers needed for the packet to reach its
+    final destination. This process is shown in the following illustration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254249.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: All of this packet encapsulation makes up a complex language that hosts on the
+    Internet (and other types of networks) use to communicate with each other. These
+    protocols are programmed into routers, firewalls, and your computer's operating
+    system so they can communicate. Programs that use networking, such as web browsers
+    and email clients, need to interface with the operating system which handles the
+    network communications. Since the operating system takes care of the details of
+    network encapsulation, writing network programs is just a matter of using the
+    network interface of the OS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sockets
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A socket is a standard way to perform network communication through the OS.
+    A socket can be thought of as an endpoint to a connection, like a socket on an
+    operator's switchboard. But these sockets are just a programmer's abstraction
+    that takes care of all the nitty-gritty details of the OSI model described above.
+    To the programmer, a socket can be used to send or receive data over a network.
+    This data is transmitted at the session layer (5), above the lower layers (handled
+    by the operating system), which take care of routing. There are several different
+    types of sockets that determine the structure of the transport layer (4). The
+    most common types are stream sockets and datagram sockets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stream sockets provide reliable two-way communication similar to when you call
+    someone on the phone. One side initiates the connection to the other, and after
+    the connection is established, either side can communicate to the other. In addition,
+    there is immediate confirmation that what you said actually reached its destination.
+    Stream sockets use a standard communication protocol called Transmission Control
+    Protocol (TCP), which exists on the transport layer (4) of the OSI model. On computer
+    networks, data is usually transmitted in chunks called packets. TCP is designed
+    so that the packets of data will arrive without errors and in sequence, like words
+    arriving at the other end in the order they were spoken when you are talking on
+    the telephone. Webservers, mail servers, and their respective client applications
+    all use TCP and stream sockets to communicate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another common type of socket is a datagram socket. Communicating with a datagram
+    socket is more like mailing a letter than making a phone call. The connection
+    is one-way only and unreliable. If you mail several letters, you can't be sure
+    that they arrived in the same order, or even that they reached their destination
+    at all. The postal service is pretty reliable; the Internet, however, is not.
+    Datagram sockets use another standard protocol called UDP instead of TCP on the
+    transport layer (4). UDP stands for User Datagram Protocol, implying that it can
+    be used to create custom protocols. This protocol is very basic and lightweight,
+    with few safeguards built into it. It's not a real connection, just a basic method
+    for sending data from one point to another. With datagram sockets, there is very
+    little overhead in the protocol, but the protocol doesn't do much. If your program
+    needs to confirm that a packet was received by the other side, the other side
+    must be coded to send back an acknowledgment packet. In some cases packet loss
+    is acceptable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Datagram sockets and UDP are commonly used in networked games and streaming
+    media, since developers can tailor their communications exactly as needed without
+    the built-in overhead of TCP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Socket Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In C, sockets behave a lot like files since they use file descriptors to identify
+    themselves. Sockets behave so much like files that you can actually use the `read()`
+    and `write()` functions to receive and send data using socket file descriptors.
+    However, there are several functions specifically designed for dealing with sockets.
+    These functions have their prototypes defined in /usr/include/sys/sockets.h.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`socket(int domain, int type, int protocol)`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Used to create a new socket, returns a file descriptor for the socket or `-1`
+    on error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`connect(int fd, struct sockaddr *remote_host, socklen_t addr_length)`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Connects a socket (described by file descriptor `fd`) to a remote host. Returns
+    `0` on success and `-1` on error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`bind(int fd, struct sockaddr *local_addr, socklen_t addr_length)`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Binds a socket to a local address so it can listen for incoming connections.
+    Returns `0` on success and `-1` on error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`listen(int fd, int backlog_queue_size)`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Listens for incoming connections and queues connection requests up to `backlog_queue_size`.
+    Returns `0` on success and `-1` on error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`accept(int fd, sockaddr *remote_host, socklen_t *addr_length)`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Accepts an incoming connection on a bound socket. The address information from
+    the remote host is written into the `remote_host` structure and the actual size
+    of the address structure is written into `*addr_length`. This function returns
+    a new socket file descriptor to identify the connected socket or `-1` on error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**``send(int fd, void *buffer, size_t *`n`*, int flags)``**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sends *`n`* bytes from `*buffer` to socket `fd`; returns the number of bytes
+    sent or `-1` on error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**``recv(int fd, void *buffer, size_t *`n`*, int flags)``**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Receives *`n`* bytes from socket `fd` into `*buffer`; returns the number of
+    bytes received or `-1` on error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a socket is created with the `socket()` function, the domain, type, and
+    protocol of the socket must be specified. The domain refers to the protocol family
+    of the socket. A socket can be used to communicate using a variety of protocols,
+    from the standard Internet protocol used when you browse the Web to amateur radio
+    protocols such as AX.25 (when you are being a gigantic nerd). These protocol families
+    are defined in bits/socket.h, which is automatically included from sys/socket.h.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/bits/socket.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: As mentioned before, there are several types of sockets, although stream sockets
+    and datagram sockets are the most commonly used. The types of sockets are also
+    defined in bits/socket.h. (The `/* comments */` in the code above are just another
+    style that comments out everything between the asterisks.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/bits/socket.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The final argument for the `socket()` function is the protocol, which should
+    almost always be `0`. The specification allows for multiple protocols within a
+    protocol family, so this argument is used to select one of the protocols from
+    the family. In practice, however, most protocol families only have one protocol,
+    which means this should usually be set for `0`; the first and only protocol in
+    the enumeration of the family. This is the case for everything we will do with
+    sockets in this book, so this argument will always be `0` in our examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Socket Addresses
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Many of the socket functions reference a `sockaddr` structure to pass address
+    information that defines a host. This structure is also defined in bits/socket.h,
+    as shown on the following page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/bits/socket.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The macro for `SOCKADDR_COMMON` is defined in the included bits/sockaddr.h file,
+    which basically translates to an unsigned short int. This value defines the address
+    family of the address, and the rest of the structure is saved for address data.
+    Since sockets can communicate using a variety of protocol families, each with
+    their own way of defining endpoint addresses, the definition of an address must
+    also be variable, depending on the address family. The possible address families
+    are also defined in bits/socket.h; they usually translate directly to the corresponding
+    protocol families.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/bits/socket.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since an address can contain different types of information, depending on the
+    address family, there are several other address structures that contain, in the
+    address data section, common elements from the `sockaddr` structure as well as
+    information specific to the address family. These structures are also the same
+    size, so they can be typecast to and from each other. This means that a `socket()`
+    function will simply accept a pointer to a `sockaddr` structure, which can in
+    fact point to an address structure for IPv4, IPv6, or X.25\. This allows the socket
+    functions to operate on a variety of protocols.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this book we are going to deal with Internet Protocol version 4, which is
+    the protocol family `PF_INET`, using the address family `AF_INET`. The parallel
+    socket address structure for `AF_INET` is defined in the netinet/in.h file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/netinet/in.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `SOCKADDR_COMMON` part at the top of the structure is simply the unsigned
+    short int mentioned above, which is used to define the address family. Since a
+    socket endpoint address consists of an Internet address and a port number, these
+    are the next two values in the structure. The port number is a 16-bit short, while
+    the `in_addr` structure used for the Internet address contains a 32-bit number.
+    The rest of the structure is just 8 bytes of padding to fill out the rest of the
+    `sockaddr` structure. This space isn''t used for anything, but must be saved so
+    the structures can be interchangeably typecast. In the end, the socket address
+    structures end up looking like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254410.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-2.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network Byte Order
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The port number and IP address used in the `AF_INET` socket address structure
+    are expected to follow the network byte ordering, which is big-endian. This is
+    the opposite of *x*86''s little-endian byte ordering, so these values must be
+    converted. There are several functions specifically for these conversions, whose
+    prototypes are defined in the netinet/in.h and arpa/inet.h include files. Here
+    is a summary of these common byte order conversion functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`htonl`***`(long value)`* **Host-to-Network Long**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Converts a 32-bit integer from the host's byte order to network byte order
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`htons`***`(short value)`* **Host-to-Network Short**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Converts a 16-bit integer from the host's byte order to network byte order
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`ntohl`***`(long value)`* **Network-to-Host Long**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Converts a 32-bit integer from network byte order to the host's byte order
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`ntohs`***`(long value)`* **Network-to-Host Short**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Converts a 16-bit integer from network byte order to the host's byte order
+  prefs: []
+  type: TYPE_NORMAL
+- en: For compatibility with all architectures, these conversion functions should
+    still be used even if the host is using a processor with big-endian byte ordering.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Internet Address Conversion
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'When you see 12.110.110.204, you probably recognize this as an Internet address
+    (IP version 4). This familiar dotted-number notation is a common way to specify
+    Internet addresses, and there are functions to convert this notation to and from
+    a 32-bit integer in network byte order. These functions are defined in the arpa/inet.h
+    include file, and the two most useful conversion functions are:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**ASCII to Network**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This function converts an ASCII string containing an IP address in dottednumber
+    format into an `in_addr` structure, which, as you remember, only contains a 32-bit
+    integer representing the IP address in network byte order.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**Network to ASCII**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This function converts the other way. It is passed a pointer to an `in_addr`
+    structure containing an IP address, and the function returns a character pointer
+    to an ASCII string containing the IP address in dotted-number format. This string
+    is held in a statically allocated memory buffer in the function, so it can be
+    accessed until the next call to `inet_ntoa()`, when the string will be overwritten.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Simple Server Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The best way to show how these functions are used is by example. The following
+    server code listens for TCP connections on port 7890\. When a client connects,
+    it sends the message *Hello, world!* and then receives data until the connection
+    is closed. This is done using socket functions and structures from the include
+    files mentioned earlier, so these files are included at the beginning of the program.
+    A useful memory dump function has been added to hacking.h, which is shown on the
+    following page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Added to hacking.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function is used to display packet data by the server program. However,
+    since it is also useful in other places, it has been put into hacking.h, instead.
+    The rest of the server program will be explained as you read the source code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: simple_server.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: So far, the program sets up a socket using the `socket()` function. We want
+    a TCP/IP socket, so the protocol family is `PF_INET` for IPv4 and the socket type
+    is `SOCK_STREAM` for a stream socket. The final protocol argument is `0`, since
+    there is only one protocol in the `PF_INET` protocol family. This function returns
+    a socket file descriptor which is stored in `sockfd`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `setsockopt()` function is simply used to set socket options. This function
+    call sets the `SO_REUSEADDR` socket option to `true`, which will allow it to reuse
+    a given address for binding. Without this option set, when the program tries to
+    bind to a given port, it will fail if that port is already in use. If a socket
+    isn't closed properly, it may appear to be in use, so this option lets a socket
+    bind to a port (and take over control of it), even if it seems to be in use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first argument to this function is the socket (referenced by a file descriptor),
+    the second specifies the level of the option, and the third specifies the option
+    itself. Since `SO_REUSEADDR` is a socket-level option, the level is set to `SOL_SOCKET`.
+    There are many different socket options defined in /usr/include/ asm/socket.h.
+    The final two arguments are a pointer to the data that the option should be set
+    to and the length of that data. A pointer to data and the length of that data
+    are two arguments that are often used with socket functions. This allows the functions
+    to handle all sorts of data, from single bytes to large data structures. The `SO_REUSEADDR`
+    options uses a 32-bit integer for its value, so to set this option to `true`,
+    the final two arguments must be a pointer to the integer value of `1` and the
+    size of an integer (which is 4 bytes).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: These next few lines set up the `host_addr` structure for use in the bind call.
+    The address family is `AF_INET`, since we are using IPv4 and the `sockaddr_in`structure.
+    The port is set to `PORT`, which is defined as `7890`. This short integer value
+    must be converted into network byte order, so the `htons()` function is used.
+    The address is set to `0`, which means it will automatically be filled with the
+    host's current IP address. Since the value `0` is the same regardless of byte
+    order, no conversion is necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bind()` call passes the socket file descriptor, the address structure,
+    and the length of the address structure. This call will bind the socket to the
+    current IP address on port 7890.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `listen()` call tells the socket to listen for incoming connections, and
+    a subsequent `accept()` call actually accepts an incoming connection. The `listen()`
+    function places all incoming connections into a backlog queue until an `accept()`
+    call accepts the connections. The last argument to the `listen()` call sets the
+    maximum size for the backlog queue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next is a loop that accepts incoming connections. The `accept()` function's
+    first two arguments should make sense immediately; the final argument is a pointer
+    to the size of the address structure. This is because the `accept()` function
+    will write the connecting client's address information into the address structure
+    and the size of that structure into `sin_size`. For our purposes, the size never
+    changes, but to use the function we must obey the calling convention. The `accept()`
+    function returns a new socket file descriptor for the accepted connection. This
+    way, the original socket file descriptor can continue to be used for accepting
+    new connections, while the new socket file descriptor is used for communicating
+    with the connected client.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After getting a connection, the program prints out a connection message, using
+    `inet_ntoa()` to convert the `sin_addr` address structure to a dotted-number IP
+    string and `ntohs()` to convert the byte order of the `sin_port` number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `send()` function sends the 13 bytes of the string `Hello, world!\n` to
+    the new socket that describes the new connection. The final argument for the `send()`
+    and `recv()` functions are flags, that for our purposes, will always be `0`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next is a loop that receives data from the connection and prints it out. The
+    `recv()` function is given a pointer to a buffer and a maximum length to read
+    from the socket. The function writes the data into the buffer passed to it and
+    returns the number of bytes it actually wrote. The loop will continue as long
+    as the `recv()` call continues to receive data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When compiled and run, the program binds to port 7890 of the host and waits
+    for incoming connections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: A telnet client basically works like a generic TCP connection client, so it
+    can be used to connect to the simple server by specifying the target IP address
+    and port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From a Remote Machine
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Upon connection, the server sends the string `Hello, world!`, and the rest is
+    the local character echo of me typing `this is a test` and a line of keyboard
+    mashing. Since telnet is line-buffered, each of these two lines is sent back to
+    the server when `ENTER` is pressed. Back on the server side, the output shows
+    the connection and the packets of data that are sent back.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On a Local Machine
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: A Web Client Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The telnet program works well as a client for our server, so there really isn't
+    much reason to write a specialized client. However, there are thousands of different
+    types of servers that accept standard TCP/IP connections. Every time you use a
+    web browser, it makes a connection to a webserver somewhere. This connection transmits
+    the web page over the connection using HTTP, which defines a certain way to request
+    and send information. By default, webservers run on port 80, which is listed along
+    with many other default ports in /etc/services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /etc/services
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: HTTP exists in the application layer—the top layer—of the OSI model. At this
+    layer, all of the networking details have already been taken care of by the lower
+    layers, so HTTP uses plaintext for its structure. Many other application layer
+    protocols also use plaintext, such as POP3, SMTP, IMAP, and FTP's control channel.
+    Since these are standard protocols, they are all well documented and easily researched.
+    Once you know the syntax of these various protocols, you can manually talk to
+    other programs that speak the same language. There's no need to be fluent, but
+    knowing a few important phrases will help you when traveling to foreign servers.
+    In the language of HTTP, requests are made using the command `GET`, followed by
+    the resource path and the HTTP protocol version. For example, `GET / HTTP/1.0`
+    will request the root document from the webserver using HTTP version 1.0\. The
+    request is actually for the root directory of /, but most webservers will automatically
+    search for a default HTML document in that directory of index.html. If the server
+    finds the resource, it will respond using HTTP by sending several headers before
+    sending the content. If the command `HEAD` is used instead of `GET`, it will only
+    return the HTTP headers without the content. These headers are plaintext and can
+    usually provide information about the server. These headers can be retrieved manually
+    using telnet by connecting to port 80 of a known website, then typing `HEAD /
+    HTTP/1.0` and pressing ENTER twice. In the output below, telnet is used to open
+    a TCP-IP connection to the webserver at [http://www.internic.net](http://www.internic.net).
+    Then the HTTP application layer is manually spoken to request the headers for
+    the main index page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: This reveals that the webserver is Apache version 2.0.52 and even that the host
+    runs CentOS. This can be useful for profiling, so let's write a program that automates
+    this manual process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next few programs will be sending and receiving a lot of data. Since the
+    standard socket functions aren't very friendly, let's write some functions to
+    send and receive data. These functions, called `send_string()` and `recv_line()`,
+    will be added to a new include file called hacking-network.h.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The normal `send()` function returns the number of bytes written, which isn't
+    always equal to the number of bytes you tried to send. The `send_string()` function
+    accepts a socket and a string pointer as arguments and makes sure the entire string
+    is sent out over the socket. It uses `strlen()` to figure out the total length
+    of the string passed to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You may have noticed that every packet the simple server received ended with
+    the bytes `0x0D` and `0x0A`. This is how telnet terminates the lines—it sends
+    a carriage return and a newline character. The HTTP protocol also expects lines
+    to be terminated with these two bytes. A quick look at an ASCII table shows that
+    `0x0D` is a carriage return (`'\r'`) and `0x0A` is the newline character (`'\n'`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `recv_line()` function reads entire lines of data. It reads from the socket
+    passed as the first argument into the a buffer that the second argument points
+    to. It continues receiving from the socket until it encounters the last two linetermination
+    bytes in sequence. Then it terminates the string and exits the function. These
+    new functions ensure that all bytes are sent and receive data as lines terminated
+    by `'\r\n'`. They are listed below in a new include file called hacking-network.h.
+  prefs: []
+  type: TYPE_NORMAL
+- en: hacking-network.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Making a socket connection to a numerical IP address is pretty simple but named
+    addresses are commonly used for convenience. In the manual `HTTP HEAD` request,
+    the telnet program automatically does a DNS (Domain Name Service) lookup to determine
+    that [www.internic.net](http://www.internic.net) translates to the IP address
+    192.0.34.161\. DNS is a protocol that allows an IP address to be looked up by
+    a named address, similar to how a phone number can be looked up in a phone book
+    if you know the name. Naturally, there are socket-related functions and structures
+    specifically for hostname lookups via DNS. These functions and structures are
+    defined in netdb.h. A function called `gethostbyname()` takes a pointer to a string
+    containing a named address and returns a pointer to a `hostent`structure, or `NULL`
+    pointer on error. The `hostent` structure is filled with information from the
+    lookup, including the numerical IP address as a 32-bit integer in network byte
+    order. Similar to the `inet_ntoa()` function, the memory for this structure is
+    statically allocated in the function. This structure is shown below, as listed
+    in netdb.h.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/netdb.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: The following code demonstrates the use of the `gethostbyname()` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: host_lookup.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: This program accepts a hostname as its only argument and prints out the IP address.
+    The `gethostbyname()` function returns a pointer to a `hostent` structure, which
+    contains the IP address in element `h_addr`. A pointer to this element is typecast
+    into an `in_addr` pointer, which is later dereferenced for the call to `inet_ntoa()`,
+    which expects a `in_addr` structure as its argument. Sample program output is
+    shown on the following page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Using socket functions to build on this, creating a webserver identification
+    program isn't that difficult.
+  prefs: []
+  type: TYPE_NORMAL
+- en: webserver_id.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Most of this code should make sense to you now. The `target_addr` structure's
+    `sin_addr` element is filled using the address from the `host_info` structure
+    by typecasting and then dereferencing as before (but this time it's done in a
+    single line). The `connect()` function is called to connect to port 80 of the
+    target host, the command string is sent, and the program loops reading each line
+    into buffer. The `strncasecmp()` function is a string comparison function from
+    strings.h. This function compares the first *n* bytes of two strings, ignoring
+    capitalization. The first two arguments are pointers to the strings, and the third
+    argument is *n*, the number of bytes to compare. The function will return `0`
+    if the strings match, so the `if` statement is searching for the line that starts
+    with `"Server:"`. When it finds it, it removes the first eight bytes and prints
+    the webserver version information. The following listing shows compilation and
+    execution of the program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: A Tinyweb Server
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A webserver doesn't have to be much more complex than the simple server we created
+    in the previous section. After accepting a TCP-IP connection, the webserver needs
+    to implement further layers of communication using the HTTP protocol.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The server code listed below is nearly identical to the simple server, except
+    that connection handling code is separated into its own function. This function
+    handles HTTP `GET` and `HEAD` requests that would come from a web browser. The
+    program will look for the requested resource in the local directory called webroot
+    and send it to the browser. If the file can't be found, the server will respond
+    with a 404 HTTP response. You may already be familiar with this response, which
+    means *File Not Found*. The complete source code listing follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: tinyweb.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `handle_connection` function uses the `strstr()` function to look for the
+    substring `HTTP/` in the request buffer. The `strstr()` function returns a pointer
+    to the substring, which will be right at the end of the request. The string is
+    terminated here, and the requests `HEAD` and `GET` are recognized as processable
+    requests. A `HEAD` request will just return the headers, while a `GET` request
+    will also return the requested resource (if it can be found).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The files index.html and image.jpg have been put into the directory webroot,
+    as shown in the output below, and then the tinyweb program is compiled. Root privileges
+    are needed to bind to any port below 1024, so the program is setuid root and executed.
+    The server''s debugging output shows the results of a web browser''s request of
+    http://127.0.0.1:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: The address 127.0.0.1 is a special loopback address that routes to the local
+    machine. The initial request gets index.html from the webserver, which in turn
+    requests image.jpg. In addition, the browser automatically requests favicon.ico
+    in an attempt to retrieve an icon for the web page. The screenshot below shows
+    the results of this request in a browser.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254301.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Peeling Back the Lower Layers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When you use a web browser, all seven OSI layers are taken care of for you,
+    allowing you to focus on browsing and not protocols. At the upper layers of OSI,
+    many protocols can be plaintext since all the other details of the connection
+    are already taken care of by the lower layers. Sockets exist on the session layer
+    (5), providing an interface to send data from one host to another. TCP on the
+    transport layer (4) provides reliability and transport control, while IP on the
+    network layer (3) provides addressing and packet-level communication. Ethernet
+    on the data-link layer (2) provides addressing between Ethernet ports, suitable
+    for basic LAN (Local Area Network) communications. At the bottom, the physical
+    layer (1) is simply the wire and the protocol used to send bits from one device
+    to another. A single HTTP message will be wrapped in multiple layers as it is
+    passed through different aspects of communication.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This process can be thought of as an intricate interoffice bureaucracy, reminiscent
+    of the movie *Brazil*. At each layer, there is a highly specialized receptionist
+    who only understands the language and protocol of that layer. As data packets
+    are transmitted, each receptionist performs the necessary duties of her particular
+    layer, puts the packet in an interoffice envelope, writes the header on the outside,
+    and passes it on to the receptionist at the next layer below. That receptionist,
+    in turn, performs the necessary duties of his layer, puts the entire envelope
+    in another envelope, writes the header on the outside, and passes it on. Network
+    traffic is a chattering bureaucracy of servers, clients, and peer-to-peer connections.
+    At the higher layers, the traffic could be financial data, email, or basically
+    anything. Regardless of what the packets contain, the protocols used at the lower
+    layers to move the data from point A to point B are usually the same. Once you
+    understand the office bureaucracy of these common lower layer protocols, you can
+    peek inside envelopes in transit, and even falsify documents to manipulate the
+    system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data-Link Layer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The lowest visible layer is the data-link layer. Returning to the receptionist
+    and bureaucracy analogy, if the physical layer below is thought of as interoffice
+    mail carts and the network layer above as a worldwide postal system, the data-link
+    layer is the system of interoffice mail. This layer provides a way to address
+    and send messages to anyone else in the office, as well as to figure out who's
+    in the office.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ethernet exists on this layer, providing a standard addressing system for all
+    Ethernet devices. These addresses are known as Media Access Control (MAC) addresses.
+    Every Ethernet device is assigned a globally unique address consisting of six
+    bytes, usually written in hexadecimal in the form `xx:xx:xx:xx:xx:xx`. These addresses
+    are also sometimes referred to as hardware addresses, since each address is unique
+    to a piece of hardware and is stored in the device's integrated circuit memory.
+    MAC addresses can be thought of as Social Security numbers for hardware, since
+    each piece of hardware is supposed to have a unique MAC address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An Ethernet header is 14 bytes in size and contains the source and destination
+    MAC addresses for this Ethernet packet. Ethernet addressing also provides a special
+    broadcast address, consisting of all binary 1's (`ff:ff:ff:ff:ff:ff`). Any Ethernet
+    packet sent to this address will be sent to all the connected devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The MAC address of a network device isn't meant to change, but its IP address
+    may change regularly. The concept of IP addresses doesn't exist at this level,
+    only hardware addresses do, so a method is needed to correlate the two addressing
+    schemes. In the office, post office mail sent to an employee at the office's address
+    goes to the appropriate desk. In Ethernet, the method is known as Address Resolution
+    Protocol (ARP).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This protocol allows "seating charts" to be made to associate an IP address
+    with a piece of hardware. There are four different types of ARP messages, but
+    the two most important types are *ARP request messages* and *ARP reply messages*.
+    Any packet's Ethernet header includes a type value that describes the packet.
+    This type is used to specify whether the packet is an ARP-type message or an IP
+    packet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An ARP request is a message, sent to the broadcast address, that contains the
+    sender's IP address and MAC address and basically says, "Hey, who has this IP?
+    If it's you, please respond and tell me your MAC address." An ARP reply is the
+    corresponding response that is sent to the requester's MAC address (and IP address)
+    saying, "This is my MAC address, and I have this IP address." Most implementations
+    will temporarily cache the MAC/IP address pairs received in ARP replies, so that
+    ARP requests and replies aren't needed for every single packet. These caches are
+    like the interoffice seating chart.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, if one system has the IP address 10.10.10.20 and MAC address `00:00:00:aa:aa:aa`,
+    and another system on the same network has the IP address 10.10.10.50 and MAC
+    address `00:00:00:bb:bb:bb`, neither system can communicate with the other until
+    they know each other's MAC addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254445.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-4.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the first system wants to establish a TCP connection over IP to the second
+    device's IP address of 10.10.10.50, the first system will first check its ARP
+    cache to see if an entry exists for 10.10.10.50\. Since this is the first time
+    these two systems are trying to communicate, there will be no such entry, and
+    an ARP request will be sent out to the broadcast address, saying, "If you are
+    10.10.10.50, please respond to me at `00:00:00:aa:aa:aa`." Since this request
+    uses the broadcast address, every system on the network sees the request, but
+    only the system with the corresponding IP address is meant to respond. In this
+    case, the second system responds with an ARP reply that is sent directly back
+    to `00:00:00:aa:aa:aa` saying, "I am 10.10.10.50 and I'm at `00:00:00:bb:bb:bb`."
+    The first system receives this reply, caches the IP and MAC address pair in its
+    ARP cache, and uses the hardware address to communicate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network Layer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The network layer is like a worldwide postal service providing an addressing
+    and delivery method used to send things everywhere. The protocol used at this
+    layer for Internet addressing and delivery is, appropriately, called Internet
+    Protocol (IP); the majority of the Internet uses IP version 4.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every system on the Internet has an IP address, consisting of a familiar four-byte
+    arrangement in the form of `xx.xx.xx.xx`. The IP header for packets in this layer
+    is 20 bytes in size and consists of various fields and bitflags as defined in
+    RFC 791.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From RFC 791
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: This surprisingly descriptive ASCII diagram shows these fields and their positions
+    in the header. Standard protocols have awesome documentation. Similar to the Ethernet
+    header, the IP header also has a protocol field to describe the type of data in
+    the packet and the source and destination addresses for routing. In addition,
+    the header carries a checksum, to help detect transmission errors, and fields
+    to deal with packet fragmentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Internet Protocol is mostly used to transmit packets wrapped in higher layers.
+    However, Internet Control Message Protocol (ICMP) packets also exist on this layer.
+    ICMP packets are used for messaging and diagnostics. IP is less reliable than
+    the post office—there's no guarantee that an IP packet will actually reach its
+    final destination. If there's a problem, an ICMP packet is sent back to notify
+    the sender of the problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ICMP is also commonly used to test for connectivity. ICMP Echo Request and Echo
+    Reply messages are used by a utility called ping. If one host wants to test whether
+    it can route traffic to another host, it pings the remote host by sending an ICMP
+    Echo Request. Upon receipt of the ICMP Echo Request, the remote host sends back
+    an ICMP Echo Reply. These messages can be used to determine the connection latency
+    between the two hosts. However, it is important to remember that ICMP and IP are
+    both connectionless; all this protocol layer really cares about is getting the
+    packet to its destination address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sometimes a network link will have a limitation on packet size, disallowing
+    the transfer of large packets. IP can deal with this situation by fragmenting
+    packets, as shown here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254201.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-5.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The packet is broken up into smaller packet fragments that can pass through
+    the network link, IP headers are put on each fragment, and they're sent off. Each
+    fragment has a different fragment offset value, which is stored in the header.
+    When the destination receives these fragments, the offset values are used to reassemble
+    the original IP packet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Provisions such as fragmentation aid in the delivery of IP packets, but this
+    does nothing to maintain connections or ensure delivery. This is the job of the
+    protocols at the transport layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Transport Layer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The transport layer can be thought of as the first line of office receptionists,
+    picking up the mail from the network layer. If a customer wants to return a defective
+    piece of merchandise, they send a message requesting a Return Material Authorization
+    (RMA) number. Then the receptionist would follow the return protocol by asking
+    for a receipt and eventually issuing an RMA number so the customer can mail the
+    product in. The post office is only concerned with sending these messages (and
+    packages) back and forth, not with what's in them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The two major protocols at this layer are the Transmission Control Protocol
+    (TCP) and User Datagram Protocol (UDP). TCP is the most commonly used protocol
+    for services on the Internet: telnet, HTTP (web traffic), SMTP (email traffic),
+    and FTP (file transfers) all use TCP. One of the reasons for TCP''s popularity
+    is that it provides a transparent, yet reliable and bidirectional, connection
+    between two IP addresses. Stream sockets use TCP/IP connections. A bidirectional
+    connection with TCP is similar to using a telephone—after dialing a number, a
+    connection is made through which both parties can communicate. Reliability simply
+    means that TCP will ensure that all the data will reach its destination in the
+    proper order. If the packets of a connection get jumbled up and arrive out of
+    order, TCP will make sure they''re put back in order before handing the data up
+    to the next layer. If some packets in the middle of a connection are lost, the
+    destination will hold on to the packets it has while the source retransmits the
+    missing packets.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'All of this functionality is made possible by a set of flags, called *TCP flags*,
+    and by tracking values called *sequence numbers*. The TCP flags are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| TCP flag | Meaning | Purpose |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| URG | Urgent | Identifies important data |'
+  prefs: []
+  type: TYPE_TB
+- en: '| ACK | Acknowledgment | Acknowledges a packet; it is turned on for the majority
+    of the connection |'
+  prefs: []
+  type: TYPE_TB
+- en: '| PSH | Push | Tells the receiver to push the data through instead of buffering
+    it |'
+  prefs: []
+  type: TYPE_TB
+- en: '| RST | Reset | Resets a connection |'
+  prefs: []
+  type: TYPE_TB
+- en: '| SYN | Synchronize | Synchronizes sequence numbers at the beginning of a connection
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| FIN | Finish | Gracefully closes a connection when both sides say goodbye
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: These flags are stored in the TCP header along with the source and destination
+    ports. The TCP header is specified in RFC 793.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From RFC 793
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: The sequence number and acknowledgment number are used to maintain state. The
+    SYN and ACK flags are used together to open connections in a three-step handshaking
+    process. When a client wants to open a connection with a server, a packet with
+    the SYN flag on, but the ACK flag off, is sent to the server. The server then
+    responds with a packet that has both the SYN and ACK flags turned on. To complete
+    the connection, the client sends back a packet with the SYN flag off but the ACK
+    flag on. After that, every packet in the connection will have the ACK flag turned
+    on and the SYN flag turned off. Only the first two packets of the connection have
+    the SYN flag on, since those packets are used to synchronize sequence numbers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254295.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-6.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sequence numbers allow TCP to put unordered packets back into order, to determine
+    whether packets are missing, and to prevent mixing up packets from other connections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a connection is initiated, each side generates an initial sequence number.
+    This number is communicated to the other side in the first two SYN packets of
+    the connection handshake. Then, with each packet that is sent, the sequence number
+    is incremented by the number of bytes found in the data portion of the packet.
+    This sequence number is included in the TCP packet header. In addition, each TCP
+    header has an acknowledgment number, which is simply the other side's sequence
+    number plus one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TCP is great for applications where reliability and bidirectional communication
+    are needed. However, the cost of this functionality is paid in communication overhead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'UDP has much less overhead and built-in functionality than TCP. This lack of
+    functionality makes it behave much like the IP protocol: It is connectionless
+    and unreliable. Without built-in functionality to create connections and maintain
+    reliability, UDP is an alternative that expects the application to deal with these
+    issues. Sometimes connections aren''t needed, and the lightweight UDP is a much
+    better protocol for these situations. The UDP header, defined in RFC 768, is relatively
+    tiny. It only contains four 16-bit values in this order: source port, destination
+    port, length, and checksum.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network Sniffing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: On the data-link layer lies the distinction between switched and unswitched
+    networks. On an *unswitched network*, Ethernet packets pass through every device
+    on the network, expecting each system device to only look at the packets sent
+    to its destination address. However, it's fairly trivial to set a device to *promiscuous
+    mode*, which causes it to look at all packets, regardless of the destination address.
+    Most packet-capturing programs, such as tcpdump, drop the device they are listening
+    to into promiscuous mode by default. Promiscuous mode can be set using `ifconfig`,
+    as seen in the following output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: The act of capturing packets that aren't necessarily meant for public viewing
+    is called *sniffing*. Sniffing packets in promiscuous mode on an unswitched network
+    can turn up all sorts of useful information, as the following output shows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Data transmitted over the network by services such as telnet, FTP, and POP3
+    is unencrypted. In the preceding example, the user `leech` is seen logging into
+    an FTP server using the password `l8@nite`. Since the authentication process during
+    login is also unencrypted, usernames and passwords are simply contained in the
+    data portions of the transmitted packets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`tcpdump` is a wonderful, general-purpose packet sniffer, but there are specialized
+    sniffing tools designed specifically to search for usernames and passwords. One
+    notable example is Dug Song''s program, `dsniff`, which is smart enough to parse
+    out data that looks important.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Raw Socket Sniffer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: So far in our code examples, we have been using stream sockets. When sending
+    and receiving using stream sockets, the data is neatly wrapped in a TCP/IP connection.
+    Accessing the OSI model of the session (5) layer, the operating system takes care
+    of all of the lower-level details of transmission, correction, and routing. It
+    is possible to access the network at lower layers using raw sockets. At this lower
+    layer, all the details are exposed and must be handled explicitly by the programmer.
+    Raw sockets are specified by using `SOCK_RAW` as the type. In this case, the protocol
+    matters since there are multiple options. The protocol can be `IPPROTO_TCP, IPPROTO_UDP`,
+    or `IPPROTO_ICMP`. The following example is a TCP sniffing program using raw sockets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: raw_tcpsniff.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: This program opens a raw TCP socket and listens for three packets, printing
+    the raw data of each one with the `dump()` function. Notice that buffer is declared
+    as a `u_char` variable. This is just a convenience type definition from sys/socket.h
+    that expands to "unsigned char." This is for convenience, since unsigned variables
+    are used a lot in network programming and typing `unsigned` every time is a pain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When compiled, the program needs to be run as root, because the use of raw sockets
+    requires root access. The following output shows the program sniffing the network
+    while we're sending sample text to our simple_server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: While this program will capture packets, it isn't reliable and will miss some
+    packets, especially when there is a lot of traffic. Also, it only captures TCP
+    packets—to capture UDP or ICMP packets, additional raw sockets need to be opened
+    for each. Another big problem with raw sockets is that they are notoriously inconsistent
+    between systems. Raw socket code for Linux most likely won't work on BSD or Solaris.
+    This makes multiplatform programming with raw sockets nearly impossible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: libpcap Sniffer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A standardized programming library called libpcap can be used to smooth out
+    the inconsistencies of raw sockets. The functions in this library still use raw
+    sockets to do their magic, but the library knows how to correctly work with raw
+    sockets on multiple architectures. Both tcpdump and dsniff use libpcap, which
+    allows them to compile with relative ease on any platform. Let's rewrite the raw
+    packet sniffer program using the libpcap's functions instead of our own. These
+    functions are quite intuitive, so we will discuss them using the following code
+    listing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pcap_sniff.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: First, pcap.h is included providing various structures and defines used by the
+    pcap functions. Also, I've written a `pcap_fatal()` function for displaying fatal
+    errors. The pcap functions use a error buffer to return error and status messages,
+    so this function is designed to display this buffer to the user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `errbuf` variable is the aforementioned error buffer, its size coming from
+    a define in pcap.h set to `256`. The header variable is a `pcap_pkthdr` structure
+    containing extra capture information about the packet, such as when it was captured
+    and its length. The `pcap_handle` pointer works similarly to a file descriptor,
+    but is used to reference a packet-capturing object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `pcap_lookupdev()` function looks for a suitable device to sniff on. This
+    device is returned as a string pointer referencing static function memory. For
+    our system this will always be `/dev/eth0`, although it will be different on a
+    BSD system. If the function can't find a suitable interface, it will return `NULL`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: Similar to the socket function and file open function, the `pcap_open_live()`
+    function opens a packet-capturing device, returning a handle to it. The arguments
+    for this function are the device to sniff, the maximum packet size, a promiscuous
+    flag, a timeout value, and a pointer to the error buffer. Since we want to capture
+    in promiscuous mode, the promiscuous flag is set to `1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, the packet capture loop uses `pcap_next()` to grab the next packet.
+    This function is passed the `pcap_handle` and a pointer to a `pcap_pkthdr` structure
+    so it can fill it with details of the capture. The function returns a pointer
+    to the packet and then prints the packet, getting the length from the capture
+    header. Then `pcap_close()` closes the capture interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When this program is compiled, the pcap libraries must be linked. This can be
+    done using the `-l` flag with GCC, as shown in the output below. The pcap library
+    has been installed on this system, so the library and include files are already
+    in standard locations the compiler knows about.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that there are many bytes preceding the sample text in the packet and
+    many of these bytes are similar. Since these are raw packet captures, most of
+    these bytes are layers of header information for Ethernet, IP, and TCP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Decoding the Layers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In our packet captures, the outermost layer is Ethernet, which is also the lowest
+    visible layer. This layer is used to send data between Ethernet endpoints with
+    MAC addresses. The header for this layer contains the source MAC address, the
+    destination MAC address, and a 16-bit value that describes the type of Ethernet
+    packet. On Linux, the structure for this header is defined in /usr/include/linux/if_ethernet.h
+    and the structures for the IP header and TCP header are located in /usr/include/netinet/ip.h
+    and /usr/include/ netinet/tcp.h, respectively. The source code for tcpdump also
+    has structures for these headers, or we could just create our own header structures
+    based on the RFCs. A better understanding can be gained from writing our own structures,
+    so let's use the structure definitions as guidance to create our own packet header
+    structures to include in hacking-network.h.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, let's look at the existing definition of the Ethernet header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/if_ether.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: This structure contains the three elements of an Ethernet header. The variable
+    declaration of `__be16` turns out to be a type definition for a 16-bit unsigned
+    short integer. This can be determined by recursively grepping for the type definition
+    in the include files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: The include file also defines the Ethernet header length in `ETH_HLEN` as 14
+    bytes. This adds up, since the source and destination MAC addresses use 6 bytes
+    each, and the packet type field is a 16-bit short integer that takes up 2 bytes.
+    However, many compilers will pad structures along 4-byte boundaries for alignment,
+    which means that `sizeof(struct ethhdr)` would return an incorrect size. To avoid
+    this, `ETH_HLEN` or a fixed value of 14 bytes should be used for the Ethernet
+    header length.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By including `<linux/if_ether.h>`, these other include files containing the
+    required `__be16` type definition are also included. Since we want to make our
+    own structures for hacking-network.h, we should strip out references to unknown
+    type definitions. While we're at it, let's give these fields better names.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Added to hacking-network.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can do the same thing with the IP and TCP structures, using the corresponding
+    structures and RFC diagrams as a reference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/netinet/ip.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: From RFC 791
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: Each element in the structure corresponds to the fields shown in the RFC header
+    diagram. Since the first two fields, Version and IHL (Internet Header Length)
+    are only four bits in size and there aren't any 4-bit variable types in C, the
+    Linux header definition splits the byte differently depending on the byte order
+    of the host. These fields are in the network byte order, so, if the host is little-endian,
+    the IHL should come before Version since the byte order is reversed. For our purposes,
+    we won't really be using either of these fields, so we don't even need to split
+    up the byte.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Added to hacking-network.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: The compiler padding, as mentioned earlier, will align this structure on a 4-byte
+    boundary by padding the rest of the structure. IP headers are always 20 bytes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the TCP packet header, we reference /usr/include/netinet/tcp.h for the structure
+    and RFC 793 for the header diagram.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/netinet/tcp.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: From RFC 793
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: Linux's `tcphdr` structure also switches the ordering of the 4-bit data offset
+    field and the 4-bit section of the reserved field depending on the host's byte
+    order. The data offset field is important, since it tells the size of the variablelength
+    TCP header. You might have noticed that Linux's `tcphdr` structure doesn't save
+    any space for TCP options. This is because the RFC defines this field as optional.
+    The size of the TCP header will always be 32-bit-aligned, and the data offset
+    tells us how many 32-bit words are in the header. So the TCP header size in bytes
+    equals the data offset field from the header times four. Since the data offset
+    field is required to calculate the header size, we'll split the byte containing
+    it, assuming little-endian host byte ordering.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `th_flags` field of Linux's `tcphdr` structure is defined as an 8-bit unsigned
+    character. The values defined below this field are the bitmasks that correspond
+    to the six possible flags.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Added to hacking-network.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that the headers are defined as structures, we can write a program to decode
+    the layered headers of each packet. But before we do, let''s talk about libpcap
+    for a moment. This library has a function called `pcap_loop()`, which is a better
+    way to capture packets than just looping on a `pcap_next()`call. Very few programs
+    actually use `pcap_next()`, because it''s clumsy and inefficient. The `pcap_loop()`
+    function uses a callback function. This means the `pcap_loop()` function is passed
+    a function pointer, which is called every time a packet is captured. The prototype
+    for `pcap_loop()` is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first argument is the pcap''s handle, the next one is a count of how many
+    packets to capture, and the third is a function pointer to the callback function.
+    If the count argument is set to `-1`, it will loop until the program breaks out
+    of it. The final argument is an optional pointer that will get passed to the callback
+    function. Naturally, the callback function needs to follow a certain prototype,
+    since `pcap_loop()` must call this function. The callback function can be named
+    whatever you like, but the arguments must be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first argument is just the optional argument pointer from the last argument
+    to `pcap_loop()`. It can be used to pass additional information to the callback
+    function, but we aren''t going to be using this. The next two arguments should
+    be familiar from `pcap_next()`: a pointer to the capture header and a pointer
+    to the packet itself.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following example code uses `pcap_loop()` with a callback function to capture
+    packets and our header structures to decode them. This program will be explained
+    as the code is listed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: decode_sniff.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: At the beginning of this program, the prototype for the callback function, called
+    `caught_packet()`, is declared along with several decoding functions. Everything
+    else in `main()` is basically the same, except that the for loop has been replaced
+    with a single call to `pcap_loop()`. This function is passed the `pcap_handle`,
+    told to capture three packets, and pointed to the callback function, `caught_packet()`.
+    The final argument is `NULL`, since we don't have any additional data to pass
+    along to `caught_packet()`. Also, notice that the `decode_tcp()`function returns
+    a u_int. Since the TCP header length is variable, this function returns the length
+    of the TCP header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `caught_packet()` function gets called whenever `pcap_loop()` captures a
+    packet. This function uses the header lengths to split the packet up by layers
+    and the decoding functions to print out details of each layer's header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: The decoding functions are passed a pointer to the start of the header, which
+    is typecast to the appropriate structure. This allows accessing various fields
+    of the header, but it's important to remember these values will be in network
+    byte order. This data is straight from the wire, so the byte order needs to be
+    converted for use on an *x*86 processor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With the headers decoded and separated into layers, the TCP/IP connection is
+    much easier to understand. Notice which IP addresses are associated with which
+    MAC address. Also, notice how the sequence number in the two packets from 192.168.42.1
+    (the first and last packet) increases by nine, since the first packet contained
+    nine bytes of actual data: 2887045283 – 2887045274 = 9\. This is used by the TCP
+    protocol to make sure all of the data arrives in order, since packets could be
+    delayed for various reasons.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Despite all of the mechanisms built into the packet headers, the packets are
+    still visible to anyone on the same network segment. Protocols such as FTP, POP3,
+    and telnet transmit data without encryption. Even without the assistance of a
+    tool like dsniff, it's fairly trivial for an attacker sniffing the network to
+    find the usernames and passwords in these packets and use them to compromise other
+    systems. From a security perspective, this isn't too good, so more intelligent
+    switches provide switched network environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Active Sniffing
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In a *switched network environment*, packets are only sent to the port they
+    are destined for, according to their destination MAC addresses. This requires
+    more intelligent hardware that can create and maintain a table associating MAC
+    addresses with certain ports, depending on which device is connected to each port,
+    as illustrated here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The advantage of a switched environment is that devices are only sent packets
+    that are meant for them, so that promiscuous devices aren't able to sniff any
+    additional packets. But even in a switched environment, there are clever ways
+    to sniff other devices' packets; they just tend to be a bit more complex. In order
+    to find hacks like these, the details of the protocols must be examined and then
+    combined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One important aspect of network communications that can be manipulated for interesting
+    effects is the source address. There's no provision in these protocols to ensure
+    that the source address in a packet really is the address of the source machine.
+    The act of forging a source address in a packet is known as *spoofing*. The addition
+    of spoofing to your bag of tricks greatly increases the number of possible hacks,
+    since most systems expect the source address to be valid.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254195.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-7.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Spoofing is the first step in sniffing packets on a switched network. The other
+    two interesting details are found in ARP. First, when an ARP reply comes in with
+    an IP address that already exists in the ARP cache, the receiving system will
+    overwrite the prior MAC address information with the new information found in
+    the reply (unless that entry in the ARP cache was explicitly marked as permanent).
+    Second, no state information about the ARP traffic is kept, since this would require
+    additional memory and would complicate a protocol that is meant to be simple.
+    This means systems will accept an ARP reply even if they didn't send out an ARP
+    request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These three details, when exploited properly, allow an attacker to sniff network
+    traffic on a switched network using a technique known as *ARP redirection*. The
+    attacker sends spoofed ARP replies to certain devices that cause the ARP cache
+    entries to be overwritten with the attacker's data. This technique is called *ARP
+    cache poisoning*. In order to sniff network traffic between two points, *A* and
+    *B*, the attacker needs to poison the ARP cache of *A* to cause *A* to believe
+    that *B*'s IP address is at the attacker's MAC address, and also poison the ARP
+    cache of *B* to cause *B* to believe that *A*'s IP address is also at the attacker's
+    MAC address. Then the attacker's machine simply needs to forward these packets
+    to their appropriate final destinations. After that, all of the traffic between
+    *A* and *B* still gets delivered, but it all flows through the attacker's machine,
+    as shown here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254508.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-8.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since *A* and *B* are wrapping their own Ethernet headers on their packets based
+    on their respective ARP caches, *A*'s IP traffic meant for *B* is actually sent
+    to the attacker's MAC address, and vice versa. The switch only filters traffic
+    based on MAC address, so the switch will work as it's designed to, sending *A*'s
+    and *B*'s IP traffic, destined for the attacker's MAC address, to the attacker's
+    port. Then the attacker rewraps the IP packets with the proper Ethernet headers
+    and sends them back to the switch, where they are finally routed to their proper
+    destination. The switch works properly; it's the victim machines that are tricked
+    into redirecting their traffic through the attacker's machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Due to timeout values, the victim machines will periodically send out real ARP
+    requests and receive real ARP replies in response. In order to maintain the redirection
+    attack, the attacker must keep the victim machine's ARP caches poisoned. A simple
+    way to accomplish this is to send spoofed ARP replies to both A and B at a constant
+    interval—for example, every 10 seconds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A *gateway* is a system that routes all the traffic from a local network out
+    to the Internet. ARP redirection is particularly interesting when one of the victim
+    machines is the default gateway, since the traffic between the default gateway
+    and another system is that system's Internet traffic. For example, if a machine
+    at 192.168.0.118 is communicating with the gateway at 192.168.0.1 over a switch,
+    the traffic will be restricted by MAC address. This means that this traffic cannot
+    normally be sniffed, even in promiscuous mode. In order to sniff this traffic,
+    it must be redirected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To redirect the traffic, first the MAC addresses of 192.168.0.118 and 192.168.0.1
+    need to be determined. This can be done by pinging these hosts, since any IP connection
+    attempt will use ARP. If you run a sniffer, you can see the ARP communications,
+    but the OS will cache the resulting IP/MAC address associations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: After pinging, the MAC addresses for both 192.168.0.118 and 192.168.0.1 are
+    in the attacker's ARP cache. This way, packets can reach their final destinations
+    after being redirected to the attacker's machine. Assuming IP forwarding capabilities
+    are compiled into the kernel, all we need to do is send some spoofed ARP replies
+    at regular intervals. 192.168.0.118 needs to be told that 192.168.0.1 is at `00:00:AD:D1:C7:ED`,
+    and 192.168.0.1 needs to be told that 192.168.0.118 is also at `00:00:AD:D1:C7:ED`.
+    These spoofed ARP packets can be injected using a command-line packet injection
+    tool called Nemesis. Nemesis was originally a suite of tools written by Mark Grimes,
+    but in the most recent version 1.4, all functionality has been rolled up into
+    a single utility by the new maintainer and developer, Jeff Nathan. The source
+    code for Nemesis is on the LiveCD at /usr/src/nemesis-1.4/, and it has already
+    been built and installed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: These two commands spoof ARP replies from 192.168.0.1 to 192.168.0.118 and vice
+    versa, both claiming that their MAC address is at the attacker's MAC address of
+    `00:00:AD:D1:C7:ED`. If these commands are repeated every 10 seconds, these bogus
+    ARP replies will continue to keep the ARP caches poisoned and the traffic redirected.
+    The standard BASH shell allows commands to be scripted, using familiar control
+    flow statements. A simple BASH shell while loop is used below to loop forever,
+    sending our two poisoning ARP replies every 10 seconds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can see how something as simple as Nemesis and the standard BASH shell can
+    be used to quickly hack together a network exploit. Nemesis uses a C library called
+    libnet to craft spoofed packets and inject them. Similar to libpcap, this library
+    uses raw sockets and evens out the inconsistencies between platforms with a standardized
+    interface. libnet also provides several convenient functions for dealing with
+    network packets, such as checksum generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The libnet library provides a simple and uniform API to craft and inject network
+    packets. It's well documented and the functions have descriptive names. A high-level
+    glance at the source code for Nemesis shows how easy it is to craft ARP packets
+    using libnet. The source file nemesis-arp.c contains several functions for crafting
+    and injecting ARP packets, using statically defined data structures for the packet
+    header information. The `nemesis_arp()` function shown below is called in nemesis.c
+    to build and inject an ARP packet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From nemesis-arp.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: The structures `ETHERhdr` and `ARPhdr` are defined in the file nemesis.h (shown
+    below) as aliases for existing libnet data structures. In C, `typedef` is used
+    to alias a data type with a symbol.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From nemesis.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `nemesis_arp()` function calls a series of other functions from this file:
+    `arp_initdata(), arp_cmdline(), arp_validatedata()`, and `arp_verbose()`. You
+    can probably guess that these functions initialize data, process command-line
+    arguments, validate data, and do some sort of verbose reporting. The `arp_initdata()`
+    function does exactly this, initializing values in statically declared data structures.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `arp_initdata()` function, shown below, sets various elements of the header
+    structures to the appropriate values for an ARP packet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From nemesis-arp.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, the `nemesis_arp()` function calls the function `buildarp()` with pointers
+    to the header data structures. Judging from the way the return value from `buildarp()`
+    is handled here, `buildarp()` builds the packet and injects it. This function
+    is found in yet another source file, nemesis-proto_arp.c.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From nemesis-proto_arp.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: At a high level, this function should be readable to you. Using libnet functions,
+    it opens a link interface and initializes memory for a packet. Then, it builds
+    the Ethernet layer using elements from the Ethernet header data structure and
+    then does the same for the ARP layer. Next, it writes the packet to the device
+    to inject it, and finally cleans up by destroying the packet and closing the interface.
+    The documentation for these functions from the libnet man page is shown below
+    for clarity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the libnet Man Page
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: With a basic understanding of C, API documentation, and common sense, you can
+    teach yourself just by examining open source projects. For example, Dug Song provides
+    a program called arpspoof, included with dsniff, that performs the ARP redirection
+    attack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the arpspoof Man Page
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: The magic of this program comes from its `arp_send()` function, which also uses
+    libnet to spoof packets. The source code for this function should be readable
+    to you, since many of the previously explained libnet functions are used (shown
+    in bold below). The use of structures and an error buffer should also be familiar.
+  prefs: []
+  type: TYPE_NORMAL
+- en: arpspoof.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: The remaining libnet functions get hardware addresses, get the IP address, and
+    look up hosts. These functions have descriptive names and are explained in detail
+    on the libnet man page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the libnet Man Page
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: Once you've learned how to read C code, existing programs can teach you a lot
+    by example. Programming libraries like libnet and libpcap have plenty of documentation
+    that explains all the details you may not be able to divine from the source alone.
+    The goal here is to teach you how to learn from source code, as opposed to just
+    teaching how to use a few libraries. After all, there are many other libraries
+    and a lot of existing source code that uses them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Denial of Service
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'One of the simplest forms of network attack is a Denial of Service (DoS) attack.
+    Instead of trying to steal information, a DoS attack simply prevents access to
+    a service or resource. There are two general forms of DoS attacks: those that
+    crash services and those that flood services.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Denial of Service attacks that crash services are actually more similar to program
+    exploits than network-based exploits. Often, these attacks are dependent on a
+    poor implementation by a specific vendor. A buffer overflow exploit gone wrong
+    will usually just crash the target program instead of directing the execution
+    flow to the injected shellcode. If this program happens to be on a server, then
+    no one else can access that server after it has crashed. Crashing DoS attacks
+    like this are closely tied to a certain program and a certain version. Since the
+    operating system handles the network stack, crashes in this code will take down
+    the kernel, denying service to the entire machine. Many of these vulnerabilities
+    have long since been patched on modern operating systems, but it's still useful
+    to think about how these techniques might be applied to different situations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SYN Flooding
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A SYN flood tries to exhaust states in the TCP/IP stack. Since TCP maintains
+    "reliable" connections, each connection needs to be tracked somewhere. The TCP/IP
+    stack in the kernel handles this, but it has a finite table that can only track
+    so many incoming connections. A SYN flood uses spoofing to take advantage of this
+    limitation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The attacker floods the victim's system with many SYN packets, using a spoofed
+    nonexistent source address. Since a SYN packet is used to initiate a TCP connection,
+    the victim's machine will send a SYN/ACK packet to the spoofed address in response
+    and wait for the expected ACK response. Each of these waiting, half-open connections
+    goes into a backlog queue that has limited space. Since the spoofed source addresses
+    don't actually exist, the ACK responses needed to remove these entries from the
+    queue and complete the connections never come. Instead, each half-open connection
+    must time out, which takes a relatively long time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As long as the attacker continues to flood the victim's system with spoofed
+    SYN packets, the victim's backlog queue will remain full, making it nearly impossible
+    for real SYN packets to get to the system and initiate valid TCP/IP connections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the Nemesis and arpspoof source code as reference, you should be able
+    to write a program that performs this attack. The example program below uses libnet
+    functions pulled from the source code and socket functions previously explained.
+    The Nemesis source code uses the function `libnet_get_prand()` to obtain pseudo-random
+    numbers for various IP fields. The function `libnet_seed_prand()` is used to seed
+    the randomizer. These functions are similarly used below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: synflood.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: This program uses a `print_ip()` function to handle converting the u_long type,
+    used by libnet to store IP addresses, to the struct type expected by `inet_ntoa()`.
+    The value doesn't change—the typecasting just appeases the compiler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The current release of libnet is version 1.1, which is incompatible with libnet
+    1.0\. However, Nemesis and arpspoof still rely on the 1.0 version of libnet, so
+    this version is included in the LiveCD and this is also what we will use in our
+    synflood program. Similar to compiling with libpcap, when compiling with libnet,
+    the flag `-lnet` is used. However, this isn't quite enough information for the
+    compiler, as the output below shows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: The compiler still fails because several mandatory define flags need to be set
+    for libnet. Included with libnet, a program called libnet-config will output these
+    flags.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: Using the BASH shell's command substitution in both, these defines can be dynamically
+    inserted into the compile command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the example above, the host 192.168.42.88 is a Windows XP machine running
+    an openssh server on port 22 via cygwin. The tcpdump output below shows the spoofed
+    SYN packets flooding the host from apparently random IPs. While the program is
+    running, legitimate connections cannot be made to this port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE68]'
+  prefs: []
+  type: TYPE_PRE
+- en: Some operating systems (for example, Linux) use a technique called syncookies
+    to try to prevent SYN flood attacks. The TCP stack using syncookies adjusts the
+    initial acknowledgment number for the responding SYN/ACK packet using a value
+    based on host details and time (to prevent replay attacks).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The TCP connections don't actually become active until the final ACK packet
+    for the TCP handshake is checked. If the sequence number doesn't match or the
+    ACK never arrives, a connection is never created. This helps prevent spoofed connection
+    attempts, since the ACK packet requires information to be sent to the source address
+    of the initial SYN packet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Ping of Death
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: According to the specification for ICMP, ICMP echo messages can only have 2^(16),
+    or 65,536, bytes of data in the data part of the packet. The data portion of ICMP
+    packets is commonly overlooked, since the important information is in the header.
+    Several operating systems crashed if they were sent ICMP echo messages that exceeded
+    the size specified. An ICMP echo message of this gargantuan size became affectionately
+    known as "The Ping of Death." It was a very simple hack exploiting a vulnerability
+    that existed because no one ever considered this possibility. It should be easy
+    for you to write a program using libnet that can perform this attack; however,
+    it won't be that useful in the real world. Modern systems are all patched against
+    this vulnerability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, history tends to repeat itself. Even though oversized ICMP packets
+    won't crash computers anymore, new technologies sometimes suffer from similar
+    problems. The Bluetooth protocol, commonly used with phones, has a similar ping
+    packet on the L2CAP layer, which is also used to measure the communication time
+    on established links. Many implementations of Bluetooth suffer from the same oversized
+    ping packet problem. Adam Laurie, Marcel Holtmann, and Martin Herfurt have dubbed
+    this attack *Bluesmack* and have released source code by the same name that performs
+    this attack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Teardrop
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Another crashing DoS attack that came about for the same reason was called teardrop.
+    Teardrop exploited another weakness in several vendors' implementations of IP
+    fragmentation reassembly. Usually, when a packet is fragmented, the offsets stored
+    in the header will line up to reconstruct the original packet with no overlap.
+    The teardrop attack sent packet fragments with overlapping offsets, which caused
+    implementations that didn't check for this irregular condition to inevitably crash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although this specific attack doesn't work anymore, understanding the concept
+    can reveal problems in other areas. Although not limited to a Denial of Service,
+    a recent remote exploit in the OpenBSD kernel (which prides itself on security)
+    had to do with fragmented IPv6 packets. IP version 6 uses more complicated headers
+    and even a different IP address format than the IPv4 most people are familiar
+    with. Often, the same mistakes made in the past are repeated by early implementations
+    of new products.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ping Flooding
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Flooding DoS attacks don't try to necessarily crash a service or resource, but
+    instead try to overload it so it can't respond. Similar attacks can tie up other
+    resources, such as CPU cycles and system processes, but a flooding attack specifically
+    tries to tie up a network resource.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The simplest form of flooding is just a ping flood. The goal is to use up the
+    victim's bandwidth so that legitimate traffic can't get through. The attacker
+    sends many large ping packets to the victim, which eat away at the bandwidth of
+    the victim's network connection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There's nothing really clever about this attack—it's just a battle of bandwidth.
+    An attacker with greater bandwidth than a victim can send more data than the victim
+    can receive and therefore deny other legitimate traffic from getting to the victim.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Amplification Attacks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: There are actually some clever ways to perform a ping flood without using massive
+    amounts of bandwidth. An amplification attack uses spoofing and broadcast addressing
+    to amplify a single stream of packets by a hundred-fold. First, a target amplification
+    system must be found. This is a network that allows communication to the broadcast
+    address and has a relatively high number of active hosts. Then the attacker sends
+    large ICMP echo request packets to the broadcast address of the amplification
+    network, with a spoofed source address of the victim's system. The amplifier will
+    broadcast these packets to all the hosts on the amplification network, which will
+    then send corresponding ICMP echo reply packets to the spoofed source address
+    (i.e., to the victim's machine).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This amplification of traffic allows the attacker to send a relatively small
+    stream of ICMP echo request packets out, while the victim gets swamped with up
+    to a couple hundred times as many ICMP echo reply packets. This attack can be
+    done with both ICMP packets and UDP echo packets. These techniques are known as
+    *smurf* and *fraggle* attacks, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254478.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-9.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Distributed DoS Flooding
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A *distributed DoS (DDoS) attack* is a distributed version of a flooding DoS
+    attack. Since bandwidth consumption is the goal of a flooding DoS attack, the
+    more bandwidth the attacker is able to work with, the more damage they can do.
+    In a DDoS attack, the attacker first compromises a number of other hosts and installs
+    daemons on them. Systems installed with such software are commonly referred to
+    as bots and make up what is known as a botnet. These bots wait patiently until
+    the attacker picks a victim and decides to attack. The attacker uses some sort
+    of a controlling program, and all of the bots simultaneously attack the victim
+    with some form of flooding DoS attack. Not only does the great number of distributed
+    hosts multiply the effect of the flooding, this also makes tracing the attack
+    source much more difficult.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TCP/IP Hijacking
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*TCP/IP hijacking* is a clever technique that uses spoofed packets to take
+    over a connection between a victim and a host machine. This technique is exceptionally
+    useful when the victim uses a one-time password to connect to the host machine.
+    A one-time password can be used to authenticate once and only once, which means
+    that sniffing the authentication is useless for the attacker.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To carry out a TCP/IP hijacking attack, the attacker must be on the same network
+    as the victim. By sniffing the local network segment, all of the details of open
+    TCP connections can be pulled from the headers. As we have seen, each TCP packet
+    contains a sequence number in its header. This sequence number is incremented
+    with each packet sent to ensure that packets are received in the correct order.
+    While sniffing, the attacker has access to the sequence numbers for a connection
+    between a victim (system A in the following illustration) and a host machine (system
+    B). Then the attacker sends a spoofed packet from the victim's IP address to the
+    host machine, using the sniffed sequence number to provide the proper acknowledgment
+    number, as shown here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages254502.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-10.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The host machine will receive the spoofed packet with the correct acknowledgment
+    number and will have no reason to believe it didn't come from the victim machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RST Hijacking
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A very simple form of TCP/IP hijacking involves injecting an authentic-looking
+    reset (RST) packet. If the source is spoofed and the acknowledgment number is
+    correct, the receiving side will believe that the source actually sent the reset
+    packet, and the connection will be reset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Imagine a program to perform this attack on a target IP. At a high level, it
+    would sniff using libpcap, then inject RST packets using libnet. Such a program
+    doesn't need to look at every packet but only at established TCP connections to
+    the target IP. Many other programs that use libpcap also don't need to look at
+    every single packet, so libpcap provides a way to tell the kernel to only send
+    certain packets that match a filter. This filter, known as a Berkeley Packet Filter
+    (BPF), is very similar to a program. For example, the filter rule to filter for
+    a destination IP of 192.168.42.88 is `"dst host 192.168.42.88"`. Like a program,
+    this rule consists of keyword and must be compiled before it's actually sent to
+    the kernel. The tcpdump program uses BPFs to filter what it captures; it also
+    provides a mode to dump the filter program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE69]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After the filter rule is compiled, it can be passed to the kernel for filtering.
+    Filtering for established connections is a bit more complicated. All established
+    connections will have the ACK flag set, so this is what we should look for. The
+    TCP flags are found in the 13th octet of the TCP header. The flags are found in
+    the following order, from left to right: URG, ACK, PSH, RST, SYN, and FIN. This
+    means that if the ACK flag is turned on, the 13th octet would be `00010000` in
+    binary, which is 16 in decimal. If both SYN and ACK are turned on, the 13th octet
+    would be `00010010` in binary, which is 18 in decimal.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In order to create a filter that matches when the ACK flag is turned on without
+    caring about any of the other bits, the bitwise AND operator is used. ANDing `00010010`
+    with `00010000` will produce `00010000`, since the ACK bit is the only bit where
+    both bits are `1`. This means that a filter of `tcp[13] & 16 == 16` will match
+    the packets where the ACK flag is turned on, regardless of the state of the remaining
+    flags.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This filter rule can be rewritten using named values and inverted logic as `tcp[tcpflags]
+    & tcp-ack != 0`. This is easier to read but still provides the same result. This
+    rule can be combined with the previous destination IP rule using and logic; the
+    full rule is shown below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE70]'
+  prefs: []
+  type: TYPE_PRE
+- en: A similar rule is used in the following program to filter the packets libpcap
+    sniffs. When the program gets a packet, the header information is used to spoof
+    a RST packet. This program will be explained as it's listed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: rst_hijack.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE71]'
+  prefs: []
+  type: TYPE_PRE
+- en: The majority of this program should make sense to you. In the beginning, a `data_pass`
+    structure is defined, which is used to pass data through the libpcap callback.
+    libnet is used to open a raw socket interface and to allocate packet memory. The
+    file descriptor for the raw socket and a pointer to the packet memory will be
+    needed in the callback function, so this critical libnet data is stored in its
+    own structure. The final argument to the `pcap_loop()` call is user pointer, which
+    is passed directly to the callback function. By passing a pointer to the `critical_libnet_data`
+    structure, the callback function will have access to everything in this structure.
+    Also, the snap length value used in `pcap_open_live()` has been reduced from `4096`
+    to `128`, since the information needed from the packet is just in the headers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE72]'
+  prefs: []
+  type: TYPE_PRE
+- en: The next function compiles and sets the BPF to only accept packets from established
+    connections to the target IP. The `sprintf()` function is just a `printf()` that
+    prints to a string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE73]'
+  prefs: []
+  type: TYPE_PRE
+- en: The callback function spoofs the RST packets. First, the critical libnet data
+    is retrieved, and pointers to the IP and TCP headers are set using the structures
+    included with libnet. We could use our own structures from hacking-network.h,
+    but the libnet structures are already there and compensate for the host's byte
+    ordering. The spoofed RST packet uses the sniffed source address as the destination,
+    and vice versa. The sniffed sequence number is used as the spoofed packet's acknowledgment
+    number, since that is what is expected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE74]'
+  prefs: []
+  type: TYPE_PRE
+- en: Continued Hijacking
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The spoofed packet doesn't need to be an RST packet. This attack becomes more
+    interesting when the spoof packet contains data. The host machine receives the
+    spoofed packet, increments the sequence number, and responds to the victim's IP.
+    Since the victim's machine doesn't know about the spoofed packet, the host machine's
+    response has an incorrect sequence number, so the victim ignores that response
+    packet. And since the victim's machine ignored the host machine's response packet,
+    the victim's sequence number count is off. Therefore, any packet the victim tries
+    to send to the host machine will have an incorrect sequence number as well, causing
+    the host machine to ignore it. In this case, both legitimate sides of the connection
+    have incorrect sequence numbers, resulting in a desynchronized state. And since
+    the attacker sent out the first spoofed packet that caused all this chaos, it
+    can keep track of sequence numbers and continue spoofing packets from the victim's
+    IP address to the host machine. This lets the attacker continue communicating
+    with the host machine while the victim's connection hangs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Port Scanning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Port scanning is a way of figuring out which ports are listening and accepting
+    connections. Since most services run on standard, documented ports, this information
+    can be used to determine which services are running. The simplest form of port
+    scanning involves trying to open TCP connections to every possible port on the
+    target system. While this is effective, it's also noisy and detectable. Also,
+    when connections are established, services will normally log the IP address. To
+    avoid this, several clever techniques have been invented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A port scanning tool called nmap, written by Fyodor, implements all of the following
+    port-scanning techniques. This tool has become one of the most popular open source
+    port-scanning tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stealth SYN Scan
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A SYN scan is also sometimes called a *half-open* scan. This is because it
+    doesn''t actually open a full TCP connection. Recall the TCP/IP handshake: When
+    a full connection is made, first a SYN packet is sent, then a SYN/ACK packet is
+    sent back, and finally an ACK packet is returned to complete the handshake and
+    open the connection. A SYN scan doesn''t complete the handshake, so a full connection
+    is never opened. Instead, only the initial SYN packet is sent, and the response
+    is examined. If a SYN/ACK packet is received in response, that port must be accepting
+    connections. This is recorded, and an RST packet is sent to tear down the connection
+    to prevent the service from accidentally being DoSed.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using nmap, a SYN scan can be performed using the command-line option `-sS`.
+    The program must be run as root, since the program isn't using standard sockets
+    and needs raw network access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE75]'
+  prefs: []
+  type: TYPE_PRE
+- en: FIN, X-mas, and Null Scans
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In response to SYN scanning, new tools to detect and log half-open connections
+    were created. So yet another collection of techniques for stealth port scanning
+    evolved: FIN, X-mas, and Null scans. These all involve sending a nonsensical packet
+    to every port on the target system. If a port is listening, these packets just
+    get ignored. However, if the port is closed and the implementation follows protocol
+    (RFC 793), an RST packet will be sent. This difference can be used to detect which
+    ports are accepting connections, without actually opening any connections.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The FIN scan sends a FIN packet, the X-mas scan sends a packet with FIN, URG,
+    and PUSH turned on (so named because the flags are lit up like a Christmas tree),
+    and the Null scan sends a packet with no TCP flags set. While these types of scans
+    are stealthier, they can also be unreliable. For instance, Microsoft's implementation
+    of TCP doesn't send RST packets like it should, making this form of scanning ineffective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using nmap, FIN, X-mas, and NULL scans can be performed using the command-line
+    options `-sF, -sX`, and `-sN`, respectively. Their output looks basically the
+    same as the previous scan.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Spoofing Decoys
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Another way to avoid detection is to hide among several decoys. This technique
+    simply spoofs connections from various decoy IP addresses in between each real
+    port-scanning connection. The responses from the spoofed connections aren't needed,
+    since they are simply misleads. However, the spoofed decoy addresses must use
+    real IP addresses of live hosts; otherwise, the target may be accidentally SYN
+    flooded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Decoys can be specified in nmap with the `-D` command-line option. The sample
+    nmap command shown below scans the IP 192.168.42.72, using 192.168.42.10 and 192.168.42.11
+    as decoys.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE76]'
+  prefs: []
+  type: TYPE_PRE
+- en: Idle Scanning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Idle scanning is a way to scan a target using spoofed packets from an idle host,
+    by observing changes in the idle host. The attacker needs to find a usable idle
+    host that is not sending or receiving any other network traffic and that has a
+    TCP implementation that produces predictable IP IDs that change by a known increment
+    with each packet. IP IDs are meant to be unique per packet per session, and they
+    are commonly incremented by a fixed amount. Predictable IP IDs have never really
+    been considered a security risk, and idle scanning takes advantage of this misconception.
+    Newer operating systems, such as the recent Linux kernel, OpenBSD, and Windows
+    Vista, randomize the IP ID, but older operating systems and hardware (such as
+    printers) typically do not.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, the attacker gets the current IP ID of the idle host by contacting it
+    with a SYN packet or an unsolicited SYN/ACK packet and observing the IP ID of
+    the response. By repeating this process a few more times, the increment applied
+    to the IP ID with each packet can be determined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, the attacker sends a spoofed SYN packet with the idle host''s IP address
+    to a port on the target machine. One of two things will happen, depending on whether
+    that port on the victim machine is listening:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If that port is listening, a SYN/ACK packet will be sent back to the idle host.
+    But since the idle host didn't actually send out the initial SYN packet, this
+    response appears to be unsolicited to the idle host, and it responds by sending
+    back an RST packet.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If that port isn't listening, the target machine doesn't send a SYN/ACK packet
+    back to the idle host, so the idle host doesn't respond.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: At this point, the attacker contacts the idle host again to determine how much
+    the IP ID has incremented. If it has only incremented by one interval, no other
+    packets were sent out by the idle host between the two checks. This implies that
+    the port on the target machine is closed. If the IP ID has incremented by two
+    intervals, one packet, presumably an RST packet, was sent out by the idle machine
+    between the checks. This implies that the port on the target machine is open.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The steps are illustrated on the next page for both possible outcomes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, if the idle host isn't truly idle, the results will be skewed. If
+    there is light traffic on the idle host, multiple packets can be sent for each
+    port. If 20 packets are sent, then a change of 20 incremental steps should be
+    an indication of an open port, and none, of a closed port. Even if there is light
+    traffic, such as one or two non–scan-related packets sent by the idle host, this
+    difference is large enough that it can still be detected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If this technique is used properly on an idle host that doesn't have any logging
+    capabilities, the attacker can scan any target without ever revealing his or her
+    IP address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After finding a suitable idle host, this type of scanning can be done with
+    nmap using the `-sI` command-line option followed by the idle host''s address:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE77]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![](httpatomoreillycomsourcenostarchimages254496.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 0x400-11.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Proactive Defense (shroud)
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Port scans are often used to profile systems before they are attacked. Knowing
+    what ports are open allows an attacker to determine which services can be attacked.
+    Many IDSs offer methods to detect port scans, but by then the information has
+    already been leaked. While writing this chapter, I wondered if it is possible
+    to prevent port scans before they actually happen. Hacking, really, is all about
+    coming up with new ideas, so a newly developed method for proactive port-scanning
+    defense will be presented here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First of all, the FIN, Null, and X-mas scans can be prevented by a simple kernel
+    modification. If the kernel never sends reset packets, these scans will turn up
+    nothing. The following output uses `grep` to find the kernel code responsible
+    for sending reset packets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE78]'
+  prefs: []
+  type: TYPE_PRE
+- en: By adding the `return` command (shown above in bold), the `tcp_v4_send_reset()`
+    kernel function will simply return instead of doing anything. After the kernel
+    is recompiled, the resulting kernel won't send out reset packets, avoiding information
+    leakage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FIN Scan Before the Kernel Modification
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE79]'
+  prefs: []
+  type: TYPE_PRE
+- en: FIN Scan After the Kernel Modification
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE80]'
+  prefs: []
+  type: TYPE_PRE
+- en: This works fine for scans that rely on RST packets, but preventing information
+    leakage with SYN scans and full-connect scans is a bit more difficult. In order
+    to maintain functionality, open ports have to respond with SYN/ACK packets—there
+    is no way around that. But if all of the closed ports also responded with SYN/ACK
+    packets, the amount of useful information an attacker could retrieve from port
+    scans would be minimized. Simply opening every port would cause a major performance
+    hit, though, which isn't desirable. Ideally, this should all be done without using
+    a TCP stack. The following program does exactly that. It's a modification of the
+    rst_hijack.c program, using a more complex BPF string to filter only SYN packets
+    destined for closed ports. The callback function spoofs a legitimate looking SYN/ACK
+    response to any SYN packet that makes it through the BPF. This will flood port
+    scanners with a sea of false positives, which will hide legitimate ports.
+  prefs: []
+  type: TYPE_NORMAL
+- en: shroud.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE81]'
+  prefs: []
+  type: TYPE_PRE
+- en: There are a few tricky parts in the code above, but you should be able to follow
+    all of it. When the program is compiled and executed, it will shroud the IP address
+    given as the first argument, with the exception of a list of existing ports provided
+    as the remaining arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE82]'
+  prefs: []
+  type: TYPE_PRE
+- en: While shroud is running, any port scanning attempts will show every port to
+    be open.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE83]'
+  prefs: []
+  type: TYPE_PRE
+- en: The only service that is actually running is ssh on port 22, but it is hidden
+    in a sea of false positives. A dedicated attacker could simply telnet to every
+    port to check the banners, but this technique could easily be expanded to spoof
+    banners also.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reach Out and Hack Someone
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Network programming tends to move many chunks of memory around and is heavy
+    in typecasting. You've seen for yourself how crazy some of the typecasts can get.
+    Mistakes thrive in this type of chaos. And since many network programs need to
+    run as root, these little mistakes can become critical vulnerabilities. One such
+    vulnerability exists in the code from this chapter. Did you notice it?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reach Out and Hack Someone
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: From hacking-network.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE84]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `recv_line()` function in hacking-network.h has a small mistake of omission—there
+    is no code to limit the length. This means received bytes can overflow if they
+    exceed the `dest_buffer` size. The tinyweb server program and any other programs
+    that use this function are vulnerable to attack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analysis with GDB
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To exploit the vulnerability in the tinyweb.c program, we just need to send
+    packets that will strategically overwrite the return address. First, we need to
+    know the offset from the start of a buffer we control to the stored return address.
+    Using GDB, we can analyze the compiled program to find this; however, there are
+    some subtle details that can cause tricky problems. For example, the program requires
+    root privileges, so the debugger must be run as root. But using `sudo` or running
+    with root's environment will change the stack, meaning the addresses seen in the
+    debugger's run of the binary won't match the addresses when it's running normally.
+    There are other slight differences that can shift memory around in the debugger
+    like this, creating inconsistencies that can be maddening to track down. According
+    to the debugger, everything will look like it should work; however, the exploit
+    fails when run outside the debugger, since the addresses are different.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One elegant solution to this problem is to attach to the process after it's
+    already running. In the output below, GDB is used to attach to an already-running
+    tinyweb process that was started in another terminal. The source is recompiled
+    using the `-g` option to include debugging symbols that GDB can apply to the running
+    process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE85]'
+  prefs: []
+  type: TYPE_PRE
+- en: After attaching to the running process, a stack backtrace shows the program
+    is currenty in `main()`, waiting for a connection. After setting a breakpoint
+    at the first `recv_line()` call on line 62 (![](httpatomoreillycomsourcenostarchimages254488.png)),
+    the program is allowed to continue. At this point, the program's execution must
+    be advanced by making a web request using `wget` in another terminal or a browser.
+    Then the breakpoint in `handle_connection()` will be hit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE86]'
+  prefs: []
+  type: TYPE_PRE
+- en: At the breakpoint, the request buffer begins at `0xbfffff5c0`. The `bt` command's
+    stack backtrace shows that the return address from `handle_connection()` is `0x08048cf6`.
+    Since we know how the local variables are generally laid out on the stack, we
+    know the request buffer is near the end of the frame. This means that the stored
+    return address should be on the stack somewhere near the end of this 500-byte
+    buffer. Since we already know the general area to look, a quick inspection shows
+    the stored return address is at `0xbffff7dc` (![](httpatomoreillycomsourcenostarchimages254530.png)).
+    A little math shows the stored return address is 540 bytes from the start of the
+    request buffer. However, there are a few bytes near the beginning of the buffer
+    that might be mangled by the rest of the function. Remember, we don't gain control
+    of the program until the function returns. To account for this, it's best to just
+    avoid the beginning of the buffer. Skipping the first 200 bytes should be safe,
+    while leaving plenty of space for shellcode in the remaining 300 bytes. This means
+    `0xbffff688` is the target return address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost Only Counts with Hand Grenades
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The following exploit for the tinyweb program uses the offset and return address
+    overwrite values calculated with GDB. It fills the exploit buffer with null bytes,
+    so anything written into it will automatically be null-terminated. Then it fills
+    the first 540 bytes with NOP instructions. This builds the NOP sled and fills
+    the buffer up to the return address overwrite location. Then the entire string
+    is terminated with the `'\r\n'` line terminator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: tinyweb_exploit.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE87]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When this program is compiled, it can remotely exploit hosts running the tinyweb
+    program, tricking them into running the shellcode. The exploit also dumps out
+    the bytes of the exploit buffer before it sends it. In the output below, the tinyweb
+    program is run in a different terminal, and the exploit is tested against it.
+    Here''s the output from the attacker''s terminal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE88]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Back on the terminal running the tinyweb program, the output shows the exploit
+    buffer was received and the shellcode is executed. This will provide a rootshell,
+    but only for the console running the server. Unfortunately, we aren''t at the
+    console, so this won''t do us any good. At the server console, we see the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE89]'
+  prefs: []
+  type: TYPE_PRE
+- en: The vulnerability certainly exists, but the shellcode doesn't do what we want
+    in this case. Since we're not at the console, shellcode is just a selfcontained
+    program, designed to take over another program to open a shell. Once control of
+    the program's execution pointer is taken, the injected shellcode can do anything.
+    There are many different types of shellcode that can be used in different situations
+    (or payloads). Even though not all shellcode actually spawns a shell, it's still
+    commonly called shellcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Port-Binding Shellcode
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When exploiting a remote program, spawning a shell locally is pointless. Port-binding
+    shellcode listens for a TCP connection on a certain port and serves up the shell
+    remotely. Assuming you already have port-binding shellcode ready, using it is
+    simply a matter of replacing the shellcode bytes defined in the exploit. Port-binding
+    shellcode is included in the LiveCD that will bind to port 31337\. These shellcode
+    bytes are shown in the output below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE90]'
+  prefs: []
+  type: TYPE_PRE
+- en: After some quick formatting, these bytes are swapped into the shellcode bytes
+    of the tinyweb_exploit.c program, resulting in tinyweb_exploit2.c. The new shellcode
+    line is shown below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: New Line from tinyweb_exploit2.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE91]'
+  prefs: []
+  type: TYPE_PRE
+- en: When this exploit is compiled and run against a host running tinyweb server,
+    the shellcode listens on port 31337 for a TCP connection. In the output below,
+    a program called nc is used to connect to the shell. This program is netcat (*nc*
+    for short), which works like that cat program but over the network. We can't just
+    use telnet to connect since it automatically terminates all outgoing lines with
+    `'\r\n'`. The output of this exploit is shown below. The `-vv` command-line option
+    passed to netcat is just to make it more verbose.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE92]'
+  prefs: []
+  type: TYPE_PRE
+- en: Even though the remote shell doesn't display a prompt, it still accepts commands
+    and returns the output over the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A program like netcat can be used for many other things. It's designed to work
+    like a console program, allowing standard input and output to be piped and redirected.
+    Using netcat and the port-binding shellcode in a file, the same exploit can be
+    carried out on the command line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE93]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the output above, first the length of the port-binding shellcode is shown
+    to be 92 bytes. The return address is found 540 bytes from the start of the buffer,
+    so with a 300-byte NOP sled and 92 bytes of shellcode, there are 152 bytes to
+    the return address overwrite. This means that if the target return address is
+    repeated 38 times at the end of the buffer, the last one should do the overwrite.
+    Finally, the buffer is terminated with `'\r\n'`. The commands that build the buffer
+    are grouped with parentheses to pipe the buffer into netcat. netcat connects to
+    the tinyweb program and sends the buffer. After the shellcode runs, netcat needs
+    to be broken out of by pressing CTRL-C, since the original socket connection is
+    still open. Then, netcat is used again to connect to the shell bound on port 31337.
+  prefs: []
+  type: TYPE_NORMAL

@@ -1,0 +1,1054 @@
+- en: Chapter 3. PROVISIONING DOMUS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*You can suck Linux right out of the air, as it were, by downloading the right
+    files and putting them in the right places, but there probably are not more than
+    a few hundred people in the world who could create a functioning Linux system
+    in that way*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: —Neal Stephenson, *In the Beginning Was the Command Line*![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Up until now, we've focused on administering the dom0, leaving the specifics
+    of domU creation up to the `virt-install` tool. However, you'll probably need
+    to build a domU image from scratch on occasion. There are plenty of good reasons
+    for this—perhaps you want an absolutely minimal Linux environment to use as a
+    base for virtual private server (VPS) hosting setups. Maybe you're deploying some
+    custom application—a *server appliance*—using Xen. It might just seem like a good
+    way to keep systems patched. Possibly you need to create Xen instances without
+    the benefit of a network connection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just as there are many reasons to want custom filesystem images, there are many
+    ways to make the images. We'll give detailed instructions for some that we use
+    frequently, and briefly mention some others, but it would be impossible to provide
+    an exhaustive list (and very boring besides). The goal of this chapter is to give
+    you an idea of the range of options you have in provisioning domU filesystems,
+    a working knowledge of the principles, and just enough step-by-step instruction
+    to get familiar with the processes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Basic DomU Configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'All of the examples that we''re presenting here should work with a basic—in
+    fact, downright skeletal—domU config file. Something along the lines of this should
+    work:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This specifies a kernel, a network interface, and a disk, and lets Xen use defaults
+    for everything else. Tailor the variables, such as volume group and kernel name,
+    to your site. As we mention elsewhere, we recommend including other variables,
+    such as a MAC and IP address, but we'll omit them during this chapter for clarity
+    so we can focus on creating domU images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*This doesn''t include a ramdisk. Either add a* *`ramdisk=`* *line or include*
+    *`xenblk`* *(and* *`xennet`* *if you plan on accessing the network before modules
+    are available) in your kernel. When we compile our own kernels, we usually include
+    the* *`xenblk`* *and* *`xennet`* *drivers directly in the kernel. We only use
+    a ramdisk to satisfy the requirements of the distro kernels*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you''re using a modular kernel, which is very likely, you''ll also need
+    to ensure that the kernel has a matching set of modules that it can load from
+    the domU filesystem. If you''re booting the domU using the same kernel as the
+    dom0, you can copy over the modules like this (if the domU image is mounted on
+    */mnt*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that this command only works if the domU kernel is the same as the dom0
+    kernel! Some install procedures will install the correct modules automatically;
+    others won't. No matter how you create the domU, remember that modules need to
+    be accessible from the domU, even if the kernel lives in the dom0\. If you have
+    trouble, make sure that the kernel and module versions match, either by booting
+    from a different kernel or copying in different modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Selecting a Kernel
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Traditionally, one boots a domU image using a kernel stored in the dom0 filesystem,
+    as in the sample config file in the last section. In this case, it's common to
+    use the same kernel for domUs and the dom0\. However, this can lead to trouble—one
+    distro's kernels may be too specialized to work properly with another distro.
+    We recommend either using the proper distro kernel, copying it into the dom0 filesystem
+    so the domain builder can find it, or compiling your own generic kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another possible choice is to download Xen's binary distribution, which includes
+    precompiled domU kernels, and extracting an appropriate domU kernel from that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Alternatively (and this is the option that we usually use when dealing with
+    distros that ship Xen-aware kernels), you can bypass the entire problem of kernel
+    selection and use PyGRUB to boot the distro''s own kernel from within the domU
+    filesystem. For more details on PyGRUB, see [Chapter 7](ch07.html "Chapter 7. HOSTING
+    UNTRUSTED USERS UNDER XEN: LESSONS FROM THE TRENCHES"). PyGRUB also makes it more
+    intuitive to match modules to kernels by keeping both the domU kernel and its
+    corresponding modules in the domU.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Quick-and-Dirty Install via tar
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Let's start by considering the most basic install method possible, just to get
+    an idea of the principles involved. We'll generate a root filesystem by copying
+    files out of the dom0 (or an entirely separate physical machine) and into the
+    domU. This approach copies out a filesystem known to work, requires no special
+    tools, and is easy to debug. However, it's also likely to pollute the domU with
+    a lot of unnecessary stuff from the source system and is kind of a lot of work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A good set of commands for this "cowboy" approach might be:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Do all this as root*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These commands, in order, map the backing file to a virtual device in the dom0,
+    create a filesystem on that device, mount the filesystem, and tar up the dom0
+    root directory while omitting */home*, */mnt*, */tmp*, */proc*, */sys*, and */var*.
+    The output from this `tar` command then goes to a complementary `tar` used to
+    extract the file in */mnt*. Finally, we make some directories that the domU will
+    need after it boots. At the end of this process, we have a self-contained domU
+    in *duncan.img*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why This Is Not the Best Idea
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The biggest problem with the cowboy approach, apart from its basic inelegance,
+    is that it copies a lot of unnecessary stuff with no easy way to clear it out.
+    When the domU is booted, you could use the package manager to remove things or
+    just delete files by hand. But that's work, and we are all about avoiding work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stuff to Watch Out For
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are some things to note:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You *must* `mkdir /sys` and `/proc` or else things will not work properly.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The issue here is that the Linux startup process uses */sys* and */proc* to
+    discover and configure hardware—if, say, */proc/mounts* doesn't exist, the boot
+    scripts will become extremely annoyed.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You may need to `mknod /dev/xvda b 220 0`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*/dev/xvd* is the standard name for Xen virtual disks, by analogy with the
+    *hd* and *sd* device nodes. The first virtual disk is */dev/xvda*, which can be
+    partitioned into */dev/xvda1*, and so on. The command'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: creates the node */dev/xvda* as a block device (b) with major number 220 (the
+    number reserved for Xen VBDs) and minor number 0 (because it's *xvda*—the first
+    such device in the system).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_IND
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*On most modern Linux systems, udev makes this unnecessary*.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You may need to edit */etc/inittab* and */etc/securettys* so that */dev/xvc0*
+    works as the console and has a proper `getty`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We''ve noticed this problem only with Red Hat''s kernels: for regular XenSource
+    kernels (at least through 3.1) the default `getty` on tty0 should work without
+    further action on your part. If it doesn''t, read on!'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The term *console* is something of a holdover from the days of giant time-sharing
+    machines, when the system operator sat at a dedicated terminal called the *system
+    console*. Nowadays, the console is a device that receives system administration
+    messages—usually a graphics device, sometimes a serial console.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'In the Xen case, all output goes to the Xen virtual console, `xvc0`. The `xm
+    console` command attaches to this device with help from `xenconsoled`. To log
+    in to it, Xen''s virtual console must be added to */etc/inittab* so that `init`
+    knows to attach a `getty`.^([[17](#ftn.CHP-3-FNOTE-1)]) Do this by adding a line
+    like the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: (As with all examples in books, don't take this construction too literally!
+    If you have a differently named `getty` binary, for example, you will definitely
+    want to use that instead.)
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You might also, depending on your policy regarding root logins, want to add
+    */dev/xvc0* to */etc/securetty* so that root will be able to log in on it. Simply
+    append a line containing the device name, *xvc0*, to the file.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[17](#CHP-3-FNOTE-1)]) `getty` gives you a login prompt. What, you didn't
+    think they showed up by magic, did you?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the Package Management System with an Alternate Root
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Another way to obtain a domU image would be to just run the setup program for
+    your distro of choice and instruct it to install to the mounted domU root. The
+    disadvantage here is that most setup programs expect to be installed on a real
+    machine, and they become surly and uncooperative when forced to deal with paravirtualization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Nonetheless, this is a viable process for most installers, including both RPM
+    and Debian-based distros. We'll describe installation using both Red Hat's and
+    Debian's tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Red Hat, CentOS, and Other RPM-Based Distros
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: On Red Hat–derived systems, we treat this as a *package* installation, rather
+    than a *system installation*. Thus, rather than using `anaconda`, the system installer,
+    we use `yum`, which has an installation mode suitable for this sort of thing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, it's easiest to make sure that SELinux is disabled or nonenforcing because
+    its extended permissions and policies don't work well with the installer.^([[18](#ftn.CHP-3-FNOTE-2)])
+    The quickest way to do this is to issue `echo 0 >/selinux/enforce`. A more permanent
+    solution would be to boot with `selinux=0` on the kernel command line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Specify kernel parameters as a space-separated list on the "module" line that
+    loads the Linux kernel—either in* /boot/grub/menu.lst *or by pushing* e *at the
+    GRUB menu*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When that''s done, mount your target domU image somewhere appropriate. Here
+    we create the logical volume *malcom* in the volume group *scotland* and mount
+    it on */mnt*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Create some vital directories, just as in the `tar` example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Make a basic `fstab` (you can just copy the one from dom0 and edit the root
+    device as appropriate—with the sample config file mentioned earlier, you would
+    use */dev/sda*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Fix *modprobe.conf*, so that the kernel knows where to find its device drivers.
+    (This step isn't technically necessary, but it enables `yum upgrade` to properly
+    build a new initrd when the kernel changes—handy if you're using PyGRUB.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: At this point you'll need an RPM that describes the software release version
+    and creates the `yum` configuration files—we installed CentOS 5, so we used `centos-release-5.el5.centos.i386.rpm`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Normally, the CentOS release RPM includes the minor version number, but it is
+    hard to find old versions. See the *README.prgmr* file in the same directory for
+    a full explanation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next we install `yum` under the new install tree. If we don''t do this before
+    installing other packages, `yum` will complain about transaction errors:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that the directory has been appropriately populated, we can use `yum` to
+    finish the install.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: And that's really all there is to it. Create a domU config file as normal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Debootstrap with Debian and Ubuntu
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Debootstrap is quite a bit easier. Create a target for the install (using LVM
+    or a flat file), mount it, and then use debootstrap to install a base system into
+    that directory. For example, to install Debian Etch on an x68_64 machine:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note the `--include=` option. Because Xen's networking requires the hot-plug
+    system, the domU must include a working install of udev with its support scripts.
+    (We've also included SSH, just for convenience and to demonstrate the syntax for
+    multiple items.) If you are on an i386 platform, add libc6-xen to the include
+    list. Finally, to ensure that we have a compatible kernel and module set, we add
+    a suitable kernel to the `include=` list. We use `linux-image-xen-amd64`. Pick
+    an appropriate kernel for your hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you want to use PyGRUB, create */mnt/etc/modules* before you run `debootstrap`,
+    and put in that file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Also, create a */mnt/boot/grub/menu.lst* file as for a physical machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're not planning to use PyGRUB, make sure that an appropriate Debian kernel
+    and ramdisk are accessible from the dom0, or make sure that modules matching your
+    planned kernel are available within the domU. In this case, we'll copy the sdom0
+    kernel modules into the domU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When that''s done, copy over `/etc/fstab` to the new system, editing it if
+    necessary:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Renaming Network Devices
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Debian, like many systems, uses udev to tie `eth0` and `eth1` to consistent
+    physical devices. It does this by assigning the device name (`ethX`) based on
+    the MAC address of the Ethernet device. It will do this during debootstrap—this
+    means that it ties `eth0` to the MAC of the box you are running `debootstrap`
+    on. In turn, the domU's Ethernet interface, which presumably has a different MAC
+    address, will become `eth1`.^([[19](#ftn.CHP-3-FNOTE-3)]) You can avoid this by
+    removing */mnt/etc/udev/rules.d/z25_persistent-net.rules*, which contains the
+    stored mappings between MAC addresses and device names. That file will be recreated
+    next time you reboot. If you only have one interface, it might make sense to remove
+    the file that generates it, */mnt/etc/udev/rules.d/z45_persistent-net-generator.rules*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, unmount the install root. Your system should then essentially work.
+    You may want to change the hostname and edit */etc/inittab* within the domU's
+    filesystem, but these are purely optional steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Test the new install by creating a config file as previously described (say,
+    */etc/xen/banquo*) and issuing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[18](#CHP-3-FNOTE-2)]) Although we don't really approve of the tendency to
+    disable SELinux at the first hint of trouble, we decided to take the path of least
+    resistance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[19](#CHP-3-FNOTE-3)]) Or another device, depending on how many Ethernet
+    devices the original machine had.
+  prefs: []
+  type: TYPE_NORMAL
+- en: QEMU Install
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Our favorite way to create the domU image—the way that most closely simulates
+    a real machine—is probably to install using QEMU and then take the installed filesystem
+    and use that as your domU root filesystem. This allows you, the installer, to
+    leverage your years of experience installing Linux. Because it's installing in
+    a virtual machine as strongly partitioned as Xen's, the install program is very
+    unlikely to do anything surprising and even more unlikely to interact badly with
+    the existing system. QEMU also works equally well with all distros and even non-Linux
+    operating systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: QEMU does have the disadvantage of being slow. Because KQEMU (the kernel acceleration
+    module) isn't compatible with Xen, you'll have to fall back to software-only full
+    emulation. Of course, you can use this purely for an initial image-creation step
+    and then copy the pristine disk images around as needed, in which case the speed
+    penalty becomes less important.
+  prefs: []
+  type: TYPE_NORMAL
+- en: QEMU'S RELATION TO XEN
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You may already have noted that QEMU gets mentioned fairly often in connection
+    with Xen. There''s a good reason for this: The two projects complement each other.
+    Although QEMU is a *pure*, or *classic*, full emulator, there''s some overlap
+    in QEMU''s and Xen''s requirements. For example, Xen can use QCOW images for its
+    disk emulation, and it uses QEMU fully virtualized drivers when running in hardware
+    virtualization mode. QEMU also furnishes some code for the hardware virtualization
+    built into the Linux kernel, KVM (kernel virtual machine)^([[20](#ftn.CHP-3-FNOTE-4)])
+    and win4lin, on the theory that there''s no benefit in reinventing the wheel.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen and QEMU aren't the same, but there's a general consensus that they complement
+    each other well, with Xen more suited to high-performance production environments,
+    and QEMU is aimed more at exact emulation. Xen's and QEMU's developers have begun
+    sharing patches and working together. They're distinct projects, but Xen developers
+    have acknowledged that QEMU "played a critical role in Xen's success."^([[21](#ftn.CHP-3-FNOTE-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This technique works by running QEMU as a pure emulator for the duration of
+    the install, using emulated devices. Begin by getting and installing QEMU. Then
+    run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: This command runs QEMU with the target device—a logical volume in this case—as
+    its hard drive and the install medium as its virtual CD drive. (The Slackware
+    ISO here, as always, is just an example—install whatever you like.) The `-boot
+    d` option tells QEMU to boot from the emulated CD drive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now install to the virtual machine as usual. At the end, you should have a completely
+    functional domU image. Of course, you're still going to have to create an appropriate
+    domU config file and handle the other necessary configuration from the dom0 side,
+    but all of that is reasonably easy to automate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One last caveat that bears repeating because it applies to many of these install
+    methods: If the domU kernel isn''t Xen-aware, then you will have to either use
+    a kernel from the dom0 or mount the domU and replace its kernel.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[20](#CHP-3-FNOTE-4)]) Although we don't cover KVM extensively, it's another
+    interesting virtualization technology. More information is available at the KVM
+    web page, [http://kvm.sf.net/](http://kvm.sf.net/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[21](#CHP-3-FNOTE-5)]) Liguori, Anthony, "Merging QEMU-DM upstream," [http://www.xen.org/files/xensummit_4/Liguori_XenSummit_Spring_2007.pdf](http://www.xen.org/files/xensummit_4/Liguori_XenSummit_Spring_2007.pdf).
+  prefs: []
+  type: TYPE_NORMAL
+- en: virt-install—Red Hat's One-Step DomU Installer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Red Hat opted to support a generic virtualization *concept* rather than a specific
+    *technology*. Their approach is to wrap the virtualization in an abstraction layer,
+    libvirt. Red Hat then provides support software that uses this library to take
+    the place of the virtualization package-specific control software.^([[22](#ftn.CHP-3-FNOTE-6)])
+    (For information on the management end of libvirt, `virt-manager`, see [Chapter 6](ch06.html
+    "Chapter 6. DOMU MANAGEMENT: TOOLS AND FRONTENDS").)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, Red Hat includes `virsh`, a command-line interface that controls
+    virtual machines. `xm` and `virsh` do much the same thing, using very similar
+    commands. The advantage of `virsh` and libvirt, however, is that the `virsh` interface
+    will remain consistent if you decide to switch to another virtualization technology.
+    Right now, for example, it can control QEMU and KVM in addition to Xen using a
+    consistent set of commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The installation component of this system is `virt-install`. Like `virsh`,
+    it builds on libvirt, which provides a platform-independent wrapper around different
+    virtualization packages. No matter which virtualization backend you''re using,
+    `virt-install` works by providing an environment for the standard network install
+    method: First it asks the user for configuration information, then it writes an
+    appropriate config file, makes a virtual machine, loads a kernel from the install
+    medium, and finally bootstraps a network install using the standard Red Hat installer,
+    `anaconda`. At this point `anaconda` takes over, and installation proceeds as
+    normal.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, this means that `virt-install` only works with network-accessible
+    Red Hat–style directory trees. (Other distros don't have the install layout that
+    the installer expects.) If you're planning to standardize on Red Hat, CentOS,
+    or Fedora, this is okay. Otherwise, it could be a serious problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although `virt-install` is usually called from within Red Hat's `virt-manager`
+    GUI, it's also an independent executable that you can use manually in an interactive
+    or scripted mode. Here's a sample `virt-install` session, with our inputs in bold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Most of these inputs are self-explanatory. Note that the install location can
+    be *ftp://*, *http://*, *nfs*:, or an SSH-style path (*user@host:/path*). All
+    of these can be local if necessary—a local FTP or local HTTP server, for example,
+    is a perfectly valid source. *Graphics support* indicates whether to use the virtual
+    framebuffer—it tweaks the `vfb=` line in the config file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here''s the config file generated from that input:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: There are some niceties about `virt-install`'s config file that we'd like to
+    mention. First, note that `virt-install` accesses the disk image using the tap
+    driver for improved performance. (For more details on the tap driver, see [Chapter 4](ch04.html
+    "Chapter 4. STORAGE WITH XEN").)
+  prefs: []
+  type: TYPE_NORMAL
+- en: It also exports the disk as `xvda` to the guest operating system, rather than
+    as a SCSI or IDE device. The generated config file also includes a randomly generated
+    MAC for each `vif`, using the `00:16:3e` prefix assigned to Xen. Finally, the
+    image boots using PyGRUB, rather than specifying a kernel within the config file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[22](#CHP-3-FNOTE-6)]) There's nothing *inherently* Red Hat–specific about
+    libvirt, but Red Hat is currently driving its adoption. See [http://libvirt.org/](http://libvirt.org/)
+    for more information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Converting VMware Disk Images
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One of the great things about virtualization is that it allows people to distribute
+    *virtual appliances*—complete, ready-to-run, preconfigured OS images. VMware has
+    been pushing most strongly in that direction, but with a little work, it's possible
+    to use VMware's prebuilt virtual machines with Xen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PYGRUB, PYPXEBOOT, AND FRIENDS
+  prefs: []
+  type: TYPE_NORMAL
+- en: The principle behind PyGRUB, pypxeboot, and similar programs is that they allow
+    Xen's domain builder to load a kernel that isn't directly accessible from the
+    dom0 filesystem. This, in turn, improves Xen's simulation of a real machine. For
+    example, an automated provisioning tool that uses PXE can provision Xen domains
+    without modification. This becomes especially important in the context of domU
+    images because it allows the image to be a self-contained package—plop a generic
+    config file on top, and it's ready to go.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Both PyGRUB and pypxeboot take the place of an analogous utility for physical
+    machines: GRUB and PXEboot, respectively. Both are emulations written in Python,
+    specialized to work with Xen. Both acquire the kernel from a place where the ordinary
+    loader would be unable to find it. And both can help you, the hapless Xen administrator,
+    in your day-to-day life.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For more notes on setting up PyGRUB, see [Chapter 7](ch07.html "Chapter 7. HOSTING
+    UNTRUSTED USERS UNDER XEN: LESSONS FROM THE TRENCHES"). For more on pypxeboot,
+    see [Installing pypxeboot](ch03s08.html#installing_pypxeboot "Installing pypxeboot")
+    on [Installing pypxeboot](ch03s08.html#installing_pypxeboot "Installing pypxeboot").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other virtualization providers, by and large, use disk formats that do more
+    than Xen's—for example, they include configuration or provide snapshots. Xen's
+    approach is to leave that sort of feature to standard tools in the dom0\. Because
+    Xen uses open formats and standard tools whenever possible, its disk images are
+    simply … filesystems.^([[23](#ftn.CHP-3-FNOTE-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thus, the biggest part of converting a virtual appliance to work with Xen is
+    in converting over the disk image. Fortunately, `qemu-img` supports most of the
+    image formats you're likely to encounter, including VMware's *.vmdk*, or Virtual
+    Machine Disk format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The conversion process is pretty easy. First, get a VMware image to play with.
+    There are some good ones at [http://www.vmware.com/appliances/directory/](http://www.vmware.com/appliances/directory/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, take the image and use `qemu-img` to convert it to a QCOW or raw image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: This command duplicates the contents of *foo.vmdk* in a QCOW image (hence the
+    `-o qcow`, for output format) called *hecate.qcow*. (*QCOW*, by the way, is a
+    disk image format that originates with the QEMU emulator. It supports AES encryption
+    and transparent decompression. It's also supported by Xen. More details on using
+    QCOW images with Xen are in [Chapter 4](ch04.html "Chapter 4. STORAGE WITH XEN").)
+    At this point you can boot it as usual, loading the kernel via PyGRUB if it's
+    Xen-aware or if you're using HVM, or using a standard domU kernel from within
+    the dom0 otherwise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Unfortunately, this won''t generate a configuration suitable for booting the
+    image with Xen. However, it should be easy to create a basic config file that
+    uses the QCOW image as its root device. For example, here''s a fairly minimal
+    generic config that relies on the default values to the extent possible:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that we're using a kernel from the dom0 filesystem rather than loading
+    the kernel from the VMware disk image with PyGRUB, as we ordinarily suggest. This
+    is so we don't have to worry about whether or not that kernel works with Xen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'RPATH''S RBUILDER: A NEW APPROACH'
+  prefs: []
+  type: TYPE_NORMAL
+- en: RPath is kind of interesting. It probably doesn't merit extended discussion,
+    but their approach to building virtual machines is cool. Neat. Elegant.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RPath starts by focusing on the application that the machine is meant to run
+    and then uses software that determines precisely what the machine needs to run
+    it by examining library dependencies, noticing which config files are read, and
+    so on. The promise of this approach is that it delivers compact, tuned, refined
+    virtual machine images with known characteristics—all while maintaining the high
+    degree of automation necessary to manage large systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Their website is [http://rpath.org/](http://rpath.org/). They've got a good
+    selection of prerolled VMs, aimed at both testing and deployment. (Note that although
+    we think their approach is worth mentioning, we are not affiliated with rPath
+    in any way. You may want to give them a shot, though.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[23](#CHP-3-FNOTE-7)]) Except when they're QCOW images. Let's ignore that
+    for now.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mass Deployment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Of course, all this is tied up in the broader question of *provisioning infrastructure*
+    and higher-level tools like Kickstart, SystemImager, and so on. Xen amplifies
+    the problem by increasing the number of servers you own exponentially and making
+    it easy and quick to bring another server online. That means you now need the
+    ability to automatically deploy lots of hosts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Manual Deployment
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The most basic approach (analogous to *tarring up a filesystem*) is probably
+    to build a single tarball using any of the methods we've discussed and then make
+    a script that partitions, formats, and mounts each domU file and then extracts
+    the tarball.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: This script takes a domain name as an argument, provisions storage from a tarball
+    at */opt/xen/images/base.tar.gz*, and writes a config file for a basic domain,
+    with a gigabyte of disk and 128MB of memory. Further extensions to this script
+    are, as always, easy to imagine. We've put this script here mostly to show how
+    simple it can be to create a large number of domU images quickly with Xen. Next,
+    we'll move on to more elaborate provisioning systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: QEMU and Your Existing Infrastructure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Another way to do mass provisioning is with QEMU, extending the QEMU installation
+    we previously outlined. Because QEMU simulates a physical machine, you can use
+    your existing provisioning tools with QEMU—in effect treating virtual machines
+    exactly like physical machines. For example, we've done this using SystemImager
+    to perform automatic installs on the emulated machines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This approach is perhaps the most flexible (and most likely integrates best
+    with your current provisioning system), but it's slow. Remember, KQEMU and Xen
+    are not compatible, so you are running old-school, software-only QEMU. Slow! And
+    needlessly slow because when a VM has been created, there's nothing to keep you
+    from duplicating it rather than going through the entire process again. But it
+    works, and it works the exact same way as your previous provisioning system.^([[24](#ftn.CHP-3-FNOTE-8)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll describe a basic setup with SystemImager and QEMU, which should be easy
+    enough to generalize to whichever other provisioning system you've got in place.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting Up SystemImager
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'First, install SystemImager using your method of choice—`yum`, `apt-get`, download
+    from [http://wiki.systemimager.org/](http://wiki.systemimager.org/)—whichever.
+    We downloaded the RPMs from SystemImager using the sis-install script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: SystemImager works by taking a system image of a *golden client*, hosting that
+    image on a server, and then automatically rolling the image out to targets. In
+    the Xen case, these components—golden client, server, and targets—can all exist
+    on the same machine. We'll assume that the server is dom0, the client is a domU
+    that you've installed by some other method, and the targets are new domUs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Begin by installing the dependency, `systemconfigurator`, on the server:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then install the server packages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Boot the golden client using `xm create` and install the packages (note that
+    we are performing these next steps within the domU rather than the dom0):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'SystemImager''s process for generating an image from the golden client is fairly
+    automated. It uses `rsync` to copy files from the client to the image server.
+    Make sure the two hosts can communicate over the network. When that''s done, run
+    on the client:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then run on the server:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: The server will connect to the client and build the image, using the name *porter*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now you're ready to configure the server to actually serve out the image. Begin
+    by running the `si_mkbootserver` script and answering its questions. It'll configure
+    DHCP and TFTP for you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then answer some more questions about the clients:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, use the provided script to enable netboot for the requisite clients:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And you''re ready to go. Boot the QEMU machine from the emulated network adapter
+    (which we''ve left unspecified on the command line because it''s active by default):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Of course, after the clients install, you will need to create domU configurations.
+    One way might be to use a simple script (in Perl this time, for variety):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: '(Further refinements, such as generating an IP based on the name, are of course
+    easy to imagine.) In any case, just run this script with the name as argument:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And then start your shiny new Xen machine:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Installing pypxeboot
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Like PyGRUB, pypxeboot is a Python script that acts as a domU bootloader. Just
+    as PyGRUB loads a kernel from the domain's virtual disk, pypxeboot loads a kernel
+    from the network, after the fashion of PXEboot (for Preboot eXecution Environment)
+    on standalone computers. It accomplishes this by calling `udhcpc` (the micro-DHCP
+    client) to get a network configuration, and then TFTP to download a kernel, based
+    on the MAC address specified in the domain config file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pypxeboot isn't terribly hard to get started with. You'll need the pypxeboot
+    package itself, udhcp, and tftp. Download the packages and extract them. You can
+    get pypxeboot from [http://book.xen.prgmr.com/mediawiki/index.php/pypxeboot](http://book.xen.prgmr.com/mediawiki/index.php/pypxeboot)
+    and udhcp from [http://book.xen.prgmr.com/mediawiki/index.php/udhcp](http://book.xen.prgmr.com/mediawiki/index.php/udhcp).
+    Your distro will most likely include the tftp client already.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The pypxeboot package includes a patch for udhcp that allows udhcp to take a
+    MAC address from the command line. Apply it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: Build udhcp. A simple `make` followed by `make install` did the trick for us.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Copy pypxeboot and *outputpy.udhcp.sh* to appropriate places:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next set up the TFTP server for network boot. The boot server can be essentially
+    the same as a boot server for physical machines, with the caveat that the kernel
+    and initrd need to support Xen paravirtualization. We used the setup generated
+    by Cobbler, but any PXE environment should work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now you should be able to use pypxeboot with a domU configuration similar to
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The regex that finds the MAC address in pypxeboot is easily confused. If you
+    specify other parameters, put spaces between the* *`mac=`* *parameter and the
+    surrounding commas, for example*, *`vif = [''vifname=lady , mac=00:16:3E:11:11:11
+    , bridge=xenbr0'']`*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create the domain:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: Automated Installs the Red Hat Way
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Red Hat uses Kickstart to provision standalone systems. A full discussion of
+    Kickstart is probably best left to Red Hat's documentation—suffice it to say that
+    Kickstart has been designed so that, with some supporting tools, you can install
+    Xen domUs with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The tools you'll most likely want to use to install virtual machines are Cobbler
+    and `koan`. Cobbler is the server software, while `koan` (*Kickstart over a network*)^([[25](#ftn.CHP-3-FNOTE-9)])
+    is the client. With the `--virt` option, `koan` supports installing to a virtual
+    machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This being a Red Hat tool, you can install it with `yum`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'No, sorry, we lied about that. First you''ll need to add the *Extra Packages
+    for Enterprise Linux* repository to your `yum` configuration. Install the package
+    describing the additional repo:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Now* you can install Cobbler with `yum`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then you''ll want to configure it. Run `cobbler check`, which will give you
+    a list of issues that may interfere with Cobbler. For example, out of the box,
+    Cobbler reported these issues for us:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: After you've fixed these problems, you're ready to use Cobbler. This involves
+    setting up install media and adding profiles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, find some install media. Kickstart is a Red Hat–specific package, so
+    Cobbler works only with Red Hat–like distros (SUSE is also supported, but it's
+    experimental). Cobbler supports importing a Red Hat–style install tree via `rsync`,
+    a mounted DVD, or NFS. Here we'll use a DVD—for other options, see Cobbler's man
+    page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you''re using a network install source, this may take a while. A full mirror
+    of one architecture is around 5GB of software. When it''s done downloading, you
+    can see the mirror status by running `cobbler report`. When you''ve got a directory
+    tree, you can use it as an install source by adding a *profile* for each type
+    of virtual machine you plan to install. We suggest installing through Cobbler
+    rather than *bare* pypxeboot and Kickstart because it has features aimed specifically
+    at setting up virtual machines. For example, you can specify the domU image size
+    and RAM amount in the machine profile (in GB and MB, respectively):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When you''ve added profiles, the next step is to tell Cobbler to regenerate
+    some data, including PXEboot menus:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, you can use the client, `koan`, to build the virtual machine. Specify
+    the Cobbler server, a profile, and optionally a name for the virtual machine.
+    We also used the `--nogfx` option to disable the VNC framebuffer. If you leave
+    the framebuffer enabled, you won''t be able to interact with the domU via `xm
+    console`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`koan` will then create a virtual machine, install, and automatically create
+    a domU config so that you can then start the domU using `xm`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[24](#CHP-3-FNOTE-8)]) This can be made faster by using an HVM domU for the
+    SystemImager install, rather than a QEMU instance. Not *blazing fast*, but an
+    improvement.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[25](#CHP-3-FNOTE-9)]) It begs the question of whether there are non-networked
+    Kickstart installs, but we'll let that slide.
+  prefs: []
+  type: TYPE_NORMAL
+- en: And Then…
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we've gone through a bunch of install methods, ranging from
+    the generic and brute force to the specialized and distro-specific. Although we
+    haven't covered anything in exhaustive detail, we've done our best to outline
+    the procedures to emphasize when you might want to, say, use `yum`, and when you
+    might want to use QEMU. We've also gestured in the direction of possible pitfalls
+    with each method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Many of the higher-level domU management tools also include a quick-and-easy
+    way to install a domU if none of these more generic methods strike your fancy.
+    (See [Chapter 6](ch06.html "Chapter 6. DOMU MANAGEMENT: TOOLS AND FRONTENDS")
+    for details.) For example, you''re most likely to encounter `virt-install` in
+    the context of Red Hat''s `virt-manager`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The important thing, though, is to tailor the install method to your needs.
+    Consider how many systems you're going to install, how similar they are to each
+    other, and the intended role of the domU, and then pick whatever makes the most
+    sense.
+  prefs: []
+  type: TYPE_NORMAL

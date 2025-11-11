@@ -1,0 +1,952 @@
+- en: '![](../images/67-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[**BUILDING AND SECURING DAEMONS**](toc.html#chapter4)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/as.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: At the heart of almost all Linux appliances is one or more daemons, the background
+    programs that provide a network or system service. You can get an idea of the
+    daemons available on your Linux system by looking in the /etc/ rc.d/init.d directory
+    or by using the ps ax command to show the daemons you have running on your system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The term *daemon* refers to a program that runs in the background without a
+    controlling terminal. Daemons also run in their own process group in order to
+    avoid inadvertently receiving signals meant for other processes. A daemon usually
+    redirects standard input, output, and error to /dev/null or to a log file. Many
+    daemons use a Process ID file (or pidfile) to enforce mutual exclusion to a resource;
+    this prevents more than one copy of the daemon from running at the same time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter shows you how to build and secure the daemons you’ll be using in
+    your appliances. It’s divided into three main sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to Build a Daemon
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to Secure a Daemon
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A Prototype Daemon
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[**How to Build a Daemon**](toc.html#chapter4.1)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section shows you how to build a daemon and offers a brief explanation
+    of why each step is needed. Your application may not require all of the steps
+    listed, and you may need to do them in a different order to meet your needs, but
+    this will give you a general idea, nonetheless.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Load the configuration.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Go into the background.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Become the process and session leader.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set the working directory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Redirect stdin, stdout, and stderr.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set up logging.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set group IDs and user IDs.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Check for a pidfile.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set the umask.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set up signal handlers.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*The sample daemon presented later in this chapter includes code for each of
+    these steps. Some of the following sections use code taken from the sample daemon.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Load the Daemon’s Configuration***](toc.html#chapter4.2)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a daemon starts, it needs to load a set of parameters that govern its operation.
+    This usually means parsing options on the command line and reading settings from
+    a configuration file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The command line used to start the daemon often contains entries such as the
+    location of the configuration file, the user and group IDs to use while running,
+    and whether or not the program should become a daemon or stay as a foreground
+    process. Some daemons let you specify the daemon’s working directory as well as
+    whether or not to do a chroot() before starting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is a precedence to the configuration information. Specifically, compiled-in
+    values are always loaded first, since they are loaded when the program starts.
+    Next, the configuration values from the configuration file are loaded, overwriting
+    the compiled-in values. Finally, the values from the command line are loaded,
+    overwriting the values from the configuration file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compiled-in values should focus more on security than functionality, since an
+    attacker might delete or modify the configuration file as part of a break in.
+    As a security precaution, some daemons refuse to run if they cannot open and load
+    a configuration file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Since the configuration file is often specified on the command line, your program
+    may need to make two passes through it: once to get the configuration file and
+    a second time to parse the command line again after the configuration file has
+    been loaded. Parameters on the command line are often used while debugging, so
+    their values normally override those in the configuration file.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Make sure your program does a sanity check by verifying the consistency of
+    the configuration and that it reports errors or exits if any problems are found.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Go into the Background***](toc.html#chapter4.3)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once the configuration is loaded, the next step is for the process to (optionally)
+    go into the background, where it can detach itself from the controlling terminal.
+    This is achieved by calling the fork() function to create a child process. The
+    parent process should exit after the fork.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In order to go into the background, the child process closes the file descriptors
+    of the controlling terminal. The result is that we have a *background process*
+    that is not attached to a controlling terminal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Your code might look like this example in which the parent process forks and
+    exits, leaving the child process to continue setting up the daemon:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/69-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'There are two times when you should not send your process into the background:
+    when debugging (since you want your terminal to remain the controlling terminal
+    for the program so that you see any diagnostic messages and can kill the program
+    if you need to), and when you want to automatically respawn your program if it
+    dies. In the latter case, the daemon should remain in the foreground so that the
+    parent process will receive control when the daemon exits (whether gracefully
+    or due to some error).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following example shell script shows how you can automatically respawn a
+    daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/69-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Two common alternatives to a shell script monitor are to add your daemon to
+    /etc/inittab and let the init process respawn it, or to write a custom monitor
+    program to respawn the various daemons on the appliance. The /etc/inittab approach
+    might save memory and a few entries in the process table, and you don’t need to
+    write any new software. The script to respawn mydaemon could be replaced with
+    a single line in /etc/inittab. If the default runlevel is 3, the line might appear
+    as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ap:3:respawn:/usr/local/bin/mydaemon
+  prefs: []
+  type: TYPE_NORMAL
+- en: The word *respawn* tells the init program to restart mydaemon if it dies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Become the Process and Session Leader***](toc.html#chapter4.4)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Linux kernel assigns each process to a process group and to a session, both
+    of which are used in the distribution of signals. In a *session,* all the processes
+    are typically started from an xterm window or from a virtual console login. In
+    a *process group,* all the processes are started in a command-line pipe. Each
+    session has only one process group that receives input from the controlling terminal;
+    that process group is called the *foreground process group.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, open an xterm or log in to a virtual console, and enter these
+    commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: cat | sort | uniq | tr a d &
+  prefs: []
+  type: TYPE_NORMAL
+- en: cat | sort | uniq | tr a d
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From another xterm or console, the output of ps xj might appear as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/70-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: All of the processes from the first command line will appear in a process group
+    with ![](../images/1.jpg) the cat process (PID 5327 in the above example) as the
+    process leader.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now look at the Process Group ID (PGID) column in the output of ps xj. All of
+    the programs on each command line have the PGID set to the PID of the cat command
+    that starts the command line. All the commands for the first line have a PGID
+    of 5327, and all the commands for the second line have a PGID of 5331\. The second
+    command ![](../images/2.jpg), the one you did not put into the background, is
+    the foreground process group for the session, so its PID (5331) is the Session
+    Group ID (TPGID) for all of the processes running in the xterm session. Recall
+    that the session leader (5331 in this example) is the process that gets standard
+    input from the terminal (hence the term Terminal Process Group ID, TPGID).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The reason for having separate IDs for the process group and session is that
+    if you kill a process group, you want the kernel to send the TERM signal to all
+    of the processes in the group. The same is true if you want to kill the processes
+    in a session.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We don’t want a daemon to receive signals that were not meant for it, and so
+    we want the daemon to be in its own session and its own process group. Here is
+    code that shows how to use setsid() to make your daemon a session and process
+    group leader:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/71-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: As an exercise, you might try typing the ps jax command and examining the sessions,
+    process groups, and foreground process groups for the daemons running on your
+    system. You should be able to tell which processes belong to the different session
+    and process groups.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*As a security precaution, do another fork() after calling setsid() and have
+    the parent exit immediately, leaving the child to continue as the daemon. This
+    removes the session leader status of the daemon in such a way that it can never
+    regain a controlling terminal.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Set the Working Directory***](toc.html#chapter4.5)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Daemons traditionally use the root directory, /, as the working directory. This
+    allows the daemon to continue working even if most other filesystems are unmounted.
+    Using the root directory also makes it easier to put your daemon into a chroot
+    jail for added security. (Chroot jails are described in “Chroot if Possible” on
+    page 59.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some daemons let you specify the working directory in the configuration file
+    or on the command line. Whether you use the root directory, the /tmp directory,
+    or a value from the configuration file, you should be deliberate in specifying
+    the working directory of your daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use chdir() to set the working directory of your daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Redirect stdin, stdout, and stderr***](toc.html#chapter4.6)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To remove itself from the controlling terminal, a daemon redirects the stdin,
+    stdout, and stderr file descriptors by closing and then reopening them (usually
+    to the /dev/null device). A daemon inherits all of the open file descriptors of
+    the parent. For this reason, many daemons loop through all possible file descriptors
+    and close each one. You can get the maximum number of file descriptors from OPEN_MAX
+    at compile time or from mx = getdtablesize(); at run time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you’ve closed all open files, it is good practice to reopen stdin, stdout,
+    and stderr; some libraries write to stderr, and therefore stderr should be initialized
+    with a valid file descriptor. Instead of using /dev/null, some daemons open a
+    log file as stderr.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following code redirects these three file descriptors by closing them and
+    then reopening them to the /dev/null device. The code also closes all file descriptors
+    up to the maximum returned from getdtablesize().
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/72-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[***Set Up Logging***](toc.html#chapter4.7)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Your daemon should report errors and other events of interest. While you are
+    working on the daemon, you will want to see debugging information, and you may
+    want to record your daemon’s activity when it is in operation. Logging can fill
+    all of these needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The three common destinations for log messages are syslog, stderr, and a log
+    file. It is fairly common to see debugging information directed to stderr, errors
+    directed to syslog, and activity logs put into files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*If you save log files to a local disk, you should probably run crond and have
+    logrotate delete old log files. Be sure to add any custom log files to logrotate’s
+    configuration.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you’re building a network appliance, you may want to send both errors and
+    usage logs to syslog, then configure syslog to send log messages to a log host
+    on the network instead of saving them in local disk files. This helps minimize
+    your appliance’s disk requirements and, since all log message are saved on one
+    host, makes it easier to analyze the messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many daemons let you set the verbosity of debug logging with a parameter on
+    the command line. For example, typing -d 5 might turn on debugging output with
+    a verbosity level of 5.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is no standard meaning for the debug levels in Linux. Some daemons have
+    a simple on/off option, while others use a level between 0 and 9\. Some daemons
+    let you turn debugging on and off while the program is running by sending it SIGUSR1
+    and SIGUSR2 signals, and some daemons read the debug level from the configuration
+    file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On a large project with several developers, you may want to have separate debug
+    levels for different parts of the code so that each developer can independently
+    control the logging in his or her code. It is also nice if you can set the debug
+    levels while the program is running. (Chapter 6 covers logging in greater detail,
+    and shows how we use RTA to modify debug levels at run time.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Set Group and User IDs***](toc.html#chapter4.8)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many daemons start from inittab or from the rc scripts at boot time; others
+    are started by cron. Thus, most daemons start with a root user ID, which presents
+    a security risk if the program is ever compromised.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To limit possible damage if the program is compromised, many daemons drop root
+    privileges as soon as possible. For example, a webserver might drop root privileges
+    as soon as it has bound to TCP port 80.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Likewise, your daemon should drop root privileges if at all possible. But if
+    not root, which user IDs and group IDs should you use? Many applications create
+    their own users and groups. (A quick look at /etc/passwd and /etc/group confirms
+    this.) If you decide to create a user for your daemon, try to keep the user shell
+    as /bin/nologin. Your daemon can get the user IDs and group IDs from the configuration
+    file or from the command line.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can drop root privileges and become another user by using the setuid() system
+    call. Other routines that can change the user ID include seteuid() and setreuid(),
+    which set both the real and effective user IDs. Your needs should dictate which
+    of these to use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following code from our sample daemon ![](../images/1.jpg) gets the user
+    ID (UID) name from Config[], a global configuration table, and calls ![](../images/2.jpg)
+    getpwnam() to convert the name to a numeric UID. A call to ![](../images/3.jpg)
+    setuid() sets the UID for the daemon. Our routine to set the group ID (GID) is
+    similar, using setgid() instead of setuid(). (The LOG macro is explained later.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/73-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](../images/74-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[***Check for a pidfile***](toc.html#chapter4.9)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many daemons require exclusive access to the computer’s resources, such as a
+    TCP port or a printer. In these cases, there should not be two instances of the
+    daemon running, as both instances cannot have exclusive access to a resource.
+    The most common way to reserve access is through the use of a pidfile.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The *pidfile* is a text file containing the process ID (PID) of the running
+    daemon and is usually located at /var/run/*xxx*.pid, where *xxx* is the name of
+    the daemon. For example, you might see the following in /var/run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/74-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: When a daemon starts, it checks to see if a pidfile exists. If the file does
+    not exist, the daemon creates it and writes its own PID there. If the file does
+    exist, the daemon checks to see if the process specified in the file is still
+    running. Then it reads the PID from the file and calls kill(0) to send a signal
+    to the process (this is just a test, kill(0) won’t actually terminate a running
+    process). If the kill() succeeds, it means that the process specified in the file
+    was running and able to accept the signal, so the new daemon can simply exit (optionally
+    logging the event). There is no way to atomically check for and create a pidfile,
+    so you have to use a Linux file lock to be sure another instance of the daemon
+    does not also create a pidfile. The code given later in this section illustrates
+    how to use a file lock.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a security precaution, you may want to configure your appliance so that one
+    process is not allowed to kill() another. To do so, check for the existence of
+    the daemon by looking for its PID in the /proc directory. If the PID specified
+    in the pidfile is not running, the new daemon overwrites the pidfile with its
+    PID and continues. (Your daemon should also verify that a process with a matching
+    PID is an instance of your daemon and not some other program that happens to have
+    a PID matching the one in the pidfile.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stale pidfiles are a nuisance, so when your daemon exits, it should remove its
+    pidfile. Write a subroutine that deletes the pidfile and use atexit() to register
+    the subroutine for execution at program termination. You may also want to modify
+    your rc.sysinit or other initialization scripts to delete all of the old pidfiles
+    from /var/run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Be sure to delete stale pidfiles early in the boot sequence before the daemon
+    is started so that your system initialization does not inadvertently remove active
+    pidfiles.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The name and location of the pidfile is often in the configuration file; if
+    it is not there, it can be passed in from the command line. Being able to specify
+    the pidfile in the configuration file or on the command line makes it easier to
+    run multiple instances of the daemon should the need arise (during debugging,
+    for instance).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code below is taken from our sample daemon and presents one approach to
+    the voluntary mutual exclusion of a pidfile. We ![](../images/1.jpg) get the name
+    of the pidfile and try to open it. If the open succeeds, we read the PID from
+    the file and ![](../images/2.jpg) try to send a signal to the process. If the
+    kill() call succeeds, it means the process specified in the pidfile is still running
+    and this instance should exit. If the pidfile exists, but the process it specifies
+    is not running, the pidfile is stale and should be ![](../images/3.jpg) removed.
+    If this instance of the daemon is the valid one, it ![](../images/4.jpg) creates
+    a pidfile, ![](../images/5.jpg) locks it, and ![](../images/6.jpg) writes the
+    PID into it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/75-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](../images/76-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '[***Set the umask***](toc.html#chapter4.10)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The umask command sets the default read/write permissions for files created
+    in the current shell. It is generally good practice to set the umask of your daemon
+    to 0, which forces you to explicitly set the permissions of any files you create.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because there is no need to save the old value of the umask, we cast the return
+    value to void:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: (void) umask((mode_t) 000);
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Set Up Signal Handlers***](toc.html#chapter4.11)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A *signal handler is* a function that is compiled with the rest of your application.
+    Instead of directly invoking the function, you use signal or sigaction to tell
+    the operating system to call the function when a signal arrives.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The last step in setting up a daemon is to configure the signal handlers. The
+    requirements for your application dictate which signals to catch and how to handle
+    them. Running the man 7 signal command will give you an idea of the signals you
+    might want to catch. Some of the most common signals and actions are:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**SIGHUP** Reread the configuration file and reinitialize as appropriate. Close
+    and reopen any log files to give logrotate a chance to work.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**SIGTERM**, **SIGQUIT** Do a graceful shutdown of the daemon and exit.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**SIGUSR1** Toggle debug mode on or off.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**SIGCHLD** Handle the death of any child processes.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You should consult both the man page for sigaction() and your favorite Linux
+    programming book before implementing your signal handler, but this simple example
+    might help you get started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/77-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The routine that will handle the signal is passed an integer with the signal
+    number. The routine should be of type void.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/77-2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*The code in a signal handler is not executed in the main execution path of
+    your program, and since a signal can occur while the signal handler itself is
+    running, signal handlers must be reentrant.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writing reentrant code can be a little tricky, and you might want to consider
+    just setting a volatile flag and having your main loop examine the flag periodically,
+    leaving the real work to be done in the main loop. The flag has to be volatile
+    so that the compiler does not optimize away tests for it in the main loop. If
+    you decide to do more than set a flag in your signal handler, make sure that all
+    the glibc and system calls in your signal handler are reentrant safe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**How to Secure a Daemon**](toc.html#chapter4.12)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section will give you some general guidelines to help you write more secure
+    programs. However, because your daemon’s security is much too important to use
+    this document as the sole source of your security information, we urge you to
+    read the books listed in the bibliography at the end of this chapter. The information
+    here is really just an overview of the points you need to consider. Furthermore,
+    this section does not tell you how to secure the Linux kernel or your appliance
+    in general.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll break the topic of daemon security into three sections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Designing a secure daemon
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Writing a secure daemon
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Limiting damage in case of a breach
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[***Designing a Secure Daemon***](toc.html#chapter4.13)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Securing your daemon starts when you begin thinking about its specification,
+    architecture, and design. You have the greatest ability to make your application
+    secure when you lay out your daemon’s foundation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By secure, we mean that the daemon should respond to errors and malicious attacks
+    in a predictable way. This implies that we must first detect errors (and attacks)
+    and then handle them appropriately. One way to think about this is to always have
+    a plan for each possible error condition and attack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Always Have an Escape Plan**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many buildings post escape plans next to elevators and stairwells. The escape
+    plan is a map showing the best route to take in case of an emergency. As you design
+    your daemon, think about how you will recover or escape from each possible error
+    condition. Laying the foundation for a good escape plan early makes it less burdensome
+    for you to add the code after your daemon has been developed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An exit may mean a core dump and program termination, or it may mean aborting
+    a single request, closing a network connection, or performing some other error
+    recovery. Program termination may be appropriate if you detect an error during
+    startup or during a configuration change, or if for any reason you think security
+    has been breached. For example, if your daemon is a network server handling client
+    requests, it may be appropriate to close a network connection if the daemon receives
+    a badly formed request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In practice, having an error escape plan usually means that all of your subroutines
+    return an error code. No matter how deeply nested your subroutine calls are, you
+    should be able to pass an error indicator up the chain of subroutine returns.
+    An event-driven or state-machine-driven program can use a flag or separate state
+    to indicate an error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Your escape should always begin with a log message describing the location of
+    the error and the inputs that generated it. You can have two log messages, one
+    to detect the error, and another, at a higher level, to report how you’ve decided
+    to handle the error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Be Restrictive**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When designing a daemon from scratch, you can specify its operation in detail.
+    Your specification and the resulting code should allow only the simplest subset
+    of requests and configuration data. Setting a tight standard will make your daemon
+    more secure and may help eliminate subtle bugs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, let’s consider restrictions you could place on configuration or
+    other internal filenames. Type the following at a bash prompt (noting the placement
+    of single and double quotes):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/79-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Amazing, isn’t it? The above command works. The string, cd ..; cd ..; cd ..;
+    cd etc; echo 'nameserver 1.2.3.4'>resolv.conf is a perfectly valid Linux filename.
+    While bash must honor this as a valid filename, you do not need to. Consider stating
+    in your specification that filenames are limited to the characters [_a-zA-Z/.]
+    but the sequences .. and // are invalid. In addition, the maximum length of a
+    Linux path and filename is PATH_MAX in limits.h and is usually set to 4096 characters.
+    You might want to restrict filename lengths to the minimum that your daemon needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Filenames are just one example. Give some thought to other ways in which you
+    can tighten your daemon’s specification.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Write a Secure Daemon***](toc.html#chapter4.14)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Security is only as good as the weakest link in its chain. Designing a secure
+    daemon is not enough. You must also *write* a secure daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Validate Input**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many of the recent Linux vulnerabilities stem from buffer overruns that allow
+    an intruder to place executable code on the stack. The most effective defense
+    against this kind of attack is to validate all input from a user or from any non-secure
+    source. Verify string lengths and make sure strings do not contain any illegal
+    characters. Verify that integers are reasonable, relative to their uses, and that
+    counting integers are always positive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Perform as much application-specific checking as possible before committing
+    other resources. For example, make sure that HTTP requests are well formed and
+    that SQL statements are valid. Checking early helps prevent the problem of trying
+    to back out of a request once you’ve allocated buffers, sockets, or other resources
+    for the request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Do not let any malformed input into your daemon. Remember: If it’s only 99
+    percent right, then it’s still wrong.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Check All Return Codes**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the best things you can do to enhance security is to check all return
+    codes, especially from system calls. Normally, this would seem like a burden,
+    but if you’ve laid out your design with an error escape plan, you’ll find that
+    it does not take a lot of thought or effort to test every return code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Avoid Buffer Overrun Attacks**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some library functions are considered unsafe because they do not limit how much
+    memory they will overwrite. For example, the strcpy() function is considered unsafe,
+    while the strncpy() function is considered safe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Nevertheless, we are not convinced that the strn routines are all that safe,
+    since they do not guarantee that the resulting string is null terminated. The
+    best thing to do is to check the length of the string before doing a copy. Let’s
+    look at some examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/80-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: While it uses more code, the above protects the program and reports source strings
+    that might be part of an attack on your program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Several other function families are considered unsafe. Specifically, these include
+    strcat(), sprintf(), gets(), and scanf().
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Other Security Software**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Even if you follow the best coding practices, you may want the added protection
+    of the following software:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**IBM’s ProPolice** GNU Compiler Collection (GCC) patch to help prevent buffer
+    overruns'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**StackGuard** GCC patch to help prevent buffer overruns'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Libsafe** Alternate library for strcpy() and other unsafe functions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**grsecurity** Kernel patch that can (among other things) make the stack non-executable'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Systrace** Kernel patch that can limit which system calls your daemon can
+    make'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We strongly recommend using grsecurity and configuring your system so that code
+    is never executed from the stack. This feature uses the hardware in the memory
+    management unit and will not affect your program’s performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[***Limit Damage in Case of a Breach***](toc.html#chapter4.15)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost every major Linux application has, at one time or another, been found
+    to be vulnerable. Since the same may happen to your daemon at some point, you
+    want to limit the amount of risk a compromised daemon might present to the appliance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Prevent Library and Path Attacks**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If an attacker gains access to your appliance, he might be able to run your
+    daemon having first set LD_LIBRARY_PATH or PATH to point to compromised libraries
+    and commands. If your program is Set User ID (SUID) root, your attacker has just
+    gained complete root control over your appliance. Don’t despair. There are a few
+    things you can do to limit disaster in the event that your daemon is compromised.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, do not run your application with an SUID of root. This is easier on an
+    appliance than on a multi-user system where programs like passwd and the X server
+    must be SUID root. It is better to drop root privileges or to run as a non-privileged
+    user. (You’ll learn a few more details about this in the next section.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second defense is to do a static build of your daemon using -static as an
+    option to your gcc invocation. A statically linked executable might not increase
+    the size of your executable as much as you’d imagine, and if you are using chroot
+    jails, it might actually save disk space. Statically linked executables usually
+    load faster, too.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another way to prevent a library or path attack is to ignore the environment
+    variables that tell your program where to look for shared object libraries and
+    system commands. If you are really security conscious, use the glibc clearenv()
+    function to undefine all environment variables. You will need to give the full
+    path to any commands you run with system(), but this is probably a good idea anyway.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Avoid Root Privileges**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attackers want root privileges so they can take control of your appliance. If
+    you run your daemon as root, you make your daemon a target for their attacks.
+    Avoid root privileges if at all possible. Create a new user (with the login shell
+    set to /bin/nologin) and use setuid() and setgid() to change to that user. This
+    technique is used by most web- and database servers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another approach is to modify your rc initialization scripts to launch your
+    daemon with sudo to change to the appropriate user. For example, your rc script
+    might start your webui daemon as user *wuser with* the command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: sudo -l wuser webui
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Drop Root Privileges and Set Capabilities**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you must have root privileges to open network ports below 1024 or to write
+    to root-owned files, try to drop as many root privileges as possible. The 2.2
+    and later kernels make this possible with capabilities. *Capabilities* are separate
+    permissions that perform very specific operations. Your SUID root program may
+    drop individual capabilities and keep others.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The kernel keeps track of three sets of capabilities for each program:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Effective** What is currently allowed'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Permitted** Maximum capabilities the process can use'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Inherited** What to transfer across an execve()'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The system call to set capabilities is capset(). You might also be able to use
+    cap_set_proc(), which is more portable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Capabilities are seeing a lot of active development in Linux. Here is a sample
+    of the more than 25 capabilities that your daemon should relinquish if possible.
+    A list of all of the capabilities is available from the output of man capabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](../images/82-1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The kernel itself honors a set of capabilities, and as the last step in your
+    boot process, you might want to limit what the kernel can do. For example, if
+    your kernel uses modules, at the end of system bootup, you may want to completely
+    remove the kernel’s ability to load or remove modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**NOTE**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*A full description of capabilities is beyond the scope of what we can present
+    here. A good place to start is man capabilities on your Linux system.*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Chroot if Possible**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the oldest and most trusted techniques to limit damage in case of a breech
+    is to run a daemon in a chroot jail. The idea is to put all of the files that
+    your daemon will need in a directory subtree and to then tell your daemon that
+    the top of the subtree is the “root” of the filesystem. The system call is chroot(),
+    and it is a good way to make the rest of the real filesystem invisible in case
+    your daemon is breeched.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is fairly easy for a process owned by root to break out of a chroot jail,
+    so be sure to drop root privileges after the chroot() call. A typical sequence
+    of calls to build a chroot jail looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: chdir("/var/app_jail");
+  prefs: []
+  type: TYPE_NORMAL
+- en: chroot("/var/app_jail")
+  prefs: []
+  type: TYPE_NORMAL
+- en: setuid(500);
+  prefs: []
+  type: TYPE_NORMAL
+- en: Following the chroot() call, the application will be able to see only the files
+    and directories under the directory specified in the chroot() call. You will need
+    to close file descriptors to directories outside of the chroot jail, since they
+    can provide a means to break out of the jail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The trick in building a successful chroot jail is in limiting the number of
+    files and devices in the jail. Of course you will need all of your daemon’s working
+    files, but do not include the startup configuration directory if it contains,
+    for example, where to locate the chroot jail. If your program is dynamically linked,
+    you will need to include a /lib directory and whatever shared object libraries
+    your program uses. Consider doing a static build of your application to avoid
+    the necessity of adding the /lib directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The standard library logging routine, syslog(), assumes access to a Unix socket
+    at /dev/log. Create a /dev directory in your jail and tell the system logging
+    daemon, syslogd, to listen on an additional socket using the -a command line option.
+    Here’s an example of how to start syslogd so that it listens on an additional
+    socket:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: syslogd -a /var/app_jail/dev/log
+  prefs: []
+  type: TYPE_NORMAL
+- en: A common alternative to a chroot jail is a virtual machine. Programs such as
+    VMware, VServer, and User-mode Linux all provide more isolation than a chroot
+    jail but at the cost of higher memory or CPU requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**A Prototype Daemon**](toc.html#chapter4.16)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This book includes a bootable CD that turns a PC into a Linux-based appliance.
+    The programming effort for the book’s sample appliance was divided among the authors,
+    with each of us writing some of the programs. To make the appliance code easier
+    for you to read (and easier for us to write), we decided to start by building
+    a common core for each of our programs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code for the empty daemon is available as part of the code for our appliance,
+    and you can get it from the CD or from the book’s website. We’ve tried to build
+    the empty daemon to reflect all of the lessons learned in the sections above,
+    and you are welcome to copy our empty daemon code and use it as you see fit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Summary**](toc.html#chapter4.17)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter we have demonstrated the initialization steps a typical daemon
+    takes—for example, redirecting stdin, stdout, and stderr, and going into the background.
+    We’ve also introduced some concepts and techniques that you might use to make
+    your daemons more secure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[**Further Reading**](toc.html#chapter4.18)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ve found the following books useful in determining how to secure a daemon.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Secure Programming for Linux and Unix HOWTO* by David A. Wheeler ([http://www.dwheeler.com/secure-programs](http://www.dwheeler.com/secure-programs),
+    2003)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Real World Linux Security* by Bob Toxen (Prentice Hall, 2000)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Network Security Hacks* by Andrew Lockart (O’Reilly, 2004)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*SSH, The Secure Shell: The Definitive Guide* by Daniel J. Barrett and Richard
+    E. Silverman (O’Reilly, 2001)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Linux Security* by Shadab Siddiqui (Premier Press, 2002)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

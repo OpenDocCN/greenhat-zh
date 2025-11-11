@@ -1,0 +1,494 @@
+- en: Chapter 17. Simulated Penetration Test
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Penetration testing is the pinnacle for most of us, and successfully bypassing
+    an organization’s defenses during a penetration test is one of our most rewarding
+    experiences. In this chapter, we’ll pull together what you’ve learned in previous
+    chapters as we simulate a complete penetration test. You will be re-creating steps
+    that you’ve seen in previous chapters, so most of what is shown here should be
+    familiar.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before you begin, download and install Metasploit’s vulnerable Linux virtual
+    machine called *Metasploitable*. (You can find it at [http://www.thepiratebay.org/torrent/5573179/Metasploitable/](http://www.thepiratebay.org/torrent/5573179/Metasploitable/).)
+    Metasploitable was created to train individuals to use Metasploit for successful
+    exploitation. Follow the directions on the site to install Metasploitable, and
+    then power it on. We’ll be running the Metasploitable virtual machine alongside
+    the Windows XP system [to simulate a small networked](http://www.exploit-db.com/exploits/5720/)
+    environment, with one virtual machine acting as an Internet-facing system and
+    another acting as an internal network host.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The simulated penetration test in this chapter is a small one. You would do
+    something more in-depth if your target were a large corporation. We’ve kept this
+    simple to make it easy for you to replicate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pre-engagement Interactions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Planning is the first step in pre-engagement. During a true planning phase,
+    we would identify our target(s) and our primary method of planned attack, which
+    might include social engineering, wireless, Internet, or internal attack vectors.
+    Unlike an actual penetration test, here we will not be targeting a specific organization
+    or a group of systems; we will perform a simulation using our known virtual machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the purposes of this simulation, our target will be the protected Metasploitable
+    virtual machine at IP address 172.16.32.162 (to configure Metasploitable, use
+    the username and password of *msfadmin*). The Metasploitable target is a machine
+    attached to an internal network, protected by a firewall, and *not* directly connected
+    to the Internet. Our Windows XP machine is behind the firewall (turn on Windows
+    Firewall) with only port 80 open at IP address 172.16.32.131.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Intelligence Gathering
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The next step, intelligence gathering, is one of the most important phases in
+    the process, because if you miss something here you might miss an entire avenue
+    of attack. Our goal at this point is to understand what we are going to attack
+    and determine how we might gain access to the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We begin with a basic *nmap* scan (as shown next) against our Windows XP virtual
+    machine, and we find that port 80 is open. We use *nmap*’s stealth TCP scan, which
+    is typically effective in detecting ports without triggering defenses. Most IPSs
+    can detect port scans, but because port scans are so common, they are generally
+    considered regular noise and are ignored as long as they’re not very aggressive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: We discover what appears to be a web server running on this server. This is
+    typical when attacking Internet-facing systems, most of which will limit the ports
+    accessible by Internet users. In this example, we find port 80, the standard HTTP
+    port, listening. If we browse to it, we see something similar to [Figure 17-1](part0021.html#a_web_application_was_identified).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A web application was identified.](../images/00060.jpeg)Figure 17-1. A web
+    application was identified.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threat Modeling
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Having identified port 80 as open, we could enumerate any available additional
+    systems, but we’re interested only in the single target. Let’s move on to threat
+    modeling and attempt to identify the best route into this system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The web page we found gives us a chance to enter input in User and Password
+    fields. At this point, you, as a penetration tester, should think outside the
+    box and try to determine what the best avenue is going to be. When you’re performing
+    application security penetration tests, consider using tools other than Metasploit,
+    such as the Burp Suite ([http://www.portswigger.net/](http://www.portswigger.net/))
+    when appropriate; don’t feel locked into a single tool set. In the following example,
+    we’ll attempt a manual attack by entering ‘TEST (notice the leading single quote)
+    into the username field and a single quote in the password field. Prior to submitting
+    the form, our username and password fields should look like those in [Figure 17-2](part0021.html#attempting_to_leverage_sql_injection).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Attempting to leverage SQL injection](../images/00061.jpeg)Figure 17-2. Attempting
+    to leverage SQL injection'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Take a moment to consider what is occurring on the backend when the server receives
+    this input. Here we simply tried to start a new SQL statement and appended some
+    bogus data to it. You probably won’t find many web applications in the wild that
+    are as easy to attack as this one, but this makes for a good example — and it
+    was not too long ago that these sorts of errors were in fact being discovered
+    all the time. When we click the Submit button, we get the error message shown
+    in [Figure 17-3](part0021.html#error_message_colon_sql_injection_is_pre).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This error message indicates that a SQL injection flaw is present based on the
+    SQL exception and the “Incorrect syntax near” message shows that the *‘TEST* input
+    caused it. With a quick Google search, we can determine that the backend database
+    is Microsoft SQL, purely based on the error messages that were presented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We won’t go into how to perform SQL injection on web applications here, but
+    you can easily manipulate the input parameters to attack a given system and completely
+    compromise it. (This was covered briefly in [Chapter 11](part0015.html#fast-track).)
+    Notice that we still haven’t actually attacked a system yet; we’ve simply tried
+    to identify a viable attack vector in the system. Now that we know we can potentially
+    compromise this system, it’s time to move on to the exploitation phase.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Error message: SQL injection is present.](../images/00062.jpeg)Figure 17-3. Error
+    message: SQL injection is present.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploitation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When we looked for vulnerabilities in the web application, we found a viable
+    attack vector via SQL injection. In this instance, Fast-Track is our best option
+    for compromising the MS SQL server and gaining access to our target through Meterpreter,
+    because, as you’ll recall from [Chapter 11](part0015.html#fast-track), it attacks
+    Microsoft SQL–based injection vulnerabilities with ease.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After we have a Meterpreter console, we’ll look at how to gain access to the
+    Metasploitable system on the internal network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Customizing MSFconsole
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We’ll use SQLPwnage to deploy the Meterpreter console via SQL injection on the
+    target to gain administrative access to its backend database. Recall from [Chapter 11](part0015.html#fast-track)
+    that SQLPwnage is an automated way of attacking MS SQL–based injection flaws,
+    and it uses multiple methods of attack in an attempt to fully compromise the SQL
+    server via the `xp_cmdshell` stored procedure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before launching the attack, we need to set up some options through *msfconsole*.
+    For practice, let’s create our own Metasploit listener manually. Fast-Track can
+    set it up for you, but we will be adding the `load auto_add_route` ![](../images/00002.gif)
+    function within Metasploit so that we can automatically connect to systems on
+    the internal network. We’ll create a listener and launch Fast-Track to attack
+    the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: With our listener waiting for a connection from our soon-to-be compromised target,
+    we launch Fast-Track. (When the *xterm* window opens, close it since we already
+    have a listener set up.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This should look familiar. We’ve essentially attacked the web application through
+    Fast-Track and exploited it via SQL injection attacks. We used the `xp_cmdshell`
+    stored procedure and the binary-to-hex conversion technique to present a full-fledged
+    Meterpreter shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Post Exploitation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: At this point, we should have a Meterpreter console running in the background
+    within *msfconsole*, so we can begin to scan the target’s subnet for other live
+    systems. To do this, we’ll upload *nmap* to the target and run it from the Windows
+    machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, download *nmap* from [insecure.org](http://insecure.org) in an executable
+    format and save it locally. We’ll be uploading this to our target. Next, we’ll
+    connect to the target via Microsoft’s Remote Desktop Protocol (RDP), a built-in
+    graphical remote administration protocol that lets you interact with the Windows
+    Desktop as if you were sitting in front of the remote machine. After we’re connected
+    with our Meterpreter session, we’ll use the *getgui* Meterpreter script to tunnel
+    RDP back out to us over port 8080 and add a new administrative user to the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We enter **rdesktop localhost:8080** from Back|Track’s command line, so we can
+    log into the system with the newly created user account. We then use Meterpreter
+    to upload *nmap* to the target. Our goal is to install *nmap* on the compromised
+    Windows target and use the system as a staging ground for further attacks. Conversely
+    you could use *scanner/portscan/syn* and *scanner/portscan/tcp* to port scan directly
+    through Metasploit. The choice is a matter of personal preference and needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: We now have our launching pad for additional attacks. With *nmap* installed
+    on the target, we are essentially sitting on the internal network. We can now
+    attempt to enumerate internally connected systems and further penetrate the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scanning the Metasploitable System
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: With our Meterpreter session granting us access to the internal network via
+    the `load auto_add_route` command, we can scan and exploit the inside hosts using
+    the compromised Windows XP target as the launching point. We’re effectively connected
+    to the internal network, so we should be able to reach our Metasploitable system.
+    Let’s begin with a basic port scan.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here we see a series of open ports. Based on *nmap*’s OS detection we see that
+    the scanned system is a UNIX/Linux variant of some sort. Some of these ports should
+    jump out at you, such as FTP, Telnet, HTTP, SSH, Samba, MySQL, PostgreSQL, and
+    Apache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Identifying Vulnerable Services
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Because a few ports look interesting, we’ll start banner-grabbing each one to
+    try to find a way into the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Exiting the system, we know now that ProFTPD 1.3.1 is running on port 21\.
+    Next we use SSH to learn more about the target. (The addition of the `-v` flag
+    gives us verbose output.) The next listing tells us that our target is running
+    an older version of OpenSSH, specifically written for Ubuntu:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now we issue the following to determine the version of Ubuntu running on this
+    system:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Great! We know that the system is running Ubuntu 8.04 and that two unencrypted
+    protocols (telnet and FTP) are in use that might come into play later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now let’s look at SMTP to see what version our target is running. Remember that
+    we are trying to identify the running versions of the services operating on the
+    various remote systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the Postfix mail server appears to be running on the Metasploitable
+    server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This process is continued through all the different ports that have been discovered
+    as listening on our target. The various auxiliary modules are very useful for
+    this work. When you’re finished, you should have a list of the versions of software
+    running on the system, information that you will use when targeting attacks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attacking Apache Tomcat
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now we enter the attack phase again, where we start to get our hands dirty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the course of our research, we noticed a plethora of vulnerabilities on this
+    system, including direct exploits and brute force possibilities. Now, if we were
+    performing an overt penetration test, we could run vulnerability scanners against
+    the system to find most openings for us, but that would take all the fun out of
+    it! Let’s attack Apache instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We notice that Apache Tomcat is installed on port 8180, as shown in our earlier
+    port scans. After a bit of Internet research, we learn that Tomcat is vulnerable
+    to a management interface brute force attack. (In most cases, we can use *exploit-db*
+    or Google to identify potential vulnerabilities in a given service.) After some
+    more research on the operating version number of the Apache Tomcat installation
+    running on the target, the Tomcat manager seemed the best route for compromising
+    the system. If we can get through Tomcat’s manager function, we can use the HTTP
+    `PUT` method to deploy our payload on the vulnerable system. We launch the attack
+    as follows (with the list of exploits and payloads snipped):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our brute force attack is successful, and it logs in with the username *tomcat*
+    and password *tomcat*. But we don’t yet have a shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With our newly discovered credentials, we leverage Apache’s HTTP `PUT` functionality
+    with the *multi/http/tomcat_mgr_deploy* exploit to place our payload on the system
+    using the valid username and password that we discovered by brute-forcing the
+    login.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that we cannot write to the root folder, because we’re running from a
+    limited user account and this folder requires root-level permissions. Usually,
+    Apache runs under the Apache user account, which is sometimes *apache* but which
+    can also be *httpd*, *www-data*, among other names. Based on what we know about
+    the operating system version in use on the target, we could use local privilege
+    escalation techniques to gain further access as root. Because we already have
+    some basic access, let’s try a couple of different attacks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Here’s a little hint in obtaining root access to Metasploitable, without privilege
+    escalation: Check out [http://www.exploit-db.com/exploits/5720/](http://www.exploit-db.com/exploits/5720/)
+    for the SSH predictable PRNG exploit.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attacking Obscure Services
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When we performed only the default *nmap* port scan, we did not include all
+    possible ports. Because we have now gained initial access to the system, we enter
+    **`netstat -antp`**, and we notice other ports that *nmap* did not scan for when
+    performing the attack. (Remember that in a penetration test we can’t always rely
+    on the defaults to be successful.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our scan finds that port 3632 is open and associated with *DistCC*. An online
+    search tells us that *DistCC* is a program that distributes builds of C/C++ code
+    to several machines across a network, and it is vulnerable to an attack. (When
+    performing penetration tests, you will often encounter unfamiliar applications
+    and products, and you will need to research the application before you can attack
+    it.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice above that we are still not at root. A local privilege exploit will further
+    compromise the system and give full root access. We won’t tell you the answer
+    here; use what you’ve learned in this book to gain root privileges successfully
+    on the Metasploitable system. One hint is that you can find the exploit at Exploits
+    Database ([http://www.exploit-db.com/](http://www.exploit-db.com/)). Try getting
+    a root Linux/Meterpreter shell on the system on your own.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Covering Your Tracks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Having completed our attacks, our next step is to return to each exploited system
+    to erase our tracks and clean up any mess we’ve left behind. Remnants of a Meterpreter
+    shell or some other pieces of malware should be removed to avoid exposing the
+    system further. For example, when we used the `PUT` command to compromise the
+    Apache Tomcat instance, an attacker could use the exploit code left behind to
+    compromise the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sometimes, you will need to cover your tracks — for example, when testing the
+    forensics analysis of a compromised system or an incident response program. In
+    such cases, your goal is to thwart any forensics analysis or IDS. It’s often difficult
+    to hide all your tracks, but you should be able to manipulate the system to confuse
+    the examiner and make it almost impossible to identify the extent of the attack.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In most cases, when forensics analysis is performed, if you can mangle the system
+    so that it renders the majority of the examiner’s work almost unreadable and inconclusive,
+    he will most likely identify the system as having been infected or compromised
+    and might not understand how much information you were able to extract from the
+    system. The best way to thwart forensic analysis is to wipe the system completely
+    and rebuild it, removing all traces, but this is rare during a penetration test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One benefit discussed in a number of chapters is the ability for Meterpreter
+    to reside purely in memory. Often, you’ll find it challenging to detect and react
+    to Meterpreter in memory space. Although research often suggests ways to detect
+    a Meterpreter payload, the Metasploit crew typically responds with a new way to
+    hide Meterpreter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the same cat-and-mouse game that antivirus software vendors play with
+    new releases of Meterpreter. When a new encoder or method for obfuscating a payload
+    is released, vendors can take several months to detect the issues and update their
+    product signatures to catch them. In most cases, it’s relatively difficult for
+    most forensics analysts to identify a purely memory-resident attack vector from
+    Metasploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We won’t offer in-depth information about covering your tracks, but a couple
+    of Metasploit features are worth mentioning: *timestomp* and *event_manager*.
+    *Timestomp* is a Meterpreter plug-in that allows you to modify, erase, or set
+    certain attributes on files. Let’s run *timestomp* first:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, we changed the timestamp so that when Encase (a popular forensics
+    analysis tool) is used, the timestamps are blank.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The tool *event_manager* will modify event logs so that they don’t show any
+    information that might reveal that an attack occurred. Here it is in action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, we clear all the event logs, but the examiner might notice
+    other interesting things on the system that could alert him to an attack. In general
+    though, the examiner will not be able to piece together the puzzle to identify
+    what happened during the attack, but he will know that something bad had occurred.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember to document your changes to a target system to make it easier to cover
+    your tracks. Usually, you’ll leave a small sliver of information on the system,
+    so you might as well make it extremely difficult for the incident response and
+    forensics analysis team to find it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Wrapping Up
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Having gotten this far, we could continue to attack other machines on the internal
+    network using Metasploit and Meterpreter, with our attacks limited only by our
+    creativity and ability. If this were a larger network, we could further penetrate
+    the network using information gathered from various systems on the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, earlier in this chapter we compromised a Windows-based system.
+    We could use the Meterpreter console to extract the hash values from that system
+    and then use those credentials to authenticate to other Windows-based systems.
+    The local administrator account is almost always the same from one system to another,
+    so even in a corporate environment, we could use the information from one system
+    to bridge attacks to another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Penetration testing requires you to think outside the box and combine pieces
+    of a puzzle. We used one method during this chapter, but there are probably several
+    different ways to get into the systems and different avenues of attack you can
+    leverage. This all comes with experience and spending the time to become creative.
+    Persistence is key to penetration testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember to establish a fundamental set of methodologies you are comfortable
+    with, but change them as necessary. Often, penetration testers change their methodologies
+    at least once per test to stay fresh. Changes might include a new way of attacking
+    a system or use of a new method. Regardless of the method you choose, remember
+    that you can accomplish anything in this field with a bit of experience and hard
+    work.
+  prefs: []
+  type: TYPE_NORMAL

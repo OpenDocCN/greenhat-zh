@@ -1,0 +1,739 @@
+- en: Chapter 5. Delaying Execution
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Often, drivers need to delay their execution in order to give their device(s),
+    the kernel, or a user the time to accomplish some task. In this chapter, I’ll
+    detail the different functions available for achieving these delays. In the process,
+    I’ll also describe asynchronous code execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Voluntary Context Switching, or Sleeping
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Voluntary context switching*, or *sleeping*, is done when a driver thread
+    must await the availability of a resource or the arrival of an event; for example,
+    a driver thread should sleep after it requests data from an input device, such
+    as a terminal (McKusick and Neville-Neil, 2005). A driver thread sleeps by calling
+    a `*sleep` function.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: A thread voluntarily context switches (or sleeps) by calling `tsleep`. The arguments
+    for `tsleep` are common to the other `*sleep` functions and are described in the
+    next few paragraphs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `chan` argument is the channel (that is to say, an arbitrary address) that
+    uniquely identifies the event that the thread is waiting for.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `priority` argument is the priority for the thread when it resumes. If `priority`
+    is `0`, the current thread priority is used. If `PCATCH` is `OR`’ed into `priority`,
+    signals are checked before and after sleeping.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `wmesg` argument expects a concise description of the sleeping thread. This
+    description is displayed by user-mode utilities, such as `ps(1)`, and has no real
+    impact on performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `timo` argument specifies the sleep timeout. If `timo` is nonzero, the thread
+    will sleep for at most `timo` / `hz` seconds. Afterward, `tsleep` returns the
+    error code `EWOULDBLOCK`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `wakeup` function wakes up every thread asleep on the channel `chan`. Generally
+    speaking, threads woken from sleep should re-evaluate the conditions they slept
+    on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `wakeup_one` function is a variant of `wakeup` that only gets up the first
+    thread that it finds asleep on chan. The assumption is that when the awakened
+    thread is done, it calls `wakeup_one` to wake up another thread that’s asleep
+    on `chan`; this succession of `wakeup_one` calls continues until every thread
+    asleep on `chan` has been awakened (McKusick and Neville-Neil, 2005). This reduces
+    the load in cases when numerous threads are asleep on `chan`, but only one thread
+    can do anything meaningful when made runnable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `pause` function puts the calling thread to sleep for `timo` / `hz` seconds.
+    This thread cannot be awoken by `wakeup`, `wakeup_one`, or signals.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remaining `*sleep` functions—`mtx_sleep`, `msleep_spin`, `sx_sleep`, and
+    `rw_`sleep—are variants of tsleep that take a particular lock. This lock is dropped
+    before the thread sleeps and is reacquired before the thread awakes; if `PDROP`
+    is `OR`’ed into `priority`, this lock is not reacquired.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the `msleep_spin` function does not have a `priority` argument. Consequently,
+    it cannot assign a new thread priority, catch signals via `PCATCH`, or drop its
+    spin mutex via `PDROP`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing Sleeps and Condition Variables
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 5-1](ch05s02.html#sleep.c "Example 5-1. sleep.c") (which is based
+    on code written by John Baldwin) is a KLD designed to demonstrate sleeps and condition
+    variables. It works by obtaining “events” from a sysctl; each event is then passed
+    to a thread, which performs a specific task based on the event it received.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take a quick look at this code and try to discern some of its structure. If
+    you don’t understand all of it, don’t worry; an explanation follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 5-1. sleep.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Near the beginning of [Example 5-1](ch05s02.html#sleep.c "Example 5-1. sleep.c"),
+    a constant named ![](httpatomoreillycomsourcenostarchimages1137499.png) `MAX_EVENT`
+    is defined as `1`, and a `struct proc` pointer named ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `kthread` is declared. For now, ignore these two objects; I’ll discuss them later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, there are two variable declarations: an integer named ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `event` and a condition variable named ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `event_cv`. These variables are used to synchronize [Example 5-1](ch05s02.html#sleep.c
+    "Example 5-1. sleep.c")’s threads. Obviously, the ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `event_mtx` mutex is used to protect even`t`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remaining parts—![](httpatomoreillycomsourcenostarchimages1137509.png) `sleep_thread`,
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) `sysctl_debug_sleep_test`,
+    ![](httpatomoreillycomsourcenostarchimages1137513.png) `load`, ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    `unload`, and ![](httpatomoreillycomsourcenostarchimages1137517.png) `sleep_modevent`—require
+    a more in-depth explanation and are therefore described in their own sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To make things easier to follow, I’ll describe the abovementioned parts in the
+    order they execute, rather than in the order they appear. Thus, I’ll begin with
+    [Example 5-1](ch05s02.html#sleep.c "Example 5-1. sleep.c")’s module event handler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sleep_modevent Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `sleep_modevent` function is the module event handler for [Example 5-1](ch05s02.html#sleep.c
+    "Example 5-1. sleep.c"). Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: On module load, this function simply calls the ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    load function. On module unload, it calls the ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `unload` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: load Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `load` function initializes this KLD. Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can be split into four parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    creates a kernel process to execute the function ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `sleep_thread`. A handle to this process is saved in ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `p`. The constant ![](httpatomoreillycomsourcenostarchimages1137505.png) `RFSTOPPED`
+    puts the process in the stopped state. The second part initializes the ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `event`, ![](httpatomoreillycomsourcenostarchimages1137509.png) `event_mtx`, and
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) `event_cv` variables. The
+    third part ![](httpatomoreillycomsourcenostarchimages1137513.png) schedules the
+    new process to execute `sleep_thread`. It also saves the process handle in ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    `kthread`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Processes are executed at thread granularity, which is why this code is thread
+    centric.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The fourth part creates a sysctl named debug.sleep.test, which uses a handler
+    function named ![](httpatomoreillycomsourcenostarchimages1137517.png) `sysctl_debug_sleep_test`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sleep_thread Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `sleep_thread` function receives events from the `sysctl_debug_sleep_test`
+    function. It then performs a specific task based on the event received. Here is
+    its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the execution of `sleep_thread` is contained within a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    forever loop. This loop begins by ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    acquiring `event_mtx`. Next, the value of `event` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    saved in `ev`. If `event` is equal to `0`, `sleep_thread` ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    waits on `event_cv`. See, `event` is only `0` if `sleep_thread` has yet to receive
+    an event. If an event has been received, `sleep_thread` ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    sets event to 0 to prevent reprocessing it. Next, `event_mtx` is ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    released. Finally, the received event is processed by a ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `switch` statement. Note that if the received event is ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `−1, sleep_thread` ![](httpatomoreillycomsourcenostarchimages1137515.png) self-terminates
+    via `kproc_exit`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: sysctl_debug_sleep_test Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `sysctl_debug_sleep_test` function obtains events from the sysctl `debug.sleep.test`.
+    It then passes those events to the `sleep_thread` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    obtaining an event from `debug.sleep.test` and ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    storing it in `i`. The following ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    if statement ensures that the event was obtained successfully. Next, a ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    range check is performed on `i`. If `i` is in the allowable range, `event_mtx`
+    is ![](httpatomoreillycomsourcenostarchimages1137507.png) acquired and `event`
+    is ![](httpatomoreillycomsourcenostarchimages1137509.png) queried to ensure that
+    it equals 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If `event` does not equal `0`, something has gone horribly wrong. And if `INVARIANTS`
+    is enabled, the kernel panics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, `event` is ![](httpatomoreillycomsourcenostarchimages1137511.png) set
+    to `i` and `sleep_thread` is ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    unblocked to process it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: unload Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `unload` function shuts down this KLD. Here is its function definition
+    (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    tearing down the sysctl `debug.sleep.test`. Afterward, `event` is ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    set to -`1` and `sleep_thread` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    unblocked to process it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recall that if event is `−1`, `sleep_thread` self-terminates via `kproc_exit`.
+    Note that `kproc_exit` executes `wakeup` on its caller’s process handle before
+    returning. This is why `unload` ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    sleeps on the channel ![](httpatomoreillycomsourcenostarchimages1137507.png) `kthread`,
+    because it contains `sleep_thread`’s process handle.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Recall that `load` saved `sleep_thread`’s process handle in `kthread`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As `unload` sleeps (at ![](httpatomoreillycomsourcenostarchimages1137505.png))
+    until `sleep_thread` exits, it cannot destroy ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `event_mtx` and ![](httpatomoreillycomsourcenostarchimages1137511.png) `event_cv`
+    while they’re still in use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t Panic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Here are the results from loading and unloading [Example 5-1](ch05s02.html#sleep.c
+    "Example 5-1. sleep.c"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Naturally, it works. Now, let’s look at some other ways to delay execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kernel Event Handlers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Event handlers* allow drivers to register one or more functions to be called
+    when an event occurs. As an example, before halting the system, every function
+    that is registered with the event handler `shutdown_final` is called. [Table 5-1](ch05s03.html#kernel_event_handlers-id1
+    "Table 5-1. Kernel Event Handlers") describes every event handler that is available.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 5-1. Kernel Event Handlers
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Event Handler | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `acpi_sleep_event` | Registered functions are called when the system is sent
+    to sleep. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `acpi_wakeup_event` | Registered functions are called when the system is
+    woken up. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `dev_clone` | Registered functions are called when a solicited item under
+    */dev* does not exist; in other words, these functions create device nodes on
+    demand. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ifaddr_event` | Registered functions are called when an address is set up
+    on a network interface. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `if_clone_event` | Registered functions are called when a network interface
+    is cloned. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ifnet_arrival_event` | Registered functions are called when a new network
+    interface appears. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ifnet_departure_event` | Registered functions are called when a network
+    interface is taken down. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `power_profile_change` | Registered functions are called when the system’s
+    power profile changes. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `process_exec` | Registered functions are called when a process issues an
+    `exec` operation. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `process_exit` | Registered functions are called when a process exits. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `process_fork` | Registered functions are called when a process forks. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `shutdown_pre_sync` | Registered functions are called when the system is
+    shut down before any filesystems are synchronized. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `shutdown_post_sync` | Registered functions are called when the system is
+    shut down after every filesystem is synchronized. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `shutdown_final` | Registered functions are called before halting the system.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `vm_lowmem` | Registered functions are called when virtual memory is low.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `watchdog_list` | Registered functions are called when the watchdog timer
+    is reinitialized. |'
+  prefs: []
+  type: TYPE_TB
+- en: 'The FreeBSD kernel provides the following three macros for working with event
+    handlers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `EVENTHANDLER_REGISTER` macro registers the function ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `func` with the event handler ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `name`. If successful, an ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `eventhandler_tag` is returned. When `func` is called, ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `arg` will be its first argument. Functions registered with `name` are called
+    in order of ![](httpatomoreillycomsourcenostarchimages1137507.png) `priority`.
+    `priority` can be 0 (which is the highest priority) to `20000` (which is the lowest
+    priority).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Generally, I use the constant `EVENTHANDLER_PRI_ANY`, which equals `10000`,
+    for `priority`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `EVENTHANDLER_DEREGISTER` macro deletes the function associated with ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `tag` from the event handler ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `name` (where `tag` is an ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `eventhandler_tag`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `EVENTHANDLER_INVOKE` macro executes every function registered with the
+    event handler ![](httpatomoreillycomsourcenostarchimages1137513.png) `name`. Note
+    that you’ll never call `EVENTHANDLER_INVOKE`, because each event handler has threads
+    dedicated to do just that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We’ll walk through an example that uses event handlers in [Chapter 6](ch06.html
+    "Chapter 6. Case Study: Virtual Null Modem").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Callouts
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Callouts* allow drivers to asynchronously execute a function after a specified
+    amount of time (or at regular intervals). These functions are known as *callout
+    functions*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following seven functions for working with
+    callouts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `callout_init` function initializes the `callout` structure ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `c`. The ![](httpatomoreillycomsourcenostarchimages1137501.png) `mpsafe` argument
+    denotes whether the callout function is “multiprocessor safe.” Valid values for
+    this argument are shown in [Table 5-2](ch05s04.html#callout_underscore_init_symbolic_constan
+    "Table 5-2. callout_init Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 5-2. callout_init Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `0` | The callout function is *not* multiprocessor safe; the `Giant` mutex
+    is acquired before executing the callout function, and it’s dropped after the
+    callout function returns. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `CALLOUT_MPSAFE` | The callout function is multiprocessor safe; in other
+    words, race conditions are dealt with by the callout function itself. |'
+  prefs: []
+  type: TYPE_TB
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Here, `Giant` is acquired and dropped by the callout subsystem. `Giant` primarily
+    protects legacy code and should not be used by contemporary code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `callout_init_mtx` function is an alternative to `callout_init`. The mutex
+    ![](httpatomoreillycomsourcenostarchimages1137503.png) `mtx` is acquired before
+    executing the callout function and it’s dropped after the callout function returns
+    (`mtx` is acquired and dropped by the callout subsystem). After `callout_init_mtx`
+    returns, `mtx` is associated with the `callout` structure `c` and its callout
+    function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137505.png) `flags` argument
+    modifies `callout_init_mtx’s` behavior. [Table 5-3](ch05s04.html#callout_underscore_init_underscore_mtx_s
+    "Table 5-3. callout_init_mtx Symbolic Constants") displays its only valid value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 5-3. callout_init_mtx Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `CALLOUT_RETURNUNLOCKED` | Indicates that the callout function will drop
+    mtx itself; in other words, `mtx` is not dropped after the callout function returns,
+    but during. |'
+  prefs: []
+  type: TYPE_TB
+- en: The `callout_init_rw` function is an alternative to `callout_init`. The rw lock
+    ![](httpatomoreillycomsourcenostarchimages1137507.png) `rw` is acquired, as a
+    writer, before executing the callout function and it’s dropped after the callout
+    function returns (`rw` is acquired and dropped by the callout subsystem). After
+    `callout_init_rw` returns, `rw` is associated with the `callout` structure `c`
+    and its callout function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137509.png) `flags` argument
+    modifies `callout_init_rw`’s behavior. [Table 5-4](ch05s04.html#callout_underscore_init_underscore_rw_sy
+    "Table 5-4. callout_init_rw Symbolic Constants") displays its only valid value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 5-4. callout_init_rw Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `CALLOUT_SHAREDLOCK` | Causes `rw` to be acquired as a reader |'
+  prefs: []
+  type: TYPE_TB
+- en: The `callout_stop` function cancels a callout function that’s currently pending.
+    If successful, a nonzero value is returned. If 0 is returned, the callout function
+    is either currently executing or it has already finished executing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You must exclusively hold the lock associated with the callout function that
+    you’re trying to stop before calling `callout_stop`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `callout_drain` function is identical to `callout_stop` except that if the
+    callout function is currently executing, it waits for the callout function to
+    finish before returning. If the callout function that you’re trying to stop requires
+    a lock and you’re exclusively holding that lock while calling `callout_drain`,
+    deadlock will result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `callout_reset` function schedules the function ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    `func` to be executed, one time, after ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `ticks` / `hz` seconds; negative values for `ticks` are converted to `1`. When
+    func is called, ![](httpatomoreillycomsourcenostarchimages1137517.png) `arg` will
+    be its first and only argument. After `callout_reset` returns, `func` is the callout
+    function for the callout structure ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `c`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `callout_reset` function can also reschedule a pending callout function
+    to execute at a new time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You must exclusively hold the lock associated with the callout or callout function
+    that you’re trying to establish or reschedule before calling `callout_reset`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `callout_schedule` function reschedules a pending callout function to execute
+    at a new time. This function is simply a convenience wrapper for `callout_reset`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You must exclusively hold the lock associated with the callout function that
+    you’re trying to reschedule before calling `callout_schedule`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Callouts and Race Conditions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Because callout functions execute asynchronously, it’s possible for a callout
+    function to be called while another thread attempts to stop or reschedule it;
+    thus creating a race condition. Fortunately, there are two simple solutions available
+    for solving this problem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Use** **`callout_init_mtx`**, **`callout_init_rw`**, **or** **`callout_init(foo,
+    0)`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Callout functions associated with a lock are exempt from the race condition
+    described above—as long as the associated lock is held before calling the callout
+    management functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Use** **`callout_drain`** **to permanently cancel a callout function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use `callout_drain` instead of `callout_stop` to permanently cancel a callout
+    function. See, by waiting for the callout function to finish, you can’t destroy
+    any objects that it might need.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We’ll walk through an example that uses callouts in [Chapter 6](ch06.html "Chapter 6. Case
+    Study: Virtual Null Modem").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Taskqueues
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Taskqueues* allow drivers to schedule the asynchronous execution of one or
+    more functions at a later time. These functions are known as *tasks*. Taskqueues
+    are primarily used for deferred work.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Taskqueues are like callouts except that you can’t specify the time to execute
+    your functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Taskqueues work by having tasks queued on them. Intermittently, these tasks
+    get executed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Global Taskqueues
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'FreeBSD runs and maintains four global taskqueues:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`taskqueue_swi`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `taskqueue_swi` taskqueue executes its tasks in the context of an interrupt.
+    Interrupt handlers typically defer their computationally expensive work to this
+    taskqueue. This taskqueue lets interrupt handlers finish sooner, thereby reducing
+    the amount of time spent with interrupts disabled. Interrupt handlers are discussed
+    in detail in [Chapter 8](ch08.html "Chapter 8. Interrupt Handling").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`taskqueue_swi_giant`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `taskqueue_swi_giant` taskqueue is identical to `taskqueue_swi` except that
+    it acquires the `Giant` mutex before executing its tasks. Contemporary code should
+    avoid this taskqueue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`taskqueue_thread`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `taskqueue_thread` taskqueue is the general-purpose taskqueue. It executes
+    its tasks in the context of a kernel thread (which is the same context that drivers
+    execute in). You can use this taskqueue when you have code that executes without
+    a thread context (such as an interrupt handler) that needs to execute code that
+    requires a thread context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`taskqueue_fast`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `taskqueue_fast` taskqueue is identical to `taskqueue_thread` except that
+    it acquires a spin mutex before executing its tasks. Use this taskqueue when your
+    tasks cannot sleep.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Taskqueue Management Routines
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following macro and functions for working with
+    taskqueues:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `TASK_INIT` macro initializes the `task` structure ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `task`. The ![](httpatomoreillycomsourcenostarchimages1137503.png) `priority`
+    argument is `task`’s position on a taskqueue. The ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `func` argument is the function to be executed (one time). When `func` is called,
+    ![](httpatomoreillycomsourcenostarchimages1137507.png) `context` will be its first
+    argument and the value of ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `ta_pending` will be its second.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `taskqueue_enqueue` function puts ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `task` on the taskqueue ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `queue` right before the first `task` structure that has a lower `priority` value.
+    If `taskqueue_enqueue` gets called to put `task` on `queue` again, `task`’s `ta_pending`
+    value is incremented—another copy of `task` is *not* put on `queue`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `taskqueue_run` function executes every task on the taskqueue ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `queue` in the order of the task’s `priority` value. After each task finishes,
+    its `task` structure is removed from `queue`. Then its `ta_pending` value is zeroed
+    and `wakeup` is called on its `task` structure. Note that you’ll never call `taskqueue_run`,
+    because each taskqueue has threads dedicated to do just that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `taskqueue_drain` function waits for ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    task, which is on ![](httpatomoreillycomsourcenostarchimages1137515.png) `queue`,
+    to finish executing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We’ll walk through an example that uses taskqueues in [Chapter 6](ch06.html
+    "Chapter 6. Case Study: Virtual Null Modem").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter covered the four different methods for delaying execution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Sleeping** Sleeping is done when you must wait for something to occur before
+    you can proceed. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Event Handlers** Event handlers let you register one or more functions
+    to be executed when an event occurs. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Callouts** Callouts let you perform asyn chronous code execution. Callouts
+    are used to execute your functions at a specific time. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Taskqueues** Taskqueues also let you perform asynchronous code execution.
+    Taskqueues are used for deferred work. |'
+  prefs: []
+  type: TYPE_TB

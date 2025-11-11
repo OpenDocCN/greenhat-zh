@@ -1,0 +1,867 @@
+- en: Chapter 15. Zippers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: While Haskell’s purity comes with a whole bunch of benefits, it makes us tackle
+    some problems differently than we would in impure languages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because of referential transparency, one value is as good as another in Haskell
+    if it represents the same thing. So, if we have a tree full of fives (high fives,
+    maybe?), and we want to change one of them into a six, we must have some way of
+    knowing exactly which five in our tree we want to change. We need to know where
+    it is in our tree. In impure languages, we could just note where the five is located
+    in memory and change that. But in Haskell, one five is as good as another, so
+    we can’t discriminate based on their location in memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802724.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: We also can’t really *change* anything. When we say that we “change a tree,”
+    we actually mean that we take a tree and return a new one that’s similar to the
+    original, but slightly different.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One thing we can do is remember a path from the root of the tree to the element
+    that we want to change. We could say, “Take this tree, go left, go right and then
+    left again, and change the element that’s there.” While this works, it can be
+    inefficient. If we want to later change an element that’s near the element that
+    we previously changed, we need to walk all the way from the root of the tree to
+    our element again!
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, you’ll see how to take some data structure and equip it with
+    something called a *zipper* to focus on a part of the data structure in a way
+    that makes changing its elements easy and walking around it efficient. Nice!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Taking a Walk
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As you learned in biology class, there are many different kinds of trees, so
+    let’s pick a seed that we will use to plant ours. Here it is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our tree is either empty or it’s a node that has an element and two subtrees.
+    Here’s a fine example of such a tree, which I give to you, the reader, for free!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And here''s this tree represented graphically:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802726.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Notice that `W` in the tree there? Say we want to change it into a `P`. How
+    would we go about doing that? Well, one way would be to pattern match on our tree
+    until we find the element, by first going right and then left. Here’s the code
+    for this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Yuck! Not only is this rather ugly, it’s also kind of confusing. What is actually
+    happening here? Well, we pattern match on our tree and name its root element `x`
+    (that becomes the `'P'` in the root) and its left subtree `l`. Instead of giving
+    a name to its right subtree, we further pattern match on it. We continue this
+    pattern matching until we reach the subtree whose root is our `'W'`. Once we’ve
+    made the match, we rebuild the tree, but with the subtree that contained the `'W'`
+    at its root now having a `'P'`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Is there a better way of doing this? How about if we make our function take
+    a tree along with a list of directions. The directions will be either `L` or `R`,
+    representing left or right, respectively, and we’ll change the element that we
+    arrive at by following the supplied directions. Check it out:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: If the first element in the list of directions is `L`, we construct a new tree
+    that’s like the old tree, but its left subtree has an element changed to `'P'`.
+    When we recursively call `changeToP`, we give it only the tail of the list of
+    directions, because we already took a left. We do the same thing in the case of
+    an `R`. If the list of directions is empty, that means that we’re at our destination,
+    so we return a tree that’s like the one supplied, except that it has `'P'` as
+    its root element.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To avoid printing out the whole tree, let’s make a function that takes a list
+    of directions and tells us the element at the destination:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This function is actually quite similar to `changeToP`. The difference is that
+    instead of remembering stuff along the way and reconstructing the tree, it ignores
+    everything except its destination. Here, we change the `''W''` to a `''P''` and
+    see if the change in our new tree sticks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This seems to work. In these functions, the list of directions acts as a sort
+    of *focus*, because it pinpoints one exact subtree of our tree. A direction list
+    of `[R]` focuses on the subtree that’s to the right of the root, for example.
+    An empty direction list focuses on the main tree itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While this technique may seem cool, it can be rather inefficient, especially
+    if we want to repeatedly change elements. Say we have a really huge tree and a
+    long direction list that points to some element all the way at the bottom of the
+    tree. We use the direction list to take a walk along the tree and change an element
+    at the bottom. If we want to change another element that’s close to the element
+    that we just changed, we need to start from the root of the tree and walk all
+    the way to the bottom again. What a drag!
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we’ll find a better way of focusing on a subtree—one that
+    allows us to efficiently switch focus to subtrees that are nearby.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Trail of Breadcrumbs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802728.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: For focusing on a subtree, we want something better than just a list of directions
+    that we always follow from the root of our tree. Would it help if we started at
+    the root of the tree and moved either left or right one step at a time, leaving
+    “breadcrumbs” along the way? Using this approach, when we go left, we remember
+    that we went left, and when we go right, we remember that we went right. Let’s
+    try it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To represent our breadcrumbs, we’ll also use a list of direction values (`L`
+    and `R` values), but instead of calling it `Directions`, we’ll call it `Breadcrumbs`,
+    because our directions will now be reversed as we leave them while going down
+    our tree.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here’s a function that takes a tree and some breadcrumbs and moves to the left
+    subtree while adding `L` to the head of the list that represents our breadcrumbs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: We ignore the element at the root and the right subtree, and just return the
+    left subtree along with the old breadcrumbs with `L` as the head.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a function to go right:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: It works the same way as the one to go left.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s use these functions to take our `freeTree` and go right and then left.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802730.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Now we have a tree that has `'W'` in its root, `'C'` in the root of its left
+    subtree, and `'R'` in the root of its right subtree. The breadcrumbs are `[L,R]`,
+    because we first went right and then went left.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To make walking along our tree clearer, we can use the `-:` function from [Chapter 13](ch13.html
+    "Chapter 13. A Fistful of Monads") that we defined like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This allows us to apply functions to values by first writing the value, then
+    a `-:`, and then the function. So, instead of `goRight (freeTree, [])`, we can
+    write `(freeTree, []) -: goRight`. Using this form, we can rewrite the preceding
+    example so that it’s more apparent that we’re going right and then left:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Going Back Up
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: What if we want to go back up in our tree? From our breadcrumbs, we know that
+    the current tree is the left subtree of its parent and that it is the right subtree
+    of its parent, and that’s all we know. The breadcrumbs don’t tell us enough about
+    the parent of the current subtree for us to be able to go up in the tree. It would
+    seem that apart from the direction that we took, a single breadcrumb should also
+    contain all the other data we need to go back up. In this case, that’s the element
+    in the parent tree along with its right subtree.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In general, a single breadcrumb should contain all the data needed to reconstruct
+    the parent node. So, it should have the information from all the paths that we
+    didn’t take, and it should also know the direction that we did take. However,
+    it must not contain the subtree on which we’re currently focusing. That’s because
+    we already have that subtree in the first component of the tuple. If we also had
+    it in the breadcrumb, we would have duplicate information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We don’t want duplicate information because if we were to change some elements
+    in the subtree that we’re focusing on, the existing information in the breadcrumbs
+    would be inconsistent with the changes that we made. The duplicate information
+    becomes outdated as soon as we change something in our focus. It can also hog
+    a lot of memory if our tree contains a lot of elements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s modify our breadcrumbs so that they also contain information about everything
+    that we previously ignored when moving left and right. Instead of `Direction`,
+    we’ll make a new data type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, instead of just `L`, we have a `LeftCrumb`, which also contains the element
+    in the node that we moved from and the right tree that we didn’t visit. Instead
+    of `R`, we have `RightCrumb`, which contains the element in the node that we moved
+    from and the left tree that we didn’t visit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These breadcrumbs now contain all the data needed to re-create the tree that
+    we walked through. So, instead of just being normal breadcrumbs, they’re more
+    like floppy disks that we leave as we go along, because they contain a lot more
+    information than just the direction that we took.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In essence, every breadcrumb is now like a tree node with a hole in it. When
+    we move deeper into a tree, the breadcrumb carries all the information that the
+    node that we moved away from carried, *except* the subtree on which we chose to
+    focus. It also needs to note where the hole is. In the case of a `LeftCrumb`,
+    we know that we moved left, so the missing subtree is the left one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s also change our `Breadcrumbs` type synonym to reflect this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next up, we need to modify the `goLeft` and `goRight` functions to store information
+    about the paths that we didn’t take in our breadcrumbs, instead of ignoring that
+    information as they did before. Here’s `goLeft`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can see that it’s very similar to our previous `goLeft`, but instead of
+    just adding a `L` to the head of our list of breadcrumbs, we add a `LeftCrumb`
+    to signify that we went left. We also equip our `LeftCrumb` with the element in
+    the node that we moved from (that’s the `x`) and the right subtree that we chose
+    not to visit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that this function assumes that the current tree that’s under focus isn’t
+    `Empty`. An empty tree doesn’t have any subtrees, so if we try to go left from
+    an empty tree, an error will occur. This is because the pattern match on `Node`
+    won’t succeed, and there’s no pattern that takes care of `Empty`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`goRight` is similar:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We were previously able to go left and right. What we have now is the ability
+    to actually go back up by remembering stuff about the parent nodes and the paths
+    that we didn’t visit. Here’s the `goUp` function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802732.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: We’re focusing on the tree `t`, and we check the latest `Crumb`. If it’s a `LeftCrumb`,
+    we construct a new tree using our tree `t` as the left subtree and using the information
+    about the right subtree and element that we didn’t visit to fill out the rest
+    of the `Node`. Because we “moved back” and picked up the last breadcrumb, then
+    used it to re-create the parent tree, the new list doesn’t contain that breadcrumb.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that this function causes an error if we’re already at the top of a tree
+    and we want to move up. Later on, we’ll use the `Maybe` monad to represent possible
+    failure when moving focus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With a pair of `Tree a` and `Breadcrumbs a`, we have all the information we
+    need to rebuild the whole tree, and we also have a focus on a subtree. This scheme
+    enables us to easily move up, left, and right.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A pair that contains a focused part of a data structure and its surroundings
+    is called a *zipper*, because moving our focus up and down the data structure
+    resembles the operation of a zipper on a pair of pants. So, it’s cool to make
+    a type synonym as such:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: I would prefer naming the type synonym `Focus`, because that makes it clearer
+    that we’re focusing on a part of a data structure. But since the name `Zipper`
+    is more widely used to describe such a setup, we’ll stick with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Manipulating Trees Under Focus
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now that we can move up and down, let’s make a function that modifies the element
+    in the root of the subtree on which the zipper is focusing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If we’re focusing on a node, we modify its root element with the function `f`.
+    If we’re focusing on an empty tree, we leave it as is. Now we can start off with
+    a tree, move to anywhere we want, and modify an element, all while keeping focus
+    on that element so that we can easily move further up or down. Here’s an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We go left, then right, and then modify the root element by replacing it with
+    a `''P''`. This reads even better if we use `-:`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can then move up if we want and replace an element with a mysterious `''X''`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Or we can write it with `-:`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Moving up is easy because the breadcrumbs that we leave form the part of the
+    data structure that we’re not focusing on, but it’s inverted, sort of like turning
+    a sock inside out. That’s why when we want to move up, we don’t need to start
+    from the root and make our way down. We just take the top of our inverted tree,
+    thereby uninverting a part of it and adding it to our focus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Each node has two subtrees, even if those subtrees are empty. So, if we’re
+    focusing on an empty subtree, one thing we can do is to replace it with a nonempty
+    subtree, thus attaching a tree to a leaf node. The code for this is simple:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We take a tree and a zipper, and return a new zipper that has its focus replaced
+    with the supplied tree. Not only can we extend trees this way by replacing empty
+    subtrees with new trees, but we can also replace existing subtrees. Let’s attach
+    a tree to the far left of our `freeTree`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`newFocus` is now focused on the tree that we just attached, and the rest of
+    the tree lies inverted in the breadcrumbs. If we were to use `goUp` to walk all
+    the way to the top of the tree, it would be the same tree as `freeTree`, but with
+    an additional `''Z''` on its far left.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Going Straight to the Top, Where the Air Is Fresh and Clean!
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Making a function that walks all the way to the top of the tree, regardless
+    of what we’re focusing on, is really easy. Here it is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: If our trail of beefed-up breadcrumbs is empty, that means we’re already at
+    the root of our tree, so we just return the current focus. Otherwise, we go up
+    to get the focus of the parent node, and then recursively apply `topMost` to that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, now we can walk around our tree, going left, right, and up, applying `modify`
+    and `attach` as we travel. Then, when we’re finished with our modifications, we
+    use `topMost` to focus on the root of our tree and see the changes that we’ve
+    made in proper perspective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Focusing on Lists
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Zippers can be used with pretty much any data structure, so it’s no surprise
+    that they work with sublists of lists. After all, lists are pretty much like trees,
+    except where a node in a tree has an element (or not) and several subtrees, a
+    node in a list has an element and only a single sublist. When we implemented our
+    own lists in [Chapter 7](ch07.html "Chapter 7. Making Our Own Types and Type Classes"),
+    we defined our data type like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compare this with the definition of our binary tree, and it’s easy to see how
+    lists can be viewed as trees where each node has only one subtree.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802734.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: A list like `[1,2,3]` can be written as `1:2:3:[]`. It consists of the head
+    of the list, which is `1`, and then the list’s tail, which is `2:3:[]`. `2:3:[]`
+    also has a head, which is `2`, and a tail, which is `3:[]`. With `3:[]`, the `3`
+    is the head, and the tail is the empty list `[]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s make a zipper for lists. To change the focus on sublists of a list, we
+    move either forward or back (whereas with trees, we move up, left, or right).
+    The focused part will be a subtree, and along with that, we’ll leave breadcrumbs
+    as we move forward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, what would a single breadcrumb for a list consist of? When we were dealing
+    with binary trees, the breadcrumb needed to hold the element in the root of the
+    parent node along with all the subtrees that we didn’t choose. It also had to
+    remember if we went left or right. So, it needed to have all the information that
+    a node has, except for the subtree on which we chose to focus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lists are simpler than trees. We don’t need to remember if we went left or right,
+    because there’s only one way to go deeper into a list. Because there’s only one
+    subtree to each node, we don’t need to remember the paths that we didn’t take
+    either. It seems that all we must remember is the previous element. If we have
+    a list like `[3,4,5]` and we know that the previous element was `2`, we can go
+    back by just putting that element at the head of our list, getting `[2,3,4,5]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because a single breadcrumb here is just the element, we don’t really need to
+    put it inside a data type, as we did when we made the `Crumb` data type for tree
+    zippers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first list represents the list that we’re focusing on, and the second list
+    is the list of breadcrumbs. Let’s make functions that go forward and backward
+    in lists:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we’re going forward, we focus on the tail of the current list and leave
+    the head element as a breadcrumb. When we’re moving backward, we take the latest
+    breadcrumb and put it at the beginning of the list. Here are these two functions
+    in action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can see that the breadcrumbs in the case of lists are nothing more than
+    a reversed part of your list. The element that we move away from always goes into
+    the head of the breadcrumbs. Then it’s easy to move back by just taking that element
+    from the head of the breadcrumbs and making it the head of our focus. This also
+    makes it easier to see why we call this a *zipper*— it really looks like the slider
+    of a zipper moving up and down.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you were making a text editor, you could use a list of strings to represent
+    the lines of text that are currently opened, and you could then use a zipper so
+    that you know on which line the cursor is currently focused. Using a zipper would
+    also make it easier to insert new lines anywhere in the text or delete existing
+    ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Very Simple Filesystem
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To demonstrate how zippers work, let’s use trees to represent a very simple
+    filesystem. Then we can make a zipper for that filesystem, which will allow us
+    to move between folders, just as we do when jumping around a real filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The average hierarchical filesystem is mostly made up of files and folders.
+    *Files* are units of data and have names. *Folders* are used to organize those
+    files and can contain files or other folders. For our simple example, let’s say
+    that an item in a filesystem is either one of these:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A file, which comes with a name and some data
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A folder, which has a name and contains other items that are either files or
+    folders themselves
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Here’s a data type for this and some type synonyms, so we know what’s what:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: A file comes with two strings, which represent its name and the data it holds.
+    A folder comes with a string that is its name and a list of items. If that list
+    is empty, then we have an empty folder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s a folder with some files and subfolders (actually what my disk contains
+    right now):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Making a Zipper for Our Filesystem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that we have a filesystem, all we need is a zipper so we can zip and zoom
+    around it, and add, modify, and remove files and folders. As with binary trees
+    and lists, our breadcrumbs will contain information about all the stuff that we
+    chose not to visit. A single bread-crumb should store everything except the subtree
+    on which we’re currently focusing. It should also note where the hole is, so that
+    once we move back up, we can plug our previous focus into the hole.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802736.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this case, a breadcrumb should be like a folder, only it should be missing
+    the folder that we currently chose. “Why not like a file?” you ask? Well, because
+    once we’re focusing on a file, we can’t move deeper into the filesystem, so it
+    doesn’t make sense to leave a breadcrumb that says that we came from a file. A
+    file is sort of like an empty tree.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we’re focusing on the folder `"root"`, and we then focus on the file `"dijon_poupon.doc"`,
+    what should the breadcrumb that we leave look like? Well, it should contain the
+    name of its parent folder along with the items that come before and after the
+    file on which we’re focusing. So, all we need is a `Name` and two lists of items.
+    By keeping separate lists for the items that come before the item that we’re focusing
+    on and for the items that come after it, we know exactly where to place it once
+    we move back up. That way, we know the location of the hole.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s our breadcrumb type for the filesystem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And here’s a type synonym for our zipper:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Going back up in the hierarchy is very simple. We just take the latest breadcrumb
+    and assemble a new focus from the current focus and breadcrumb, like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: Because our breadcrumb knew the parent folder’s name, as well as the items that
+    came before our focused item in the folder (that’s `ls`) and the items that came
+    after (that’s `rs`), moving up was easy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'How about going deeper into the filesystem? If we’re in the `"root"` and we
+    want to focus on `"dijon_poupon.doc"`, the breadcrumb that we leave will include
+    the name `"root"`, along with the items that precede `"dijon_poupon.doc"` and
+    the ones that come after it. Here’s a function that, given a name, focuses on
+    a file or folder that’s located in the current focused folder:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`fsTo` takes a `Name` and a `FSZipper` and returns a new `FSZipper` that focuses
+    on the file with the given name. That file must be in the current focused folder.
+    This function doesn’t search all over the place—it just looks in the current folder.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802738.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: First, we use `break` to break the list of items in a folder into those that
+    precede the file that we’re searching for and those that come after it. `break`
+    takes a predicate and a list and returns a pair of lists. The first list in the
+    pair holds items for which the predicate returns `False`. Then, once the predicate
+    returns `True` for an item, it places that item and the rest of the list in the
+    second item of the pair. We made an auxiliary function called `nameIs`, which
+    takes a name and a filesystem item and returns `True` if the names match.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now `ls` is a list that contains the items that precede the item that we’re
+    searching for, `item` is that very item, and `rs` is the list of items that come
+    after it in its folder. Now that we have these, we just present the item that
+    we got from `break` as the focus and build a breadcrumb that has all the data
+    it needs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that if the name we’re looking for isn’t in the folder, the pattern `item:rs`
+    will try to match on an empty list, and we’ll get an error. And if our current
+    focus is a file, rather than a folder, we get an error as well, and the program
+    crashes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, we can move up and down our filesystem. Let’s start at the root and walk
+    to the file `"skull_man(scary).bmp"`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`newFocus` is now a zipper that’s focused on the `"skull_man(scary).bmp"` file.
+    Let’s get the first component of the zipper (the focus itself) and see if that’s
+    really true:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s move up and focus on its neighboring file `"watermelon_smash.gif"`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: Manipulating a Filesystem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now that we can navigate our filesystem, manipulating it is easy. Here’s a
+    function that renames the currently focused file or folder:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s rename our `"pics"` folder to `"cspi"`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: We descended to the `"pics"` folder, renamed it, and then moved backup.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'How about a function that makes a new item in the current folder? Behold:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: Easy as pie. Note that this would crash if we tried to add an item but were
+    focusing on a file instead of a folder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s add a file to our `"pics"` folder, and then move back up to the root:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: What’s really cool about all this is that when we modify our filesystem, our
+    changes are not actually made in place, but instead, the function returns a whole
+    new filesystem. That way, we have access to our old filesystem (in this case,
+    `myDisk`), as well as the new one (the first component of `newFocus`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: By using zippers, we get versioning for free. We can always refer to older versions
+    of data structures, even after we’ve changed them. This isn’t unique to zippers,
+    but it is a property of Haskell, because its data structures are immutable. With
+    zippers, however, we get the ability to easily and efficiently walk around our
+    data structures, so the persistence of Haskell’s data structures really begins
+    to shine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Watch Your Step
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'So far, while walking through our data structures—whether they were binary
+    trees, lists, or filesystems—we didn’t really care if we took a step too far and
+    fell off. For instance, our `goLeft` function takes a zipper of a binary tree
+    and moves the focus to its left subtree:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: But what if the tree we’re stepping off from is an empty tree? What if it’s
+    not a `Node`, but an `Empty`? In this case, we would get a runtime error, because
+    the pattern match would fail, and we have not made a pattern to handle an empty
+    tree, which doesn’t have any subtrees.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, we just assumed that we would never try to focus on the left subtree
+    of an empty tree, as its left subtree doesn’t exist. But going to the left subtree
+    of an empty tree doesn’t make much sense, and so far we’ve just conveniently ignored
+    this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Or what if we are already at the root of some tree and don’t have any breadcrumbs
+    but still try to move up? The same thing would happen. It seems that when using
+    zippers, any step could be our last (cue ominous music). In other words, any move
+    can result in a success, but it can also result in a failure. Does that remind
+    you of something? Of course: monads! More specifically, the `Maybe` monad, which
+    adds a context of possible failure to normal values.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802740.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Let’s use the `Maybe` monad to add a context of possible failure to our movements.
+    We’re going to take the functions that work on our binary tree zipper and make
+    them into monadic functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, let’s take care of possible failure in `goLeft` and `goRight`. So far,
+    the failure of functions that could fail was always reflected in their result,
+    and this example is no different.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are `goLeft` and `goRight` with an added possibility of failure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, if we try to take a step to the left of an empty tree, we get a `Nothing`!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Looks good! How about going up? The problem before happened if we tried to
+    go up but we didn’t have any more breadcrumbs, which meant that we were already
+    at the root of the tree. This is the `goUp` function that throws an error if we
+    don’t keep within the bounds of our tree:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s modify it to fail gracefully:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: If we have breadcrumbs, everything is okay, and we return a successful new focus.
+    If we don’t have breadcrumbs, we return a failure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before, these functions took zippers and returned zippers, which meant that
+    we could chain them like this to walk around:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: But now, instead of returning `Zipper a`, they return `Maybe (Zipper a)`, and
+    chaining functions like this won’t work. We had a similar problem when we were
+    dealing with our tightrope walker in [Chapter 13](ch13.html "Chapter 13. A Fistful
+    of Monads"). He also walked one step at a time, and each of his steps could result
+    in failure, because a bunch of birds could land on one side of his balancing pole
+    and make him fall.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now the joke is on us, because we’re the ones doing the walking, and we’re
+    traversing a labyrinth of our own devising. Luckily, we can learn from the tightrope
+    walker and just do what he did: replace normal function application with `>>=`.
+    This takes a value with a context (in our case, the `Maybe (Zipper a)`, which
+    has a context of possible failure) and feeds it into a function, while making
+    sure that the context is handled. So just like our tightrope walker, we’re going
+    to trade in all our `-:` operators for `>>=` operators. Then we will be able to
+    chain our functions again! Watch how it works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: We used `return` to put a zipper in a `Just`, and then used `>>=` to feed that
+    to our `goRight` function. First, we made a tree that has on its left an empty
+    subtree and on its right a node that has two empty subtrees. When we try to go
+    right once, the result is a success, because the operation makes sense. Going
+    right twice is okay, too. We end up with the focus on an empty subtree. But going
+    right three times doesn’t make sense—we can’t go to the right of an empty subtree.
+    This is why the result is a `Nothing`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we’ve equipped our trees with a safety net that will catch us should we
+    fall off. (Wow, I nailed that metaphor.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Our filesystem also has a lot of cases where an operation could fail, such as
+    trying to focus on a file or folder that doesn’t exist. As an exercise, you can
+    equip our filesystem with functions that fail gracefully by using the `Maybe`
+    monad.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanks for Reading!
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Or just flipping to the last page! I hope you found this book useful and fun.
+    I have strived to give you good insight into the Haskell language and its idioms.
+    While there’s always something new to learn in Haskell, you should now be able
+    to code cool stuff, as well as read and understand other people’s code. So hurry
+    up and get coding! See you on the other side!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages802742.png.jpg)'
+  prefs: []
+  type: TYPE_IMG

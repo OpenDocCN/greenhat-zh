@@ -1,0 +1,823 @@
+- en: 'Chapter 8. BEYOND LINUX: USING XEN WITH OTHER UNIX-LIKE OSS'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: One major benefit of paravirtualization which we've thus far ignored is the
+    ability to run multiple operating systems on a single paravirtualized physical
+    machine. Although Linux is the most popular OS to run under Xen, it's not the
+    only option available. Several other Unix-like OSs can run as a dom0, and rather
+    more have been modified to run as paravirtualized domUs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Apart from Linux, only Solaris and NetBSD are capable of functioning as a dom0
+    with current versions of Xen. Some work has been done with the other BSDs and
+    with Plan9, but these OSs either can only work as a domU or can only work with
+    older Xen versions. Support is evolving rapidly, however. (FreeBSD seems especially
+    close to having functional Xen bits.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we'll focus on Solaris and NetBSD. Partially this is because
+    they have mature Xen support, with active community involvement and ongoing development.
+    Most importantly, though, it's because we have run them in production. In a later
+    chapter, we'll discuss Windows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Solaris
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Sun has been pushing Xen virtualization heavily in recent community releases
+    of OpenSolaris, and their effort shows. Solaris works well as both a dom0 and
+    a domU, with closely integrated Xen support. The only caveat is that, as of this
+    writing, OpenSolaris does not support Xen 3.3 and paravirt_ops domUs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Sun doesn''t actually call their shipping version of Xen* Xen. *They use the
+    term* xVM *for marketing purposes, and include the unrelated VirtualBox under
+    the xVM label. We''re going to continue to call it Xen, however, because it''s
+    the name we''re used to*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Only the x86 version of Solaris supports Xen—Solaris/SPARC uses alternate virtualization
+    technologies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: VIRTUALIZATION WITH SOLARIS
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sun, being traditionally a "medium iron" company, has emphasized virtualization
+    for a long time, with a few different, complementary technologies to implement
+    virtualization at different levels. Here's an overview of their non-Xen virtualization
+    offerings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On new UltraSparc Niagara-based systems, pure hardware virtualization is provided
+    by means of Logical Domains, or LDoms. These are a successor to the *Dynamic System
+    Domains* found on earlier Sun Enterprise platforms, which allowed you to devote
+    CPU and memory boards to independent OS instances. Similarly, on a reasonably
+    new SPARC box, you can partition the CPU and memory to run multiple, independent
+    operating systems, using the processor's hardware virtualization support.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On x86, Sun addresses full virtualization by way of their VirtualBox product.
+    VirtualBox executes guest code directly where possible and emulates when necessary,
+    much like VMware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, Sun addresses OS-level virtualization through Solaris Zones,^([[45](#ftn.CHP-8-FNOTE-1)])
+    which are themselves an interesting, lightweight virtualization option. Like other
+    OS-level virtualization platforms, Zones provide a fair amount of separation between
+    operating environments with very little overhead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sun even offers the option to run Linux binaries under Solaris on x86_64, via
+    *lx* branded Zones. (These *lx* branded Zones provide a thin compatibility layer
+    between the Solaris kernel and Linux userspace. Pretty cool.) However, the Linux
+    emulation isn't perfect. For example, since *lx* branded Zones use the same Solaris
+    kernel that's running on the actual hardware, you can't load Linux device drivers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting Started with Solaris
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To run Solaris under Xen, you'll need to get a copy of Solaris. There are several
+    versions, so make sure that you pick the right one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You do not want Solaris 10, which is the current Sun version of Solaris. Although
+    it's a fine OS, it doesn't have Xen support because its development lags substantially
+    behind the bleeding edge. (In this it caters to its market segment. We are personally
+    acquainted with people who are running Solaris 8—a welcome contrast to the prevailing
+    Linux view that software more than six months old is some sort of historical curiosity.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fortunately, Solaris 10 isn't the only option. Solaris Express acts as a preview
+    of the next official Solaris version, and it's a perfectly capable OS for Xen
+    in its own right. It incorporates Xen, but is still a bit behind the latest development.
+    It's also not as popular as OpenSolaris.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, there's OpenSolaris. Sun released huge tracts of Solaris source code
+    a while ago under the Common Development and Distribution License^([[46](#ftn.CHP-8-FNOTE-2)])
+    (CDDL), and the community's been pounding on it ever since. OpenSolaris is the
+    result—it's much like Sun's release of Solaris but with new technology and a much
+    faster release cycle. Think of the relationship between the two as like Red Hat
+    Enterprise Linux and Fedora, only more so.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Both Solaris Express and OpenSolaris incorporate Xen support. Solaris Express
+    has the Xen packages included on the DVD, while OpenSolaris requires you to download
+    Xen as an add-on. Both of them provide a fairly polished experience. Although
+    there are other distros based on the released Solaris code, none of them are particularly
+    Xen-oriented, so the officially blessed distros are probably the best place to
+    start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RUNNING SOLARIS EXPRESS
+  prefs: []
+  type: TYPE_NORMAL
+- en: We had some trouble deciding whether to focus on OpenSolaris or Solaris Express
+    while we were writing this chapter. We decided to go with OpenSolaris because
+    it seemed more popular, based on a completely unscientific poll of our friends.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, Solaris Express is still a perfectly fine OS with excellent Xen support,
+    so we've also included some notes on setting it up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Believe it or not, Xen support should exist pretty much out of the box.^([[47](#ftn.CHP-8-FNOTE-3)])
+    When you install Solaris Express on a system that supports Xen, it installs a
+    Xen kernel and gives you the option to boot it from GRUB—just select **Solaris
+    xVM** and off you go. (The included Xen version is 3.1.4 as of snv_107.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: From there, you can install domUs normally. It's even got `virt-manager`. Take
+    a look at the next section for more details on setting up domUs. Most of these
+    steps will apply to Solaris Express and OpenSolaris equally well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In general, there are three possible configurations of (Open)Solaris that are
+    of interest in our discussion of Xen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we have the Solaris dom0.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Second, there's the Solaris domU on a Solaris dom0\. This is a fairly straightforward
+    setup.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, you can run a Solaris domU under Linux with a minimum^([[48](#ftn.CHP-8-FNOTE-4)])
+    of fuss.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Solaris Dom0
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Let's start by setting up an OpenSolaris dom0, since you'll need one for the
+    next section. (Although we suppose this applies only if you're doing something
+    crazy like running through all our examples in order.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that we're going to be using `pfexec`, the Solaris equivalent of `sudo`,^([[49](#ftn.CHP-8-FNOTE-5)])
+    for these examples, so it's not necessary to be root for these steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, download the distribution from [http://opensolaris.org/os/downloads/](http://opensolaris.org/os/downloads/).
+    Follow the directions to unpack and burn it, and boot from the CD, just like virtually
+    any other OS install.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The OpenSolaris LiveCD will probably be a familiar experience to anyone who's
+    installed Ubuntu. It 's really quite similar, with a standard GNOME desktop, some
+    productivity software, and a cute *Install OpenSolaris* icon on the desktop. Double-click
+    the **Install OpenSolaris** icon to launch the installer, then follow its directions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the installer finishes, it'll prompt you to reboot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting Up Xen
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If, once you reboot, you notice that you don't have Xen available, don't panic.
+    OpenSolaris, unlike Solaris Express, doesn't include the Xen packages in the initial
+    install. (Everything had to fit on a CD, after all.) You will have to install
+    and set them up manually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we create a ZFS boot environment. (If you're not familiar with boot environments,
+    substitute the word *snapshot*. The idea is, if you break your system trying to
+    install Xen, you can reboot into the original environment and try again.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, we use the OpenSolaris `pkg` command to install the Xen packages in the
+    new boot environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As of OpenSolaris 2008.11, the xvm-gui package cluster provides all the necessary
+    Xen packages. Previous versions may require you to install the packages individually.
+    If you need to do that, you should be able to get away with running:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: These packages provide Xen (with HVM), `virt-install`, and `virt-install` 's
+    dependencies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we need to update GRUB to boot the Xen kernel properly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Under OpenSolaris, *menu.lst* is at */rpool/boot/grub/menu.lst*. Edit the xvm
+    menu item to look something like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that we're using extensions to GRUB that enable variables in *menu.lst*,
+    such as `$ISADIR` (for Instruction Set Architecture). Apart from that, it's a
+    fairly normal Xen GRUB config, with the hypervisor, kernel, and ramdisk.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reboot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Solaris SMF
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When you begin to configure a Solaris dom0, you'll probably notice immediately
+    that some files aren't quite where you expect. For one thing, Solaris doesn't
+    have an */etc/xen* directory, nor does it have the customary scripts in */etc/init.d*.
+    The various support scripts in */etc/xen/scripts* instead live in */usr/lib/xen/scripts*.
+    You can keep domain configurations wherever you like. (We actually make an */etc/xen*
+    directory and put domain configurations in it.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Instead of relying on the standard Xen config files, Solaris handles configuration
+    and service startup via its own management framework, SMF (Service Management
+    Facility). You can examine and change `xend` ''s settings using the `svccfg` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will output a list of properties for the `xend` service. For example,
+    to enable migration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You may have to enable the Xen-related services manually using `svcadm`, particularly
+    if you initially booted the non-Xen kernel. To look at which services are stopped,
+    use `svcs`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If the Xen services are stopped for maintenance or disabled, you can enable
+    them using `svcadm`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: From that point, you should be able to use Solaris as a perfectly normal dom0
+    OS. It's even got libvirt. Have fun.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a Solaris DomU
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You didn't really think it would be that easy, did you? There are a couple of
+    small caveats to note—things that make Xen under Solaris a slightly different
+    animal than from under Linux. We'll start by creating a Solaris domU on a Solaris
+    dom0, then extend our discussion to a Solaris domU on a Linux dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ZFS Backing Devices
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: First, we suggest handling virtual block devices a bit differently under Solaris.
+    Although you can create domU filesystems as plain loopback-mounted files, ZFS
+    is probably a better option. It's been praised far and wide, even winning some
+    grudging accolades from Linus Torvalds. It is, in fact, ideal for this sort of
+    thing, and the generally accepted way to manage disks under Solaris—even more
+    so now that OpenSolaris uses a ZFS root filesystem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'ZFS is pretty simple, at least to get started with. Users of LVM should find
+    that creating a pool and filesystem are familiar tasks, even though the commands
+    are slightly different. Here we''ll make a pool, create a ZFS filesystem within
+    the pool, and set the size of the filesystem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now we can define a domain that uses the `phy:` device */dev/zvol/dsk/guests/escalus*
+    for its backing store, as shown in the config file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll leave further subtleties of ZFS administration to Sun's documentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing a DomU via PyGRUB
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The last thing to do before creating the domU is to write an appropriate config
+    file. Here''s ours:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that the disk specifier works differently than with Linux domUs. Rather
+    than using symbolic device names, as under Linux:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'we instead specify the disk number:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here we're installing Solaris from an ISO image (*os200805.iso*) using PyGRUB
+    to pull the correct kernel and initrd off the CD image, boot that, and proceed
+    with a normal install.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*One thing to watch out for is that domU networking will only work if you''re
+    using a GLD3-based network driver. The drivers that ship with Solaris are all
+    fine in this regard—however, you may have trouble with third-party drivers*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once the install's done, we shut the machine down and remove the disk entry
+    for the CD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point your Solaris domU should be ready to go. Setting up a Linux domU
+    is equally straightforward, since standard Linux domU images and kernels should
+    work unmodified under Solaris.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we'll look at setting up a Solaris domU under Linux.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a Solaris DomU Under Linux
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For the most part, a domU is independent of the dom0 OS, and thus the install
+    under Linux uses much the same installation procedure as under Solaris. There
+    are only a few pitfalls for the unwary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, you might have a bit more work to do to ensure that the domain can find
+    an appropriate kernel. The Solaris image will complain bitterly, and in fact will
+    not boot, with a Linux kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're using PyGRUB on a Xen 3.1 or later system, you shouldn't need to do
+    anything special. PyGRUB itself will load the appropriate files from OpenSolaris
+    installation media without further intervention, just as in the previous example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you're not using PyGRUB, or if you're using the stock RHEL5.1 hypervisor,
+    you'll need to extract the kernel and miniroot (initrd, for Linux people) from
+    the OpenSolaris install package and place them somewhere that Xen can load them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Just as under Solaris, begin by writing a config file. We'll set up this config
+    file to load the installer from the CD, and later alter it to boot our newly installed
+    domU. Note that we're grabbing the kernel from the ISO, using the kernel and ramdisk
+    options to specify the files we need.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Make sure to create your backing store (*/dev/verona/rosaline* in this case).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now create the domain. Next step, installation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although OpenSolaris has a perfectly functional console when running as a domU,
+    it unfortunately does not include a text mode installer. It does, however, include
+    a VNC server and SSH server, either of which can be used to get a remote graphical
+    display. Here's how to set up VNC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Log in at the domU console with username *jack* and password *jack*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you're in locally, set up your network. (If you're using DHCP, it'll probably
+    already be set up for you, but it doesn't hurt to make sure.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can see that our network is in fine shape, with the address 192.168.2.128\.
+    If it''s not set up already, assign an address manually:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The VNC server should already be running. To enable remote access to it, run
+    the `vncpasswd` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`vncpasswd` will ask you to make up a password and enter it twice. Use this
+    password to connect to the VNC server using your favorite VNC client. You should
+    be greeted with an OpenSolaris desktop.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, click the **Install OpenSolaris** icon on the desktop and proceed with
+    the graphical install.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenSolaris DomU Postinstall Configuration
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Once the installer has done its work, you''ll be ready to shut down the domain
+    and move to the next step: setting up the dom0 to load a kernel from a ZFS filesystem.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem is that in Xen 3.3, PyGRUB's version of `libfsimage` isn't able
+    to handle recent versions of ZFS directly. Our solution was to download the Xen-unstable
+    source tree (as of this writing, Xen 3.4-rc) from [http://xenbits.xen.org/](http://xenbits.xen.org/)
+    and build PyGRUB from that. (Alternatively, you can mount the install media, extract
+    the kernel and microroot, specify these manually in the config file, and pass
+    the correct "extra" line to the kernel—that works just as well.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now we update the domain config file. Since we went to all the trouble of updating
+    PyGRUB, we''ll use it directly here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*PV-GRUB, at this time, isn''t able to load an OpenSolaris kernel properly.
+    Use PyGRUB instead*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Start your new domain as usual with `xm`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[45](#CHP-8-FNOTE-1)]) We tend to use the terms *Zone* and *Container* interchangeably.
+    Technically, a Solaris Container implements system resource controls on top of
+    Zones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[46](#CHP-8-FNOTE-2)]) The CDDL is a free software license that's GPL-incompatible
+    but generally inoffensive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[47](#CHP-8-FNOTE-3)]) That''s another reason we gloss over Solaris Express:
+    Focusing on it would not, in the words of Douglas Adams, "make for nice fat books
+    such as the American market thrives on."'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[48](#CHP-8-FNOTE-4)]) The temptation exists to write "elegant minimum,"
+    but it's simply not so.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[49](#CHP-8-FNOTE-5)]) Anyone planning to take offense to the comparison
+    of `pfexec` and `sudo`: Please assume that we have been utterly convinced by your
+    rhetoric and carry on with your day-to-day life.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: NetBSD
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: NetBSD is a popular choice for a dom0 OS because of its small and versatile
+    design, which is a good match for the *dedicated virtualization server* model
+    that Xen encourages. In our experience, a dom0 running NetBSD will use less memory
+    and be at least as stable as one running Linux.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, Linux people often make the mistake of assuming that NetBSD is exactly
+    like Linux. It's not—it's kind of close, but NetBSD is the product of an evolution
+    as long as Linux's, and it requires some practice to work with. In this section,
+    we're going to assume that you're familiar with NetBSD's idiosyncrasies; we're
+    only going to cover the Xen-related differences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: NetBSD's Historical Xen Support
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: NetBSD has supported Xen for a very long time—since NetBSD version 3.0, which
+    incorporated support for Xen2 as dom0 and as a domU. This Xen2 support is quite
+    stable. However, it has the obvious drawback of being Xen2, which lacks the Xen3
+    features like live migration and HVM. It's also 32 bit only, and doesn't support
+    PAE (Physical Address Extension). (We've used this version quite a bit. The first
+    Xen setup we used for hosting at prgmr.com was a dual Xeon running NetBSD 3.1
+    and Xen2, supporting Linux and NetBSD domUs.) NetBSD 3.1 introduced support for
+    Xen 3.0.*x*—but only as a domU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: NetBSD 4.0 added Xen 3.1 support as both a domU and a dom0, and it also introduced
+    support for HVM. The only remaining problem with NetBSD 4.0 was that it, like
+    its predecessors, it did not support PAE or x86_64, which means that it was unable
+    to use more than 4GB of memory. It also could not run as a domU on a 64-bit or
+    PAE system, such as is used by Amazon's EC2\. That last bit was the real killer—it
+    meant NetBSD 4 required a non-PAE 32-bit hypervisor, which in turn limited you
+    to 4GB of address space, which translates about 3.5GB of physical memory. (This
+    limitation is so significant that Xen.org doesn't even distribute a non-PAE binary
+    package anymore.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, the new and shiny NetBSD 5 adds PAE support for NetBSD domUs, x86-64
+    support for both dom0 and domUs, and support for 32-bit domUs on 64-bit dom0s
+    (*32-on-64* in Xen parlance). Work is still being done to add features to bring
+    NetBSD Xen support into feature parity with Linux's Xen support, but NetBSD is
+    already a perfectly viable platform.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing NetBSD as a Dom0
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The basic steps to get started using NetBSD with Xen are pretty much the same
+    as for any other OS: Download it, install it, and make it work. Again, we''re
+    assuming that you''re familiar with the basic NetBSD install procedure, so we''re
+    just going to outline these directions briefly.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Begin by downloading NetBSD and installing it as usual. (We opted to download
+    and burn the ISO at [http://mirror.planetunix.net/pub/NetBSD/iso/5.0/amd64cd-5.0.iso](http://mirror.planetunix.net/pub/NetBSD/iso/5.0/amd64cd-5.0.iso).)
+    Configure the system according to your preference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: ftp:// *and* http:// *are interchangeable on all of the* [ftp.netbsd.org](http://ftp.netbsd.org)
+    *URLs*. http:// *gets through firewalls better, and* ftp:// *is slightly faster.
+    Pick one. Also, you often get significantly better speeds using a mirror rather
+    than the netbsd.org site. If your FTP install fails partway through, the first
+    thing to do is to try another mirror*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However you install NetBSD, go through the installer and reboot into your new
+    system. Next, install the Xen kernel and supporting tools using the NetBSD ports
+    system, `pkgsrc`. Get `pkgsrc` at [http://ftp.netbsd.org/pub/NetBSD/packages/pkgsrc.tar.gz](http://ftp.netbsd.org/pub/NetBSD/packages/pkgsrc.tar.gz).
+    Untar *pkgsrc.tar.gz*, then install Xen:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After installing the Xen tools, NetBSD will remind you to create the Xen device
+    nodes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that Xen is installed, our next task is to install GRUB in place of the
+    standard NetBSD bootloader so that we can perform the multistage boot that Xen
+    requires:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our next step is to download and install NetBSD Xen kernels—we're already running
+    off standard NetBSD kernels, and we've got the hypervisor installed, but we still
+    need kernels for the dom0 and domUs. Download *netbsd-XEN3_DOM0.gz*, *netbsd-XEN3_DOMU.gz*,
+    and *netbsd-INSTALL_XEN3_DOMU.gz* from your favorite NetBSD mirror. (We used [http://mirror.planetunix.net/pub/NetBSD/NetBSD-5.0/](http://mirror.planetunix.net/pub/NetBSD/NetBSD-5.0/).)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that we have suitable Xen kernels to go with the hypervisor and supporting
+    tools that we installed in the previous step, we can set up GRUB in the usual
+    way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Edit */grub/menu.lst* so that it boots the Xen kernel and loads NetBSD as a
+    module. Here''s a complete file, with comments (adapted from a NetBSD example
+    at [http://www.netbsd.org/ports/xen/howto.html](http://www.netbsd.org/ports/xen/howto.html)):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: The important bits are the kernel name, `XEN3_DOM0`, and the root device, which
+    we specify using NetBSD syntax.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*We''ve also set up this config file to use the serial console. No matter which
+    operating system you use, we strongly recommend using a serial console with Xen,
+    even if you prefer to use a KVM or other method of remote management normally.
+    See [Chapter 14](ch14.html "Chapter 14. TIPS") for more discussion of the many
+    and varied uses of the serial console*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Copy over the basic Xen config files to the directory where the Xen tools will
+    expect to find them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we have all the parts of a NetBSD dom0, we need to start `xenbackendd`
+    and `xend` (in that order, or it won't work).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, to get networking to work, create */etc/ifconfig.bridge0* with these
+    contents:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At this point you''re most likely done. Reboot to test, or start the Xen services
+    manually:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You should now be able to run `xm list`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Installing NetBSD as a DomU
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Installing NetBSD as a domU is easy, even with a Linux dom0\. In fact, because
+    NetBSD's INSTALL kernels include a ramdisk with everything necessary to complete
+    the installation, we can even do it without modifying the configuration from the
+    dom0, given a sufficiently versatile PyGRUB or PV-GRUB setup.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this discussion, we assume that you've got a domU of some sort already set
+    up—perhaps one of the generic prgmr.com Linux domains. In this domU, you'll need
+    to have a small boot partition that GRUB^([[50](#ftn.CHP-8-FNOTE-6)]) can read.
+    This is where we'll store the kernel and GRUB configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, from within your domain, download the NetBSD kernels:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then, edit the domain's GRUB menu (most likely at */boot/grub/menu.lst*) to
+    load the INSTALL kernel on next reboot. (On the reboot after that, when the installation's
+    done, you'll select the NetBSD run option.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Reboot, selecting the **NetBSD install** option.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As if by magic, your domain will begin running the NetBSD installer, until you
+    end up in a totally ordinary NetBSD install session. Go through the steps of the
+    NetBSD FTP install. There's some very nice documentation at [http://netbsd.org/docs/guide/en/chap-exinst.html](http://netbsd.org/docs/guide/en/chap-exinst.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*At this point you have to be careful not to overwrite your boot device. For
+    example, prgmr.com gives you only a single physical block device, from which you''ll
+    need to carve a* /boot *partition in addition to the normal filesystem layout*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The only sticky point is that you have to be careful to set up a boot device
+    that PyGRUB can read, in the place where PyGRUB expects it. (If you have multiple
+    physical devices, PyGRUB will try to boot from the first one.) Since we''re installing
+    within the standard prgmr.com domU setup, we only have a single physical block
+    device to work with, which we''ll carve into separate */boot* and */* partitions.
+    Our disklabel, with a *32 MB FFS /boot* partition, looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: Once the install's done, reboot. Select the regular kernel in PyGRUB, and your
+    domU should be ready to go.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After NetBSD''s booted, if you want to change the bootloader configuration,
+    you can mount the *ext2* partition thus:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will allow you upgrade the domU kernel. Just remember that, whenever you
+    want to upgrade the kernel, you need to mount the partition that PyGRUB loads
+    the kernel from and make sure to update that kernel and *menu.lst*. It would also
+    be a good idea to install the NetBSD kernel in the usual place, in the root of
+    the domU filesystem, but it isn't strictly necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: And there you have it—a complete, fully functional NetBSD domU, without any
+    intervention from the dom0 at all. (If you have dom0 access, you can specify the
+    install kernel on the `kernel=` line of the domain config file in the usual way—but
+    what would be the fun of that?)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[50](#CHP-8-FNOTE-6)]) More accurately, of course, your GRUB simulator. If
+    this is PyGRUB, it relies on `libfsimage`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Beyond Paravirtualization: HVM'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we have outlined the general steps necessary to use Solaris
+    and NetBSD as both dom0 and domU operating systems. This isn't meant to exhaustively
+    list the operating systems that work with Xen—in particular, we haven't mentioned
+    Plan9 or FreeBSD at all—but it does give you a good idea of the sort of differences
+    that you might encounter and easy recipes for using at least two systems other
+    than Linux.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, they each have their own advantages: NetBSD is a very lightweight
+    operating system, much better than Linux at handling low-memory conditions. This
+    comes in handy with Xen. Solaris isn''t as light, but it is extremely robust and
+    has interesting technologies, such as ZFS. Both of these OSs can support any OS
+    as domU, as long as it''s been modified to work with Xen. That''s virtualization
+    in action, if you like.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The new Linux paravirt_ops functionality that is included in the kernel.org
+    kernels requires Xen hypervisor version 3.3 or later, so it works with NetBSD
+    but not OpenSolaris*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, the addition of hardware virtualization extensions to recent processors
+    means that virtually any OS can be used as a domU, even if it hasn''t been modified
+    specifically to work with Xen. We discuss Xen''s support for these extensions
+    in [Chapter 12](ch12.html "Chapter 12. HVM: BEYOND PARAVIRTUALIZATION") and then
+    describe using HVM to run Windows under Xen in [Chapter 13](ch13.html "Chapter 13. XEN
+    AND WINDOWS"). Stay tuned.'
+  prefs: []
+  type: TYPE_NORMAL

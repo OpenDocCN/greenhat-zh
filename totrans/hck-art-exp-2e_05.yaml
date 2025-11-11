@@ -1,0 +1,1310 @@
+- en: Chapter 0x500. SHELLCODE
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So far, the shellcode used in our exploits has been just a string of copied
+    and pasted bytes. We have seen standard shell-spawning shellcode for local exploits
+    and port-binding shellcode for remote ones. Shellcode is also sometimes referred
+    to as an exploit payload, since these self-contained programs do the real work
+    once a program has been hacked. Shellcode usually spawns a shell, as that is an
+    elegant way to hand off control; but it can do anything a program can do.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, for many hackers the shellcode story stops at copying and pasting
+    bytes. These hackers are just scratching the surface of what's possible. Custom
+    shellcode gives you absolute control over the exploited program. Perhaps you want
+    your shellcode to add an admin account to /etc/passwd or to automatically remove
+    lines from log files. Once you know how to write your own shellcode, your exploits
+    are limited only by your imagination. In addition, writing shellcode develops
+    assembly language skills and employs a number of hacking techniques worth knowing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assembly vs. C
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The shellcode bytes are actually architecture-specific machine instructions,
+    so shellcode is written using the assembly language. Writing a program in assembly
+    is different than writing it in C, but many of the principles are similar. The
+    operating system manages things like input, output, process control, file access,
+    and network communication in the kernel. Compiled C programs ultimately perform
+    these tasks by making system calls to the kernel. Different operating systems
+    have different sets of system calls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In C, standard libraries are used for convenience and portability. A C program
+    that uses `printf()` to output a string can be compiled for many different systems,
+    since the library knows the appropriate system calls for various architectures.
+    A C program compiled on an *x*86 processor will produce *x*86 assembly language.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By definition, assembly language is already specific to a certain processor
+    architecture, so portability is impossible. There are no standard libraries; instead,
+    kernel system calls have to be made directly. To begin our comparison, let's write
+    a simple C program, then rewrite it in *x*86 assembly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assembly vs. C
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: helloworld.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: When the compiled program is run, execution flows through the standard I/O library,
+    eventually making a system call to write the string *Hello, world!* to the screen.
+    The strace program is used to trace a program's system calls. Used on the compiled
+    helloworld program, it shows every system call that program makes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the compiled program does more than just print a string. The
+    system calls at the start are setting up the environment and memory for the program,
+    but the important part is the `write()` syscall shown in bold. This is what actually
+    outputs the string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Unix manual pages (accessed with the `man` command) are separated into
+    sections. Section 2 contains the manual pages for system calls, so `man 2 write`
+    will describe the use of the `write()` system call:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Man Page for the write() System Call
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The strace output also shows the arguments for the syscall. The `buf`and `count`
+    arguments are a pointer to our string and its length. The `fd` argument of `1`
+    is a special standard file descriptor. File descriptors are used for almost everything
+    in Unix: input, output, file access, network sockets, and so on. A file descriptor
+    is similar to a number given out at a coat check. Opening a file descriptor is
+    like checking in your coat, since you are given a number that can later be used
+    to reference your coat. The first three file descriptor numbers (0, 1, and 2)
+    are automatically used for standard input, output, and error. These values are
+    standard and have been defined in several places, such as the /usr/include/unistd.h
+    file on the following page.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/unistd.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Writing bytes to standard output's file descriptor of `1` will print the bytes;
+    reading from standard input's file descriptor of `0` will input bytes. The standard
+    error file descriptor of `2` is used to display the error or debugging messages
+    that can be filtered from the standard output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Linux System Calls in Assembly
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Every possible Linux system call is enumerated, so they can be referenced by
+    numbers when making the calls in assembly. These syscalls are listed in /usr/include/asm-i386/unistd.h.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/asm-i386/unistd.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For our rewrite of helloworld.c in assembly, we will make a system call to
+    the `write()` function for the output and then a second system call to `exit()`
+    so the process quits cleanly. This can be done in *x*86 assembly using just two
+    assembly instructions: `mov` and `int`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assembly instructions for the *x*86 processor have one, two, three, or no operands.
+    The operands to an instruction can be numerical values, memory addresses, or processor
+    registers. The *x*86 processor has several 32-bit registers that can be viewed
+    as hardware variables. The registers EAX, EBX, ECX, EDX, ESI, EDI, EBP, and ESP
+    can all be used as operands, while the EIP register (execution pointer) cannot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `mov` instruction copies a value between its two operands. Using Intel assembly
+    syntax, the first operand is the destination and the second is the source. The
+    `int` instruction sends an interrupt signal to the kernel, defined by its single
+    operand. With the Linux kernel, interrupt `0x80` is used to tell the kernel to
+    make a system call. When the `int 0x80` instruction is executed, the kernel will
+    make a system call based on the first four registers. The EAX register is used
+    to specify which system call to make, while the EBX, ECX, and EDX registers are
+    used to hold the first, second, and third arguments to the system call. All of
+    these registers can be set using the `mov` instruction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following assembly code listing, the memory segments are simply declared.
+    The string `"Hello, world!"` with a newline character (`0x0a`) is in the data
+    segment, and the actual assembly instructions are in the text segment. This follows
+    proper memory segmentation practices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: helloworld.asm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The instructions of this program are straight forward. For the `write()` syscall
+    to standard output, the value of `4` is put in EAX since the `write()` function
+    is system call number 4\. Then, the value of `1` is put into EBX, since the first
+    argument of `write()` should be the file descriptor for standard output. Next,
+    the address of the string in the data segment is put into ECX, and the length
+    of the string (in this case, 14 bytes) is put into EDX. After these registers
+    are loaded, the system call interrupt is triggered, which will call the `write()`
+    function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To exit cleanly, the `exit()` function needs to be called with a single argument
+    of `0`. So the value of `1` is put into EAX, since `exit()` is system call number
+    1, and the value of `0` is put into EBX, since the first and only argument should
+    be 0\. Then the system call interrupt is triggered again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To create an executable binary, this assembly code must first be assembled and
+    then linked into an executable format. When compiling C code, the GCC compiler
+    takes care of all of this automatically. We are going to create an executable
+    and linking format (ELF) binary, so the `global _start` line shows the linker
+    where the assembly instructions begin.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `nasm` assembler with the `-f elf` argument will assemble the helloworld.asm
+    into an object file ready to be linked as an ELF binary. By default, this object
+    file will be called helloworld.o. The linker program ld will produce an executable
+    a.out binary from the assembled object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This tiny program works, but it's not shellcode, since it isn't self-contained
+    and must be linked.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Path to Shellcode
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Shellcode is literally injected into a running program, where it takes over
+    like a biological virus inside a cell. Since shellcode isn't really an executable
+    program, we don't have the luxury of declaring the layout of data in memory or
+    even using other memory segments. Our instructions must be self-contained and
+    ready to take over control of the processor regardless of its current state. This
+    is commonly referred to as position-independent code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In shellcode, the bytes for the string `"Hello, world!"` must be mixed together
+    with the bytes for the assembly instructions, since there aren't definable or
+    predictable memory segments. This is fine as long as EIP doesn't try to interpret
+    the string as instructions. However, to access the string as data we need a pointer
+    to it. When the shellcode gets executed, it could be anywhere in memory. The string's
+    absolute memory address needs to be calculated relative to EIP. Since EIP cannot
+    be accessed from assembly instructions, however, we need to use some sort of trick.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assembly Instructions Using the Stack
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The stack is so integral to the *x*86 architecture that there are special instructions
+    for its operations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Instruction | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `push <source>` | Push the source operand to the stack. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `pop <destination>` | Pop a value from the stack and store in the destination
+    operand. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `call <location>` | Call a function, jumping the execution to the address
+    in the location operand. This location can be relative or absolute. The address
+    of the instruvtion following the call is pushed to the stack, so that execution
+    can return later. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ret` | Return from a function, popping the return address from the stack
+    and jumping execution there. |'
+  prefs: []
+  type: TYPE_TB
+- en: Stack-based exploits are made possible by the `call` and `ret` instructions.
+    When a function is called, the return address of the next instruction is pushed
+    to the stack, beginning the stack frame. After the function is finished, the `ret`instruction
+    pops the return address from the stack and jumps EIP back there. By overwriting
+    the stored return address on the stack before the `ret` instruction, we can take
+    control of a program's execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This architecture can be misused in another way to solve the problem of addressing
+    the inline string data. If the string is placed directly after a call instruction,
+    the address of the string will get pushed to the stack as the return address.
+    Instead of calling a function, we can jump past the string to a `pop`instruction
+    that will take the address off the stack and into a register. The following assembly
+    instructions demonstrate this technique.
+  prefs: []
+  type: TYPE_NORMAL
+- en: helloworld1.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The call instruction jumps execution down below the string. This also pushes
+    the address of the next instruction to the stack, the next instruction in our
+    case being the beginning of the string. The return address can immediately be
+    popped from the stack into the appropriate register. Without using any memory
+    segments, these raw instructions, injected into an existing process, will execute
+    in a completely position-independent way. This means that, when these instructions
+    are assembled, they cannot be linked into an executable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `nasm` assembler converts assembly language into machine code and a corresponding
+    tool called ndisasm converts machine code into assembly. These tools are used
+    above to show the relationship between the machine code bytes and the assembly
+    instructions. The disassembly instructions marked in bold are the bytes of the
+    `"Hello, world!"` string interpreted as instructions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, if we can inject this shellcode into a program and redirect EIP, the program
+    will print out *Hello, world!* Let's use the familiar exploit target of the notesearch
+    program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Failure. Why do you think it crashed? In situations like this, GDB is your best
+    friend. Even if you already know the reason behind this specific crash, learning
+    how to effectively use a debugger will help you solve many other problems in the
+    future.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Investigating with GDB
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Since the notesearch program runs as root, we can't debug it as a normal user.
+    However, we also can't just attach to a running copy of it, because it exits too
+    quickly. Another way to debug programs is with core dumps. From a root prompt,
+    the OS can be told to dump memory when the program crashes by using the command
+    `ulimit -c unlimited`. This means that dumped core files are allowed to get as
+    big as needed. Now, when the program crashes, the memory will be dumped to disk
+    as a core file, which can be examined using GDB.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Once GDB is loaded, the disassembly style is switched to Intel. Since we are
+    running GDB as root, the .gdbinit file won't be used. The memory where the shellcode
+    should be is examined. The instructions look incorrect, but it seems like the
+    first incorrect call instruction is what caused the crash. At least, execution
+    was redirected, but something went wrong with the shellcode bytes. Normally, strings
+    are terminated by a null byte, but here, the shell was kind enough to remove these
+    null bytes for us. This, however, totally destroys the meaning of the machine
+    code. Often, shellcode will be injected into a process as a string, using functions
+    like `strcpy()`. Such functions will simply terminate at the first null byte,
+    producing incomplete and unusable shellcode in memory. In order for the shellcode
+    to survive transit, it must be redesigned so it doesn't contain any null bytes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Removing Null Bytes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Looking at the disassembly, it is obvious that the first null bytes come from
+    the `call` instruction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: This instruction jumps execution forward by 19 (`0x13`) bytes, based on the
+    first operand. The `call` instruction allows for much longer jump distances, which
+    means that a small value like 19 will have to be padded with leading zeros resulting
+    in null bytes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One way around this problem takes advantage of two''s complement. A small negative
+    number will have its leading bits turned on, resulting in `0xff`bytes. This means
+    that, if we call using a negative value to move backward in execution, the machine
+    code for that instruction won''t have any null bytes. The following revision of
+    the helloworld shellcode uses a standard implementation of this trick: Jump to
+    the end of the shellcode to a call instruction which, in turn, will jump back
+    to a pop instruction at the beginning of the shellcode.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: helloworld2.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: After assembling this new shellcode, disassembly shows that the call instruction
+    (shown in italics below) is now free of null bytes. This solves the first and
+    most difficult null-byte problem for this shellcode, but there are still many
+    other null bytes (shown in bold).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These remaining null bytes can be eliminated with an understanding of register
+    widths and addressing. Notice that the first `jmp` instruction is actually `jmp
+    short`. This means execution can only jump a maximum of approximately 128 bytes
+    in either direction. The normal `jmp` instruction, as well as the call instruction
+    (which has no short version), allows for much longer jumps. The difference between
+    assembled machine code for the two jump varieties is shown below:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: versus
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The EAX, EBX, ECX, EDX, ESI, EDI, EBP, and ESP registers are 32 bits in width.
+    The *E* stands for *extended*, because these were originally 16-bit registers
+    called AX, BX, CX, DX, SI, DI, BP, and SP. These original 16-bit versions of the
+    registers can still be used for accessing the first 16 bits of each corresponding
+    32-bit register. Furthermore, the individual bytes of the AX, BX, CX, and DX registers
+    can be accessed as 8-bit registers called AL, AH, BL, BH, CL, CH, DL, and DH,
+    where *L* stands for *low byte* and *H* for *high byte*. Naturally, assembly instructions
+    using the smaller registers only need to specify operands up to the register's
+    bit width. The three variations of a `mov` instruction are shown below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Machine code | Assembly |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `B8 04 00 00 00` | `mov eax,0x4` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `66 B8 04 00` | `mov ax,0x4` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `B0 04` | `mov al,0x4` |'
+  prefs: []
+  type: TYPE_TB
+- en: Using the AL, BL, CL, or DL register will put the correct least significant
+    byte into the corresponding extended register without creating any null bytes
+    in the machine code. However, the top three bytes of the register could still
+    contain anything. This is especially true for shellcode, since it will be taking
+    over another process. If we want the 32-bit register values to be correct, we
+    need to zero out the entire register before the `mov` instructions—but this, again,
+    must be done without using null bytes. Here are some more simple assembly instructions
+    for your arsenal. These first two are small instructions that increment and decrement
+    their operand by one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Instruction | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `inc <target>` | Increment the target operand by adding 1 to it. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `dec <target>` | Decrement the target operand by subtracting 1 from it. |'
+  prefs: []
+  type: TYPE_TB
+- en: The next few instructions, like the `mov` instruction, have two operands. They
+    all do simple arithmetic and bitwise logical operations between the two operands,
+    storing the result in the first operand.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Instruction | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `add <dest>, <source>` | Add the source operand to the destination operand,
+    storing the result in the destination. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `sub <dest>, <source>` | Subtract the source operand from the destination
+    operand, storing the result in the destination. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `or <dest>, <source>` | Perform a bitwise `or` logic operation, comparing
+    each bit of one operand with the corresponding bit of the other operand.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 1 or 0 = 1 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 1 or 1 = 1 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 0 or 1 = 1 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 0 or 0 = 0 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the source bit or the destination bit is on, or if both of them are on, the
+    result bit is on; otherwise, the result is off. The final result is stored in
+    the destination operand. |
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| `and <dest>, <source>` | Perform a bitwise `and` logic operation, comparing
+    each bit of one operand with the corresponding bit of the other operand.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 1 or 0 = 0 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 1 or 1 = 1 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 0 or 1 = 0 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 0 or 0 = 0 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The result bit is on only if both the source bit and the destination bit are
+    on. The final result is stored in the destination operand. |
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| `xor <dest>, <source>` | Perform a bitwise exclusive `or (xor)` logical operation,
+    comparing each bit of one operand with the corresponding bit of the other operand.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 1 or 0 = 1 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 1 or 1 = 0 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 0 or 1 = 1 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&#124; 0 or 0 = 0 &#124;'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the bits differ, the result bit is on; if the bits are the same, the result
+    bit is off. The final result is stored in the destination operand. |
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One method is to move an arbitrary 32-bit number into the register and then
+    subtract that value from the register using the `mov` and `sub` instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'While this technique works, it takes 10 bytes to zero out a single register,
+    making the assembled shellcode larger than necessary. Can you think of a way to
+    optimize this technique? The DWORD value specified in each instruction comprises
+    80 percent of the code. Subtracting any value from itself also produces 0 and
+    doesn''t require any static data. This can be done with a single two-byte instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Using the `sub` instruction will work fine when zeroing registers at the beginning
+    of shellcode. This instruction will modify processor flags, which are used for
+    branching, however. For that reason, there is a preferred two-byte instruction
+    that is used to zero registers in most shellcode. The `xor` instruction performs
+    an e`x` clusive `or` operation on the bits in a register. Since 1 `xor` ed with
+    1 results in a 0, and 0 `xor`ed with 0 results in a 0, any value `xor` ed with
+    itself will result in 0\. This is the same result as with any value subtracted
+    from itself, but the `xor` instruction doesn't modify processor flags, so it's
+    considered to be a cleaner method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can safely use the `sub` instruction to zero registers (if done at the beginning
+    of the shellcode), but the `xor` instruction is most commonly used in shellcode
+    in the wild. This next revision of the shellcode makes use of the smaller registers
+    and the `xor` instruction to avoid null bytes. The `inc` and `dec`instructions
+    have also been used when possible to make for even smaller shellcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: helloworld3.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: After assembling this shellcode, hexdump and grep are used to quickly check
+    it for null bytes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now this shellcode is usable, as it doesn't contain any null bytes. When used
+    with an exploit, the notesearch program is coerced into greeting the world like
+    a newbie.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Shell-Spawning Shellcode
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that you've learned how to make system calls and avoid null bytes, all sorts
+    of shellcodes can be constructed. To spawn a shell, we just need to make a system
+    call to execute the /bin/sh shell program. System call number 11, `execve()`,
+    is similar to the C `execute()` function that we used in the previous chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first argument of the filename should be a pointer to the string `"/bin/sh"`,
+    since this is what we want to execute. The environment array— the third argument—can
+    be empty, but it still need to be terminated with a 32-bit null pointer. The argument
+    array—the second argument—must be nullterminated, too; it must also contain the
+    string pointer (since the zeroth argument is the name of the running program).
+    Done in C, a program making this call would look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shell-Spawning Shellcode
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: exec_shell.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: To do this in assembly, the argument and environment arrays need to be built
+    in memory. In addition, the `"/bin/sh"` string needs to be terminated with a null
+    byte. This must be built in memory as well. Dealing with memory in assembly is
+    similar to using pointers in C. The `lea` instruction, whose name stands for *load
+    effective address*, works like the `address-of` operator in C.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Instruction | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `lea <dest>, <source>` | Load the effective address of the source operand
+    into the destination operand. |'
+  prefs: []
+  type: TYPE_TB
+- en: With Intel assembly syntax, operands can be dereferenced as pointers if they
+    are surrounded by square brackets. For example, the following instruction in assembly
+    will treat EBX+12 as a pointer and write `eax` to where it's pointing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: The following shellcode uses these new instructions to build the `execve()`
+    arguments in memory. The environment array is collapsed into the end of the argument
+    array, so they share the same 32-bit null terminator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: exec_shell.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: After terminating the string and building the arrays, the shellcode uses the
+    `lea` instruction (shown in bold above) to put a pointer to the argument array
+    into the ECX register. Loading the effective address of a bracketed register added
+    to a value is an efficient way to add the value to the register and store the
+    result in another register. In the example above, the brackets dereference EBX+8
+    as the argument to `lea`, which loads that address into EDX. Loading the address
+    of a dereferenced pointer produces the original pointer, so this instruction puts
+    EBX+8 into EDX. Normally, this would require both a `mov` and an `add` instruction.
+    When assembled, this shellcode is devoid of null bytes. It will spawn a shell
+    when used in an exploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: This shellcode, however, can be shortened to less than the current 45 bytes.
+    Since shellcode needs to be injected into program memory somewhere, smaller shellcode
+    can be used in tighter exploit situations with smaller usable buffers. The smaller
+    the shellcode, the more situations it can be used in. Obviously, the `XAAAABBBB`
+    visual aid can be trimmed from the end of the string, which brings the shellcode
+    down to 36 bytes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: This shellcode can be shrunk down further by redesigning it and using registers
+    more efficiently. The ESP register is the stack pointer, pointing to the top of
+    the stack. When a value is pushed to the stack, ESP is moved up in memory (by
+    subtracting 4) and the value is placed at the top of the stack. When a value is
+    popped from the stack, the pointer in ESP is moved down in memory (by adding 4).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following shellcode uses `push` instructions to build the necessary structures
+    in memory for the `execve()` system call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: tiny_shell.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: This shellcode builds the null-terminated string `"/bin//sh"` on the stack,
+    and then copies ESP for the pointer. The extra backslash doesn't matter and is
+    effectively ignored. The same method is used to build the arrays for the remaining
+    arguments. The resulting shellcode still spawns a shell but is only 25 bytes,
+    compared to 36 bytes using the `jmp` call method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: A Matter of Privilege
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To help mitigate rampant privilege escalation, some privileged processes will
+    lower their effective privileges while doing things that don't require that kind
+    of access. This can be done with the `seteuid()` function, which will set the
+    effective user ID. By changing the effective user ID, the privileges of the process
+    can be changed. The manual page for the `seteuid()` function is shown below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function is used by the following code to drop privileges down to those
+    of the "games" user before the vulnerable `strcpy()` call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: drop_privs.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Even though this compiled program is setuid root, the privileges are dropped
+    to the games user before the shellcode can execute. This only spawns a shell for
+    the games user, without root access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: Fortunately, the privileges can easily be restored at the beginning of our shellcode
+    with a system call to set the privileges back to root. The most complete way to
+    do this is with a `setresuid()` system call, which sets the real, effective, and
+    saved user IDs. The system call number and manual page are shown below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: The following shellcode makes a call to `setresuid()` before spawning the shell
+    to restore root privileges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: priv_shell.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: This way, even if a program is running under lowered privileges when it's exploited,
+    the shellcode can restore the privileges. This effect is demonstrated below by
+    exploiting the same program with dropped privileges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: And Smaller Still
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A few more bytes can still be shaved off this shellcode. There is a single-byte
+    *x*86 instruction called `cdq`, which stands for *convert doubleword to quadword*.
+    Instead of using operands, this instruction always gets its source from the EAX
+    register and stores the results between the EDX and EAX registers. Since the registers
+    are 32-bit doublewords, it takes two registers to store a 64-bit quadword. The
+    conversion is simply a matter of extending the sign bit from a 32-bit integer
+    to 64-bit integer. Operationally, this means if the sign bit of EAX is `0`, the
+    `cdq` instruction will zero the EDX register. Using `xor` to zero the EDX register
+    requires two bytes; so, if EAX is already zeroed, using the `cdq` instruction
+    to zero EDX will save one byte
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: compared to
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Another byte can be saved with clever use of the stack. Since the stack is 32-bit
+    aligned, a single byte value pushed to the stack will be aligned as a doubleword.
+    When this value is popped off, it will be sign-extended, filling the entire register.
+    The instructions that push a single byte and pop it back into a register take
+    three bytes, while using `xor` to zero the register and moving a single byte takes
+    four bytes
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: compared to
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: These tricks (shown in bold) are used in the following shellcode listing. This
+    assembles into the same shellcode as that used in the previous chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: shellcode.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: The syntax for pushing a single byte requires the size to be declared. Valid
+    sizes are `BYTE` for one byte, `WORD` for two bytes, and `DWORD` for four bytes.
+    These sizes can be implied from register widths, so moving into the AL register
+    implies the `BYTE` size. While it's not necessary to use a size in all situations,
+    it doesn't hurt and can help readability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Port-Binding Shellcode
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When exploiting a remote program, the shellcode we've designed so far won't
+    work. The injected shellcode needs to communicate over the network to deliver
+    an interactive root prompt. Port-binding shellcode will bind the shell to a network
+    port where it listens for incoming connections. In the previous chapter, we used
+    this kind of shellcode to exploit the tinyweb server. The following C code binds
+    to port 31337 and listens for a TCP connection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Port-Binding Shellcode
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: bind_port.c
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: These familiar socket functions can all be accessed with a single Linux system
+    call, aptly named `socketcall()`. This is syscall number 102, which has a slightly
+    cryptic manual page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: The possible call numbers for the first argument are listed in the linux/net.h
+    include file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From /usr/include/linux/net.h
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: So, to make socket system calls using Linux, EAX is always 102 for `socketcall()`,
+    EBX contains the type of socket call, and ECX is a pointer to the socket call's
+    arguments. The calls are simple enough, but some of them require a `sockaddr`
+    structure, which must be built by the shellcode. Debugging the compiled C code
+    is the most direct way to look at this structure in memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first breakpoint is just before the socket call happens, since we need to
+    check the values of `PF_INET` and `SOCK_STREAM`. All three arguments are pushed
+    to the stack (but with `mov` instructions) in reverse order. This means `PF_INET`
+    is `2` and `SOCK_STREAM` is `1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: The next breakpoint happens after the `sockaddr` structure is filled with values.
+    The debugger is smart enough to decode the elements of the structure when `host_addr`
+    is printed, but now *you* need to be smart enough to realize the port is stored
+    in network byte order. The `sin_family` and `sin_port` elements are both words,
+    followed by the address as a `DWORD`. In this case, the address is `0`, which
+    means any address can be used for binding. The remaining eight bytes after that
+    are just extra space in the structure. The first eight bytes in the structure
+    (shown in bold) contain all the important information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following assembly instructions perform all the socket calls needed to bind
+    to port 31337 and accept TCP connections. The `sockaddr` structure and the argument
+    arrays are each created by pushing values in reverse order to the stack and then
+    copying ESP into ECX. The last eight bytes of the `sockaddr` structure aren't
+    actually pushed to the stack, since they aren't used. Whatever random eight bytes
+    happen to be on the stack will occupy this space, which is fine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: bind_port.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: When assembled and used in an exploit, this shellcode will bind to port 31337
+    and wait for an incoming connection, blocking at the accept call. When a connection
+    is accepted, the new socket file descriptor is put into EAX at the end of this
+    code. This won't really be useful until it's combined with the shell-spawning
+    code described earlier. Fortunately, standard file descriptors make this fusion
+    remarkably simple.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Duplicating Standard File Descriptors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Standard input, standard output, and standard error are the three standard file
+    descriptors used by programs to perform standard I/O. Sockets, too, are just file
+    descriptors that can be read from and written to. By simply swapping the standard
+    input, output, and error of the spawned shell with the connected socket file descriptor,
+    the shell will write output and errors to the socket and read its input from the
+    bytes that the socket received. There is a system call specifically for duplicating
+    file descriptors, called `dup2`. This is system call number 63.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: The bind_port.s shellcode left off with the connected socket file descriptor
+    in EAX. The following instructions are added in the file bind_shell_beta.s to
+    duplicate this socket into the standard I/O file descriptors; then, the tiny_shell
+    instructions are called to execute a shell in the current process. The spawned
+    shell's standard input and output file descriptors will be the TCP connection,
+    allowing remote shell access.
+  prefs: []
+  type: TYPE_NORMAL
+- en: New Instructions from bind_shell1.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: When this shellcode is assembled and used in an exploit, it will bind to port
+    31337 and wait for an incoming connection. In the output below, grep is used to
+    quickly check for null bytes. At the end, the process hangs waiting for a connection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: From another terminal window, the program netstat is used to find the listening
+    port. Then, netcat is used to connect to the root shell on that port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: Branching Control Structures
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The control structures of the C programming language, such as for loops and
+    if-then-else blocks, are made up of conditional branches and loops in the machine
+    language. With control structures, the repeated calls to `dup2` could be shrunk
+    down to a single call in a loop. The first C program written in previous chapters
+    used a for loop to greet the world 10 times. Disassembling the main function will
+    show us how the compiler implemented the for loop using assembly instructions.
+    The loop instructions (shown below in bold) come after the function prologue instructions
+    save stack memory for the local variable `i`. This variable is referenced in relation
+    to the EBP register as `[ebp-4]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The loop contains two new instructions: `cmp` (compare) and `jle` (jump if
+    less than or equal to), the latter belonging to the family of conditional jump
+    instructions. The `cmp` instruction will compare its two operands, setting flags
+    based on the result. Then, a conditional jump instruction will jump based on the
+    flags. In the code above, if the value at `[ebp-4]` is less than or equal to 9,
+    execution will jump to `0x8048393`, past the next `jmp` instruction. Otherwise,
+    the next `jmp` instruction brings execution to the end of the function at `0x080483a6`,
+    exiting the loop. The body of the loop makes the call to `printf()`, increments
+    the counter variable at `[ebp-4]`, and finally jumps back to the compare instruction
+    to continue the loop. Using conditional jump instructions, complex programming
+    control structures such as loops can be created in assembly. More conditional
+    jump instructions are shown below.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Instruction | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `cmp <dest>, <source>` | Compare the destination operand with the source,
+    setting flags for use with a conditional jump instruction. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `je <target>` | Jump to target if the compared values are equal. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jne <target>` | Jump if not equal. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jl <target>` | Jump if less than. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jle <target>` | Jump if less than or equal to. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jnl <target>` | Jump if not less than. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jnle <target>` | Jump if not less than or equal to. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jg jge` | Jump if greater than, or greater than or equal to. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jng jnge` | Jump if not greater than, or not greater than or equal to. |'
+  prefs: []
+  type: TYPE_TB
+- en: 'These instructions can be used to shrink the `dup2` portion of the shellcode
+    down to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: This loop iterates ECX from `0` to `2`, making a call to `dup2` each time. With
+    a more complete understanding of the flags used by the `cmp` instruction, this
+    loop can be shrunk even further. The status flags set by the `cmp` instruction
+    are also set by most other instructions, describing the attributes of the instruction's
+    result. These flags are carry flag (CF), parity flag (PF), adjust flag (AF), overflow
+    flag (OF), zero flag (ZF), and sign flag (SF). The last two flags are the most
+    useful and the easiest to understand. The zero flag is set to true if the result
+    is zero, otherwise it is false. The sign flag is simply the most significant bit
+    of the result, which is true if the result is negative and false otherwise. This
+    means that, after any instruction with a negative result, the sign flag becomes
+    true and the zero flag becomes false.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Abbreviation | Name | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| ZF | zero flag | True if the result is zero. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| SF | sign flag | True if the result is negative (equal to the most significant
+    bit of result). |'
+  prefs: []
+  type: TYPE_TB
+- en: 'The `cmp` (compare) instruction is actually just a `sub` (subtract) instruction
+    that throws away the results, only affecting the status flags. The `jle` (jump
+    if less than or equal to) instruction is actually checking the zero and sign flags.
+    If either of these flags is true, then the destination (first) operand is less
+    than or equal to the source (second) operand. The other conditional jump instructions
+    work in a similar way, and there are still more conditional jump instructions
+    that directly check individual status flags:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Instruction | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jz <target>` | Jump to target if the zero flag is set. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jnz <target>` | Jump if the zero flag is not set. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `js <target>` | Jump if the sign flag is set. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `jns <target>` | Jump is the sign flag is not set. |'
+  prefs: []
+  type: TYPE_TB
+- en: With this knowledge, the `cmp` (compare) instruction can be removed entirely
+    if the loop's order is reversed. Starting from `2` and counting down, the sign
+    flag can be checked to loop until `0`. The shortened loop is shown below, with
+    the changes shown in bold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first two instructions before the loop can be shortened with the `xchg`(exchange)
+    instruction. This instruction swaps the values between the source and destination
+    operands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Instruction | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `xchg <dest>, <source>` | Exchange the values between the two operands. |'
+  prefs: []
+  type: TYPE_TB
+- en: 'This single instruction can replace both of the following instructions, which
+    take up four bytes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The EAX register needs to be zeroed to clear only the upper three bytes of
+    the register, and EBX already has these upper bytes cleared. So swapping the values
+    between EAX and EBX will kill two birds with one stone, reducing the size to the
+    following single-byte instruction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since the `xchg` instruction is actually smaller than a `mov` instruction between
+    two registers, it can be used to shrink shellcode in other places. Naturally,
+    this only works in situations where the source operand's register doesn't matter.
+    The following version of the bind port shellcode uses the exchange instruction
+    to shave a few more bytes off its size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: bind_shell.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: This assembles to the same 92-byte bind_shell shellcode used in the previous
+    chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: Connect-Back Shellcode
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Port-binding shellcode is easily foiled by firewalls. Most firewalls will block
+    incoming connections, except for certain ports with known services. This limits
+    the user's exposure and will prevent port-binding shellcode from receiving a connection.
+    Software firewalls are now so common that port-bind shellcode has little chance
+    of actually working in the wild.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, firewalls typically do not filter outbound connections, since that
+    would hinder usability. From inside the firewall, a user should be able to access
+    any web page or make any other outbound connections. This means that if the shellcode
+    initiates the outbound connection, most firewalls will allow it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead of waiting for a connection from an attacker, connect-back shellcode
+    initiates a TCP connection back to the attacker's IP address. Opening a TCP connection
+    only requires a call to `socket()` and a call to `connect()`. This is very similar
+    to the bind-port shellcode, since the socket call is exactly the same and the
+    `connect()` call takes the same type of arguments as `bind()`. The following connect-back
+    shellcode was made from the bind-port shellcode with a few modifications (shown
+    in bold).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Connect-Back Shellcode
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: connectback_shell.s
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the shellcode above, the connection IP address is set to 192.168.42.72,
+    which should be the IP address of the attacking machine. This address is stored
+    in the `in_addr` structure as `0x482aa8c0`, which is the hexadecimal representation
+    of 72, 42, 168, and 192\. This is made clear when each number is displayed in
+    hexadecimal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since these values are stored in network byte order but the *x*86 architecture
+    is in little-endian order, the stored DWORD seems to be reversed. This means the
+    DWORD for 192.168.42.72 is `0x482aa8c0`. This also applies for the two-byte WORD
+    used for the destination port. When the port number 31337 is printed in hexadecimal
+    using gdb, the byte order is shown in little-endian order. This means the displayed
+    bytes must be reversed, so WORD for 31337 is `0x697a`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The netcat program can also be used to listen for incoming connections with
+    the `-l` command-line option. This is used in the output below to listen on port
+    31337 for the connect-back shellcode. The `ifconfig` command ensures the IP address
+    of eth0 is 192.168.42.72 so the shellcode can connect back to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, let's try to exploit the tinyweb server program using the connectback shellcode.
+    From working with this program before, we know that the request buffer is 500
+    bytes long and is located at `0xbffff5c0` in stack memory. We also know that the
+    return address is found within 40 bytes of the end of the buffer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: Since the offset from the beginning of the buffer to the return address is 540
+    bytes, a total of 544 bytes must be written to overwrite the four-byte return
+    address. The return address overwrite also needs to be properly aligned, since
+    the return address uses multiple bytes. To ensure proper alignment, the sumof
+    the NOP sled and shellcode bytes must be divisible by four. In addition, the shellcode
+    itself must stay within the first 500 bytes of the overwrite. These are the bounds
+    of the response buffer, and the memory afterward corresponds to other values on
+    the stack that might be written to before we change the program's control flow.
+    Staying within these bounds avoids the risk of random overwrites to the shellcode,
+    which inevitably lead to crashes. Repeating the return address 16 times will generate
+    64 bytes, which can be put at the end of the 544-byte exploit buffer and keeps
+    the shellcode safely within the bounds of the buffer. The remaining bytes at the
+    beginning of the exploit buffer will be the NOP sled. The calculations above show
+    that a 402-byte NOP sled will properly align the 78-byte shellcode and place it
+    safely within the bounds of the buffer. Repeating the desired return address 12
+    times spaces the final 4 bytes of the exploit buffer perfectly to overwrite the
+    saved return address on the stack. Overwriting the return address with `0xbffff688`
+    should return execution right to the middle of the NOP sled, while avoiding bytes
+    near the beginning of the buffer, which might get mangled. These calculated values
+    will be used in the following exploit, but first the connect-back shell needs
+    some place to connect back to. In the output below, netcat is used to listen for
+    incoming connections on port 31337.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, in another terminal, the calculated exploit values can be used to exploit
+    the tinyweb program remotely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From Another Terminal Window
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: Back in the original terminal, the shellcode has connected back to the netcat
+    process listening on port 31337\. This provides root shell access remotely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: The network configuration for this example is slightly confusing because the
+    attack is directed at 127.0.0.1 and the shellcode connects back to 192.168.42.72\.
+    Both of these IP addresses route to the same place, but 192.168.42.72 is easier
+    to use in shellcode than 127.0.0.1\. Since the loopback address contains two null
+    bytes, the address must be built on the stack with multiple instructions. One
+    way to do this is to write the two null bytes to the stack using a zeroed register.
+    The file loopback_shell.s is a modified version of connectback_shell.s that uses
+    the loopback address of 127.0.0.1\. The differences are shown in the following
+    output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: After pushing the value `0x01BBBB7f` to the stack, the ESP register will point
+    to the beginning of this DWORD. By writing a two-byte WORD of null bytes at ESP+1,
+    the middle two bytes will be overwritten to form the correct return address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This additional instruction increases the size of the shellcode by a few bytes,
+    which means the NOP sled also needs to be adjusted for the exploit buffer. These
+    calculations are shown in the output below, and they result in a 397-byte NOP
+    sled. This exploit using the loopback shellcode assumes that the tinyweb program
+    is running and that a netcat process is listening for incoming connections on
+    port 31337.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: As with the previous exploit, the terminal with netcat listening on port 31337
+    will receive the rootshell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: It almost seems too easy, doesn't it?
+  prefs: []
+  type: TYPE_NORMAL

@@ -1,0 +1,738 @@
+- en: 'Chapter 1. XEN: A HIGH-LEVEL OVERVIEW'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: We'll start by explaining what makes Xen different from other virtualization
+    techniques and then provide some low-level detail on how Xen works and how its
+    components fit together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Virtualization Principles
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: First, we might want to mention that computers, even new and fast ones with
+    modern multitasking operating systems, can perform only one instruction at a time.^([[8](#ftn.CHP-1-FNOTE-1)])
+    Now, you say, "But my computer is performing many tasks at once. Even now, I can
+    see a clock running, hear music playing, download files, and chat with friends,
+    all at the same time." And this is true. However, what is *actually* happening
+    is that the computer is switching between these different tasks so quickly that
+    the delays become imperceptible. Just as a movie is a succession of still images
+    that give the illusion of movement, a computer performs tasks that are so seamlessly
+    interweaved as to appear simultaneous.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Virtualization just extends this metaphor a bit. Ordinarily, this multiplexing
+    takes place under the direction of the operating system, which acts to supervise
+    tasks and make sure that each receives its fair share of CPU time. Because the
+    operating system must therefore *schedule* tasks to run on the CPU, this aspect
+    of the operating system is called a *scheduler*. With Xen virtualization, the
+    same process occurs, with entire operating systems taking the place of tasks.
+    The scheduling aspect is handled by the Xen kernel, which runs on a level superior
+    to the "supervising" guest operating systems, and which we thus call the *hypervisor*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, it's not quite so simple—operating systems, even ones that have been
+    modified to be Xen-friendly, use a different, more comprehensive, set of assumptions
+    than applications, and switching between them is almost by definition going to
+    involve more complexity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So let's look at an overview of how virtualization is traditionally done and
+    how Xen's design is new and different. A traditional virtual machine is designed
+    to mimic a real machine in every way, such that it's impossible to tell from within
+    the virtual machine that it isn't real. To preserve that illusion, fully virtualized
+    machines intercept attempts to access hardware and emulate that hardware's functionality
+    in software—thus maintaining perfect compatibility with the applications inside
+    the virtual machine. This layer of indirection makes the virtual machine very
+    slow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen bypasses this slowdown using an approach called *paravirtualization*—*para*
+    as a prefix means *similar to* or *alongside*. As the name suggests, it's not
+    "real" virtualization in the traditional sense because it doesn't try to provide
+    a seamless illusion of a machine. Xen presents only a partial abstraction of the
+    underlying hardware to the hosted operating system, exposing some aspects of the
+    machine as *limitations* on the guest OS, which needs to know that it's running
+    on Xen and should handle certain hardware interactions accordingly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Newer processors incorporate support for hardware virtualization, allowing
+    unmodified operating systems to run under Xen. See [Chapter 12](ch12.html "Chapter 12. HVM:
+    BEYOND PARAVIRTUALIZATION") for details*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most of these limitations—by design—aren't noticeable to the system's users.
+    To run under Xen, the guest OS kernel needs to be modified so that, for example,
+    it asks Xen for memory rather than allocating it directly. One of the design goals
+    for Xen was to have these changes occur in the hardware-dependent bits of the
+    guest operating system, without changing the interface between the kernel and
+    user-level software.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This design goal reduces the difficulty of moving to Xen by ensuring that existing
+    binaries will work unmodified on the Xen guest OS and that the virtual machine
+    will, in most regards, act exactly like a real one, at least from the perspective
+    of the system's end users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen therefore trades seamless virtualization for a high-performance paravirtualized
+    environment. The paper in which the original Xen developers initially presented
+    this project, "Xen and the Art of Virtualization,"^([[9](#ftn.CHP-1-FNOTE-2)])
+    puts this in strong terms, saying "Paravirtualization is necessary to attain high
+    performance and strong resource isolation on uncooperative machine architectures
+    such as x86." It's not quite as simple as "paravirtualization makes a computer
+    fast"—I/O, for example, can lead to expensive context switches—but it is generally
+    faster than other approaches. We generally assume that a Xen guest will run at
+    about 95 percent of its native speed on physical hardware, assuming that other
+    guests on the machine are idle.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, paravirtualization isn''t the only way to run a virtual machine. There
+    are two competing approaches: full virtualization and OS-level virtualization.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[8](#CHP-1-FNOTE-1)]) Of course, SMP and multicore CPUs make this not entirely
+    true, and we are drastically simplifying pipelining, superscalar execution, and
+    so forth, but the principle still holds—at any instant, each core is only doing
+    one thing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[9](#CHP-1-FNOTE-2)]) See [http://www.cl.cam.ac.uk/research/srg/netos/papers/2003-xensosp.pdf](http://www.cl.cam.ac.uk/research/srg/netos/papers/2003-xensosp.pdf).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Virtualization Techniques: Full Virtualization'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Not all virtualization methods use Xen's approach. Virtualization software come
+    in three flavors. At one extreme you have *full virtualization*, or emulation,
+    in which the virtual machine is a software simulation of hardware, real or fictional—as
+    long as there's a driver, it doesn't matter much. Products in this category include
+    VMware and QEMU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*And what, you ask, is this fictional hardware? Apart from the obvious "not
+    real" answer, one good example is the VTPM driver. TPM (Trusted Platform Module)
+    hardware is relatively uncommon, but it has some potential applications with signing
+    code—for example, making sure that the running kernel is the correct one, rather
+    than a fake put on by a rootkit or virus. Xen therefore makes a virtual TPM available
+    to the domUs*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With full virtualization, an unmodified^([[10](#ftn.CHP-1-FNOTE-3)]) OS "hosts"
+    a userspace program that emulates a machine on which the "guest" OS runs. This
+    is a popular approach because it doesn't require the guest OS to be changed in
+    any way. It also has the advantage that the virtualized architecture can be completely
+    different from the host architecture—for example, QEMU can simulate a MIPS processor
+    on an IA-32 host and a startling array of other chips.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, this level of hardware independence comes at the cost of an enormous
+    speed penalty. Unaccelerated QEMU is an order of magnitude slower than native
+    execution, and accelerated QEMU or VMware ESX server can only accelerate the emulated
+    machine if it's the same architecture as the underlying hardware. In this context,
+    for normal usage, the increased hardware versatility of a full emulator isn't
+    a significant advantage over Xen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: VMware is currently the best-known vendor of full-virtualization products, with
+    a robust set of tools, broad support, and a strong brand. Recent versions of VMware
+    address the speed problem by running instructions in place where possible and
+    dynamically translating code when necessary. Although this approach is elegant
+    and doesn't require guest OS modification, it's not as fast as Xen, making it
+    less desirable for production setups or for a full-time work environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[10](#CHP-1-FNOTE-3)]) Or a slightly modified OS—QEMU, for example, has the
+    KQEMU kernel module, which speeds up the emulated code by allowing it to run directly
+    on the processor when possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Virtualization Techniques: OS Virtualization'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: On the other extreme is *OS-level virtualization*, where what's being virtualized
+    is the operating environment, rather than the complete machine. FreeBSD jails
+    and Solaris Containers take this approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OS virtualization takes the position that the operating system already provides,
+    or at least can be made to provide, sufficient isolation to do everything that
+    a normal VM user expects—install software systemwide, upgrade system libraries
+    in the guest without affecting those in the host, and so forth. Thus, rather than
+    emulating physical hardware, OS virtualization emulates a complete OS userspace
+    using operating system facilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FreeBSD jails and Solaris Containers (or Zones) are two popular implementations
+    of OS-level virtualization. Both derive from the classic Unix `chroot` jail. The
+    idea is that the jailed process can only access parts of the filesystem that reside
+    under a certain directory—the rest of the filesystem, as far as this process can
+    tell, simply doesn't exist. If we install an OS into that directory, it can be
+    considered a complete virtual environment. Jails and Zones expand on the concept
+    by also restricting certain system calls and providing a virtual network interface
+    to enhance isolation between virtual machines. Although this is incredibly useful,
+    it's neither as useful or as versatile as a full-fledged virtual machine would
+    be. Because the jails share a kernel, for example, a kernel panic will bring down
+    all the VMs on the hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, because they bypass the overhead of virtualizing hardware, virtualized
+    machines can be about as fast as native execution—in fact, they are native.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OS virtualization and Xen complement each other, each being useful in different
+    situations, possibly even simultaneously. One can readily imagine, for example,
+    giving a user a single Xen VM, which he then partitions into multiple Zones for
+    his own use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Paravirtualization: Xen''s Approach'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Finally, somewhere between the two, there's *paravirtualization*, which relies
+    on the operating system being modified to work in concert with a sort of "super
+    operating system," which we call the *hypervisor*. This is the approach Xen uses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How Paravirtualization Works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Xen works by introducing a very small, very compact and focused piece of software
+    that runs directly on the hardware and provides services to the virtualized operating
+    systems.^([[11](#ftn.CHP-1-FNOTE-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen's approach to virtualization does away with most of the split between host
+    OS and guest OS. Full virtualization and OS-level virtualization have a clear
+    distinction—the host OS is the one that runs with full privileges. With Xen, only
+    the hypervisor has full privileges, and it's designed to be as small and limited
+    as possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead of this "host/guest" split, the hypervisor relies on a trusted guest
+    OS (domain 0, the *driver domain*, or more informally, *dom0*) to provide hardware
+    drivers, a kernel, and a userland. This privileged domain is uniquely distinguished
+    as the domain that the hypervisor allows to access devices and perform control
+    functions. By doing this, the Xen developers ensure that the hypervisor remains
+    small and maintainable and that it occupies as little memory as possible. [Figure 1-1](ch01s04.html#shown_here_is_the_hypervisor_with_domain
+    "Figure 1-1. Shown here is the hypervisor with domains. Note that the hypervisor
+    runs directly on the hardware but doesn't itself mediate access to disk and network
+    devices. Instead, dom0 interacts directly with disk and network devices, servicing
+    requests from the other domains. In this diagram, domU 1 also acts as a driver
+    domain for an unnamed PCI device.") shows this relationship.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Shown here is the hypervisor with domains. Note that the hypervisor runs
+    directly on the hardware but doesn''t itself mediate access to disk and network
+    devices. Instead, dom0 interacts directly with disk and network devices, servicing
+    requests from the other domains. In this diagram, domU 1 also acts as a driver
+    domain for an unnamed PCI device.](httpatomoreillycomsourcenostarchimages333193.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-1. Shown here is the hypervisor with domains. Note that the hypervisor
+    runs directly on the hardware but doesn't itself mediate access to disk and network
+    devices. Instead, dom0 interacts directly with disk and network devices, servicing
+    requests from the other domains. In this diagram, domU 1 also acts as a driver
+    domain for an unnamed PCI device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*See also "Safe Hardware Access with the Xen Virtual Machine Monitor," Fraser
+    et al.^([[12](#ftn.CHP-1-FNOTE-5)]) Also, non-dom0 driver domains can exist—however,
+    they''re not recommended on current hardware in the absence of an IOMMU (I/O Memory
+    Management Unit) and therefore will not be covered here. For more on IOMMU development,
+    see [Chapter 12](ch12.html "Chapter 12. HVM: BEYOND PARAVIRTUALIZATION")*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Domain 0's privileged operations broadly fall into two categories. First, dom0
+    functions as an area from which to administer Xen. From the dom0, the administrator
+    can control the other domains running on the machine—create, destroy, save, restore,
+    etc. Network and storage devices can also be manipulated—created, presented to
+    the kernel, assigned to domUs, etc.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Second, dom0 has uniquely privileged access to hardware. The domain 0 kernel
+    has the usual hardware drivers and uses them to export abstractions of hardware
+    devices to the hypervisor and thence to virtual machines. Think of the machine
+    as a car, with the dom0 as driver. He's also a passenger but has privileges and
+    responsibilities that the other passengers don't.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[11](#CHP-1-FNOTE-4)]) Some would call the Xen hypervisor a microkernel.
+    Others wouldn't.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[12](#CHP-1-FNOTE-5)]) See [http://www.cl.cam.ac.uk/research/srg/netos/papers/2004-oasis-ngio.pdf](http://www.cl.cam.ac.uk/research/srg/netos/papers/2004-oasis-ngio.pdf).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Xen''s Underpinnings: The Gory Details'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'So, with this concept of virtual devices firmly in mind, the question becomes:
+    What does a computer need to provide at the most basic level? The Xen developers
+    considered this question at length and concluded that Xen would have to manage
+    *CPU time, interrupts, memory, block devices*, and *network*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The hypervisor operates much like the very core of a traditional operating system,
+    parceling out CPU time and resources to the operating systems that run under it,
+    which in turn allocate resources to their individual processes. Just as modern
+    operating systems can transparently pause a process, the Xen hypervisor can pause
+    an operating system, hand control to another for a while, and then seamlessly
+    restart the paused system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because Xen is designed to be small and simple, the hypervisor interacts with
+    the OSs that run under it using a very few well-defined interfaces, which the
+    Xen team refers to as *hypercalls*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These hypercalls take the place of a standard operating system's system calls,
+    with a similar interface. In effect, they have the same function—to allow user
+    code to execute privileged operations in a way that can be controlled and managed
+    by trusted code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The hypercalls have several design goals and requirements. First, they are *asynchronous*
+    so that hypercalls don't block other processes or other OSs—while one domain waits
+    for a hypercall to finish, another domain can get some CPU time. Second, they
+    are small, simple, and clearly defined—Xen has only about 50 hypercalls, in contrast
+    with over 300 syscalls for Linux. Finally, the hypercalls use a common system
+    of notifications to interact with the Xen hypervisor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scheduling
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The CPU, regardless of Xen virtualization, is still a physical object, subject
+    to all the messy and intractable laws of physical reality. It can perform only
+    one instruction at a time, and so the various demands on its attention have to
+    be scheduled. Xen schedules processes to run on the CPU in response to instructions
+    from the guest OSs, subject to its own accounting of which guest should have access
+    to the CPU at any given time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each guest maintains its own internal queues of which instructions to run next—which
+    process gets a CPU time slice, essentially. In an ordinary machine, the OS would
+    run the process at the head of a queue on the physical CPU. (Under Linux, the
+    run queue.) On a virtual machine, it instead notifies Xen to run that process
+    for a certain amount of time, expressed in domain-virtual terms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The guest can also "make an appointment" with Xen, requesting an interrupt and
+    CPU time at a later time, based on either a domain-virtual timer or system timer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The domain-virtual timer is used mostly for internal scheduling between processes—the
+    domU kernel can request that the hypervisor preempt a task and run another one
+    after a certain amount of virtual time has passed. Note that the domain doesn't
+    actually schedule processes directly on the CPU—that sort of hardware interaction
+    has to be handled by the hypervisor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The system timer is used for events that are sensitive to real-world time, such
+    as networking. Using the system timer, the domain can give up the CPU for a while
+    and request to be woken back up in time to refill the network buffer or send out
+    the next ping.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The administrator can also tune the scheduling parameters that Xen uses to
+    allocate resources to domains. There are a number of different algorithms, with
+    varying degrees of usefulness. See [Chapter 7](ch07.html "Chapter 7. HOSTING UNTRUSTED
+    USERS UNDER XEN: LESSONS FROM THE TRENCHES") for more details on scheduling.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Interrupts
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In computing terms, an *interrupt* is a request for attention. An interrupt
+    usually occurs when some piece of hardware needs to interact with its control
+    software (that is, drivers). Traditionally, interrupts must be handled immediately,
+    and all other processes have to wait until the interrupt handler has finished.
+    In the context of virtualization, this is patently unacceptable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen therefore intercepts interrupts, rather than passing them directly through
+    to guest domains. This allows Xen to retain control of the hardware, *scheduling*
+    interrupt servicing, rather than merely reacting. Domains can register interrupt
+    handlers with the hypervisor in advance. Then, when an interrupt comes in, Xen
+    notifies the appropriate guest domain and schedules it for execution. Interrupts
+    that occur while the domain is waiting to execute are coalesced into a nice package,
+    avoiding unnecessary notifications. This also contributes to Xen's performance
+    because context switches between domains are expensive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Memory
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The hypervisor has authority over memory that is both localized and absolute.
+    It must allocate all memory used by the domains, but it only deals with physical
+    memory and the page table—the guest OSs handle all other memory management functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This, as it turns out, is quite as much as any sensible implementor could desire.
+    Memory, under x86, is difficult and arcane. The Xen authors point out, in a classic
+    understatement, that "the x86 processors use a complex hybrid memory management
+    scheme." [Figure 1-2](ch01s05.html#lets_take_the_example_of_translating_an_ "Figure 1-2. Let's
+    take the example of translating an address given by an application. First, at
+    the left, we have the address as given. This consists of a segment selector and
+    offset. The MMU looks up the segment selector in the GDT (Global Descriptor Table)
+    to find that segment's location in the linear address space, which is the complete
+    address space accessible to the process (usually 4GB). The offset then acts as
+    an address within that segment. This gives the processor a linear address relative
+    to the process's address space. The MMU then decomposes that address into two
+    indices and an offset—first it looks through the page directory to find the correct
+    page table, then it finds the correct page in the page table, and finally it uses
+    the offset to return a machine address—actual, physical memory.") shows an overview
+    of address translation on the x86.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the most fundamental, hardware-dependent level, or at least the lowest level
+    we're willing to mention here, we have the machine memory. This can be accessed
+    one word at a time, via numbered addresses. That's the final product, shown on
+    the right in [Figure 1-2](ch01s05.html#lets_take_the_example_of_translating_an_
+    "Figure 1-2. Let's take the example of translating an address given by an application.
+    First, at the left, we have the address as given. This consists of a segment selector
+    and offset. The MMU looks up the segment selector in the GDT (Global Descriptor
+    Table) to find that segment's location in the linear address space, which is the
+    complete address space accessible to the process (usually 4GB). The offset then
+    acts as an address within that segment. This gives the processor a linear address
+    relative to the process's address space. The MMU then decomposes that address
+    into two indices and an offset—first it looks through the page directory to find
+    the correct page table, then it finds the correct page in the page table, and
+    finally it uses the offset to return a machine address—actual, physical memory.").
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, this approach is too hardware dependent for a modern computer, which
+    needs to be able to swap to disk, memory map I/O, use DMA, and so on. The processor
+    therefore implements *virtual memory*, which provides two advantages for the programmer.
+    First, it allows each process to access its own memory as if it were the only
+    thing running on the computer—that is, as if it had the entirety of physical memory
+    to itself. Second, virtual memory enables a process to access much more memory
+    than is physically available, swapping to disk as necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Let''s take the example of translating an address given by an application.
+    First, at the left, we have the address as given. This consists of a segment selector
+    and offset. The MMU looks up the segment selector in the GDT (Global Descriptor
+    Table) to find that segment''s location in the linear address space, which is
+    the complete address space accessible to the process (usually 4GB). The offset
+    then acts as an address within that segment. This gives the processor a linear
+    address relative to the process''s address space. The MMU then decomposes that
+    address into two indices and an offset—first it looks through the page directory
+    to find the correct page table, then it finds the correct page in the page table,
+    and finally it uses the offset to return a machine address—actual, physical memory.](httpatomoreillycomsourcenostarchimages333195.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-2. Let's take the example of translating an address given by an application.
+    First, at the left, we have the address as given. This consists of a segment selector
+    and offset. The MMU looks up the segment selector in the GDT (Global Descriptor
+    Table) to find that segment's location in the linear address space, which is the
+    complete address space accessible to the process (usually 4GB). The offset then
+    acts as an address within that segment. This gives the processor a linear address
+    relative to the process's address space. The MMU then decomposes that address
+    into two indices and an offset—first it looks through the page directory to find
+    the correct page table, then it finds the correct page in the page table, and
+    finally it uses the offset to return a machine address—actual, physical memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Like physical memory, virtual memory is accessed one word at a time, via numbered
+    addresses. The mapping between physical addresses and virtual addresses is handled
+    by *page tables*, which associate chunks of physical memory with pages of virtual
+    memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This level of abstraction applies even when there's only one operating system
+    running on the machine. It's one of the basic forms of virtualization, so ubiquitous
+    as to go unnoticed by most non-programmers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen interposes itself at this point, acting as the sole gatekeeper of the page
+    tables. Because applications have to go through Xen to update their mappings between
+    virtual and physical memory, the hypervisor can ensure that domains only access
+    memory within their reservation—memory that a domain doesn't have access to isn't
+    mapped to any of its pages and therefore doesn't exist from the domain's perspective.
+    [Figure 1-3](ch01s05.html#the_hypervisors_main_role_is_to_validate "Figure 1-3. The
+    hypervisor's main role is to validate the domU's updates to the page tables, ensuring
+    that domU only maps memory allocated to it. The domU handles memory using physical
+    pages directly, generating pseudophysical addresses where necessary.") shows the
+    relationship between the hypervisor, physical memory, and pseudophysical mappings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far so good. x86 handles this partially in hardware, using an area of the
+    processor called the *MMU*, or *Memory Management Unit*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although this mapping should be sufficient to provide memory protection and
+    the *illusion* of contiguous virtual memory, the x86 architecture also uses segmentation
+    to protect memory and increase the amount of addressable memory.^([[13](#ftn.CHP-1-FNOTE-6)])
+    Application-level addresses are *logical addresses*, each of which includes a
+    16-bit segment selector and a 32-bit segment offset, which the processor then
+    maps to virtual (or *linear*) addresses, which are eventually turned into physical
+    addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The hypervisor''s main role is to validate the domU''s updates to the page
+    tables, ensuring that domU only maps memory allocated to it. The domU handles
+    memory using physical pages directly, generating pseudophysical addresses where
+    necessary.](httpatomoreillycomsourcenostarchimages333197.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-3. The hypervisor's main role is to validate the domU's updates to
+    the page tables, ensuring that domU only maps memory allocated to it. The domU
+    handles memory using physical pages directly, generating pseudophysical addresses
+    where necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In practice, however, modern software usually avoids the segment registers as
+    much as possible—the segments are simply made equivalent to the entire address
+    space, which has the practical effect of allowing processes to ignore their existence.
+    However, the unused segmentation model provides a perfect way for Xen to protect
+    its own memory reservation. The Xen hypervisor reserves a small amount of memory
+    at the beginning of each domain's allocation and arranges the domain's segments
+    so that they don't include the hypervisor's memory region.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*This leads to the common* /lib/tls *problem. See [Chapter 15](ch15.html "Chapter 15. TROUBLESHOOTING")
+    for more information*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: But wait! There's more. Each memory segment can also be protected by the system
+    of *rings*, which specify the privilege levels that allow access to the memory
+    on a per-process basis. Xen protects the hypervisor by allowing it to run in the
+    privileged ring 0, while the guest OS uses privilege rings 1 through 3\. This
+    way, the processor can trap access attempts to the protected beginning of the
+    segment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, Xen adds another layer to this memory-management tower of cards. Because
+    the physical memory allocated to a domain is likely to be fragmented, and because
+    most guest OSs don't expect to have to deal with this sort of thing, they must
+    be modified to build a mapping between the hardware and the virtual machine, or
+    *real physical* and *pseudophysical* addresses. This mapping is used for all other
+    components of the guest OS so that they have the illusion of operating in a contiguous
+    address space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thus, guest OS page tables still contain real machine addresses, which the guest
+    itself translates to pseudophysical addresses for the benefit of applications.
+    This helps Xen to remain fast, but it means that the guests cannot be trusted
+    to manipulate page tables directly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The internal update mechanisms are replaced by two hypercalls that request Xen
+    to manipulate the page tables on the domain's behalf.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I/O Devices
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Obviously, the domUs cannot be trusted to handle devices by themselves. Part
+    of Xen's model is that even actively malicious guest domains should be unable
+    to interfere with the hardware or other domains. All device access is through
+    the hypervisor, with the aid of the dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen handles domain I/O by using *device channels* and *virtual devices*. These
+    are point-to-point links between a frontend device in the domU and a backend device
+    in dom0, implemented as *ring buffers*, as shown in [Figure 1-4](ch01s05.html#a_ring_buffer_is_a_simple_data_structure
+    "Figure 1-4. A ring buffer is a simple data structure that consists of preallocated
+    memory regions, each tagged with a descriptor. As one party writes to the ring,
+    the other reads from it, each updating the descriptors along the way. If the writer
+    reaches a "written" block, the ring is full, and it needs to wait for the reader
+    to mark some blocks empty."). (Note that these are distinct from x86 privilege
+    rings.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A ring buffer is a simple data structure that consists of preallocated memory
+    regions, each tagged with a descriptor. As one party writes to the ring, the other
+    reads from it, each updating the descriptors along the way. If the writer reaches
+    a "written" block, the ring is full, and it needs to wait for the reader to mark
+    some blocks empty.](httpatomoreillycomsourcenostarchimages333199.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-4. A ring buffer is a simple data structure that consists of preallocated
+    memory regions, each tagged with a descriptor. As one party writes to the ring,
+    the other reads from it, each updating the descriptors along the way. If the writer
+    reaches a "written" block, the ring is full, and it needs to wait for the reader
+    to mark some blocks empty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The important qualities of these rings is that they're fixed size and lightweight—the
+    domain operates directly on physical memory, without the need for constant hypervisor
+    intervention. At opportune times, the virtual machine notifies the hypervisor
+    that it's updated the ring, and the hypervisor then takes appropriate action (sending
+    packets, replying with data, etc.).
+  prefs: []
+  type: TYPE_NORMAL
+- en: For performance reasons, the rings generally contain I/O descriptors rather
+    than actual data. The data is kept in separate buffers accessed through DMA, which
+    Xen maintains control of using principles similar to those for memory allocation.
+    The hypervisor also locks the pages in question, ensuring that the application
+    doesn't try to give them away or use them incorrectly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As the contents of a ring buffer are read, they're replaced by empty descriptors,
+    indicating that the buffer has space for more data. Meanwhile, the reading process
+    moves on to the next buffer entry. At the end of the buffer, it simply wraps around.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a ring fills up, the backend device silently drops data intended for it.
+    This is analogous to a network card or disk filling its buffer and usually results
+    in a re-request for the data at a more convenient time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Networking
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The networking architecture (shown in [Figure 1-5](ch01s05.html#the_domu_uses_the_netfront_or_network_fr
+    "Figure 1-5. The domU uses the netfront or network frontend driver as its network
+    device, which then transparently flips packets to the netback driver in the dom0\.
+    The packets then go through the Linux software bridge, traverse Linux's network
+    stack (including interaction with iptables and friends), and finally go to the
+    network via Linux's network driver.")) of Xen is designed to reuse as much code
+    as possible. Xen provides virtual network interfaces to domains and functions,
+    via device channels, as a medium by which packets can move from a virtual interface
+    in a guest domain to a virtual interface in the driver domain. Other functions
+    are left to standard networking tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The domU uses the netfront or network frontend driver as its network device,
+    which then transparently flips packets to the netback driver in the dom0\. The
+    packets then go through the Linux software bridge, traverse Linux''s network stack
+    (including interaction with iptables and friends), and finally go to the network
+    via Linux''s network driver.](httpatomoreillycomsourcenostarchimages333201.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-5. The domU uses the netfront or network frontend driver as its network
+    device, which then transparently flips packets to the netback driver in the dom0\.
+    The packets then go through the Linux software bridge, traverse Linux's network
+    stack (including interaction with iptables and friends), and finally go to the
+    network via Linux's network driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The hypervisor functions solely as a data channel by which packets can move
+    from the physical network interface to the domU's virtual interface. It mediates
+    access between domains, but it doesn't validate packets or perform accounting—these
+    are handled by iptables rules in dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Accordingly, the virtual network interface is relatively simple—a buffer to
+    receive packets, a buffer to send them, and a hypercall to notify the hypervisor
+    that something has changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other side of this is that there's a lot of configurability in Xen's networking
+    because you can act on the virtual interfaces using all the standard Linux tools.
+    For more information on networking and suggestions on how to use this nigh-unlimited
+    power, see [Chapter 5](ch05.html "Chapter 5. NETWORKING").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Block Devices
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In practical terms, *block devices* are disks or disklike devices. MD arrays,
+    filesystem images, and physical disks all fall under the general category of block
+    devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen handles block devices in much the same way as network devices. The hypervisor
+    exports *virtual block devices* (often referred to as VBDs) to the domUs and relies
+    on the dom0 to provide backend drivers that map the functionality of the real
+    block device to the VBD. The system of rings and limited hypercalls is also similar,
+    as shown in [Figure 1-6](ch01s05.html#a_domus_request_for_a_block_device_begin
+    "Figure 1-6. A domU's request for a block device begins with the blkfront or block
+    frontend driver, which uses a buffer in the hypervisor to interact with the block
+    backend driver in domain 0\. Blkback then reads or writes the requested blocks
+    through dom0's block device driver (which can be a SCSI driver, IDE, fibre channel,
+    etc.).").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A domU''s request for a block device begins with the blkfront or block frontend
+    driver, which uses a buffer in the hypervisor to interact with the block backend
+    driver in domain 0\. Blkback then reads or writes the requested blocks through
+    dom0''s block device driver (which can be a SCSI driver, IDE, fibre channel, etc.).](httpatomoreillycomsourcenostarchimages333203.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 1-6. A domU's request for a block device begins with the blkfront or
+    block frontend driver, which uses a buffer in the hypervisor to interact with
+    the block backend driver in domain 0\. Blkback then reads or writes the requested
+    blocks through dom0's block device driver (which can be a SCSI driver, IDE, fibre
+    channel, etc.).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen relies on the dom0 to create block devices and provide device drivers that
+    map physical devices to Xen virtual devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For more information about this, see [Chapter 4](ch04.html "Chapter 4. STORAGE
+    WITH XEN").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[13](#CHP-1-FNOTE-6)]) This is untrue for AMD64, which does away with segmentation
+    entirely. Instead, Xen on x86_64 uses page-level protection for its memory regions.
+    Stranger things in Heaven and Earth, Horatio.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Putting It Together
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In general, all of these implementation details demonstrate Xen's focus on simplicity
+    and code reuse. Where possible, the Xen developers have chosen to focus on providing
+    and managing channels between physical devices and virtual devices, letting Linux
+    userspace tools and kernel mechanisms handle arbitration and device access. Also,
+    the actual work is offloaded as much as possible to the dom0 so as to reduce the
+    complexity of the hypervisor and maximize device support.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the administrator, this means that Xen can be administered and monitored,
+    by and large, with standard tools, and that most interactions with Xen take place
+    at the level of the dom0\. When Xen is installed and domains are running, the
+    Xen domains act like normal, physical machines, running unmodified userspace programs,
+    with some caveats. Let's move on to the next chapter to see how to set this up
+    in practice.
+  prefs: []
+  type: TYPE_NORMAL

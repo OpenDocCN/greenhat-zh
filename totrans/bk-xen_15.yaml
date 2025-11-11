@@ -1,0 +1,1397 @@
+- en: Chapter 15. TROUBLESHOOTING
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: With any luck, you're just reading this chapter for fun, not because your server
+    has just erupted in a tower of flame. Of course, sysadmins being almost comically
+    lazy, it's most likely the latter, but the former is at least vaguely possible,
+    right?
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the machine is in fact already broken, don't panic. Xen is complex, but the
+    issues discussed here are fixable problems with known solutions. There's a vast
+    arsenal of tools, a great deal of information to work with, and a lot of expertise
+    available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we'll outline a number of troubleshooting steps and techniques,
+    with particular reference to Xen's peculiarities. We'll include explanations for
+    some of the vague error messages that you might come across, and we'll make some
+    suggestions about where to get help if all else fails.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's start with a general overview of our approach to troubleshooting, which
+    will help to put the specific discussion of Xen-related problems in context.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The most important thing when troubleshooting is to get a clear idea of the
+    machine''s state: what it''s doing, what problems it''s having, what telegraphic
+    errors it''s spitting out, and where the errors are coming from. This is doubly
+    important in Xen because its modular, standards-based design brings together diverse
+    and unrelated tools, each with its own methods of logging and error handling.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our usual troubleshooting technique is to:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reproduce the problem.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the problem generates an error message, use that as a starting point.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the error message doesn't provide enough information to solve the problem,
+    consult the logs.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the logs don't help, use `set -x` to make sure the scripts are firing correctly,
+    and closely examine the control flow of the non—Xen-specific parts of the system.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use `strace` or `pdb` to track the flow of execution in the more Xen-specific
+    bits and see what's failing.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you get truly stuck, you might want to think about asking for help. Xen has
+    a couple of excellent mailing lists (*xen-devel* and *xen-users*) and a useful
+    IRC channel, *#xen* on *irc.oftc.net*. For more information about how and where
+    to get help, see the end of the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Troubleshooting Phase 1: Error Messages'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The first sign that something's amiss is likely to be an error message and an
+    abrupt exit. These usually occur in response to some action—booting the machine,
+    perhaps, or creating a domU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen's error messages can be, frankly, infuriating. They're somewhat vague and
+    developer oriented, and they usually come from somewhere deep in the bowels of
+    the code where it's difficult to determine what particular class of user error
+    is responsible, or even if it's user error at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Better admins than us have been driven mad, have thrown their machines out the
+    window and vowed to spend the rest of their lives wearing animal skins, killing
+    dinner with fire-hardened spears. And who can say they are wrong?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Regardless, the error messages are a useful diagnostic and often provide enough
+    information to solve the problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Errors at Dom0 Boot
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The first place to look for information about system-wide problems (if only
+    because there's nothing else to do while the machine boots) is the boot output,
+    both from the hypervisor and the dom0 kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: READING BOOT ERROR MESSAGES
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a machine's broken badly enough that it can't boot, it often reboots itself
+    immediately. This can lead to difficulty when trying to diagnose the problem.
+    We suggest using a serial console with some sort of scrollback buffer to preserve
+    the messages on another computer. This also makes it easy to log output, for example
+    by using GNU screen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you refuse to use serial consoles, or if you wish to otherwise do something
+    before the box reboots, you can append noreboot to both the Xen and Linux kernel
+    lines in GRUB. (If you miss either, it'll reboot. It's finicky that way.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many of the Xen-specific problems we've encountered at boot have to do with
+    kernel/hypervisor mismatches. The Xen kernel must match the dom0 kernel in terms
+    of PAE support, and if the hypervisor is 64 bit, the dom0 must be 64 bit or i386-PAE.
+    Of course, if the hypervisor is 32 bit, so must be the dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can run an i386-PAE dom0 with an x86_64 hypervisor and x86_64 domUs, but
+    only on recent Xen kernels (in fact, this is what some versions of the Citrix
+    Xen product do). In no case can you mismatch the PAE-ness. Modern versions of
+    Xen don't even include the compile-time option to run in i386 non-PAE mode, causing
+    all sorts of problems if you want to run older operating systems, such as NetBSD
+    4.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, many of the problems that we've had at boot aren't especially Xen-specific;
+    for example, the machine may not boot properly if the initrd isn't correctly matched
+    to the kernel. This often causes people trouble when moving to the Xen.org kernel
+    because it puts the drivers for the root device into an initrd, rather than into
+    the kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If your distro expects an initrd, you probably want to use your distro''s initrd
+    creation script after installing the Xen.org kernel. With CentOS, after installing
+    the Xen.org kernel, make sure that */etc/modprobe.conf* correctly describes your
+    root device (with an entry like `alias scsi_hostadapter sata_nv`), then run something
+    like:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Replace */boot/initrd-2.6.18.8-xen.img* with the desired filename of your new
+    initrd, and replace *2.6.18.8-xen* with the output of `uname -r` for the kernel
+    that you're building the initrd for. (Other options, such as `--preload`, may
+    also come in handy. Refer to the distro manual for more information.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assuming you've booted successfully, there are a variety of informative error
+    messages that Xen can give you. Usually these are in response to an attempt to
+    do something, like starting `xend` or creating a domain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DomU Preboot Errors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'If you''re using PyGRUB (or another bootloader, such as pypxeboot), you may
+    see the message `VmError: Boot loader didn''t return any data!` This means that
+    PyGRUB, for some reason, wasn''t able to find a kernel. Usually this is either
+    because the disks aren''t specified properly or because there isn''t a valid GRUB
+    configuration in the domU. Check the disk configuration and make sure that */boot/grub/menu.lst*
+    exists in the filesystem on the first domU VBD.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*There''s some leeway; PyGRUB will check a bunch of filenames, including but
+    not limited to* /boot/grub/menu.lst, /boot/grub/grub.conf, /grub/menu.lst, *and*
+    /grub/grub.conf. *Remember that PyGRUB is a good emulation of GRUB, but it''s
+    not exact*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can troubleshoot PyGRUB problems by running PyGRUB manually:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This should give you a PyGRUB boot menu. When you choose a kernel from the
+    menu, PyGRUB exits with a message like:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This means that PyGRUB successfully loaded a kernel and placed it in the dom0
+    filesystem. Check the listed location to make sure it's actually there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PyGRUB is quite picky about the terminal it's connected to. If PyGRUB exits,
+    complaining about libncurses, or if PyGRUB on the same domain works for some people
+    and not for others, you might have a problem with the terminal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, with the version of PyGRUB that comes with CentOS 5.1, you can
+    repeatedly get a failure by executing `xm create -c` from a terminal window less
+    than 19 lines long. If you suspect this may be the problem, resize your console
+    to 80 x 24 and try again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PyGRUB will also expect to find your terminal type (the value of the `TERM`
+    variable) in the terminfo database. Manually setting `TERM=vt100` before creating
+    the domain is usually sufficient.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating Domains in Low-Memory Conditions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'This is one of the most informative error messages in Xen''s arsenal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The error means that the system doesn't have enough memory to create the domU
+    as requested. (The system in this case had only 384MiB, so the error really isn't
+    surprising.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The solution is to adjust `dom0_min_mem` to compensate or adjust the domU to
+    require less memory. Or, as in this case, do both (and possibly add more memory).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring Devices in the DomU
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Most likely, if the domU fails to start because of missing devices, the problem
+    is tied to storage. (Broken network setups don't usually cause the boot to fail
+    outright, although they can render your VM less than useful after booting.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sometimes the domU will load its kernel and get through the first part of its
+    boot sequence but then complain about not being able to access its root device,
+    despite a correctly specified root kernel parameter. Most likely, the problem
+    is that the domU doesn't have the root device node in the */dev* directory in
+    the initrd.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This can lead to trouble when attempting to use the semantically more correct
+    `xvd*` devices. Because many distros don''t include the appropriate device nodes,
+    they''ll fail to boot. The solution, then, is to use the `hd*` or `sd*` devices
+    in the `disk=` line, thus:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: After starting the domain successfully, you can create the `xvd` devices properly
+    or edit your udev configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Xen block driver may also have trouble attaching to virtual drives that
+    use the `sdX` naming convention if the domU kernel includes a SCSI driver. In
+    that case, use the `xvdX` convention, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Troubleshooting Disks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Most disk-related errors will cause the domU creation to fail immediately.
+    This makes them fairly easy to troubleshoot. Here are some examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: These pop up frequently and usually mean that something's wrong in the device
+    specification. Check the config file for typos in the `vif=` and `disk=` lines.
+    If the message refers to a block device, the problem is often that you're referring
+    to a nonexistent device or file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are a few other errors that have similar causes. For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This, too, is usually caused by a `phy:` device with an incorrectly specified
+    backing device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, this isn''t the only possible cause. If you''re using file-backed
+    block devices, rather than LVM volumes, the kernel may have run out of block loops
+    on which to mount these devices. (In this case, the message is particularly frustrating
+    because it seems entirely independent of the domain''s config.) You can confirm
+    this by looking for an error in the logs like:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Although this message usually means that you've mistyped the name of the domain's
+    backing storage device, it may instead mean that you've run out of block loops.
+    The default loop driver only creates seven of the things—barely enough for three
+    domains with root and swap devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We might suggest that you move to LVM, but that''s probably overkill. The more
+    direct answer is to make more loops. If your loop driver is a module, edit */etc/modules.conf*
+    and add:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'or another number of your choice; each domU file-backed VBD will require one
+    loop device in dom0\. (Do this in whatever domain is used as the backend, usually
+    dom0, although Xen''s new stub domains promise to make non-dom0 driver domains
+    much more prevalent.) Then reload the module. Shut down all domains that use loop
+    devices (and detach loops from the dom0) and then run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If the loop driver is built into the kernel, you can add the `max_loop` option
+    to the dom0 kernel command line. For example, in */boot/grub/menu.lst*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Reboot and the problem should go away.
+  prefs: []
+  type: TYPE_NORMAL
+- en: VM Restarting Too Fast
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Disk problems, if they don''t announce themselves through a specific error
+    message, often manifest in log entries like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This one is really just Xen's way of asking for help; the domain is stuck in
+    a reboot cycle. Start the domain with the `-c` option (for console autoconnect)
+    and look at what's causing it to die on startup. In this case, the domain booted
+    and immediately panicked for lack of a root device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*In this case, the VM is restarting every 4.2 seconds, long enough to get console
+    output. If the restarting too fast number is less than 1 or 2 seconds, often *`xm
+    create -c`* shows no output. If this happens, check the logs for informative messages.
+    See later sections of this chapter for more details on Xen''s logging*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Troubleshooting Xen's Networking
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In our experience, troubleshooting Xen's networking is a straightforward process,
+    given some general networking knowledge. Unless you've modified the networking
+    scripts, Xen will fairly reliably create the `vif` devices. However, if you have
+    problems, here are some general guidelines.(We'll focus on `network-bridge` here,
+    although similar steps apply to `network-route` and `network-nat`.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: To troubleshoot networking, you really need to understand how Xen does networking.
+    There are a number of scripts and systems working together, and it's important
+    to decompose each problem and isolate it to the appropriate components. Check
+    [Chapter 5](ch05.html "Chapter 5. NETWORKING") for a general overview of Xen's
+    network components.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first thing to do is run the network script with the `status` argument.
+    For example, if you're using `network-bridge, /etc/xen/scripts/network-bridge
+    status` will provide a helpful dump of the state of your network as seen in dom0\.
+    At this point you can use `brctl show` to examine the network in more detail,
+    and use the `xm vnet-create` and `vnet-delete` commands in conjunction with the
+    rest of the userspace tools to get a properly set up bridge and Xen virtual network
+    devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you've got the backend sorted, you can address the frontend. Check the
+    logs and check `dmesg` from within the domU to make sure that the domU is initializing
+    its network devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If these look normal, we usually attack the problem more systematically, from
+    bottom to top. First, make sure that the relevant devices show up in the domU.
+    Xen creates these pretty reliably. If they aren't there, check the domU config
+    and the logs for relevant-looking error messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the next level (because we know that the dom0's networking works, right?)
+    we want to check that the link is functioning. Our basic tool for that is `arping`
+    from within the domU, combined with `tcpdump -i [interface]` on the domU's interface
+    in the dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here we're going to demonstrate connectivity between the domain *caliban* (IP
+    address 192.0.2.86) and the dom0 (at 192.0.2.67).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the dom0 replies with its MAC address when queried via ARP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The ARP queries show up correctly in the dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, most of the time, you will see appropriate output in `tcpdump` as shown.
+    This tells you that Xen is moving packets from the domU to the dom0\. Do you see
+    a response to the ARP who-has? (It should be ARP is-at.) If not, it''s possible
+    your bridge in the dom0 isn''t set up correctly. One easy way to check the bridge
+    is to run `brctl show`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*In Xen.org versions before Xen 3.2, the bridge name is, by default*, *`xenbr0`*
+    *for* *`network-bridge`*. *Xen 3.2 and later, however, named the bridge eth0 (0,
+    in this case, is the number of the related network interface). RHEL/CentOS, by
+    default, creates another bridge*, *`virbr0`*, *which is part of the libvirt stuff.
+    In practical terms, it functions like* *`network-nat`*, *with a DHCP server handing
+    out private addresses on the dom0*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, for troubleshooting purposes, a bridge is like a switch. Make sure the
+    bridge (switch) your domU interface is connected to is also connected to an interface
+    that touches the network you want the domU on, usually a `pethX` device. (As explained
+    in [Chapter 5](ch05.html "Chapter 5. NETWORKING"), `network-bridge` renames `ethX`
+    to `pethX` and creates a fake `ethX` device from `vif0.x` when it starts up.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Check the easy stuff. Can anything else on the bridge see traffic from the outside
+    world? Do `tcpdump -n -i peth0`. Are the packets flowing properly?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Check your routes. Don't forget higher-level stuff, like DNS servers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The DomU Interface Number Increments with Every Reboot
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When Xen creates a domain, it looks at the `vif=[]` statement. Each string within
+    the `[ ]` characters (it's a Python array) is another network device. If I just
+    say `vif=['','']` it creates two network devices for me, with random MAC addresses.
+    In the domU, they are (ideally) named `eth0` and `eth1`. In the dom0, they are
+    named `vifX.0` and `vifX.1`, where `X` is the domain number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Most modern Linux distros, by default, lock `ethX` to a particular MAC address
+    on the first boot. In RHEL/CentOS, the setting is `HWADDR=` in */etc/sysconfig/network-scripts/ifcfg-ethX*.
+    Most other distros use `udev` to handle persistent MAC addresses, as described
+    in [Chapter 5](ch05.html "Chapter 5. NETWORKING"). We circumvent the problem by
+    specifying the MAC address on the `vif=` line in the `xm config` file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here we're using the XenSource MAC prefix, `00:16:3E`. If you start your MAC
+    with that prefix, you know it won't conflict with any assigned hardware MAC addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you don't specify the MAC address, it'll be randomly generated every time
+    the domU boots, which causes some inconvenience if your domU OS has locked down
+    `ethX` to a particular MAC. For more on the possible effects and why it's a good
+    idea to specify a MAC address, see [Chapter 5](ch05.html "Chapter 5. NETWORKING").
+  prefs: []
+  type: TYPE_NORMAL
+- en: iptables
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `iptables` rules can also be a source of trouble with Xen. As with any `iptables`
+    setup, it's easy to mess up in subtle ways and break everything. The best way
+    we've found to make sure that `iptables` rules are working is to send packets
+    through and watch what happens to them. Run `iptables -L -v` to see counters for
+    how many packets have hit each rule or have been affected by the chain policy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The interface counters for vifs that are examined from the dom0 end will be
+    inverted; outgoing traffic will report as incoming, and vice versa. See [Chapter 5](ch05.html
+    "Chapter 5. NETWORKING") for more information about why that happens*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You may also have trouble getting antispoof to work. If you enable antispoof
+    but find you can still spoof arbitrary IP addresses in the domU, add the following
+    to your network startup:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will cause packets sent through the bridges to traverse the forward chain,
+    where Xen puts the antispoof rules. We added the command to the end of */etc/xen/scripts/network-bridge*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another problem can occur if you're using vifnames, as we suggest in [Chapter 5](ch05.html
+    "Chapter 5. NETWORKING"). Make sure the names are short—eight characters or less.
+    Longer names can get truncated, and different parts of the system truncate at
+    different lengths (at least in CentOS 5.0). In our particular case, we saw problems
+    where the actual vifnames were truncated at one length, and our firewall rules
+    (for antispoof) were truncated at another length, blocking all packets from the
+    domain in question. It is better to avoid the problem and keep the vifnames short.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Memory Issues
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Xen (or rather, the Linux driver domain) can act rather strangely when memory
+    is running low. Because Xen and the dom0 require a certain amount of contiguous,
+    unswappable memory, it's surprisingly easy (in our experience) to find the oom-killer
+    snacking on processes like candy. This even happens when there's plenty of swap
+    available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The best solution we've found—and we freely admit that it's not perfect—is to
+    give dom0 more memory. We also prefer to fix its memory allocation at something
+    like 512MB so that it doesn't have to cope with Xen constantly adjusting its memory
+    size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The basic way of tuning dom0's memory allocation is by adjusting the `dom0_mem`
+    kernel parameter, which sets an upper limit, and the `dom0-min-mem` parameter
+    in */etc/xen/xend-config.sxp*, which sets a lower limit. Again, we usually set
+    both of these to the same value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To set the maximum amount of memory available to the dom0, edit *menu.lst*
+    and put the option after the kernel line, like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the absence of units, Xen will assume that the value is in KB.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, edit */etc/xen/xend-config.sxp* and add a line that says:^([[85](#ftn.CHP-15-FNOTE-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: We do this because we've seen the dom0 have problems with ballooning. Ballooning
+    usually works, but, like taking backups from a nonquiescent filesystem, *usually
+    works* is not good enough for something as important as the dom0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[85](#CHP-15-FNOTE-1)]) Recent versions of Xen also support the option `(enable-dom0-ballooning
+    no)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other Messages
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: This message usually shows up in response to an attempt to connect to a domain's
+    virtual console (especially when Xen's kernel doesn't match its userland; for
+    example, if we've upgraded Xen's supporting tools without changing the hypervisor).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If this is a paravirtualized domain, first try killing and restarting the `xenconsoled`
+    process. Make sure it dies. We have seen cases where `xenconsoled` hangs and must
+    be killed with a `-9`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then reconnect with `xm console`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the problem persists, you''re most likely trying to access a domain that
+    doesn''t have the necessary Xen frontend console device configured in. There are
+    several possibilities: If this is a custom kernel, you may have simply forgotten
+    to include it, for example. Check the configuration of the domain''s kernel and
+    the initrd for the xvc driver.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you are accessing an HVM domain running a default (nonenlightened) kernel
+    that doesn''t include the console driver, try using the framebuffer or booting
+    a different kernel. You might also be able to set `serial=pty` in the domain config
+    file and set the domU OS to use com1 as the console. See [Chapter 12](ch12.html
+    "Chapter 12. HVM: BEYOND PARAVIRTUALIZATION") for details.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This error can mean a number of things. Often the problem is a version mismatch
+    between the tools and the running Xen hypervisor. Although the binaries installed
+    in */usr/sbin* may be correct, the underlying Python modules may be wrong. Check
+    that they''re correct using whatever evidence is available: dates, comments in
+    the files themselves, output of `xm info`, and so on.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The error can also indicate a PAE mismatch. In this case *xend-debug.log* will
+    give a succinct description of the problem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: Incidentally, your dom0—which is, after all, just a special Xen guest domain—can
+    also suffer from this problem. If it happens, the hypervisor will report a PAE
+    mismatch in a large boxed-off error message at boot time and immediately reboot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: We got this error while trying to install the binary Xen distribution on a Slackware
+    machine. The binary distro comes with a very minimal kernel, so it needs an initrd
+    with appropriate modules. For some reason, the default script loaded modules in
+    the wrong order, causing some loads to fail with the preceding message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We fixed the problem by changing the load order in the initrd; specific directions
+    would depend on your distro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Constant Stream of 4GiB seg fixup Messages
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Sometimes, on booting a newly installed i386 domain, you''ll be greeted with
+    screens full of messages like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These are related to the */lib/tls* problem: Xen is complaining because it''s
+    having to emulate a 4GiB segment for the benefit of some process that''s using
+    negative offsets to access the stack. You may also see a giant message at boot,
+    reminding you to address this issue.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To solve this problem, you want to use a glibc that does not do this. You can
+    compile glibc with the `-mno-tls-direct-seg-refs` option or install the appropriate
+    libc6-xen package for your distribution (both Red Hat–like and Debian-like distros
+    have created packages to address this problem).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With Red Hat (and its derived distros), you can also run these commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will instruct the dynamic loader to avoid that particular optimization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For Debian-based distros (using the 2.6.18 kernel), you can simply run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If all else fails (or if you are just too lazy to find a version of gcc with
+    `no-tls-direct-seg-refs`), you can do as the error message advises and move the
+    TLS library out of the way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: In our experience, there isn't any problem with moving the library. Everything
+    will continue to function as expected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Importance of Disk Drivers (initrd Problems)
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Often when using a distro kernel, a Xen domU will boot but be unable to locate
+    its root device. For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The underlying problem here—at least in this case—is that the domU kernel doesn''t
+    have the necessary drivers compiled in, and the ramdisk was not specified. A look
+    at the boot output confirms this, with the messages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Nearly all distro kernels come with a minimal kernel and require an initrd with
+    the disk driver to finish booting. These messages may simply come from the kernel
+    before the initrd has loaded, or they can indicate a serious problem if the initrd
+    doesn't contain the necessary drivers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the kernel managed to load its initrd correctly and failed to switch to its
+    real root, you'll find yourself stuck in the initrd with a very limited selection
+    of files. In this case, make sure that your devices exist (`/dev/sda1` in this
+    example) and that you've got the Xen disk frontend kernel module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also commonly see this within PyGRUB domUs after a kernel upgrade (and new
+    initrd) if the modules config (*/etc/modules* on Debian, */etc/modprobe.conf*
+    on Red Hat) didn't specify `xenblk`. For RHEL/CentOS domUs, you can solve this
+    problem by running `mkinitrd` with the `--preload xenblk` switch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you use an external kernel and want to use a distro kernel, you must specify
+    a `ramdisk=` line in the domain config file, and specify a ramdisk that includes
+    the `xenblk` (and `xennet`, if you want network before boot) drivers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another solution to this problem would be to compile Xen from source and build
+    a sufficiently generic domU kernel, with the `xenblk` and `xennet` drivers already
+    compiled in. Even if you continue to boot the dom0 from the distro kernel (probably
+    a good idea), this will sidestep the distro-specific issues found with both Red
+    Hat and Debian kernels.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This may cause problems with some domU distros because the expected initrd won't
+    be there. Sometimes it can be difficult to build an initrd against a kernel with
+    disk drivers built in. However, the generic kernel will usually at least boot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We often find it useful to keep these generic kernels as a secondary rescue
+    boot option within the domU PyGRUB config because they work no matter how badly
+    the initrd is messed up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: XenStore
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Sometimes the XenStore gets corrupted, or `xenstored` dies, or for various other
+    reasons the XenStore ceases to store and report information. For example, this
+    may happen if the block device holding the XenStore database becomes full.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The most obvious symptom is that `xm list` will report domain names incorrectly,
+    for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: Obviously, this is problematic. For one thing, it means that all commands that
+    can take a name or ID, such as `xm console`, will no longer recognize names.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, `xenstored` cannot be restarted, so you'll have to reboot. If
+    you're running a version of Xen prior to 3.1 (including the RHEL 5.x version),
+    you'll have to remove */var/lib/xenstored/tdb* first, then reboot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Xen's Logs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: These error messages make a good start for Xen troubleshooting, but sometimes
+    they're not helpful enough to solve the problem. In these cases, we need to dig
+    deeper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: dmesg and xm dmesg
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Although the output of `xm dmesg` isn't a log in the usual sense of a log file,
+    it's an important source of diagnostic output. If you've got a problem whose source
+    isn't obvious from the error message, begin by looking at the Xen kernel message
+    buffer. As you probably know, the Linux `dmesg` command prints out the Linux kernel's
+    message buffer, which ordinarily contains all kernel messages since the system's
+    last boot (or, if the system's been up for a while, it displays a succession of
+    boring status messages).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because Xen could be said to act as a kernel in its own right, it includes
+    an equivalent tool, `xm dmesg`, to print out messages from the hypervisor boot
+    (the lines that begin with `(XEN)` in the startup messages). For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this case, the errors are harmless. The processor simply runs on its factory-installed
+    microcode.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Like the kernel, Xen retains only a fixed-size message buffer. Older messages
+    go off into oblivion*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Logs and What Xen Writes to Them
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If `xm dmesg` isn't enlightening, Xen's next line of communication is its extensive
+    logging. Let's look at the various logs that Xen uses and what we can do with
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can summarize Xen''s logs as follows, in rough order of importance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*/var/log/xen/xend.log*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*/var/log/xen/xend-debug.log*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*/var/log/xen/xen-hotplug.log*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*/var/log/syslog*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*/var/log/debug*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Most of your Xen troubleshooting will involve the first two logs. *xend.log*
+    is the main `xend` log, as you might suppose. It records domain startups, shutdowns,
+    device creation, debugging whatever, and occasionally includes giant incomprehensible
+    Python dumps. It's the first thing to check.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*xend-debug.log* has information relating to more experimental features of
+    Xen, such as the framebuffer. It''ll also have verbose tracebacks when Xen runs
+    into trouble.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because `xend` uses the syslog facility, messages from Xen also show up in the
+    system-wide */var/log/syslog* and */var/log/debug*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*We hasten to add that syslog is almost humorously configurable. Even the term*
+    system-wide *only applies to the default configuration; syslog can consolidate
+    logs across multiple hosts, categorize messages into various channels, write to
+    arbitrary files, and so on, but we''re going to assume that, if you''ve configured
+    syslog, you can translate what we say about Xen''s use of it to apply to your
+    configuration*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, if you're using HVM, `qemu-dm` will write its own logs. By and large,
+    you can safely ignore these. In our experience, problems with HVM domains haven't
+    been the fault of QEMU's device emulation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the kernel messages prove to be unenlightening, it's time to take a look
+    at the log files. First, let's configure Xen to ensure that they're as round,
+    firm, and fully packed as possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: THE IMPORTANCE OF A DEBUG BUILD
+  prefs: []
+  type: TYPE_NORMAL
+- en: For troubleshooting (and, in fact, general use) we recommend building Xen with
+    all of its debugging options turned on. This makes the error messages more informative
+    and plentiful, making it easier to figure out where problems are coming from and,
+    with any luck, eliminate them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although it might seem that copious debugging output would cause a perfor-mance
+    hit, in our experience it's negligible when running Xen normally. A debug build
+    gives you the option of running Xen with excessive debugging output, but it performs
+    about as well as a normal build when you're not using that mode. If you find that
+    the error messages are unhelpful, it might be a good idea to make sure that you
+    have all the the debugging knobs set to **full**. To enable full output for the
+    hypervisor, add the options `loglvl=all guest_loglvl=all` to your hypervisor command
+    line (usually in */boot/grub/menu.lst*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: See [Chapter 14](ch14.html "Chapter 14. TIPS") for more information on building
+    Xen, including how to set the debugging options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying the Debugger
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If even the maximum-verbosity logging isn't enough, it's time to attack the
+    problem at the Python level, with the debugger.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One investigation to try is to run the `xend` server in the foreground and watch
+    its debug output. This will let you see somewhat more information than simply
+    following the logs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With current versions of Xen, the debug functionality is included in the releases.^([[86](#ftn.CHP-15-FNOTE-2)])
+    Enable the debug output with the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will start `xend` in the foreground and tell it to print debug messages
+    as it goes along.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also get copious debugging information for the XenStore by setting `XENSTORED_TRACE=1`
+    somewhere where `xend`'s environment will pick it up, perhaps at the top of */etc/init.d/xend*
+    or in root's *.bashrc*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Xen''s Backend Architecture: Making Sense of the Debug Information'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Of course, all this debugging output is more useful with some idea of how Xen
+    is structured.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you take a look at the actual `xend` executable, the first thing you'll notice
+    is that it's really very short. There's not much to it; all of the heavy lifting
+    is done in external Python libraries, which live in */xen/xend/server* in one
+    of the Python library directories. (In the case of the system I'm sitting in front
+    of, this is */usr/lib/python2.4/site-packages/xen/xend/server*.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Likewise, `xm` is also a short Python script. The take-home message here is
+    that most of the error messages that you''ll see emanate from somewhere in this
+    directory tree, and they''ll helpfully print the responsible file and line number
+    so you can examine the Python script more closely. For example, look at this line
+    from */var/log/xen/xend.log*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: At the beginning is the date, time, and `xend`'s Process ID (PID). Then comes
+    the severity of the error (in this case, `WARNING`, which is merely irritating).
+    After that is the file and line number where the error occurred, followed by the
+    contents of the error message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: XEN'S HIERARCHY OF INFORMATIVE MESSAGES
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`WARNING` is only one point along the continuum of messages. At the lowest
+    extreme of severity, we have `DEBUG`, which the developers use for whatever output
+    strikes their fancy. It''s often useful, but it generates a lot of data to wade
+    through. Slightly more significantly, we have `INFO`. Messages at this level are
+    supposed to be interesting or useful to the administrator but not indicative of
+    a problem.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then comes `WARNING`, which indicates a problem, but not a critical one. For
+    example, the previous message tells us that we'd have trouble if we're relying
+    on the `VM.get_auto_power_on` function but that nothing bad will happen if we
+    don't try touseit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, Xen uses `ERROR` for genuine, beyond-denial errors—the sort of thing
+    thatcan't be put off or ignored. Generally this means that a domain is exiting
+    abnormally.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Armed with this information, you can do several things. To continue our earlier
+    example, we'll open */usr/lib/python2.5/site-packages/xen/xend/XendAPI.py* and
+    add a line near the top of the file to import the debugger module, `pdb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Having done that, you can set a breakpoint. Just add a line near line 672:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then try rerunning the server (or redoing whatever other behavior you're concerned
+    with) and note that `xend` starts the debugger when it hits your new breakpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At this point you can do everything that you might expect in a debugger: change
+    the values of variables, step through a function, step into subroutines, and so
+    forth. In this case, we might backtrace, figure out why it''s trying to call `VM.get_auto_power_on`,
+    and maybe wrap it in an error-handling block.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Domain Stays in Blocked State
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This heading is a bit of a misnomer. The reality is that the "blocked" state
+    reported by tools like `xm list` simply means that the domain is idle. The true
+    problem is that the domain seems unresponsive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Usually we find that this problem is related to the console; for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: (and then an indefinite hang). Upon breaking out and looking at the output of
+    `xm list`, we note that the domain stays in a blocked state and consumes very
+    little CPU time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'A quick look at */var/log/xen/xend-debug.log* suggested an answer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: Port 5900 is VNC. Aha! The problem was that Xen wasn't using the virtual console
+    device that `xm` console connects to. In this case, we traced it to user error.
+    We specified the framebuffer and forgot about it. The kernel, as instructed, used
+    the framebuffer as console rather than emulated serial console that we were expecting.
+    When we started a VNC client and connected to port 5900, it gave us the expected
+    graphical console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*If we had put a* *`getty`* *on xvc0, even though we wouldn''t have seen boot
+    output, we''d at least get a login prompt when the machine booted*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Debugging Hotplug
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Xen makes extensive use of udev to create and destroy virtual devices, both
+    in the dom0 and the domU. Most of its interaction with Linux's hotplug subsystem
+    gets logged in */var/log/xen/xen-hotplug.log*. (We're going to treat hotplug as
+    synonymous with udev because we can't think of any system that still uses the
+    pre-udev hotplug implementation.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we examine the effects of the script. In this case, we use `udevmonitor`
+    to see udev events. It should show an `add` event for each `vif` and `vbd` as
+    well as an `online` event for the `vif`. These go through the rules in */etc/udev/rules.d/xen-backend.rules*,
+    which executes appropriate scripts in */etc/xen/scripts*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At this point you can add some extra logging. At the top of the script for
+    the device you''re interested in (e.g., blktap), put:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will cause the shell to expand the commands in the script and write them
+    to *xen-hotplug.log*, enabling you (hopefully) to trace down the source of the
+    problem and eliminate it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Hotplug can also act as a bit of a catchall for any virtual device problem.
+    Some hotplug-related errors take the form of the dreaded `Hotplug scripts not
+    working` message, like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This seems to be associated with messages like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In this case, however, these messages turned out to be red herrings. The answer
+    came out of *xend-debug.log*, which said:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: As it developed, `libvncserver` was installed in */usr/local*, which the runtime
+    linker had been ignoring. After adding */usr/local/lib* to */etc/ld.so.conf*,
+    `xen-vncfb` started up happily.
+  prefs: []
+  type: TYPE_NORMAL
+- en: strace
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'One important generic troubleshooting technique is to use strace to look at
+    what the Xen control tools are really doing. For example, if Xen is failing to
+    find an external binary (like xen-vncfb), strace can reveal that problem with
+    a command like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: Unfortunately, it'll also give you a lot of other, entirely harmless output
+    while Python proceeds to pull in the entirety of its runtime environment based
+    on crude guesses about filenames.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another example of strace''s usefulness comes from when we were setting up
+    PyGRUB:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As it turned out, we didn''t have a directory required by PyGRUB''s backend.
+    Thus:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: and everything works fine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[86](#CHP-15-FNOTE-2)]) Once upon a time you had to download a patch and
+    rebuild. Thankfully, this is no longer the case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Python Path Issues
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The Python path itself can be the subject of some irritation. Just as you''ve
+    got your shell executable path, manpath, library path, and so forth, Python has
+    its own internal search path that it examines for modules. If the path doesn''t
+    include the Xen modules, you can wind up with errors like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: Unfortunately, the mechanisms for adjusting the search path aren't exactly intuitive.
+    In most cases, we just fall back to either creating some symlinks or moving the
+    Xen files into some directory that's already in Python's path.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The correct solution is to add a *.pth* file to a directory that''s already
+    in Python''s path. This *.pth* file should contain the path of a directory with
+    Python modules. For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Confirm that the path updated correctly by starting Python:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: Mysterious Lockups
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Mysterious lockups are among the most frustrating aspects of dealing with computers;
+    sometimes they just don't work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If Xen (or the dom0) hangs mysteriously, chances are you have a kernel panic
+    in the dom0\. In this case, you have two problems: first, the crash; second, your
+    console logging isn''t adequate to its task.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A serial console improves your life immensely. If you're using serial, you should
+    see an informative panic message on the serial console. If you don't see that,
+    you may want to try typing CTRL-A three times on the console to switch the input
+    to the Xen hypervisor. This will at least confirm that Xen and the hardware are
+    still up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you don't have a serial console, try to keep your VGA console on tty1 because
+    often the panic message won't go anywhere else. Sometimes a digital camera is
+    handy for saving the output of a kernel panic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the box reboots before you can see the panic message on your console, and
+    serial isn't an option, you can try adding `panic=0` to the `module` line that
+    specifies your Linux kernel in the domU *menu.lst* file. This has the obvious
+    disadvantage of hanging your computer rather than rebooting, but it's good for
+    test setups because it'll at least let you see the computer's final messages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Kernel Parameters: A Safe Mode'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If even the hypervisor serial console doesn't work—that is, if the machine is
+    *really* frozen—there are some kernel parameters that we've had good luck with
+    in the past.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `ignorebiostables` option to the Linux kernel (on the `module` line) may
+    help to avoid hangs when under I/O stress on certain Intel chipsets. If your machine
+    is crashing—the hardware is full-on ceasing to function—it might be worth a shot.
+    (I know, it's only one step removed from waving a dead chicken over the server,
+    but you work with what you've got.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a similar vein, `acpi=off` and `nousb` have been reported to improve stability
+    on some hardware. You may also want to disable hyperthreading in the BIOS. Some
+    Xen versions have had trouble with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you want to add all of these options at once, your */boot/grub/menu.lst*
+    entry for Xen will look something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: Getting Help
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You can, of course, email us directly with Xen-related questions. No guarantee
+    that we'll be able to help, but asking is easy enough. There's also a list of
+    Xen consultants on the Xen wiki at [http://wiki.xensource.com/xenwiki/Consultants](http://wiki.xensource.com/xenwiki/Consultants).
+    (If you happen to be a Xen consultant, feel free to add yourself.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mailing Lists
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: There are several popular mailing lists devoted to Xen. You can sign up and
+    read digests at [http://lists.xensource.com/](http://lists.xensource.com/). We
+    recommend reading the Xen-users mailing list at least. Xen-devel can be interesting,
+    but the high volume of patches might discourage people who aren't actively involved
+    in Xen development. At any rate, both lists are good places to look for help,
+    but Xen-users is a much better place to start if you have a question that involves
+    *using* Xen, rather than hacking at it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Xen Wiki
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Xen has a fairly extensive wiki at [http://wiki.xensource.com/](http://wiki.xensource.com/).
+    Some of it is out of date, but it's still a valuable starting point. Of course,
+    new contributors are always welcome. Take a look, poke around, and add your own
+    experiences, tips, and cool tidbits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Xen IRC Channel
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: There's a fairly popular Xen IRC channel, *#xen* on *irc.oftc.net*. Feel free
+    to stop by and chat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Bugzilla
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Xen maintains a bug database, just like all software projects above a certain
+    size. It's publicly accessible at [http://bugzilla.xensource.com/](http://bugzilla.xensource.com/).
+    Type keywords into the search box, press the button, and read the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Your Distro Vendor
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Don't forget the specific documentation and support resources of your vendor.
+    Xen is a complex piece of software, and the specifics of how it's integrated vary
+    between distros. Although the distro documentation may not be as complete as,
+    say, this book, it's likely to at least point in the correct direction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: xen-bugtool
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If all else fails, you can use `xen-bugtool` to annoy the developers directly.
+    The purpose of `xen-bugtool` is to collect the relevant troubleshooting information
+    so you can conveniently attach it to a bug report or make it available to a mailing
+    list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Simply run `xen-bugtool` on the affected box (in the dom0, of course). It'll
+    start an interactive session and ask you what data to include and what to do with
+    the data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `xen-bugtool` script collects the following information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The output of `xm dmesg`
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The output of `xm info`
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*/var/log/messages* (if desired)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*/var/log/xen/xend-debug.log* (if desired)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*/var/log/xen/xen-hotplug.log*'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*/var/log/xen/xend.log*'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`xen-bugtool` will save this data as a *.tar.bz2*, after which it''s up to
+    you to decide what to do with it. We recommend uploading it somewhere web-accessible
+    and sending a message to the Xen-devel mailing list.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some Last Words of Encouragement
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter describes a troubleshooting work flow that works for us. In general,
+    we try to hit the obvious stuff before escalating to more invasive and labor-intensive
+    methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We've also tried to list error messages that we've seen, along with possible
+    solutions. Obviously, we can't be encyclopedic, but we've probably hit most of
+    the common error messages in our years working with Xen, and we can at least give
+    you a decent starting point.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Don''t get depressed! Concentrate! Remember that the odds are very good that
+    someone has seen and solved this problem before. And, don''t forget: There''s
+    no shame in giving up occasionally. You can''t beat the computer all the time.
+    Well, maybe you can, but we can''t. Good luck.'
+  prefs: []
+  type: TYPE_NORMAL

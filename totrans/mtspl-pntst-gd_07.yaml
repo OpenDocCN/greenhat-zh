@@ -1,0 +1,337 @@
+- en: Chapter 7. Avoiding Detection
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'When you are performing a penetration test, nothing is more embarrassing than
+    being caught by antivirus software. This is one of those little details that can
+    be overlooked quite easily: If you don’t make plans to evade detection by antivirus
+    software, watch out, because your target will quickly be alerted that something
+    fishy is going on. In this chapter, we’ll cover situations in which antivirus
+    software might be an issue and discuss possible solutions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Most antivirus software uses *signatures* to identify aspects of malicious
+    code that are present in a sampling of malicious software. These signatures are
+    loaded into antivirus engines and then used to scan disk storage and running processes
+    for matches. When a match is found, the antivirus software takes certain steps
+    to respond to the situation: Most quarantine the binary or kill the running process.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you might imagine, this model has scaling issues. For one, the amount of
+    malicious code in the wild means that an antivirus product loaded with signatures
+    can check files only so quickly for matching signatures. Also, the signatures
+    must be specific enough to trigger only when they encounter truly malicious programs,
+    not legitimate software. This model is relatively easy to implement, yet it provides
+    limited success in practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That being said, a lot of money is being made by antivirus publishers, and many
+    smart and talented people work in the industry. If you plan to use a payload that
+    is not custom built, you can expect that antivirus software will detect it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To evade antivirus, we can create unique payloads to run on an antivirus software–protected
+    system that will not match any of the available signatures. In addition, when
+    we’re performing direct exploits on a system, Metasploit payloads are designed
+    to run in memory and never to write data to the hard disk. When we send a payload
+    as part of an exploit, most antivirus programs will not detect that it has been
+    run on the target.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Rather than focus on specific commands in this chapter, we’ll focus on the underlying
+    concepts. Consider the sorts of characteristics that might trigger antivirus software,
+    and try to use the techniques presented here to change sections of code so that
+    they no longer match the antivirus signatures. Don’t be afraid to experiment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating Stand-Alone Binaries with MSFpayload
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Before we perform an antivirus evasion, let’s look at how to create stand-alone
+    Metasploit binary payloads with *msfpayload*. For starters, we’ll create a simple
+    reverse shell that connects back to the attacker and spawns a command shell. We’ll
+    use `msfpayload` and `windows/shell_reverse_tcp`. But first, let’s look at the
+    available options for the `shell_reverse_tcp` payload using the `O` flag at ![](../images/00002.gif).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now let’s run `msfpayload` again and provide the options needed to create this
+    payload in the Windows Portable Executable (PE) format. To do so, we provide the
+    `X` option as shown at ![](../images/00002.gif) as our output format:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now we have a working executable, so we can start a listener with the *multi/handler*
+    module in *msfconsole*. *multi/handler* allows Metasploit to listen for reverse
+    connections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: We first use the *multi/handler* module at ![](../images/00002.gif) and get
+    a quick display of the options at ![](../images/00004.gif). Then, we set our payload
+    to be a Windows reverse shell at ![](../images/00005.gif) so that it matches the
+    behavior of the executable we created earlier, tell it the IP at ![](../images/00006.gif)
+    and the port to listen on at ![](../images/00007.gif), and we’re ready to go.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evading Antivirus Detection
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We’ll use the popular AVG Anti-Virus product in the following examples. Because
+    it can take some time and multiple tries to circumvent certain antivirus engines,
+    before we try to deploy a payload, we check the antivirus solution to make sure
+    the payload gets past it before we deploy it on the target.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case, when we test our payload with AVG, we see that it’s detected,
+    as shown in [Figure 7-1](part0011.html#avg_detected_our_payload).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![AVG detected our payload.](../images/00031.jpeg)Figure 7-1. AVG detected
+    our payload.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Encoding with MSFencode
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: One of the best ways to avoid being stopped by antivirus software is to encode
+    our payload with *msfencode*. *Msfencode* is a useful tool that alters the code
+    in an executable so that it looks different to antivirus software but will still
+    run the same way. Much as the binary attachment in email is encoded in Base64,
+    *msfencode* encodes the original executable in a new binary. Then, when the executable
+    is run, *msfencode* decodes the original code into memory and executes it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can use `msfencode -h` to see a list of *msfencode* usage options. Of the
+    *msfencode* options, the encoder formats are among the most important. For a list
+    of encoder formats, we use `msfencode -l`, as shown next. Notice that different
+    encoders are used for different platforms, because, for example, a Power PC (PPC)
+    encoder will not operate correctly on an x86 platform because of differences in
+    the two architectures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now we’ll run a simple encoding of an MSF payload by importing raw output from
+    *msfpayload* into *msfencode* to see how the result affects our antivirus detection:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: We add the `R` flag at ![](../images/00002.gif) to the `msfpayload` command
+    line to specify raw output, because we will pipe its output directly into *msfencode*.
+    We specify the `x86/shikata_ga_nai` encoder at ![](../images/00004.gif) and tell
+    *msfencode* to send the executable output `-t exe` ![](../images/00005.gif) to
+    */var/www/payload2.exe*. Finally, we run a quick check at ![](../images/00006.gif)
+    to ensure that the resulting file is in fact a Windows executable. The response
+    tells us that it is. Unfortunately, after the *payload2.exe* file is copied over
+    to the Windows system, AVG detects our encoded payload yet again, as shown in
+    [Figure 7-2](part0011.html#avg_detected_our_encoded_payload).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![AVG detected our encoded payload.](../images/00032.jpeg)Figure 7-2. AVG detected
+    our encoded payload.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multi-encoding
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When we’re performing antivirus detection without modifying the static binary
+    itself, it’s always a cat-and-mouse game, because antivirus signatures are frequently
+    updated to detect new and changed payloads. Within the Framework, we can get better
+    results through *multi-encoding*, which allows the payload to be encoded several
+    times to throw off antivirus programs that check for signatures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the preceding example, the `shikata_ga_nai` encoding is *polymorphic*, meaning
+    that the payload will change each time the script is run. Of course, the payload
+    that an antivirus product will flag is a mystery: Every time you generate a payload,
+    the same antivirus program can flag it once and miss it another time.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is recommended that you test your script using an evaluation version of
+    a product to see if it bypasses the antivirus software prior to using it in a
+    penetration test. Here’s an example of using multiple encoding passes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here we use five counts at ![](../images/00002.gif) of `shikata_ga_nai`, feeding
+    the code in raw format at ![](../images/00004.gif) into two counts of `alpha_upper`
+    encoding at ![](../images/00005.gif), which is then fed to another five counts
+    of `shikata_ga_nai` ![](../images/00006.gif),followed by five counts of `countdown`
+    encoding at ![](../images/00007.gif), before finally directing the output into
+    the desired executable. We are using a total of 17 encoding loops in an attempt
+    to circumvent the antivirus software. And, as you can see in [Figure 7-3](part0011.html#avg_has_not_detected_the_multi-encoded_p),
+    we have successfully slipped our payload past the antivirus engine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![AVG has not detected the multi-encoded payload.](../images/00033.jpeg)Figure 7-3. AVG
+    has not detected the multi-encoded payload.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Custom Executable Templates
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Typically, when `msfencode` is run, the payload is embedded into the default
+    executable template at *data/templates/template.exe*. Although this template is
+    changed on occasion, antivirus vendors still look for it when building signatures.
+    However, *msfencode* now supports the use of any Windows executable in place of
+    the default executable template via the `-x` option. In the following example,
+    we encode our payload again using the Process Explorer from Microsoft’s Sysinternals
+    Suite as a custom-executable template.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, at ![](../images/00002.gif) we download Process Explorer from
+    Microsoft then unzip it at ![](../images/00004.gif). Then at ![](../images/00005.gif)
+    we use the `-x` switch to specify the downloaded Process Explorer binary for use
+    as our custom template. After encoding completes, we start up the multi-handler
+    through *msfcli* to listen for the incoming connection, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And voilà: We have successfully opened a shell without being detected by antivirus
+    software.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The backdoored executable is not detected by AVG.](../images/00034.jpeg)Figure 7-4. The
+    backdoored executable is not detected by AVG.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Launching a Payload Stealthily
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'For the most part, when a targeted user launches a backdoored executable such
+    as the one we just generated, nothing will appear to happen, and that can raise
+    suspicions. To improve your chances of not tipping off a target, you can launch
+    a payload while simultaneously continuing normal execution of the launched application,
+    as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this listing, we download the PuTTY Windows SSH client at ![](../images/00002.gif)
+    and then access PuTTY using the `-k` flag at ![](../images/00004.gif). The `-k`
+    flag configures the payload to launch in a separate thread from the main executable
+    so the application will behave normally while the payload is being executed. Now,
+    as shown in [Figure 7-5](part0011.html#avg_declares_the_payload_safe_and_the_co),
+    when this executable is processed with AVG, it comes back clean and should execute
+    while still presenting us with a shell! (This option may not work with all executables,
+    so be sure to test yours before deployment.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: When choosing to embed a payload in an executable, you should consider using
+    GUI-based applications if you’re not specifying the `-k` flag. If you embed a
+    payload into a console-based application, when the payload is run, it will display
+    a console window that won’t close until you’re finished using the payload. If
+    you choose a GUI-based application and do not specify the `-k` flag, when the
+    payload is executed, the target will not see a console window. Paying attention
+    to these little details can help you remain stealthy during an engagement.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![AVG declares the payload safe and the computer secure.](../images/00035.jpeg)Figure 7-5. AVG
+    declares the payload safe and the computer secure.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Packers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Packers* are tools that compress an executable and combine it with decompression
+    code. When this new executable is run, the decompression code re-creates the original
+    executable from the compressed code before executing it. This usually happens
+    transparently so the compressed executable can be used in exactly the same way
+    as the original. The result of the packing process is a smaller executable that
+    retains all the functionality of the original.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As with *msfencode*, packers change the structure of an executable. However,
+    unlike the *msfencode* encoding process, which often increases the size of an
+    executable, a carefully chosen packer will use various algorithms to both compress
+    and encrypt an executable. Next, we use the popular *UPX* packer with Back|Track
+    to compress and encode our *payload3.exe* payload in attempt to evade antivirus
+    software detection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: At ![](../images/00002.gif) we install *UPX*, and then at ![](../images/00004.gif)
+    we run *UPX* with no arguments to view its command line options. Then at ![](../images/00005.gif)
+    we use the `−5` option to compress and pack our executable. You can see at ![](../images/00006.gif)
+    that *UPX* compresses our payload 59.46 percent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our tests, only 9 of 42 antivirus vendors detected the *UPX*-packed binaries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The PolyPack project ([http://jon.oberheide.org/files/woot09-polypack.pdf](http://jon.oberheide.org/files/woot09-polypack.pdf))
+    shows the results of packing known malicious binaries with various packers and
+    the effectiveness of antivirus detection before and after the packing process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Msf Venom
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In this chapter we cover only the *msfpayload* and *msfencode* utilities, but
+    there is an additional tool called *msfvenom* that combines the functionalities
+    of *msfpayload* and *msfencode* in a simpler-to-use interface. *Msfvenom* is not
+    covered in detail in this book (see [Appendix B](part0023.html#cheat_sheet)),
+    but it should be very easy to use after you become familiar with *msfpayload*
+    and *msfencode*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Final Note on Antivirus Software Evasion
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The world of antivirus software moves very quickly, even by Internet standards.
+    As of this writing, the methods and processes documented in this chapter work
+    successfully; however, experience has shown that even a few months can bring major
+    changes in how antivirus evasion is accomplished. Although the Metasploit team
+    is constantly tweaking its payloads and attempts to stay one step ahead of detection
+    algorithms, don’t be surprised if by the time you work through these examples,
+    some work and some do not. When you’re attempting antivirus evasion, consider
+    using multiple packers or encoders, as mentioned, or write your own. Antivirus
+    evasion, like all penetration testing skills, needs to be practiced and requires
+    dedicated research to help you ensure success in your engagements.
+  prefs: []
+  type: TYPE_NORMAL

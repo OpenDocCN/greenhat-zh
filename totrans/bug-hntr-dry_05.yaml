@@ -1,0 +1,648 @@
+- en: Chapter 5. Browse and You’re Owned
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Sunday, April 6, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Dear Diary*,'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Vulnerabilities in browsers and browser add-ons are all the rage these days,
+    so I decided to have a look at some ActiveX controls. The first one on my list
+    was Cisco’s online meeting and web-conferencing software called WebEx, which is
+    widely used in business. After spending some time reverse engineering the WebEx
+    ActiveX control for Microsoft’s Internet Explorer, I found an obvious bug that
+    I could have found in a few seconds if I had fuzzed the control instead of reading
+    the assembly. Fail. ![](httpatomoreillycomsourcenostarchimages939227.png)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.1 Vulnerability Discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'I used the following process to search for a vulnerability:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*I used Windows XP SP3 32-bit and Internet Explorer 6 as the platform for all
+    the following steps*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: List the registered WebEx objects and exported methods.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 2: Test the exported methods in the browser.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 3: Find the object methods in the binary.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 4: Find the user-controlled input values.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 5: Reverse engineer the object methods.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A download link for the vulnerable version of WebEx Meeting Manager can be found
+    at [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: List the Registered WebEx Objects and Exported Methods'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: After downloading and installing the WebEx Meeting Manager software, I fired
+    up COMRaider^([[45](ch05s05.html#ftn.CHP-5-FN-1)]) to generate a list of the exported
+    interfaces the control provides to the caller. I clicked the **Start** button
+    in COMRaider and selected **Scan a directory for registered COM servers** to test
+    the WebEx components installed in *C:\Program Files\Webex\*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As [Figure 5-1](ch05.html#registered_webex_objects_in_comraider "Figure 5-1. Registered
+    WebEx objects in COMRaider") illustrates, two objects are registered in the WebEx
+    install directory, and the object with GUID `{32E26FD9-F435-4A20-A561-35D4B987CFDC}`
+    and ProgID `WebexUCFObject.WebexUCFObject.1` implements `IObjectSafety`. Internet
+    Explorer will trust this object since it’s marked as *safe for initialization*
+    and *safe for scripting*. That makes the object a promising target for “browse
+    and you’re owned” attacks, since it’s possible to call its methods from within
+    a web page.^([[46](ch05s05.html#ftn.CHP-5-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Registered WebEx objects in COMRaider](httpatomoreillycomsourcenostarchimages939281.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-1. Registered WebEx objects in COMRaider
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Microsoft also provides a handy C# class called `ClassId.cs`^([[47](ch05s05.html#ftn.CHP-5-FN-3)])
+    that lists various properties of ActiveX controls. To use that class, I added
+    the following lines to the source file and compiled it with the command-line version
+    of Visual Studio’s C# compiler (`csc`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To compile and use the tool, I ran the following commands in a command-prompt
+    window:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The output of the tool shows that the object was indeed marked as *safe for
+    initialization* and *safe for scripting* using `IObjectSafety`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I then clicked the **Select** button in COMRaider to see a list of the public
+    methods exported by the object with GUID `{32E26FD9-F435-4A20-A561-35D4B987CFDC}`.
+    As illustrated in [Figure 5-2](ch05.html#public_methods_exported_by_the_object_wi
+    "Figure 5-2. Public methods exported by the object with GUID {32E26FD9-F435-4A20-A561-35D4B987CFDC}."),
+    a method called `NewObject()` is exported by the object and takes a string value
+    as input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Public methods exported by the object with GUID {32E26FD9-F435-4A20-A561-35D4B987CFDC}.](httpatomoreillycomsourcenostarchimages939283.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-2. Public methods exported by the object with GUID `{32E26FD9-F435-4A20-A561-35D4B987CFDC}`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 2: Test the Exported Methods in the Browser'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'After I generated lists of the available objects and exported methods, I wrote
+    a little HTML file that calls the `NewObject()` method with the help of VBScript:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 5-1. HTML file to call the `NewObject()` method (*webex_poc1.html*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: In line 4 of [Example 5-1](ch05.html#html_file_to_call_the "Example 5-1. HTML
+    file to call the NewObject() method (webex_poc1.html)"), the object with GUID
+    or ClassID `{32E26FD9-F435-4A20-A561-35D4B987CFDC}` is instantiated. In line 7
+    the `NewObject()` method is called with a string value of 12 As as a parameter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To test the HTML file, I implemented a little web server in Python that would
+    serve the *webex_poc1.html* file to the browser (see [Example 5-2](ch05.html#simple_web_server_implemented
+    "Example 5-2. Simple web server implemented in Python that serves the webex_poc1.html
+    file to the browser (wwwserv.py)")):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 5-2. Simple web server implemented in Python that serves the *webex_poc1.html*
+    file to the browser (*wwwserv.py*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'While the ActiveX control of WebEx is marked as safe for scripting (see [Figure 5-1](ch05.html#registered_webex_objects_in_comraider
+    "Figure 5-1. Registered WebEx objects in COMRaider")), it has been designed so
+    that it can be run only from the [webex.com](http://webex.com) domain. In practice,
+    this requirement can be bypassed with the help of a *Cross-Site Scripting (XSS)*^([[48](ch05s05.html#ftn.CHP-5-FN-4)])
+    vulnerability in the WebEx domain. Since XSS vulnerabilities are quite common
+    in modern web applications, it shouldn’t be hard to identify such a vulnerability
+    in the [webex.com](http://webex.com) domain. To test the control without the need
+    of an XSS vulnerability, I just added the following entry to my Windows `hosts`
+    file (see *C:\WINDOWS\system32\drivers\etc\hosts\*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: After that, I started my little Python web server and pointed Internet Explorer
+    to [http://www.webex.com/](http://www.webex.com/) (see [Figure 5-3](ch05.html#testing_webex_underscore_poc1.html_with
+    "Figure 5-3. Testing webex_poc1.html with my little Python web server")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Testing webex_poc1.html with my little Python web server](httpatomoreillycomsourcenostarchimages939285.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-3. Testing *webex_poc1.html* with my little Python web server
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Find the Object Methods in the Binary'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'So far I had collected the following information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is a WebEx object with ClassID `{32E26FD9-F435-4A20-A561-35D4B987CFDC}`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This object implements `IObjectSafety` and is therefore a promising target,
+    since its methods can be called from within the browser.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The object exports a method called `NewObject()` that takes a user-controlled
+    string value as input.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To reverse engineer the exported `NewObject()` method, I had to find it in the
+    binary `atucfobj.dll`. To achieve this, I used a technique similar to the one
+    Cody Pierce describes in one of his great MindshaRE articles.^([[49](ch05s05.html#ftn.CHP-5-FN-5)])
+    The general idea is to extract the addresses of the invoked methods from the arguments
+    of `OLEAUT32!DispCallFunc` while debugging the browser.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If a method of an ActiveX control gets invoked, the `DispCallFunc()`^([[50](ch05s05.html#ftn.CHP-5-FN-6)])
+    function usually performs the actual call. This function is exported by `OLEAUT32.dll`.
+    The address of the invoked method can be determined with the help of the first
+    two parameters (called `pvInstance` and `oVft`) of `DispCallFunc()`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To find the address of the `NewObject()` method, I started Internet Explorer
+    from within WinDbg^([[51](ch05s05.html#ftn.CHP-5-FN-7)]) (also see Section B.2
+    for a description of the debugger commands) and set the following breakpoint at
+    `OLEAUT32!DispCallFunc` (see also [Figure 5-4](ch05.html#defining_a_breakpoint_at_oleaut32_exclam
+    "Figure 5-4. Defining a breakpoint at OLEAUT32!DispCallFunc in Internet Explorer")):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The debugger command `bp OLEAUT32!DispCallFunc` defines a breakpoint at the
+    beginning of `DispCallFunc()`. If the breakpoint is triggered, the first two parameters
+    of the function are evaluated. The first function parameter is referenced using
+    the command `poi(poi(esp+4))`, and the second parameter is referenced by `poi(esp+8)`.
+    These values are added together, and their sum represents the address of the invoked
+    method. Subsequently, the first line (`L1`) of the method’s disassembly is printed
+    to the screen (`u poi(result of the computation)`), and the execution of the control
+    is resumed (`gc`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: I then started Internet Explorer with the `g` (Go) command of WinDbg and navigated
+    to [http://www.webex.com/](http://www.webex.com/) again. As expected, the breakpoint
+    triggered in WinDbg showed the memory address of the called `NewObject()` method
+    in `atucfobj.dll`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As illustrated in [Figure 5-5](ch05.html#windbg_showing_the_memory_address_of_the
+    "Figure 5-5. WinDbg showing the memory address of the NewObject() method"), the
+    memory address of the `NewObject()` method was `0x01d5767f` in this example. The
+    `atucfobj.dll` itself was loaded at address `0x01d50000` (see `ModLoad: 01d50000
+    01d69000 C:\Program Files\WebEx\WebEx\824\atucfobj.dll` in [Figure 5-5](ch05.html#windbg_showing_the_memory_address_of_the
+    "Figure 5-5. WinDbg showing the memory address of the NewObject() method")). So
+    the offset of `NewObject()` in `atucfobj.dll` was `0x01d5767f - 0x01d50000 = 0x767F`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Defining a breakpoint at OLEAUT32!DispCallFunc in Internet Explorer](httpatomoreillycomsourcenostarchimages939287.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-4. Defining a breakpoint at `OLEAUT32!DispCallFunc` in Internet Explorer
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![WinDbg showing the memory address of the NewObject() method](httpatomoreillycomsourcenostarchimages939289.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-5. WinDbg showing the memory address of the `NewObject()` method
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 4: Find the User-Controlled Input Values'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Next, I disassembled the binary *C:\Program Files\WebEx\WebEx\824\atucfobj.dll*
+    with IDA Pro.^([[52](ch05s05.html#ftn.CHP-5-FN-8)]) In IDA, the imagebase of `atucfobj.dll`
+    was `0x10000000`. So `NewObject()` was located at address `0x1000767f` (imagebase
+    + offset of `NewObject()`: `0x10000000 + 0x767F`) in the disassembly (see [Figure 5-6](ch05.html#disassembly_of_the_newobject_open_parent
+    "Figure 5-6. Disassembly of the NewObject() method in IDA Pro")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Disassembly of the NewObject() method in IDA Pro](httpatomoreillycomsourcenostarchimages939291.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-6. Disassembly of the `NewObject()` method in IDA Pro
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before I started reading the assembly, I had to ensure what function argument
+    holds the user-controlled string value provided through the VBScript in [Example 5-1](ch05.html#html_file_to_call_the
+    "Example 5-1. HTML file to call the NewObject() method (webex_poc1.html)"). Since
+    the argument is a string, I guessed that my value was being held in the second
+    parameter, `lpWideCharStr`, shown in IDA. I wanted to be sure, however, so I defined
+    a new breakpoint at the `NewObject()` method and had a look at the arguments in
+    the debugger (see Section B.2 for a description of the following debugger commands).
+  prefs: []
+  type: TYPE_NORMAL
+- en: As illustrated in [Figure 5-7](ch05.html#user-controlled_argument_of_newobject_op
+    "Figure 5-7. User-controlled argument of NewObject() after defining a new breakpoint"),
+    I defined the new breakpoint at the address of `NewObject()` (`0:009> bp 01d5767f`),
+    continued the execution of Internet Explorer (`0:009> g`), and again navigated
+    to the [http://www.webex.com/](http://www.webex.com/) domain. When the breakpoint
+    was triggered, I inspected the value of the second function argument of `NewObject()`
+    (`0:000> dd poi(esp+8)` and `0:000> du poi(esp+8)`). As the debugger output shows,
+    the user-controlled data (a wide-character string consisting of 12 As) was indeed
+    passed to the function through the second argument.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, I had all information I needed to start auditing the method for security
+    bugs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![User-controlled argument of NewObject() after defining a new breakpoint](httpatomoreillycomsourcenostarchimages939293.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-7. User-controlled argument of `NewObject()` after defining a new breakpoint
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 5: Reverse Engineer the Object Methods'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To recap, I found an obvious vulnerability that happens while the ActiveX control
+    processes the user-supplied string value that gets passed to `NewObject()`. [Figure 5-8](ch05.html#code_path_to_reach_the_vulnerable_functi
+    "Figure 5-8. Code path to reach the vulnerable function (created in IDA Pro)")
+    illustrates the code path to reach the vulnerable function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Code path to reach the vulnerable function (created in IDA Pro)](httpatomoreillycomsourcenostarchimages939295.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-8. Code path to reach the vulnerable function (created in IDA Pro)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In `sub_1000767F` the user-provided wide-character string is converted to a
+    character string using the `WideCharToMultiByte()` function. After that, `sub_10009642`
+    is called, and the user-controlled character string is copied into another buffer.
+    The code in `sub_10009642` allows a maximum of 256 user-controlled bytes to be
+    copied into this new character buffer (pseudo C code: `strncpy (new_buffer, user_controlled_string,
+    256)`). The function `sub_10009826` is called, and it calls `sub_100096D0`, which
+    then calls the vulnerable function `sub_1000B37D`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 5-3. Disassembly of the vulnerable function `sub_1000B37D` (created
+    in IDA Pro)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first argument of `sub_1000B37D`, called `cbData`, holds a pointer to the
+    user-controlled data stored in the new character buffer (see `new_buffer` in the
+    description of [Figure 5-8](ch05.html#code_path_to_reach_the_vulnerable_functi
+    "Figure 5-8. Code path to reach the vulnerable function (created in IDA Pro)")).
+    As I said before, the user-controlled wide-character data is stored in this new
+    buffer as a character string with a maximum length of 256 bytes. [Example 5-3](ch05.html#disassembly_of_the_vulnerable
+    "Example 5-3. Disassembly of the vulnerable function sub_1000B37D (created in
+    IDA Pro)") shows that the `sprintf()` function at address `.text:1000B39D` copies
+    the user-controlled data pointed to by `cbData` into a stack buffer called `SubKey`
+    (see `.text:1000B387` and `.text:1000B39C`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, I tried to retrieve the size of this `SubKey` stack buffer. I opened IDA
+    Pro’s default stack frame displays by pressing ctrl-k. As shown in [Figure 5-9](ch05.html#determining_the_size_of_the_subkey_stack
+    "Figure 5-9. Determining the size of the SubKey stack buffer using IDA Pro’s default
+    stack frame displays"), the stack buffer `SubKey` has a fixed size of 260 bytes.
+    If the information from the disassembly shown in [Example 5-3](ch05.html#disassembly_of_the_vulnerable
+    "Example 5-3. Disassembly of the vulnerable function sub_1000B37D (created in
+    IDA Pro)") is combined with the information on the stack layout of the vulnerable
+    function, the call to `sprintf()` can be expressed with the C code in [Example 5-4](ch05.html#pseudo_c_code_of_the_vulnerable_call
+    "Example 5-4. Pseudo C code of the vulnerable call to sprintf()").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Determining the size of the SubKey stack buffer using IDA Pro’s default stack
+    frame displays](httpatomoreillycomsourcenostarchimages939297.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-9. Determining the size of the `SubKey` stack buffer using IDA Pro’s
+    default stack frame displays
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 5-4. Pseudo C code of the vulnerable call to `sprintf()`
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `sprintf()` library function copies the user-controlled data from `cbData`
+    as well as the string “`Authoring`” (9 bytes) and the format string (39 bytes)
+    into `SubKey`. If `cbData` is filled with the maximum amount of user-controlled
+    data (256 bytes), a total of 304 bytes of data will be copied into the stack buffer.
+    `SubKey` can only hold up to 260 bytes, and `sprintf()` doesn’t perform any length
+    check. Therefore, as shown in [Figure 5-10](ch05.html#diagram_of_the_stack_buffer_overflow_tha
+    "Figure 5-10. Diagram of the stack buffer overflow that occurs when an overly
+    long string is passed to NewObject()"), it’s possible to write user-controlled
+    data out of the bounds of `SubKey`, which leads to a stack buffer overflow (see
+    Section A.1).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Diagram of the stack buffer overflow that occurs when an overly long string
+    is passed to NewObject()](httpatomoreillycomsourcenostarchimages939299.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-10. Diagram of the stack buffer overflow that occurs when an overly
+    long string is passed to `NewObject()`
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.2 Exploitation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: After I found the vulnerability, exploitation was easy. All I had to do was
+    tweak the length of the string argument supplied to `NewObject()` to overflow
+    the stack buffer and gain control of the return address of the current stack frame.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As illustrated in [Figure 5-9](ch05.html#determining_the_size_of_the_subkey_stack
+    "Figure 5-9. Determining the size of the SubKey stack buffer using IDA Pro’s default
+    stack frame displays"), the distance from the `SubKey` buffer to the saved return
+    address on the stack is 272 bytes (the offset of the saved return address (`+00000004`)
+    minus the offset of `SubKey` (`−0000010C`): `0x4 - −0x10c = 0x110` (272)). I also
+    had to account for the fact that the string “`Authoring`” and part of the format
+    string will be copied into `SubKey` right before the user-controlled data (see
+    [Figure 5-10](ch05.html#diagram_of_the_stack_buffer_overflow_tha "Figure 5-10. Diagram
+    of the stack buffer overflow that occurs when an overly long string is passed
+    to NewObject()")). All in all I had to subtract 40 bytes (“`SOFTWARE\Webex\UCF\Components\Authoring\`”)
+    from the distance between `SubKey` and the saved return address (272 – 40 = 232).
+    So I had to provide 232 bytes of dummy data to fill the stack and reach the saved
+    return address. The following 4 bytes of the user-controlled data should then
+    overwrite the value of the saved return address on the stack.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So I changed the number of supplied characters in line 6 of *webex_poc1.html*
+    and named the new file *webex_poc2.html* (see [Example 5-5](ch05s02.html#html_file_that_passes_an_overly
+    "Example 5-5. HTML file that passes an overly long string to the NewObject() method
+    (webex_poc2.html)")):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 5-5. HTML file that passes an overly long string to the `NewObject()`
+    method (*webex_poc2.html*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then, I adjusted the little Python web server to serve the new HTML file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The original *wwwserv.py*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The adjusted *wwwserv.py*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: I restarted the web server, loaded Internet Explorer in WinDbg, and navigated
+    to [http://www.webex.com/](http://www.webex.com/) again.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As illustrated in [Figure 5-11](ch05s02.html#eip_control_of_internet_explorer
+    "Figure 5-11. EIP control of Internet Explorer"), I now had full control over
+    `EIP`. The bug could be easily exploited for arbitrary code execution using the
+    well-known heap spraying technique.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![EIP control of Internet Explorer](httpatomoreillycomsourcenostarchimages939301.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-11. `EIP` control of Internet Explorer
+  prefs: []
+  type: TYPE_NORMAL
+- en: As usual, German laws prevent me from providing a full working exploit, but
+    if you’re interested, you can watch a short video I recorded that shows the exploit
+    in action on the book’s website.^([[53](ch05s05.html#ftn.CHP-5-FN-9)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: As I mentioned before, I could have found the bug much faster if I had fuzzed
+    the ActiveX control with COMRaider instead of reading the assembly. But hey, fuzzing
+    is not as cool as reading assembly, right?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.3 Vulnerability Remediation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Thursday, August 14, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In [Chapter 2](ch02.html "Chapter 2. Back to the ’90s"), [Chapter 3](ch03.html
+    "Chapter 3. Escape from the WWW Zone"), and [Chapter 4](ch04.html "Chapter 4. NULL
+    Pointer FTW"), I disclosed the security bugs directly to the vendor of the compromised
+    software and helped it to create a patch. I chose another disclosure process for
+    this bug. This time I didn’t notify the vendor directly but rather sold the bug
+    to a vulnerability broker (Verisign’s iDefense Lab Vulnerability Contributor Program
+    [VCP]) and let it coordinate with Cisco (see Section 2.3).
+  prefs: []
+  type: TYPE_NORMAL
+- en: I contacted iDefense on April 8, 2008\. It accepted my submission and informed
+    Cisco of the issue. While Cisco was working on a new version of the ActiveX control,
+    another security researcher named Elazar Broad rediscovered the bug in June 2008\.
+    He also informed Cisco but then disclosed the bug publicly in the process known
+    as *full disclosure*.^([[54](ch05s05.html#ftn.CHP-5-FN-10)]) Cisco released a
+    fixed version of WebEx Meeting Manager, as well as a security advisory, on August
+    14, 2008\. All in all it was a great mess, but in the end Elazar and I made the
+    Web a safer place.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.4 Lessons Learned
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are still obvious, easily exploitable bugs in widely deployed (enterprise)
+    software products.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cross-site scripting breaks ActiveX domain restrictions. This is also true for
+    Microsoft’s SiteLock.^([[55](ch05s05.html#ftn.CHP-5-FN-11)])
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: From a bug hunter’s perspective, ActiveX controls are promising and valuable
+    targets.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Vulnerability rediscovery happens (way too often).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 5.5 Addendum
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Wednesday, September 17, 2008*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The vulnerability is fixed and a new version of WebEx Meeting Manager is available,
+    so I released a detailed security advisory on my website today.^([[56](ch05s05.html#ftn.CHP-5-FN-12)])
+    The bug was assigned CVE-2008-3558\. [Figure 5-12](ch05s05.html#timeline_from_discovery_of_the_webex_mee
+    "Figure 5-12. Timeline from discovery of the WebEx Meeting Manager vulnerability
+    until the release of the security advisory") shows the timeline of the vulnerability
+    fix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Timeline from discovery of the WebEx Meeting Manager vulnerability until
+    the release of the security advisory](httpatomoreillycomsourcenostarchimages939303.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5-12. Timeline from discovery of the WebEx Meeting Manager vulnerability
+    until the release of the security advisory
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ^([[45](#ftn.CHP-5-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[46](#ftn.CHP-5-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[47](#ftn.CHP-5-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[48](#ftn.CHP-5-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[49](#ftn.CHP-5-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[50](#ftn.CHP-5-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[51](#ftn.CHP-5-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[52](#ftn.CHP-5-FN-8)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[53](#ftn.CHP-5-FN-9)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[54](#ftn.CHP-5-FN-10)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[55](#ftn.CHP-5-FN-11)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[56](#ftn.CHP-5-FN-12)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[45](#CHP-5-FN-1)]) COMRaider from iDefense is a great tool to enumerate
+    and fuzz COM object interfaces. See [http://labs.idefense.com/software/download/?downloadID=23](http://labs.idefense.com/software/download/?downloadID=23).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[46](#CHP-5-FN-2)]) For more information, consult “Safe Initialization and
+    Scripting for ActiveX Controls” at [http://msdn.microsoft.com/en-us/library/aa751977(VS.85).aspx](http://msdn.microsoft.com/en-us/library/aa751977(VS.85).aspx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[47](#CHP-5-FN-3)]) See “Not safe = not dangerous? How to tell if ActiveX
+    vulnerabilities are exploitable in Internet Explorer” at [http://blogs.technet.com/srd/archive/2008/02/03/activex-controls.aspx](http://blogs.technet.com/srd/archive/2008/02/03/activex-controls.aspx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[48](#CHP-5-FN-4)]) For more information on cross-site scripting, refer to
+    [https://www.owasp.org/index.php/Cross-site_Scripting_(XSS)](https://www.owasp.org/index.php/Cross-site_Scripting_(XSS)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[49](#CHP-5-FN-5)]) See “MindshaRE: Finding ActiveX Methods Dynamically”
+    at [http://dvlabs.tippingpoint.com/blog/2009/06/01/mindshare-finding-activex-methods-dynamically/](http://dvlabs.tippingpoint.com/blog/2009/06/01/mindshare-finding-activex-methods-dynamically/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[50](#CHP-5-FN-6)]) See [http://msdn.microsoft.com/en-us/library/9a16d4e4-a03d-459d-a2ec-3258499f6932(VS.85)](http://msdn.microsoft.com/en-us/library/9a16d4e4-a03d-459d-a2ec-3258499f6932(VS.85)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[51](#CHP-5-FN-7)]) WinDbg is the “official” Windows Debugger from Microsoft
+    and is distributed as part of the free “Debugging Tools for Windows” suite, available
+    at [http://www.microsoft.com/whdc/DevTools/Debugging/default.mspx](http://www.microsoft.com/whdc/DevTools/Debugging/default.mspx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[52](#CHP-5-FN-8)]) See [http://www.hex-rays.com/idapro/](http://www.hex-rays.com/idapro/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[53](#CHP-5-FN-9)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[54](#CHP-5-FN-10)]) See [http://seclists.org/fulldisclosure/2008/Aug/83](http://seclists.org/fulldisclosure/2008/Aug/83).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[55](#CHP-5-FN-11)]) For more information on Microsoft’s SiteLock, see [http://msdn.microsoft.com/en-us/library/bb250471%28VS.85%29.aspx](http://msdn.microsoft.com/en-us/library/bb250471%28VS.85%29.aspx).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[56](#CHP-5-FN-12)]) My security advisory that describes the details of the
+    WebEx Meeting Manager vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2008-009.txt](http://www.trapkit.de/advisories/TKADV2008-009.txt).
+  prefs: []
+  type: TYPE_NORMAL

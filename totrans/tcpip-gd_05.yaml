@@ -1,0 +1,1769 @@
+- en: Part II-2. TCP/IP NETWORK INTERFACE/INTERNET LAYER CONNECTION PROTOCOLS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Chapter 13](ch13.html "Chapter 13. ADDRESS RESOLUTION AND THE TCP/IP ADDRESS
+    RESOLUTION PROTOCOL (ARP)")'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Chapter 14](ch14.html "Chapter 14. REVERSE ADDRESS RESOLUTION AND THE TCP/IP
+    REVERSE ADDRESS RESOLUTION PROTOCOL (RARP)")'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second layer of the OSI Reference Model is the *data link layer*; it corresponds
+    to the TCP/IP *network interface layer*. At this layer, most local area network
+    (LAN), wide area network (WAN), and wireless LAN (WLAN) technologies are defined,
+    such as Ethernet and IEEE 802.11.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third layer of the OSI Reference Model is the *network layer*, also called
+    the *internet layer* in the TCP/IP model. At this layer, internetworking protocols
+    are defined, the most notable being the Internet Protocol (IP).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second and third layers are intimately related, because messages sent at
+    the network layer must be carried over individual physical networks at the data
+    link layer. They perform different tasks, but as neighbors in the protocol stack,
+    they must cooperate with each other.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A set of protocols serves the important task of linking together these two layers
+    and allowing them to work together. The problem is deciding where exactly these
+    protocols should live. They are sort of the black sheep of the networking world.
+    Nobody denies their importance, but they always think they belong in "the other
+    guy's" layer. For example, since these protocols pass data on layer 2 networks,
+    the folks who deal with layer 2 technologies say the protocols belong at layer
+    3\. But those who work with layer 3 protocols consider these low-level protocols
+    that provide services to layer 3, and hence put them as part of layer 2.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So where do these protocols go? Well, to some extent, it doesn''t really matter.
+    I consider them somewhat special, so I gave them their own home. Welcome to networking
+    layer limbo, also known as OSI model layer 2.5\. This is where I put a couple
+    of protocols that serve as glue between the data link and network layers. The
+    main job performed here is address resolution, or providing mappings between layer
+    2 and layer 3 addresses. This resolution can be done in either direction, and
+    is represented by the two TCP/IP protocols described in this part: the Address
+    Resolution Protocol (ARP) and the Reverse Address Resolution Protocol (RARP),
+    which, despite their similarities, are used for rather different purposes.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I suggest familiarity with the basics of layer 2 and layer 3 (described in Parts
+    I-2 and I-3) before proceeding here. In particular, some understanding of IP addressing
+    is helpful, though not strictly necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter 13. ADDRESS RESOLUTION AND THE TCP/IP ADDRESS RESOLUTION PROTOCOL (ARP)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages287681.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Communication on an internetwork is accomplished by sending data at layer 3
+    using a network layer address, but the actual transmission of that data occurs
+    at layer 2 using a data link layer address. This means that every device with
+    a fully specified networking protocol stack will have both a layer 2 and a layer
+    3 address. It is necessary to define some way of being able to link these addresses
+    together. Usually, this is done by taking a network layer address and determining
+    what data link layer address goes with it. This process is called *address resolution*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, I look at the problem of address resolution at both a conceptual
+    and practical level, with, of course, a focus on how it is done in the TCP/IP
+    protocol suite. I begin with an overview of address resolution in gen-eral terms,
+    which describes the issues involved in the process. I then fully describe the
+    TCP/IP Address Resolution Protocol (ARP), probably the best-known and most commonly
+    used address resolution technique. I then provide a brief look at how address
+    resolution is done for multicast addresses in the Internet Protocol (IP), and
+    finally, the method used in the new IP version 6 (IPv6).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Address Resolution Concepts and Issues
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Due to the prominence of TCP/IP in the world of networking, most discussions
+    of address resolution jump straight to TCP/IP's ARP. This protocol is indeed important,
+    and we will take a look at it later in this chapter. However, the basic problem
+    of address resolution is not unique to any given implementation that deals with
+    it, such as ARP. To provide better understanding of resolving addresses between
+    the data link layer and the network layer and to support our examination of ARP,
+    we'll begin by looking at the matter in more general terms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I start by discussing the need for address resolution in general terms. I then
+    describe the two main methods for solving the address resolution problem: direct
+    mapping and dynamic resolution. I also explore some of the efficiency issues involved
+    in practical dynamic address resolution, with a focus on the importance of caching.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Need for Address Resolution
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Some people may balk at the notion of address resolution and the need for protocols
+    that perform this function. In [Chapter 5](ch05.html "Chapter 5. GENERAL OSI REFERENCE
+    MODEL ISSUES AND CONCEPTS")'s discussion of the OSI Reference Model, I talked
+    extensively about how the whole point of having conceptual layers was to separate
+    logical functions and allow higher-layer protocols to be hidden from lower-layer
+    details. Given this, why do you need address resolution protocols that tie protocols
+    and layers together?
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is true. However, the OSI Reference Model is exactly that—a *model*. There
+    are often practicalities that arise that require solutions that don't strictly
+    fit the layer model. When the model doesn't fit reality, the model must yield.
+    And so it is in dealing with the problem of address resolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Addressing at Layer 2 and Layer 3
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'When you consider the seven layers of the OSI Reference Model, there are two
+    that deal with addressing: the data link layer and the network layer. The physical
+    layer is not strictly concerned with addressing at all, but rather, only with
+    sending at the bit level. The layers above the network layer all work with network
+    layer addresses.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: But why is addressing done at two different layers? The answer is that they
+    are very different types of addresses that are used for different purposes. The
+    layer 2 addresses (such as IEEE 802 MAC addresses) are used for local transmissions
+    between hardware devices that can communicate directly. They are used to implement
+    basic local area network (LAN), wireless LAN (WLAN), and wide area network (WAN)
+    technologies. In contrast, layer 3 addresses (most commonly, IP addresses) are
+    used in internetworking to create the equivalent of a massive virtual network
+    at the network layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The most important distinction between these types of addresses is between
+    layers 2 and 3: Layer 2 deals with directly connected devices (on the same network),
+    while layer 3 deals with *indirectly* connected devices (as well as directly connected
+    ones). Say, for example, you want to connect to the web server at [http://www.tcpipguide.com](http://www.tcpipguide.com).
+    This is a website that runs on a server that has an Ethernet card in it that''s
+    used for connecting it to its Internet service provider site. However, even if
+    you know its MAC address, you cannot use it to talk directly to this server using
+    the Ethernet card in your home PC, because the devices are on different networks—in
+    fact, they may be on different continents!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead, you communicate at layer 3, using the IP and higher-layer protocols
+    such as the Transmission Control Protocol (TCP) and Hypertext Transfer Protocol
+    (HTTP). Your request is *routed* from your home machine, through a sequence of
+    routers to the server at *The TCP/IP Guide*, and the response is routed back to
+    you. The communication is, logically, at layers 3 and above; you send the request
+    not to the MAC address of the server's network card, but rather to the server's
+    IP address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, though you can *virtually* connect devices at layer 3, these connections
+    are really conceptual only. When you send a request using IP, it is sent one *hop*
+    at a time, from one physical network to the next. At each of these hops, an actual
+    transmission occurs at the physical and data link layers. When your request is
+    sent to your local router at layer 3, the actual request is encapsulated in a
+    frame using whatever method you physically connect to the router, and then passed
+    to the router using its data link layer address. The same happens for each subsequent
+    step, until finally, the router nearest the destination sends to the destination
+    using its data link (MAC) address. This is illustrated in [Figure 13-1](ch13.html#why_address_resolution_is_necessary_even
+    "Figure 13-1. Why address resolution is necessary Even though conceptually the
+    client and server are directly connected at layer 3, in reality, information passing
+    between them goes over multiple layer 2 links. In this example, a client on the
+    local network is accessing a server somewhere on the Internet. Logically, this
+    connection can be made directly between the client and server, but in reality,
+    it is a sequence of physical links at layer 2\. In this case, there are six such
+    links, most of them between routers that lie between the client and server. At
+    each step, the decision of where to send the data is made based on a layer 3 address,
+    but the actual transmission must be performed using the layer 2 address of the
+    next intended recipient in the route.").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Why address resolution is necessary Even though conceptually the client and
+    server are directly connected at layer 3, in reality, information passing between
+    them goes over multiple layer 2 links. In this example, a client on the local
+    network is accessing a server somewhere on the Internet. Logically, this connection
+    can be made directly between the client and server, but in reality, it is a sequence
+    of physical links at layer 2\. In this case, there are six such links, most of
+    them between routers that lie between the client and server. At each step, the
+    decision of where to send the data is made based on a layer 3 address, but the
+    actual transmission must be performed using the layer 2 address of the next intended
+    recipient in the route.](httpatomoreillycomsourcenostarchimages287769.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-1. Why address resolution is necessary Even though conceptually the
+    client and server are directly connected at layer 3, in reality, information passing
+    between them goes over multiple layer 2 links. In this example, a client on the
+    local network is accessing a server somewhere on the Internet. Logically, this
+    connection can be made directly between the client and server, but in reality,
+    it is a sequence of physical links at layer 2\. In this case, there are six such
+    links, most of them between routers that lie between the client and server. At
+    each step, the decision of where to send the data is made based on a layer 3 address,
+    but the actual transmission must be performed using the layer 2 address of the
+    next intended recipient in the route.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The basic problem is that IP addresses are at *too high of a level* for the
+    physical hardware on networks to deal with; they don''t understand what they are.
+    When your request shows up at the router that connects to *The TCP/IP Guide*,
+    it can see the [http://www.tcpipguide.com](http://www.tcpipguide.com) server''s
+    IP address, but that isn''t helpful: It needs to send to server''s *MAC address*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The identical issue exists even with communication between devices on a LAN.
+    Even if the web server is sitting on the same desk as the client, the communication
+    is logically at the IP layer, but must also be accomplished at the data link layer.
+    This means you need a way of translating between the addresses at these two layers.
+    This process is called *address resolution*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**KEY CONCEPT** Address resolution is required because internetworked devices
+    communicate logically using layer 3 addresses, but the actual transmissions between
+    devices take place using layer 2 (hardware) addresses.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: General Address Resolution Methods
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In fact, not only do you need to have a way of making this translation, but
+    you need to be concerned with the manner in which it is done. Since the translation
+    occurs for each hop of every datagram sent over an internetwork, the efficiency
+    of the process is extremely important. You don't want to use a resolution method
+    that takes a lot of network resources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Address resolution can be accomplished in two basic ways: direct mapping and
+    dynamic resolution.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*By necessity, it is not possible to have a fully general address resolution
+    method that works automatically. Since it deals with linking data link layer addresses
+    to network layer addresses, the implementation must be specific to the technologies
+    used in each of these layers. The only method that could really be considered
+    generic would be the use of static, manually updated tables that say, link this
+    layer 3 address to this layer 2 address." This, of course, is not automatic and
+    brings with it all the limitations of manual configuration*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Address Resolution Through Direct Mapping
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Network layer addresses must be resolved into data link layer addresses numerous
+    times during the travel of each datagram across an internetwork. You therefore
+    want the process to be as simple and efficient as possible. The easiest method
+    of accomplishing this is to do *direct mapping* between the two types of addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How Direct Mapping Works
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the direct mapping technique, a formula is used to map the higher-layer address
+    into the lower-layer address. This is the simpler and more efficient technique,
+    but it has some limitations, especially regarding the size of the data link layer
+    address compared to the network layer address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The basic idea behind direct mapping is to choose a scheme for layer 2 and layer
+    3 addresses so that you can determine one from the other using a simple algorithm.
+    This enables you to take the layer 3 address and follow a short procedure to convert
+    it into a layer 2 address. In essence, whenever you have the layer 3 address,
+    you already have the layer 2 address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The simplest example of direct mapping would be if you used the same structure
+    and semantics for both data link and network layer addresses. This is generally
+    impractical, because the two types of addresses serve different purposes, and
+    are therefore based on incompatible standards. However, you can still perform
+    direct mapping if you have the flexibility of creating layer 3 addresses that
+    are large enough to encode a complete data link layer address within them. Then
+    determining the layer 2 address is a simply matter of selecting a certain portion
+    of the layer 3 address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As an example, consider a simple LAN technology like ARCNet. It uses a short,
+    8-bit data link layer address, with valid values of 1 to 255, which can be assigned
+    by an administrator. You could easily set up an IP network on such a LAN by taking
+    a Class C network and using the ARCNet data link layer as the last octet. So,
+    if the network was, for example, 222.101.33.0, you could assign the IP address
+    222.101.33.1 to the device with ARCNet address #1, the IP address 222.101.33.29
+    to the device with ARCNet address #29, and so forth, as shown in [Figure 13-2](ch13.html#address_resolution_through_direct_-id001
+    "Figure 13-2. Address resolution through direct mapping With a small hardware
+    address size, you can easily map each hardware address to a layer 3 address. As
+    you can see in this figure, when the hardware address is small, it is easy to
+    define a mapping that directly corresponds to a portion of a layer 3 address.
+    In this example, an 8-bit MAC address, such as the one used for ARCNet, is mapped
+    to the last byte of the device''s IP address, thereby making address resolution
+    a trivial matter.").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Address resolution through direct mapping With a small hardware address size,
+    you can easily map each hardware address to a layer 3 address. As you can see
+    in this figure, when the hardware address is small, it is easy to define a mapping
+    that directly corresponds to a portion of a layer 3 address. In this example,
+    an 8-bit MAC address, such as the one used for ARCNet, is mapped to the last byte
+    of the device''s IP address, thereby making address resolution a trivial matter.](httpatomoreillycomsourcenostarchimages287771.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-2. Address resolution through direct mapping With a small hardware
+    address size, you can easily map each hardware address to a layer 3 address. As
+    you can see in this figure, when the hardware address is small, it is easy to
+    define a mapping that directly corresponds to a portion of a layer 3 address.
+    In this example, an 8-bit MAC address, such as the one used for ARCNet, is mapped
+    to the last byte of the device's IP address, thereby making address resolution
+    a trivial matter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The appeal of this system is obvious. Conceptually, it is trivial to understand—to
+    get the hardware address for a device, you just use the final eight bits of the
+    IP address. It's also very simple to program devices to perform, and highly efficient,
+    requiring no exchange of data on the network at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**KEY CONCEPT** When the layer 2 address is smaller than the layer 3 address,
+    it is possible to define a direct mapping between them so that the hardware address
+    can be determined directly from the network layer address. This makes address
+    resolution extremely simple, but reduces flexibility in how addresses are assigned.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Problems with Direct Mapping
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Unfortunately, direct mapping works only when it is possible to express the
+    data link layer address as a function of the network layer address. Consider instead
+    the same IP address, 222.101.33.29, which is running on an Ethernet network. Here,
+    the data link layer addresses are hardwired into the hardware itself (they can
+    sometimes be overridden, but usually this is not done). More important, the MAC
+    address is 48 bits wide, not 8\. This means the layer 2 address is bigger than
+    the layer 3 address, and there is no way to do direct mapping, as [Figure 13-3](ch13.html#address_resolution_problems_with_large_h
+    "Figure 13-3. Address resolution problems with large hardware address size Direct
+    mapping is impossible when the layer 2 address is larger in size than the layer
+    3 address.") illustrates. As you can see, when the layer 2 address is larger in
+    size than the layer 3 address, it is not possible to define a mapping between
+    them that can be used for address resolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Address resolution problems with large hardware address size Direct mapping
+    is impossible when the layer 2 address is larger in size than the layer 3 address.](httpatomoreillycomsourcenostarchimages287773.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-3. Address resolution problems with large hardware address size Direct
+    mapping is impossible when the layer 2 address is larger in size than the layer
+    3 address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*When the hardware address size exceeds the network layer address size, you
+    could do a partial mapping. For example, you could use the IP address to get*
+    part *of the MAC address and hope you don''t have any duplication in the bits
+    you didn''t use. This method is not well suited to regular transmissions, but
+    is used for resolving multicast addresses in IPv4 to Ethernet addresses. You''ll
+    see how this is done near the end of the chapter*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In general, then, direct mapping is not possible when the layer 3 address is
+    smaller than the layer 2 address. Consider that Ethernet is the most popular technology
+    at layer 2 and uses a 48-bit address, and IP is the most popular technology at
+    layer 3 and uses a 32-bit address. This is one reason why direct mapping is a
+    technique that is not widely used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What about the next generation of IP? IPv6 supports massive 128-bit addresses
+    (see [Chapter 25](ch25.html "Chapter 25. IPV6 ADDRESSING")). Furthermore, regular
+    (unicast) addresses are even defined using a method that creates them from data
+    link layer addresses using a special mapping. This would, in theory, allow IPv6
+    to use direct mapping for address resolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, the decision was made to have IPv6 use dynamic resolution just as
+    IPv4 does. One reason might be historical, since IPv4 uses dynamic resolution.
+    However, the bigger reason is probably due to a disadvantage of direct mapping:
+    its inflexibility. Dynamic resolution is a more generalized solution, because
+    it allows data link layer and network layer addresses to be independent, and its
+    disadvantages can be mostly neutralized through careful implementation, as you
+    will see.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In fact, evidence for this can be seen in the fact that dynamic resolution of
+    IP is defined on ARCNet, the example I just used. You could do direct mapping
+    there, but it restricts you to a certain pattern of IP addressing that reduces
+    flexibility.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dynamic Address Resolution
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You just saw that direct mapping provides a simple and highly efficient means
+    of resolving network layer addresses into data link layer addresses. Unfortunately,
+    it is a technique that you either cannot or should not use in a majority of cases.
+    You cannot use it when the size of the data link layer address is larger than
+    that of the network layer address. You shouldn't use it when you need flexibility,
+    because direct mapping requires you to make layer 3 and layer 2 addresses correspond.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The alternative to direct mapping is a technique called *dynamic address resolution*.
+    This uses a special protocol that allows a device with only an IP address to determine
+    the corresponding data link layer address, even if the two address types take
+    completely different forms. This is normally done by interrogating one or more
+    other devices on a local network to determine what data link layer address corresponds
+    to a given IP address. This is more complex and less efficient than direct mapping,
+    but it's more flexible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How Dynamic Addressing Works
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To understand how dynamic addressing works, you can consider a simple analogy.
+    I''m sure you''ve seen a limousine driver who is waiting to pick up a person at
+    the airport. (Well, you''ve seen it in a movie, haven''t you?) This is similar
+    to the problem here: The driver knows the name of the person who will be transported,
+    but not the person''s face (a type of "local address" in a manner of speaking!).
+    To find the person, the driver holds up a card bearing that person''s name. Everyone
+    other than that person ignores the card, but the named individual should recognize
+    it and approach the driver.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You do the same thing with dynamic address resolution in a network. Let's say
+    that Device A wants to send to Device B but knows only Device B's network layer
+    address (its "name") and not its data link layer address (its "face"). It broadcasts
+    a layer 2 frame containing the layer 3 address of Device B—this is like holding
+    up the card with someone's name on it. The devices other than Device B don't recognize
+    this layer 3 address and ignore it. Device B, however, knows its own network layer
+    address. It recognizes this in the broadcast frame and sends a direct response
+    back to Device A. This tells Device A what Device B's layer 2 address is, and
+    the resolution is complete. [Figure 13-4](ch13.html#dynamic_address_resolution_the_device_th
+    "Figure 13-4. Dynamic address resolution The device that wants to send data broadcasts
+    a request asking for a response with a hardware address from the other device.
+    Device A needs to send data to Device B, but knows only its IP address (IPB) and
+    not its hardware address. Device A broadcasts a request asking to be sent the
+    hardware address of the device using the IP address IPB. Device B responds back
+    to Device A directly with the hardware address.") illustrates the process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**KEY CONCEPT** *Dynamic address resolution* is usually implemented using a
+    special protocol. A device that knows only the network layer address of another
+    device can use this protocol to request the other device''s hardware address.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Dynamic address resolution The device that wants to send data broadcasts
+    a request asking for a response with a hardware address from the other device.
+    Device A needs to send data to Device B, but knows only its IP address (IPB) and
+    not its hardware address. Device A broadcasts a request asking to be sent the
+    hardware address of the device using the IP address IPB. Device B responds back
+    to Device A directly with the hardware address.](httpatomoreillycomsourcenostarchimages287775.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-4. Dynamic address resolution The device that wants to send data broadcasts
+    a request asking for a response with a hardware address from the other device.
+    Device A needs to send data to Device B, but knows only its IP address (IPB) and
+    not its hardware address. Device A broadcasts a request asking to be sent the
+    hardware address of the device using the IP address IPB. Device B responds back
+    to Device A directly with the hardware address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Direct mapping is very simple, but as you can see, dynamic resolution isn't
+    exactly rocket science either! It's a simple technique that is easily implemented.
+    Furthermore, it removes the restrictions associated with direct mapping. There
+    is no need for any specific relationship between the network layer address and
+    the data link layer address; they can have a completely different structure and
+    size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There is one nagging issue though: the efficiency problem. Where direct mapping
+    involves a quick calculation, dynamic resolution requires you to use a protocol
+    to send a message over the network. Fortunately, there are techniques that you
+    can employ to remove some of the sting of this cost through careful implementation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dynamic Address Resolution Caching and Efficiency Issues
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You've now seen how dynamic address resolution removes the restrictions that
+    you saw in direct mapping, thereby allowing you to easily associate layer 2 and
+    layer 3 addresses of any size or structure. The only problem with it is that each
+    address resolution requires you to send an extra message that would not be required
+    in direct mapping. Worse yet, since you don't know the layer 2 identity of the
+    recipient, you must use a broadcast message (or at least a multicast), which means
+    that many devices on the local network must take resources to examine the data
+    frame and check which IP address is being resolved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sure, sending one extra message may not seem like that big of a deal, and the
+    frame doesn't have to be very large since it contains only a network layer address
+    and some control information. However, when you have to do this for *every* hop
+    of every datagram transmission, the overhead really adds up. For this reason,
+    while basic dynamic address resolution is simple and functional, it's usually
+    not enough. You must add some *intelligence* to the implementation of address
+    resolution in order to reduce the impact on the performance of continual address
+    resolutions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Consider that most devices on a local network send to only a small handful of
+    other physical devices and tend to do so over and over again. This is a phenomenon
+    known as *locality of reference*, which is observed in a variety of different
+    areas in the computing field. If you send a request to an Internet website from
+    your office PC, it will need to go first to your company network's local router,
+    so you will need to resolve the router's layer 2 address. If you later click a
+    link on that site, that request will also need to go to the router. In fact, almost
+    everything you do off your local network probably goes first to that same router
+    (commonly called a *default gateway*). Having to do a fresh resolution each time
+    would be, well, stupid. It would be like having to look up the phone number of
+    your best friend every time you want to call to say hello.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To avoid being accused of making address resolution protocols that are, well,
+    stupid, designers always include a *caching* mechanism. After a device's network
+    layer address is resolved to a data link layer address, the link between the two
+    is kept in the memory of the device for a period of time. When it needs the layer
+    2 address the next time, the device just does a quick lookup in its cache. This
+    means that instead of doing a broadcast on every datagram, you do it only once
+    for a whole sequence of datagrams.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Caching is by far the most important performance-enhancing tool in dynamic resolution.
+    It transforms what would otherwise be a very wasteful process into one that, most
+    of the time, is no less efficient than direct mapping. It does, however, add complexity.
+    The cache table entries must be maintained. There is also the problem that the
+    information in the table may become *stale* over time. What happens if you change
+    the network layer address or the data link layer address of a device? For this
+    reason, cache entries must be set to expire periodically. The discussion of caching
+    in TCP/IP's ARP later in this chapter shows some of the particulars of how these
+    issues are handled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other Enhancements to Dynamic Resolution
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Other enhancements are also possible to the basic dynamic resolution scheme.
+    Let's consider again our example of sending a request to the Internet. You send
+    a request that needs to go to the local router, so you resolve its address and
+    send it the request. A moment later, the reply comes back to the router to be
+    sent to you, so the router needs *your* address. Thus, it would have to do a dynamic
+    resolution on you, even though you just exchanged frames. Again, this is stupid.
+    Instead, you can improve efficiency through *cross-resolution*; when Device A
+    resolves the address of Device B, Device B also adds the entry for Device A to
+    *its* cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another improvement can be made, too. If you think about it, the devices on
+    a local network are going to talk to each other fairly often, even if they aren't
+    chatting right now. If Device A is resolving Device B's network layer address,
+    it will broadcast a frame that Devices C, D, E, and so on all see. Why not have
+    them also update *their* cache tables with resolution information that they see,
+    for future use?
+  prefs: []
+  type: TYPE_NORMAL
+- en: These and other enhancements all serve to cut down on the efficiency problems
+    with dynamic address resolution. They combine to make dynamic resolution close
+    enough to direct mapping in overall capability that there is no good reason not
+    to use it. Once again, you can see some more particulars of this in the section
+    that describes ARP's caching feature.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Incidentally, one other performance-improving idea sometimes comes up during
+    this discussion: Instead of preceding a datagram transmission with an extra broadcast
+    step for address resolution, why not just broadcast the datagram and be done with
+    it? You actually could do this, and if the datagram were small enough, it would
+    be more efficient. Usually, though, datagrams are large, while resolution frames
+    can be quite compact; it makes sense to do a small broadcast and then a large
+    unicast rather than a large broadcast. Also, suppose you did broadcast this one
+    datagram. What about the next datagram and the one after that? Each of these would
+    then need to be broadcast also. When you do a resolution with caching, you need
+    to broadcast only once in a while, instead of continually.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: TCP/IP Address Resolution Protocol (ARP)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: ARP is a full-featured, dynamic resolution protocol used to match IP addresses
+    to underlying data link layer addresses. Originally developed for Ethernet, it
+    has now been generalized to allow IP to operate over a wide variety of layer 2
+    technologies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The Address Resolution Protocol described here is used for resolving unicast
+    addresses in version 4 of the Internet Protocol (IPv4). Multicast addresses under
+    IPv4 use a direct mapping method, and IPv6 uses the new Neighbor Discovery (ND)
+    Protocol instead of ARP. These methods are both discussed near the end of this
+    chapter*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**RELATED INFORMATION** *For a discussion of ARP-related issues in networks
+    with mobile IP devices, see [Chapter 30](ch30.html "Chapter 30. INTERNET PROTOCOL
+    MOBILITY SUPPORT (MOBILE IP)")*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**RELATED INFORMATION** *The software application `arp`, which is used to administer
+    the TCP/IP ARP implementation on a host, is covered in [Chapter 88](ch88.html
+    "Chapter 88. TCP/IP ADMINISTRATION AND TROUBLESHOOTING UTILITIES AND PROTOCOLS")*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Physical networks function at layers 1 and 2 of the OSI Reference Model and
+    use data link layer addresses. In contrast, internetworking protocols function
+    at layer 3, interconnecting these physical networks to create a possibly huge
+    internetwork of devices specified using network layer addresses. Address resolution
+    is the process whereby network layer addresses are resolved into data link layer
+    addresses. This permits data to be sent one hop at a time across an internetwork.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem of address resolution was apparent from the very start in the development
+    of the TCP/IP protocol suite. Much of the early development of IP was performed
+    on the then-fledgling Ethernet LAN technology; this was even before Ethernet had
+    been officially standardized as IEEE 802.3\. It was necessary to define a way
+    to map IP addresses to Ethernet addresses to allow communication over Ethernet
+    networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we have already seen in this chapter, there are two basic methods to correlate
+    IP and Ethernet addresses: direct mapping or dynamic resolution. However, Ethernet
+    addresses are 48 bits long, while IP addresses are only 32 bits, which immediately
+    rules out direct mapping. Furthermore, the designers of IP wanted the flexibility
+    that results from using the dynamic resolution model. To this end, they developed
+    the TCP/IP *Address Resolution Protocol (ARP)*. This protocol is described in
+    one of the earliest of the Internet RFCs still in common use: RFC 826, "An Ethernet
+    Address Resolution Protocol," which was published in 1982.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The name makes clear that ARP was originally developed for Ethernet. Thus, it
+    represents a nexus between the most popular layer 2 LAN protocol and the most
+    popular layer 3 internetworking protocol. This is true even two decades later.
+    However, it was also obvious from the beginning that even though Ethernet was
+    a very common way of transporting IP, it would not be the only one. Therefore,
+    ARP was made a general protocol that was capable of resolving addresses from IP
+    to Ethernet as well as numerous other data link layer technologies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The basic operation of ARP involves encoding the IP address of the intended
+    recipient in a broadcast message. It is sent on a local network to allow the intended
+    recipient of an IP datagram to respond to the source with its data link layer
+    address. This is done using a simple request and reply method. A special format
+    is used for ARP messages, which are passed down to the local data link layer for
+    transmission.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**KEY CONCEPT** *ARP* was developed to facilitate dynamic address resolution
+    between IP and Ethernet and can now be used on other layer 2 technologies as well.
+    It works by allowing an IP device to send a broadcast on the local network, and
+    it requests a response with a hardware address from another device on the same
+    local network.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This basic operation is supplemented by methods to improve performance. Since
+    it was known from the start that having to perform a resolution using broadcast
+    for each datagram was ridiculously inefficient, ARP has always used a cache, where
+    it keeps bindings between IP addresses and data link layer addresses on the local
+    network. Over time, various techniques have been developed to improve the methods
+    used for maintaining cache entries. Refinements and additional features, such
+    as support for cross-resolution by pairs of devices as well as proxy ARP, have
+    also been defined over the years and added to the basic ARP feature set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ARP Address Specification and General Operation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: An ARP transaction begins when a source device on an IP network has an IP datagram
+    to send. It must first decide whether the destination device is on the local network
+    or a distant network. If it's the former, it will send directly to the destination;
+    if it's the latter, it will send the datagram to one of the routers on the physical
+    network for forwarding. Either way, it will determine the IP address of the device
+    that needs to be the immediate destination of its IP datagram on the local network.
+    After packaging the datagram it will pass it to its ARP software for address resolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The basic operation of ARP is a *request and response* pair of transmissions
+    on the local network. The source (the one that needs to send the IP datagram)
+    transmits a broadcast containing information about the destination (the intended
+    recipient of the datagram). The destination then responds via unicast back to
+    the source, telling the source the hardware address of the destination.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ARP Message Types and Address Designations
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The terms *source* and *destination* apply to the same devices throughout the
+    transaction. However, there are two different messages sent in ARP: one from the
+    source to the destination and one from the destination to the source. For each
+    ARP message, the *sender* is the one that is transmitting the message and the
+    *target* is the one receiving it. Thus, the identity of the sender and target
+    changes for each message. Here''s how the sender and target identities work for
+    requests and replies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Request** For the initial request, the sender is the source (the device with
+    the IP datagram to send), and the target is the destination.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Reply** For the reply to the ARP request, the sender is the destination.
+    It replies to the source, which becomes the target.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Each of the two parties in any message has two addresses (layer 2 and layer
+    3) to be concerned with, so the following four different addresses are involved
+    in each message:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Sender Hardware Address** The layer 2 address of the sender of the ARP message.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Sender Protocol Address** The layer 3 (IP) address of the sender of the ARP
+    message.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Target Hardware Address** The layer 2 address of the target of the ARP message.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Target Protocol Address** The layer 3 (IP) address of the target.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These addresses each have a position in the ARP message format, which we'll
+    examine shortly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ARP General Operation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: With that background in place, let's look at the steps that occur in an ARP
+    transaction. (These steps are also shown graphically in the illustration in [Figure 13-5](ch13s02.html#address_resolution_protocol_arp_transact
+    "Figure 13-5. Address Resolution Protocol (ARP) transaction process ARP works
+    by having the source device broadcast a request to find the destination, which
+    responds using a reply message. ARP caches are also consulted and updated as needed.").)
+    This diagram shows the sequence of steps that occur in a typical ARP transaction,
+    as well as the message exchanges between a source and destination device, and
+    the cache checking and update functions. (Incidentally, those little stacks are
+    hard disks, not cans of soup!)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source Device Checks Cache** The source device will first check its cache
+    to determine if it already has a resolution of the destination device. If so,
+    it can skip to step 9.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Source Device Generates ARP Request Message** The source device generates
+    an ARP Request message. It puts its own data link layer address as the Sender
+    Hardware Address and its own IP address as the Sender Protocol Address. It fills
+    in the IP address of the destination as the Target Protocol Address. (It must
+    leave the Target Hardware Address blank, since that it is what it is trying to
+    determine!)'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Source Device Broadcasts ARP Request Message** The source broadcasts the
+    ARP Request message on the local network.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Address Resolution Protocol (ARP) transaction process ARP works by having
+    the source device broadcast a request to find the destination, which responds
+    using a reply message. ARP caches are also consulted and updated as needed.](httpatomoreillycomsourcenostarchimages287777.png.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: Figure 13-5. Address Resolution Protocol (ARP) transaction process ARP works
+    by having the source device broadcast a request to find the destination, which
+    responds using a reply message. ARP caches are also consulted and updated as needed.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**Local Devices Process ARP Request Message** The message is received by each
+    device on the local network. It is processed, with each device looking for a match
+    on the Target Protocol Address. Those that do not match will drop the message
+    and take no further action.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Destination Device Generates ARP Reply Message** The one device whose IP
+    address matches the contents of the Target Protocol Address of the message will
+    generate an ARP Reply message. It takes the Sender Hardware Address and Sender
+    Protocol Address fields from the ARP Request message and uses these as the values
+    for the Target Hardware Address and Target Protocol Address of the reply. It then
+    fills in its own layer 2 address as the Sender Hardware Address and its IP address
+    as the Sender Protocol Address. Other fields are filled in, as explained in the
+    description of the ARP message format in the following section.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Destination Device Updates ARP Cache** If the source needs to send an IP
+    datagram to the destination now, it makes sense that the destination will probably
+    need to send a response to the source at some point soon. (After all, most communication
+    on a network is bidirectional.) Next, as an optimization, the destination device
+    will add an entry to its own ARP cache that contains the hardware and IP addresses
+    of the source that sent the ARP Request. This saves the destination from needing
+    to do an unnecessary resolution cycle later on.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Destination Device Sends ARP Reply Message** The destination device sends
+    the ARP Reply message. This reply is, however, sent unicast to the source device,
+    because there is no need to broadcast it.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Source Device Processes ARP Reply Message** The source device processes the
+    reply from the destination. It stores the Sender Hardware Address as the layer
+    2 address of the destination and uses that address for sending its IP datagram.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Source Device Updates ARP Cache** The source device uses the Sender Protocol
+    Address and Sender Hardware Address to update its ARP cache for use in the future
+    when transmitting to this device.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**KEY CONCEPT** ARP is a relatively simple request-and-reply protocol. The
+    source device broadcasts an ARP Request that''s looking for a particular device
+    based on the device''s IP address. That device responds with its hardware address
+    in an ARP Reply message.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that this description goes a bit beyond the basic steps in address resolution,
+    because two enhancements are mentioned. One is caching, which you'll explore shortly.
+    The other is cross-resolution (described earlier in this chapter in the overview
+    of caching issues in dynamic resolution), which is step 6 of the process. This
+    is why the source device includes its IP address in the request. It isn't really
+    needed for any other reason, so you can see that this feature was built into ARP
+    from the start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ARP Message Format
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You've just seen how address resolution is accomplished in ARP, through an exchange
+    of messages between the source device seeking to perform the resolution and the
+    destination device that responds to it. As with other protocols, a special *message
+    format* is used for containing the information required for each step of the resolution
+    process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'ARP messages use a relatively simple format. It includes a field describing
+    the type of message (its *operational code* or *opcode*) and information on both
+    layer 2 and layer 3 addresses. In order to support addresses that may be of varying
+    length, the format specifies the type of protocol used at both layer 2 and layer
+    3, as well as the length of the addresses used at each of these layers. It then
+    includes space for all four of the address combinations described earlier in this
+    chapter: Sender Hardware Address, Sender Protocol Address, Target Hardware Address,
+    and Target Protocol Address.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The format used for ARP messages is described in [Table 13-1](ch13s02.html#arp_message_format-id001
+    "Table 13-1. ARP Message Format"). [Figure 13-6](ch13s02.html#arp_message_format-id002
+    "Figure 13-6. ARP message format") shows how the ARP message format is designed
+    to accommodate layer 2 and layer 3 addresses of various sizes. This diagram shows
+    the most common implementation, which uses 32 bits for the layer 3 ("Protocol")
+    addresses and 48 bits for the layer 2 hardware addresses. These numbers correspond
+    to the address sizes of the IPv4 and IEEE 802 MAC addresses that are used by Ethernet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 13-1. ARP Message Format
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Field Name | Size (Bytes) | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| HRD | 2 | Hardware Type: This field specifies the type of hardware used for
+    the local network transmitting the ARP message; thus, it also identifies the type
+    of addressing used. Some of the most common values for this field are shown in
+    [Table 13-2](ch13s02.html#arp_hardware_type_hrd_field_values "Table 13-2. ARP
+    Hardware Type (HRD) Field Values"). |'
+  prefs: []
+  type: TYPE_TB
+- en: '| PRO | 2 | Protocol Type: This field is the complement of the Hardware Type
+    field, specifying the type of layer 3 addresses used in the message. For IPv4
+    addresses, this value is 2048 (0800 hex), which corresponds to the EtherType code
+    for IP. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| HLN | 1 | Hardware Address Length: Specifies how long hardware addresses
+    are in this message. For Ethernet or other networks using IEEE 802 MAC addresses,
+    the value is 6. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| PLN | 1 | Protocol Address Length: Again, the complement of the preceding
+    field; specifies how long protocol (layer 3) addresses are in this message. For
+    IPv4 addresses, this value is 4. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| OP | 2 | Opcode: This field specifies the nature of the ARP message being
+    sent. The first two values (1 and 2) are used for regular ARP. Numerous other
+    values are also defined to support other protocols that use the ARP frame format,
+    such as RARP, as shown in [Table 13-3](ch13s02.html#arp_opcode_op_field_values
+    "Table 13-3. ARP Opcode (OP) Field Values"). Some protocols are more widely used
+    than others. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| SHA | Variable, equals value in HLN field | Sender Hardware Address: The
+    hardware (layer 2) address of the device sending this message, which is the IP
+    datagram source device on a request, and the IP datagram destination on a reply.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| SPA | Variable, equals value in PLN field | Sender Protocol Address: The
+    IP address of the device sending this message. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| THA | Variable, equals value in HLN field | Target Hardware Address: The
+    hardware (layer 2) address of the device this message is being sent to. This is
+    the IP datagram destination device on a request, and the IP datagram source on
+    a reply. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TPA | Variable, equals value in PLN field | Target Protocol Address: The
+    IP address of the device this message is being sent to. |'
+  prefs: []
+  type: TYPE_TB
+- en: Table 13-2. ARP Hardware Type (HRD) Field Values
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Hardware Type (HRD) Value | Hardware Type |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1 | Ethernet (10 Mb) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 6 | IEEE 802 Networks |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 7 | ARCNeT |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 15 | Frame Relay |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 16 | Asynchronous Transfer Mode (ATM) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 17 | HDLC |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 18 | Fibre Channel |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 19 | Asynchronous Transfer Mode (ATM) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 20 | Serial Line |'
+  prefs: []
+  type: TYPE_TB
+- en: Table 13-3. ARP Opcode (OP) Field Values
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Opcode | ARP Message Type |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 1 | ARP Request |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 2 | ARP Reply |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 3 | RARP Request |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 4 | RARP Reply |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 5 | DRARP Request |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 6 | DRARP Reply |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 7 | DRARP Error |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 8 | InARP Request |'
+  prefs: []
+  type: TYPE_TB
+- en: '| 9 | InARP Reply |'
+  prefs: []
+  type: TYPE_TB
+- en: '![ARP message format](httpatomoreillycomsourcenostarchimages287779.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-6. ARP message format
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once the ARP message has been composed, it is passed down to the data link layer
+    for transmission. The entire contents of the ARP message become the payload for
+    the message actually sent on the network, such as an Ethernet frame on an Ethernet
+    LAN. Note that the total size of the ARP message is variable, since the address
+    fields are of variable length. Normally, though, these messages are quite small.
+    For example, they are only 28 bytes for a network carrying IPv4 datagrams in IEEE
+    802 MAC addresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ARP Caching
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ARP is a dynamic resolution protocol, which means that every resolution requires
+    the interchange of messages on the network. Each time a device sends an ARP message,
+    it ties up the local network, consuming network bandwidth that cannot be used
+    for other traffic. ARP messages aren't large, but having to send them for every
+    hop of every IP datagram would represent an unacceptable performance hit on the
+    network. It also wastes time compared to the simpler direct mapping method of
+    resolution. On top of this, the ARP Request message is broadcasted, which means
+    every device on the local network must spend CPU time examining the contents of
+    each one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The general solution to the efficiency issues with dynamic resolution is to
+    employ *caching*. In addition to reducing network traffic, caching also ensures
+    that the resolution of commonly used addresses is fast, thereby making overall
+    performance comparable to direct mapping. For this reason, caching functionality
+    has been built into ARP from the start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Static and Dynamic ARP Cache Entries
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The ARP cache takes the form of a table containing matched sets of hardware
+    and IP addresses. Each device on the network manages its own ARP cache table.
+    There are two different ways that cache entries can be put into the ARP cache:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Static ARP Cache Entries** These are address resolutions that are manually
+    added to the cache table for a device and are kept in the cache on a permanent
+    basis. Static entries are typically managed using a tool such as the arp software
+    utility (see [Chapter 88](ch88.html "Chapter 88. TCP/IP ADMINISTRATION AND TROUBLESHOOTING
+    UTILITIES AND PROTOCOLS")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Dynamic ARP Cache Entries** These are hardware and IP address pairs that
+    are added to the cache by the software itself as a result of past ARP resolutions
+    that were successfully completed. They are kept in the cache for only a period
+    of time and are then removed.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A device's ARP cache can contain both static and dynamic entries, each of which
+    has advantages and disadvantages. However, dynamic entries are used most often
+    because they are automatic and don't require administrator intervention.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Static ARP entries are best used for devices that a given device needs to communicate
+    with on a regular basis. For example, a workstation might have a static ARP entry
+    for its local router and file server. Since the entry is static, it is always
+    found in step 1 of the ARP transaction process, and there is no need to ever send
+    resolution messages for the destination in that entry. The disadvantage is that
+    these entries must be manually added, and they must also be changed if the hardware
+    or IP addresses of any of the hardware in the entries change. Also, each static
+    entry takes space in the ARP cache, so you don't want to overuse static entries.
+    It wouldn't be a good idea to have static entries for every device on the network,
+    for example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cache Entry Expiration
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Dynamic entries are added automatically to the cache on an as-needed basis,
+    so they represent mappings for hosts and routers that a given device is actively
+    using. They do not need to be manually added or maintained. However, it is also
+    important to realize that dynamic entries cannot be added to the cache and left
+    there forever—dynamic entries left in place for a long time can become stale.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Consider Device A's ARP cache, which contains a dynamic mapping for Device B,
+    which is another host on the network. If dynamic entries stayed in the cache forever,
+    the following situations might arise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Device Hardware Changes** Device B might experience a hardware failure that
+    requires its network interface card to be replaced. The mapping in Device A''s
+    cache would become invalid, since the hardware address in the entry is no longer
+    on the network.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Device IP Address Changes** Similarly, the mapping in Device A''s cache also
+    would become invalid if Device B''s IP address changed.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Device Removal** Suppose Device B is removed from the local network. Device
+    A would never need to send to it again at the data link layer, but the mapping
+    would remain in Device A''s cache, wasting space and possibly taking up search
+    time.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To avoid these problems, dynamic cache entries must be set to automatically
+    expire after a period of time. This is handled automatically by the ARP implementation,
+    with typical timeout values being 10 or 20 minutes. After a particular entry times
+    out, it is removed from the cache. The next time that address mapping is needed,
+    a fresh resolution is performed to update the cache. This is very slightly less
+    efficient than static entries, but sending two 28-byte messages every 10 or 20
+    minutes isn't a big deal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned in the overview of ARP operation, dynamic cache entries are added
+    not only when a device initiates a resolution, but when it is the destination
+    device as well. This is another enhancement that reduces unnecessary address resolution
+    traffic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other Caching Features
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Other enhancements are also typically put into place, depending on the implementation.
+    Standard ARP requires that if Device A initiates resolution with a broadcast,
+    each device on the network should update its own cache entries for Device A, even
+    if they are not the device that Device A is trying to reach. However, these "third-party"
+    devices are *not* required to create new cache entries for Device A in this situation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The issue here is a trade-off. Creating a new cache entry would save any of
+    those devices from needing to resolve Device A's address in the near future. However,
+    it also means every device on the network will quickly have an ARP cache table
+    filled up with the addresses of most of the other devices on the network. This
+    may not be desirable in larger networks. Even in smaller ones, this model may
+    not make sense, given that modern computing is client/server in nature and peer
+    devices on a LAN may not often communicate directly. Some devices may choose to
+    create such cache entries, but they may set them to expire after a very short
+    time to avoid filling the cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each ARP implementation is also responsible for any other housekeeping required
+    to maintain the cache. For example, if a device is on a local network with many
+    hosts and its cache table is too small, it might be necessary for older, less
+    frequently used entries to be removed to make room for newer ones. Ideally, the
+    cache should be large enough to hold all the other devices with which a device
+    communicates on a regular basis on the network, along with some room for ones
+    it occasionally talks to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Proxy ARP
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ARP was designed to be used by devices that are directly connected on a local
+    network. Each device on the network should be capable of sending both unicast
+    and broadcast transmissions directly to one another. Normally, if Device A and
+    Device B are separated by a router, they would not be considered local to each
+    other. Device A would not send directly to Device B or vice versa; they would
+    send to the router instead at layer 2 and would be considered two hops apart at
+    layer 3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In some networking situations, however, there might be two physical network
+    segments that are in the same IP network or subnetwork and are connected by a
+    router. In other words, Device A and Device B might be on different networks at
+    the data link layer level, but on the same IP network or subnet. When this happens,
+    Device A and Device B will each think the other is on the local network when they
+    look to send IP datagrams.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this situation, suppose that Device A wants to send a datagram to Device
+    B. It doesn''t have Device B''s hardware address in the cache, so it begins an
+    address resolution. When it broadcasts the ARP Request message to get Device B''s
+    hardware address, however, it will quickly run into a problem: Device B is not
+    on Device A''s local network. The router between them will not pass Device A''s
+    broadcast onto Device B''s part of the network, because routers don''t pass hardware-layer
+    broadcasts. Device B will never get the request, and thus Device A will not get
+    a reply containing Device B''s hardware address.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The solution to this situation is called *ARP proxying* or *Proxy ARP*. In this
+    technique, the router that sits between the local networks is configured to respond
+    to Device A's broadcast on behalf of Device B. It does not send back to Device
+    A the hardware address of Device B. Since they are not on the same network, Device
+    A cannot send directly to Device B anyway. Instead, the router sends Device A
+    its own hardware address. Device A then sends to the router, which forwards the
+    message to Device B on the other network. Of course, the router also does the
+    same thing on Device A's behalf for Device B, and for every other device on both
+    networks, when a broadcast is sent that targets a device that isn't on the same
+    actual physical network as the resolution initiator. This is illustrated in [Figure 13-7](ch13s02.html#arp_proxy_operation_these_two_examples_s
+    "Figure 13-7. ARP Proxy operation These two examples show how a router acting
+    as an ARP proxy returns its own hardware address in response to requests by one
+    device for an address on the other network. In this small internetwork shown,
+    a single router connects two LANs that are on the same IP network or subnet. The
+    router will not pass ARP broadcasts, but has been configured to act as an ARP
+    proxy. In this example, Device A and Device D are each trying to send an IP datagram
+    to the other, and so each broadcasts an ARP Request. The router responds to the
+    request sent by Device A as if it were Device D, giving to Device A its own hardware
+    address (without propagating Device A's broadcast). It will forward the message
+    sent by Device A to Device D on Device D's network. Similarly, it responds to
+    Device D as if it were Device A, giving its own address, then forwarding what
+    Device D sends to it over to the network where Device A is located.").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Proxy ARP provides flexibility for networks where hosts are not all actually
+    on the same physical network but are configured as if they were at the network
+    layer. It can be used to provide support in other special situations where a device
+    cannot respond directly to ARP message broadcasts. It may be used when a firewall
+    is configured for security purposes. A type of proxying is also used as part of
+    Mobile IP to solve the problem of address resolution when a mobile device travels
+    away from its home network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**KEY CONCEPT** Since ARP relies on broadcasts for address resolution, and
+    broadcasts are not propagated beyond a physical network, ARP cannot function between
+    devices on different physical networks. When such operation is required, a device,
+    such as a router, can be configured as an ARP proxy to respond to ARP requests
+    on the behalf of a device on a different network.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ARP Proxy operation These two examples show how a router acting as an ARP
+    proxy returns its own hardware address in response to requests by one device for
+    an address on the other network. In this small internetwork shown, a single router
+    connects two LANs that are on the same IP network or subnet. The router will not
+    pass ARP broadcasts, but has been configured to act as an ARP proxy. In this example,
+    Device A and Device D are each trying to send an IP datagram to the other, and
+    so each broadcasts an ARP Request. The router responds to the request sent by
+    Device A as if it were Device D, giving to Device A its own hardware address (without
+    propagating Device A''s broadcast). It will forward the message sent by Device
+    A to Device D on Device D''s network. Similarly, it responds to Device D as if
+    it were Device A, giving its own address, then forwarding what Device D sends
+    to it over to the network where Device A is located.](httpatomoreillycomsourcenostarchimages287781.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-7. ARP Proxy operation These two examples show how a router acting
+    as an ARP proxy returns its own hardware address in response to requests by one
+    device for an address on the other network. In this small internetwork shown,
+    a single router connects two LANs that are on the same IP network or subnet. The
+    router will not pass ARP broadcasts, but has been configured to act as an ARP
+    proxy. In this example, Device A and Device D are each trying to send an IP datagram
+    to the other, and so each broadcasts an ARP Request. The router responds to the
+    request sent by Device A as if it were Device D, giving to Device A its own hardware
+    address (without propagating Device A's broadcast). It will forward the message
+    sent by Device A to Device D on Device D's network. Similarly, it responds to
+    Device D as if it were Device A, giving its own address, then forwarding what
+    Device D sends to it over to the network where Device A is located.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The main advantage of proxying is that it is transparent to the hosts on the
+    different physical network segments. The technique has some drawbacks, however.
+    First, it introduces added complexity. Second, if more than one router connects
+    two physical networks using the same network ID, problems may arise. Third, it
+    introduces potential security risks; since it essentially means that a router
+    impersonates devices by acting as a proxy for them, the potential for a device
+    spoofing another is real. For these reasons, it may be better to redesign the
+    network so that routing is done between physical networks separated by a router,
+    if possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TCP/IP Address Resolution for IP Multicast Addresses
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Like most discussions of address resolution, most of this chapter so far has
+    focused on unicast communication, where a datagram is sent from one source device
+    to one destination device. Whether direct mapping or dynamic resolution is used
+    for resolving a network layer address, it is a relatively simple matter to resolve
+    addresses when there is only one intended recipient of the datagram. As you've
+    seen, TCP/IP uses ARP for its dynamic resolution scheme, which is designed for
+    unicast resolution only.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, IP also supports *multicasting* of datagrams, as I explain in the sections
+    on IP multicasting and IP multicast addressing in Chapters [Chapter 23](ch23.html
+    "Chapter 23. IP ROUTING AND MULTICASTING") and [Chapter 17](ch17.html "Chapter 17. CLASSFUL
+    (CONVENTIONAL) ADDRESSING"), respectively. In this situation, the datagram must
+    be sent to multiple recipients, which complicates matters considerably. You need
+    to establish a relationship of some sort between the IP multicast group address
+    and the addresses of the devices at the data link layer. You could do this by
+    converting the IP multicast datagram to individual unicast transmissions at the
+    data link layer with each using ARP for resolution, but this would be horribly
+    inefficient.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When possible, IP makes use of the multicast addressing and delivery capabilities
+    of the underlying network to deliver multicast datagrams on a physical network.
+    Perhaps surprisingly, even though ARP employs dynamic resolution, multicast address
+    resolution is done using a version of the direct mapping technique. By defining
+    a *mapping* between IP multicast groups and data link layer multicast groups,
+    you enable physical devices to know when to pay attention to multicasted datagrams.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The most commonly used multicast-capable data link addressing scheme is the
+    IEEE 802 addressing system best known for its use in Ethernet networks. These
+    data link layer addresses have 48 bits, arranged into two blocks of 24\. The upper
+    24 bits are arranged into a block called the *organizationally unique identifier
+    (OUI)*, with different values assigned to individual organizations; the lower
+    24 bits are then used for specific devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Internet Assigned Number Authority (IANA) itself has an OUI that it uses
+    for mapping multicast addresses to IEEE 802 addresses. This OUI is 01:00:5E. To
+    form a mapping for Ethernet, 24 bits are used for this OUI, and the 25th (of the
+    48) is always zero. This leaves 23 bits of the original 48 to encode the multicast
+    address. To do the mapping, the lower-order 23 bits of the multicast address are
+    used as the last 23 bits of the Ethernet address starting with 01:00:5E for sending
+    the multicast message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 13-8](ch13s03.html#mapping_of_multicast_ip_addresses_to_iee "Figure 13-8. Mapping
+    of multicast IP Addresses to IEEE 802 multicast MAC addresses Multicast IP addresses
+    are mapped to IEEE 802 multicast MAC addresses by copying the IANA multicast OUI
+    value (01-00-5E) to the top 24 bits, setting the 25th bit to zero, and copying
+    the bottom 23 bits of the multicast address to the remaining 23 bits. To create
+    a 48-bit multicast IEEE 802 (Ethernet) address, the top 24 bits are filled in
+    with the IANA''s multicast OUI, 01-00-5E. The 25th bit is zero, and the bottom
+    23 bits of the multicast group are put into the bottom 23 bits of the MAC address.
+    This leaves 5 bits (shown hatched) that are not mapped to the MAC address, meaning
+    that 32 different IP addresses may have the same mapped multicast MAC address.")
+    illustrates how the multicast address mapping process works.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**KEY CONCEPT** IP multicast addresses are resolved to IEEE 802 (Ethernet)
+    MAC addresses using a direct mapping technique that uses 23 of the 28 bits in
+    the IP multicast group address.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, there are 28 unique bits in IP multicast addresses, so this is a
+    "bit" of a problem! What it means is that there is no unique mapping between IP
+    multicast addresses and Ethernet multicast addresses. Since 5 of the 28 bits of
+    the multicast group cannot be encoded in the Ethernet address, 32 (2⁵) different
+    IP multicast addresses map onto each possible Ethernet multicast address. In theory,
+    this would be a problem, but in practice, it isn't. The chances of any two IP
+    multicast addresses on a single network mapping to the same Ethernet multicast
+    address at the same time are pretty small.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Mapping of multicast IP Addresses to IEEE 802 multicast MAC addresses Multicast
+    IP addresses are mapped to IEEE 802 multicast MAC addresses by copying the IANA
+    multicast OUI value (01-00-5E) to the top 24 bits, setting the 25th bit to zero,
+    and copying the bottom 23 bits of the multicast address to the remaining 23 bits.
+    To create a 48-bit multicast IEEE 802 (Ethernet) address, the top 24 bits are
+    filled in with the IANA''s multicast OUI, 01-00-5E. The 25th bit is zero, and
+    the bottom 23 bits of the multicast group are put into the bottom 23 bits of the
+    MAC address. This leaves 5 bits (shown hatched) that are not mapped to the MAC
+    address, meaning that 32 different IP addresses may have the same mapped multicast
+    MAC address.](httpatomoreillycomsourcenostarchimages287783.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13-8. Mapping of multicast IP Addresses to IEEE 802 multicast MAC addresses
+    Multicast IP addresses are mapped to IEEE 802 multicast MAC addresses by copying
+    the IANA multicast OUI value (01-00-5E) to the top 24 bits, setting the 25th bit
+    to zero, and copying the bottom 23 bits of the multicast address to the remaining
+    23 bits. To create a 48-bit multicast IEEE 802 (Ethernet) address, the top 24
+    bits are filled in with the IANA's multicast OUI, 01-00-5E. The 25th bit is zero,
+    and the bottom 23 bits of the multicast group are put into the bottom 23 bits
+    of the MAC address. This leaves 5 bits (shown hatched) that are not mapped to
+    the MAC address, meaning that 32 different IP addresses may have the same mapped
+    multicast MAC address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Still, it is possible that two IP multicast groups might be in use on the same
+    physical network and might map to the same data link layer multicast address.
+    For this reason, devices must not assume that all multicast messages they receive
+    are for their groups; they must pass up the messages to the IP layer to check
+    the full IP multicast address to make sure that they really were supposed to get
+    the multicast datagram they received. If they accidentally get one that was intended
+    for a multicast group they are not a member of, they discard it. This happens
+    infrequently, so the relative lack of efficiency is not a large concern.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TCP/IP Address Resolution for IP Version 6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The TCP/IP ARP is a fairly generic protocol for dynamically resolving network
+    layer addresses into data link layer addresses. Even though it was designed for
+    IPv4, the message format allows for variable-length addresses at both the hardware
+    and network layers. This flexibility means it would have been theoretically possible
+    to use it for the new version of IP, IPv6\. Some minor changes might have been
+    required, but the technique could have been about the same.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The designers of IPv6 chose not to do this, however. Changing IP is a big job
+    that has been under way for many years, providing a rare opportunity to change
+    various aspects of TCP/IP. The Internet Engineering Task Force (IETF) decided
+    to take advantage of the changes in IPv6 to overhaul not only IP itself, but also
+    many of the protocols that support or assist it. In IPv6, the address resolution
+    job of ARP has been combined with several functions performed by the Internet
+    Control Message Protocol (ICMP) in the original TCP/IP suite, supplemented with
+    additional capabilities and defined as the new Neighbor Discovery (ND) Protocol.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The term *neighbor* in IPv6 simply refers to devices on a local network, and
+    as the name implies, ND is responsible for tasks related to communicating information
+    between neighbors (among other things). I describe ND briefly in [Chapter 36](ch36.html
+    "Chapter 36. IPV6 NEIGHBOR DISCOVERY (ND) PROTOCOL"), including a discussion of
+    the various tasks it performs. Here, I focus specifically on how ND performs address
+    resolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The basic concepts of address resolution in IPv6 ND aren't all that different
+    from those in IPv4 ARP. Resolution is still dynamic and is based on the use of
+    a cache table that maintains pairings of IPv6 addresses and hardware addresses.
+    Each device on a physical network keeps track of this information for its neighbors.
+    When a source device needs to send an IPv6 datagram to a local network neighbor
+    but doesn't have its hardware address, it initiates the resolution process. For
+    clarity in the text let's say that, as usual, Device A is trying to send to Device
+    B.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instead of sending an ARP Request message, Device A creates an ND Neighbor Solicitation
+    message. Now, here's where the first big change can be seen from ARP. If the underlying
+    data link protocol supports multicasting, as Ethernet does, the Neighbor Solicitation
+    message is not broadcast. Instead, it is sent to the *solicited-node address*
+    of the device whose IPv6 address you are trying to resolve. So Device A won't
+    broadcast the message, but it will multicast it to Device B's solicited-node multicast
+    address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The solicited-node multicast address is a special mapping that each device on
+    a multicast-capable network creates from its unicast address; it is described
+    in [Chapter 25](ch25.html "Chapter 25. IPV6 ADDRESSING")'s discussion of IPv6
+    multicast addresses. The solicited-node address isn't unique for every IPv6 address,
+    but the odds of any two neighbors on a given network having the same one are small.
+    Each device that receives a multicasted Neighbor Solicitation must still check
+    to make sure it is the device whose address the source is trying to resolve.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why bother with this, if devices still have to check each message? The multicast
+    will affect at most a small number of devices. With a broadcast, each and every
+    device on the local network would receive the message, while the use of the solicited-node
+    address means at most that a couple of devices will need to process it. Other
+    devices don't even have to bother checking the Neighbor Solicitation message at
+    all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Device B will receive the Neighbor Solicitation and respond back to Device A
+    with a Neighbor Advertisement. This is analogous to the ARP Reply and tells Device
+    A the physical address of Device B. Device A then adds Device B's information
+    to its neighbor cache. For efficiency, cross-resolution is supported, as in IPv4
+    address resolution. This is done by having Device A include its own layer 2 address
+    in the Neighbor Solicitation, assuming it knows it. Device B will record this
+    along with Device A's IP address in Device B's neighbor cache.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**KEY CONCEPT** Address resolution in IPv6 uses the new *Neighbor Discovery
+    (ND) Protocol* instead of the Address Resolution Protocol (ARP). A device trying
+    to send an IPv6 datagram sends a Neighbor Solicitation message to get the address
+    of another device, which responds with a Neighbor Advertisement. When possible,
+    to improve efficiency, the request is sent using a special type of multicast address
+    rather than broadcast.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is actually a fairly simplified explanation of how resolution works in
+    IPv6, because ND is quite complicated. Neighbor solicitations and advertisements
+    are also used for other functions, such as testing the reachability of nodes and
+    determining if duplicate addresses are in use. There are many special cases and
+    issues that ND addresses to ensure that no problems develop during address resolution.
+    ND also supports proxied address resolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Even though I put this discussion where it would be near the other discussions
+    of address resolution, ND really isn''t a layer connection or lower-level protocol
+    like ARP. It is analogous to ICMP ([Chapter 31](ch31.html "Chapter 31. ICMP CONCEPTS
+    AND GENERAL OPERATION")) in its role and function, and, in fact, makes use of
+    ICMP(v6) messages. One advantage of this architectural change is that there is
+    less dependence on the characteristics of the physical network, so resolution
+    is accomplished in a way that''s more similar to other network support activities.
+    Thus, it is possible to make use of facilities that can be applied to all IP datagram
+    transmissions, such as IP security features. [Chapter 36](ch36.html "Chapter 36. IPV6
+    NEIGHBOR DISCOVERY (ND) PROTOCOL") contains much more information on this subject*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter 14. REVERSE ADDRESS RESOLUTION AND THE TCP/IP REVERSE ADDRESS RESOLUTION
+    PROTOCOL (RARP)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages287681.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In [Chapter 13](ch13.html "Chapter 13. ADDRESS RESOLUTION AND THE TCP/IP ADDRESS
+    RESOLUTION PROTOCOL (ARP)"), you explored the operation of the TCP/IP Address
+    Resolution Protocol (ARP). ARP is used when a device needs to determine the layer
+    2 (hardware) address of some other device but has only its layer 3 (network, IP)
+    address. It broadcasts a hardware layer request, and the target device responds
+    with the hardware address that matches the known IP address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In theory, it is also possible to use ARP in the opposite way. If you know the
+    hardware address of a device but not its IP address, you could broadcast a request
+    containing the hardware address and get back a response that contains the IP address.
+    In this chapter, you will briefly explore this concept of *reverse address resolution*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The obvious first question is why would you ever need to do this? Since you
+    are dealing with communication on an Internet Protocol (IP) internetwork, you
+    are always going to know the IP address of the destination of the datagram you
+    need to send—it's right there in the datagram itself. You also know your own IP
+    address as well. Or do you?
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a traditional TCP/IP network, every normal host on a network knows its IP
+    address because it is stored somewhere on the machine. When you turn on your PC,
+    the TCP/IP software reads the IP address from a file, which allows your PC to
+    learn and start using its IP address. However, there are some devices, such as
+    diskless workstations, that don't have any means of storing an IP address where
+    it can be easily retrieved. When these units are powered up, they know their physical
+    address only (because it's wired into the hardware) but not their IP address.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem you need to solve here is what is commonly called *bootstrapping*
+    in the computer industry. This refers to the concept of starting something from
+    a zero state; it is analogous to "pulling yourself up by your own bootstraps."
+    This is seemingly impossible, just as it seems paradoxical to use TCP/IP to configure
+    the IP address that is needed for TCP/IP communications. However, it is indeed
+    possible to do this, by making use of broadcasts, which allow local communication
+    even when the target's address is not known.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Reverse Address Resolution Protocol (RARP)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The first method devised to address the bootstrapping problem in TCP/IP was
+    the backward use of ARP, which is described in the previous chapter. This technique
+    was formalized in RFC 903, "A Reverse Address Resolution Protocol (RARP)," published
+    in 1984\. ARP allows Device A to say, "I am Device A, and I have Device B's IP
+    address. Device B please tell me your hardware address." RARP is used by Device
+    A to say, "I am Device A, and I am sending this broadcast using my hardware address;
+    can someone please tell me *my* IP address?"
+  prefs: []
+  type: TYPE_NORMAL
+- en: The two-step operation of RARP is illustrated in [Figure 14-1](ch14.html#operation_of_the_reverse_address_resolut
+    "Figure 14-1. Operation of the Reverse Address Resolution Protocol (RARP) RARP
+    works like ARP but in reverse; a device broadcasts its hardware address and an
+    RARP server responds with its IP address. Here, instead of Device A providing
+    the IP address of another device and asking for its hardware address, it is providing
+    its own hardware address and asking for an IP address it can use. The answer,
+    in this case, is provided by Device D, which is serving as an RARP server for
+    this network."). As the name suggests, RARP works like ARP but in reverse, which
+    is why this diagram is similar to [Figure 13-4](ch13.html#dynamic_address_resolution_the_device_th
+    "Figure 13-4. Dynamic address resolution The device that wants to send data broadcasts
+    a request asking for a response with a hardware address from the other device.
+    Device A needs to send data to Device B, but knows only its IP address (IPB) and
+    not its hardware address. Device A broadcasts a request asking to be sent the
+    hardware address of the device using the IP address IPB. Device B responds back
+    to Device A directly with the hardware address.").
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next question then is who knows Device A's IP address if Device A doesn't?
+    The answer is that a special *RARP server* must be configured to listen for RARP
+    requests and then issue replies to them. Each physical network where RARP is in
+    use must have RARP software running on at least one machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'RARP is not only very similar to ARP, it basically is ARP. RFC 903 doesn''t
+    define a whole new protocol from scratch; it just describes a new method for using
+    ARP to perform the opposite of its normal function. RARP uses ARP messages in
+    the same format as ARP (described in [Chapter 13](ch13.html "Chapter 13. ADDRESS
+    RESOLUTION AND THE TCP/IP ADDRESS RESOLUTION PROTOCOL (ARP)")), but uses different
+    opcodes to accomplish its reverse function. As in ARP, a request and reply are
+    used in an exchange. The meaning of the address fields is the same, too: The sender
+    is the device transmitting a message, while the target is the one receiving it.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**KEY CONCEPT** The *Reverse Address Resolution Protocol (RARP)* is the earliest
+    and simplest protocol that''s designed to allow a device to obtain an IP address
+    for use on a TCP/IP network. It is based directly on ARP and works in basically
+    the same way, but in reverse: A device sends a request containing its hardware
+    address, and a device set up as an RARP server responds back with the device''s
+    assigned IP address.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Operation of the Reverse Address Resolution Protocol (RARP) RARP works like
+    ARP but in reverse; a device broadcasts its hardware address and an RARP server
+    responds with its IP address. Here, instead of Device A providing the IP address
+    of another device and asking for its hardware address, it is providing its own
+    hardware address and asking for an IP address it can use. The answer, in this
+    case, is provided by Device D, which is serving as an RARP server for this network.](httpatomoreillycomsourcenostarchimages287785.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14-1. Operation of the Reverse Address Resolution Protocol (RARP) RARP
+    works like ARP but in reverse; a device broadcasts its hardware address and an
+    RARP server responds with its IP address. Here, instead of Device A providing
+    the IP address of another device and asking for its hardware address, it is providing
+    its own hardware address and asking for an IP address it can use. The answer,
+    in this case, is provided by Device D, which is serving as an RARP server for
+    this network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RARP General Operation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Figure 14-2](ch14s02.html#reverse_address_resolution_protocol_rarp "Figure 14-2. Reverse
+    Address Resolution Protocol (RARP) operation RARP consists of the exchange of
+    one broadcast request message and one unicast reply message.") shows the steps
+    followed in a RARP transaction. As you can see, RARP uses a simple request and
+    reply exchange to allow a device to obtain an IP address.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Reverse Address Resolution Protocol (RARP) operation RARP consists of the
+    exchange of one broadcast request message and one unicast reply message.](httpatomoreillycomsourcenostarchimages287787.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14-2. Reverse Address Resolution Protocol (RARP) operation RARP consists
+    of the exchange of one broadcast request message and one unicast reply message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here''s what happens at each step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source Device Generates RARP Request Message** The source device generates
+    an RARP Request message. Thus, it uses the value 3 for the *opcode* in the message.
+    It puts its own data link layer address as both the Sender Hardware Address and
+    also the Target Hardware Address. It leaves both the Sender Protocol Address and
+    the Target Protocol Address blank, since it doesn''t know either.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Source Device Broadcasts RARP Request Message** The source broadcasts the
+    ARP Request message on the local network.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Local Devices Process RARP Request Message** The message is received by each
+    device on the local network and processed. Devices that are not configured to
+    act as RARP servers ignore the message.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**RARP Server Generates RARP Reply Message** Any device on the network that
+    is set up to act as an RARP server responds to the broadcast from the source device.
+    It generates an RARP Reply using an opcode value of 4\. It sets the Sender Hardware
+    Address and Sender Protocol Address to its own hardware and IP address, since
+    it is the sender of the reply. It then sets the Target Hardware Address to the
+    hardware address of the original source device. It looks up in a table the hardware
+    address of the source, determines that device''s IP address assignment, and puts
+    it into the Target Protocol Address field.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**RARP Server Sends RARP Reply Message** The RARP server sends the RARP Reply
+    message unicast to the device looking to be configured.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Source Device Processes RARP Reply Message** The source device processes
+    the reply from the RARP server. It then configures itself using the IP address
+    in the Target Protocol Address supplied by the RARP server.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*More than one RARP server may respond to a request, if two or more are configured
+    on any local network. The source device will typically use the first reply and
+    discard the others*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Limitations of RARP
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'RARP is the earliest and most rudimentary of the class of technologies I call
+    *host configuration protocols*, which I describe in general terms in [Chapter 59](ch59.html
+    "Chapter 59. HOST CONFIGURATION CONCEPTS, ISSUES, AND MOTIVATION"). As the first
+    of these protocols, RARP was a useful addition to TCP/IP in the early 1980s, but
+    has several shortcomings, the most important of which are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Low-Level Hardware Orientation** RARP works using hardware broadcasts. This
+    means that if you have a large internetwork with many physical networks, you need
+    an RARP server on *every* network segment. Worse, if you need reliability to make
+    sure RARP keeps running even if one RARP server goes down, you need *two* on each
+    physical network. This makes centralized management of IP addresses difficult.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Manual Assignment** RARP allows hosts to configure themselves automatically,
+    but the RARP server must still be set up with a manual table of bindings between
+    hardware and IP addresses. These must be maintained for each server, which is,
+    again, a lot of work for an administrator.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Limited Information** RARP provides a host with only its IP address. It cannot
+    provide other needed information such as, for example, a subnet mask or default
+    gateway.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The importance of host configuration has increased dramatically since the early
+    1980s. Many organizations assign IP addresses dynamically even for hosts that
+    have disk storage, because of the many advantages this provides in administration
+    and because of the efficient use of address space. For this reason, RARP has been
+    replaced by two more capable technologies that operate at higher layers in the
+    TCP/IP protocol stack: BOOTP and DHCP. They are discussed in the application layer
+    section on host configuration protocols, in Chapters [Chapter 60](ch60.html "Chapter 60. TCP/IP
+    BOOTSTRAP PROTOCOL (BOOTP)") through [Chapter 64](ch64.html "Chapter 64. DHCP
+    CLIENT/SERVER IMPLEMENTATION, FEATURES, AND IPV6 SUPPORT").'
+  prefs: []
+  type: TYPE_NORMAL

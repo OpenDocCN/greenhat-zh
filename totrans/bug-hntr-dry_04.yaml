@@ -1,0 +1,939 @@
+- en: Chapter 4. NULL Pointer FTW
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Saturday, January 24, 2009*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Dear Diary*,'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I found a really beautiful bug today: a type conversion vulnerability leading
+    to a NULL pointer dereference (see Section A.2). Under normal circumstances this
+    wouldn’t be a big deal, since the bug affects a user space library, which generally
+    means that at worst it would crash a user space application. But this bug is different
+    from the average user space NULL pointer dereferences, and it’s possible to exploit
+    this vulnerability to execute arbitrary code.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The vulnerability affects the FFmpeg multimedia library that is used by many
+    popular software projects, including Google Chrome, VLC media player, MPlayer,
+    and Xine to name just a few. There are also rumors that YouTube uses FFmpeg as
+    backend conversion software.^([[37](ch04s05.html#ftn.CHP-4-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*There are other examples of exploitable user space NULL pointer dereferences.
+    See Mark Dowd’s MacGyver exploit for Flash* ([http://blogs.iss.net/archive/flash.html](http://blogs.iss.net/archive/flash.html))
+    *or Justin Schuh’s Firefox bug* ([http://blogs.iss.net/archive/cve-2008-0017.html](http://blogs.iss.net/archive/cve-2008-0017.html)).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.1 Vulnerability Discovery
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To find the vulnerability I did the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: List the demuxers of FFmpeg.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 2: Identify the input data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 3: Trace the input data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 1: List the Demuxers of FFmpeg'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: After getting the latest source code revision from the FFmpeg SVN repository,
+    I generated a list of the demuxers that are available in the `libavformat` library,
+    which is included with FFmpeg (see [Figure 4-1](ch04.html#ffmpeg_libavformat_demuxers
+    "Figure 4-1. FFmpeg libavformat demuxers")). I noticed that FFmpeg separates most
+    demuxers in different C files under the directory *libavformat/*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![FFmpeg libavformat demuxers](httpatomoreillycomsourcenostarchimages939263.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-1. FFmpeg libavformat demuxers
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: FFmpeg development has moved to a Git repository,^([[38](ch04s05.html#ftn.CHP-4-FN-2)])and
+    the SVN repository is no longer updated. The vulnerable source code revision (SVN-r16556)
+    of FFmpeg can now be downloaded from this book’s website.^([[39](ch04s05.html#ftn.CHP-4-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 2: Identify the Input Data'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Next, I tried to identify the input data processed by the demuxers. While reading
+    the source code, I discovered that most demuxers declare a function called *`demuxername`*`_read_header()`,
+    which usually takes a parameter of the type `AVFormatContext`. This function declares
+    and initializes a pointer that looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Many different `get_`*`something`* functions (e.g., `get_le32()`, `get_buffer()`)
+    and special macros (e.g., `AV_RL32`, `AV_RL16`) are then used to extract portions
+    of the data pointed to by `pb`. At this point, I was pretty sure that `pb` had
+    to be a pointer to the input data of the media files being processed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Trace the Input Data'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: I decided to search for bugs by tracing the input data of each demuxer at the
+    source code level. I started with the first demuxer file from the list, called
+    *4xm.c*. While auditing the demuxer of the 4X movie file format,^([[40](ch04s05.html#ftn.CHP-4-FN-4)])
+    I found the vulnerability shown in the listing below.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*libavformat/4xm.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`fourxm_read_header()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `get_buffer()` function in line 124 copies input data from the processed
+    media file into the heap buffer pointed to by `header` (see lines 101 and 121).
+    If the media file contains a so-called `strk` chunk (see line 160) the `AV_RL32()`
+    macro in line 166 reads an unsigned int from the header data and stores the value
+    in the signed int variable `current_track` (see line 103). The conversion of a
+    user-controlled unsigned int value from the media file to a signed int could cause
+    a conversion bug! My interest piqued, I continued to search through the code,
+    excited that I might be on to something.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `if` statement in line 167 checks whether the user-controlled value of `current_track
+    + 1` is greater than `fourxm->track_count`. The signed int variable `fourxm->track_count`
+    is initialized with 0 (see line 106). Supplying a value >= `0x80000000` for `current_track`
+    causes a change in sign that results in `current_track` being interpreted as negative
+    (to find out why, see Section A.3). If `current_track` is interpreted as negative,
+    the `if` statement in line 167 will always return `false` (as the signed int variable
+    `fourxm->track_count` has a value of zero), and the buffer allocation in line
+    171 will never be reached. Clearly, it was a bad idea to convert that user-controlled
+    unsigned int to a signed int.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since `fourxm->tracks` is initialized with `NULL` (see line 107) and line 171
+    is never reached, the write operations in lines 178–181 lead to four NULL pointer
+    dereferences. Because NULL is dereferenced by the user-controlled value of `current_track`,
+    it’s possible to write user-controlled data at a wide range of memory locations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Perhaps you wouldn’t technically call this a NULL pointer “dereference,” since
+    I’m not actually dereferencing NULL but a nonexistent structure that’s located
+    at a user-controlled offset from NULL. In the end it depends on how you define
+    the term *NULL pointer dereference*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The expected behavior of FFmpeg is shown in [Figure 4-2](ch04.html#expected_behavior_when_ffmpeg_operates_n
+    "Figure 4-2. Expected behavior when FFmpeg operates normally") as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`fourxm->tracks` is initialized with `NULL` (see line 107).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the processed media file contains a `strk` chunk, the value of `current_track`
+    is extracted from the user-controlled data of the chunk (see line 166).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the value of `current_track + 1` is greater than zero, a heap buffer is allocated.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The heap buffer pointed to by `fourxm->tracks` is allocated (see lines 171 and
+    172).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Data from the media file is copied into the heap buffer, while `current_track`
+    is used as an array index into the buffer (see lines 178–181).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When this behavior occurs, there is no security problem.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Expected behavior when FFmpeg operates normally](httpatomoreillycomsourcenostarchimages939265.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-2. Expected behavior when FFmpeg operates normally
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 4-3](ch04.html#unexpected_behavior_of_ffmpeg_causing_me "Figure 4-3. Unexpected
+    behavior of FFmpeg causing memory corruption") shows what happens when this bug
+    affects FFmpeg:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`fourxm->tracks` is initialized with `NULL` (see line 107).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the processed media file contains a `strk` chunk, the value of `current_track`
+    is extracted from the user-controlled data of the chunk (see line 166).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the value of `current_track + 1` is less than zero, the heap buffer isn’t
+    allocated.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`fourxm->tracks` still points to memory address `NULL`.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The resulting NULL pointer is then dereferenced by the user-controlled value
+    of `current_track`, and four 32-bit values of user-controlled data are assigned
+    to the dereferenced locations (see lines 178–181).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Four user-controlled memory locations can be overwritten with four user-controlled
+    data bytes each.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Unexpected behavior of FFmpeg causing memory corruption](httpatomoreillycomsourcenostarchimages939267.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-3. Unexpected behavior of FFmpeg causing memory corruption
+  prefs: []
+  type: TYPE_NORMAL
+- en: What a beautiful bug!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.2 Exploitation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To exploit the vulnerability I did the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*The vulnerability affects all operating system platforms supported by FFmpeg.
+    The platform that I used throughout this chapter was the default installation
+    of Ubuntu Linux 9.04 (32-bit)*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Find a sample 4X movie file with a valid `strk` chunk.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 2: Learn about the layout of the `strk` chunk.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 3: Manipulate the `strk` chunk to crash FFmpeg.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Step 4: Manipulate the `strk` chunk to get control over `EIP`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There are different ways to exploit file format bugs. I could either create
+    a file with the right format from scratch or alter an existing file. I chose the
+    latter approach. I used the website [http://samples.mplayerhq.hu/](http://samples.mplayerhq.hu/)
+    to find a 4X movie file suitable for testing this vulnerability. I could have
+    built a file myself, but downloading a preexisting file is fast and easy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Find a Sample 4X Movie File with a Valid strk Chunk'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: I used the following to get a sample file from [http://samples.mplayerhq.hu/](http://samples.mplayerhq.hu/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: After downloading the file, I renamed it *original.4xm*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 2: Learn About the Layout of the strk Chunk'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'According to the 4X movie file format description, a `strk` chunk has the following
+    structure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `strk` chunk of the downloaded sample file starts at file offset `0x1a6`,
+    as shown in [Figure 4-4](ch04s02.html#a_strk_chunk_from_the_4x_movie_sample_fi
+    "Figure 4-4. A strk chunk from the 4X movie sample file I downloaded. The numbers
+    shown are referenced in Table 4-1."):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A strk chunk from the 4X movie sample file I downloaded. The numbers shown
+    are referenced in .](httpatomoreillycomsourcenostarchimages939269.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-4. A `strk` chunk from the 4X movie sample file I downloaded. The numbers
+    shown are referenced in [Table 4-1](ch04s02.html#components_of_strk_chunk_layout_shown_in
+    "Table 4-1. Components of strk Chunk Layout Shown in Figure 4-4").
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Table 4-1](ch04s02.html#components_of_strk_chunk_layout_shown_in "Table 4-1. Components
+    of strk Chunk Layout Shown in Figure 4-4") describes the layout of the `strk`
+    chunk illustrated in [Figure 4-4](ch04s02.html#a_strk_chunk_from_the_4x_movie_sample_fi
+    "Figure 4-4. A strk chunk from the 4X movie sample file I downloaded. The numbers
+    shown are referenced in Table 4-1.").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 4-1. Components of strk Chunk Layout Shown in [Figure 4-4](ch04s02.html#a_strk_chunk_from_the_4x_movie_sample_fi
+    "Figure 4-4. A strk chunk from the 4X movie sample file I downloaded. The numbers
+    shown are referenced in Table 4-1.")
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Reference | Header offset | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| (1) | `&header[i]` | `fourcc: ''strk''` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| (2) | `&header[i+4]` | length of `strk` structure (`0x28` bytes) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| (3) | `&header[i+8]` | `track number` (this is the `current_track` variable
+    from FFmpeg source code) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| (4) | `&header[i+12]` | `audio type` (this is the value that gets written
+    at the first dereferenced memory location) |'
+  prefs: []
+  type: TYPE_TB
+- en: To exploit this vulnerability, I knew that I would need to set the values of
+    `track number` at `&header[i+8]` (that corresponds to `current_track` from FFmpeg
+    source code) and `audio type` at `&header[i+12]`. If I set the values properly,
+    the value of `audio type` would be written at the memory location `NULL + track
+    number`, which is the same as `NULL + current_track`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In summary, the (nearly) arbitrary memory write operations from the FFmpeg
+    source code are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And each corresponds to this pseudo code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 3: Manipulate the strk Chunk to Crash FFmpeg'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Compiling FFmpeg: linux$ ./configure; make These commands will compile two
+    different binary versions of FFmpeg*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ffmpeg *Binary without debugging symbols*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: ffmpeg_g *Binary with debugging symbols*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: After compiling the vulnerable FFmpeg source code revision 16556, I tried to
+    convert the 4X movie into an AVI file to verify that the compilation was successful
+    and that FFmpeg worked flawlessly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, I modified the values of `track number` as well as `audio type` in the
+    `strk` chunk of the sample file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As illustrated in [Figure 4-5](ch04s02.html#the_strk_chunk_of_the_sample_file_after
+    "Figure 4-5. The strk chunk of the sample file after I altered it. The changes
+    I made are highlighted and framed, and the numbers shown are referenced in the
+    text above."), I changed the value of `track number` to `0xaaaaaaaa` (1) and the
+    value of `audio type` to `0xbbbbbbbb` (2). I named the new file *poc1.4xm* and
+    tried to convert it with FFmpeg (see Section B.4 for a description of the following
+    debugger commands).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The strk chunk of the sample file after I altered it. The changes I made
+    are highlighted and framed, and the numbers shown are referenced in the text above.](httpatomoreillycomsourcenostarchimages939271.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-5. The `strk` chunk of the sample file after I altered it. The changes
+    I made are highlighted and framed, and the numbers shown are referenced in the
+    text above.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, FFmpeg crashed with a segmentation fault at source code line 178\.
+    I further analyzed the FFmpeg process within the debugger to see what exactly
+    caused the crash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At the time of the crash, the registers `EAX` and `EBX` were filled with the
+    values that I input for `audio type` (`0xbbbbbbbb`) and `track number` (`0xaaaaaaaa`).
+    Next, I asked the debugger to display the last instruction executed by FFmpeg:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: As the debugger output shows, the instruction that caused the segmentation fault
+    was attempting to write the value `0xbbbbbbbb` at an address calculated using
+    my value for `track number`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To control the memory write, I needed to know how the destination address of
+    the write operation was calculated. I found the answer by looking at the following
+    assembly code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These instructions correspond to the following C source line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[Table 4-2](ch04s02.html#list_of_the_assembler_instructions_and "Table 4-2. List
+    of the Assembler Instructions and the Result of Each Instruction") explains the
+    results of these instructions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Since `EBX` contains the value I supplied for `current_track` and `EDX` contains
+    the NULL pointer of `fourxm->tracks`, the calculation can be expressed as this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Table 4-2. List of the Assembler Instructions and the Result of Each Instruction
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Instruction | Result |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `lea ebp,[ebx+ebx*4]` | `ebp = ebx + ebx * 4` (The `EBX` register contains
+    the user-defined value of `current_track` (`0xaaaaaaaa`).) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `mov eax,DWORD PTR [esp+0x34]` | `eax` = array index `i` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `mov edx,DWORD PTR [esi+0x10]` | `edx = fourxm->tracks` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `shl ebp,0x2` | `ebp = ebp << 2` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `mov eax,DWORD PTR [ecx+eax*1+0xc]` | `eax = AV_RL32(&header[i + 12]);` or
+    `eax = ecx[eax + 0xc];` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `mov DWORD PTR [edx+ebp*1+0x10],eax` | `fourxm->tracks[current_track].adpcm
+    = eax;` or `edx[ebp + 0x10] = eax;` |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Or in a more simplified form:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I supplied the value `0xaaaaaaaa` for `current_track` (`EBX` register), so
+    the calculation should look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The result of `0x55555558` can be confirmed with the help of the debugger:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 4: Manipulate the strk Chunk to Gain Control over EIP'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The vulnerability allowed me to overwrite nearly arbitrary memory addresses
+    with any 4-byte value. To gain control of the execution flow of FFmpeg, I had
+    to overwrite a memory location that would allow me to control the `EIP` register.
+    I had to find a stable address, one that was predictable within the address space
+    of FFmpeg. That ruled out all stack addresses of the process. But the *Executable
+    and Linkable Format* (*ELF*) used by Linux provides an almost perfect target:
+    the *Global Offset Table* (*GOT*). Every library function used in FFmpeg has a
+    reference in the GOT. By manipulating GOT entries, I could easily gain control
+    of the execution flow (see Section A.4). The good thing about the GOT is that
+    it’s predictable, which is exactly what I needed. I could gain control of `EIP`
+    by overwriting the GOT entry of a library function that is called after the vulnerability
+    happens.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, what library function is called after the arbitrary memory writes? To answer
+    this question, I had a look at the source code again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*libavformat/4xm.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`fourxm_read_header()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Directly after the four memory-write operations, a new `AVStream` is allocated
+    using the function `av_new_stream()`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*libavformat/utils.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Function**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`av_new_stream()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: In line 2279 another function named `av_mallocz()` is called.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Source code file**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*libavutil/mem.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Functions**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`av_mallocz()` and `av_malloc()`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In line 137 the function `av_malloc()` is called, and it calls `memalign()`
+    in line 64 (the other `ifdef` cases—lines 54 and 61—are not defined when using
+    the Ubuntu Linux 9.04 platform). I was excited to see `memalign()` because it
+    was exactly what I was looking for: a library function that’s called directly
+    after the vulnerability happens (see [Figure 4-6](ch04s02.html#a_call_graph_showing_the_path_from_the_v
+    "Figure 4-6. A call graph showing the path from the vulnerable function to memalign()")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![A call graph showing the path from the vulnerable function to memalign()](httpatomoreillycomsourcenostarchimages939273.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-6. A call graph showing the path from the vulnerable function to `memalign()`
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'That brought me to the next question: What is the address of the GOT entry
+    of `memalign()` in FFmpeg?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'I gained this information with the help of `objdump`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'So the address I had to overwrite was `0x08560204`. All I had to do was calculate
+    an appropriate value for `track number` (`current_track`). I could get that value
+    in either of two ways: I could try to calculate it, or I could use brute force.
+    I chose the easy option and wrote the following program:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 4-1. Little helper program to use brute force to find the appropriate
+    value for `current_track` (*addr_brute_force.c*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: The program illustrated in [Example 4-1](ch04s02.html#little_helper_program_to
+    "Example 4-1. Little helper program to use brute force to find the appropriate
+    value for current_track (addr_brute_force.c)") uses brute force to find an appropriate
+    `track number` (`current_track`) value, which is needed to overwrite the (GOT)
+    address defined in line 4\. This is done by trying all possible values for `current_track`
+    until the result of the calculation (see line 16) matches the searched GOT entry
+    address of `memalign()` (see line 17). To trigger the vulnerability, `current_track`
+    has to be interpreted as negative, so only values in the range of `0x80000000`
+    to `0xffffffff` are considered (see line 15).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: I then adjusted the sample file and renamed it *poc2.4xm*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The only thing I changed was the value of `track number` (see (1) in [Figure 4-7](ch04s02.html#the_strk_chunk_of_poc2.4xm_after_i_adjus
+    "Figure 4-7. The strk chunk of poc2.4xm after I adjusted the track number (current_track)")).
+    It now matched the value generated by my little helper program.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![The strk chunk of poc2.4xm after I adjusted the track number (current_track)](httpatomoreillycomsourcenostarchimages939275.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-7. The `strk` chunk of *poc2.4xm* after I adjusted the `track number`
+    (`current_track`)
+  prefs: []
+  type: TYPE_NORMAL
+- en: I then tested the new proof-of-concept file in the debugger (see Section B.4
+    for a description of the following debugger commands).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: Bingo! Full control over `EIP`. After I gained control over the instruction
+    pointer, I developed an exploit for the vulnerability. I used the VLC media player
+    as an injection vector, because it uses the vulnerable version of FFmpeg.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As I’ve said in previous chapters, the laws in Germany do not allow me to provide
+    a full working exploit, but you can watch a short video I recorded that shows
+    the exploit in action on the book’s website.^([[41](ch04s05.html#ftn.CHP-4-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Figure 4-8](ch04s02.html#diagram_of_my_exploitation_of_the_ffmpeg "Figure 4-8. Diagram
+    of my exploitation of the FFmpeg bug") summarizes the steps I used to exploit
+    the vulnerability. Here is the anatomy of the bug shown in this figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The destination address for the memory write is calculated while using `current_track`
+    as an index (`NULL` + `current_track` + offset). The value of `current_track`
+    derives from user-controlled data of the 4xm media file.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The source data of the memory write derives from user-controlled data of the
+    media file.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The user-controlled data is copied at the memory location of the `memalign()`
+    GOT entry.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Diagram of my exploitation of the FFmpeg bug](httpatomoreillycomsourcenostarchimages939277.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-8. Diagram of my exploitation of the FFmpeg bug
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.3 Vulnerability Remediation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Tuesday, January 27, 2009*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After I told the FFmpeg maintainers about the bug, they developed the following
+    patch:^([[42](ch04s05.html#ftn.CHP-4-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: The patch applies a new length check that restricts the maximum value for `current_track`
+    to `0x09249247`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: When the patch is in place, `current_track` can’t become negative, and the vulnerability
+    is indeed fixed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This patch eliminated the vulnerability at the source code level. There’s also
+    a generic exploit mitigation technique that would make it much harder to exploit
+    the bug. To gain control of the execution flow, I had to overwrite a memory location
+    to gain control over `EIP`. In this example, I used a GOT entry. The *RELRO* mitigation
+    technique has an operation mode called *Full RELRO* that (re)maps the GOT as read-only,
+    thus making it impossible to use the described GOT overwrite technique to gain
+    control of the execution flow of FFmpeg. However, other exploitation techniques
+    that are not mitigated by RELRO would still allow control over `EIP`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*See Section C.2 for more information on the RELRO mitigation technique*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To make use of the Full RELRO mitigation technique, the FFmpeg binary would
+    need to be recompiled with the following additional linker options: `-Wl,-z,relro,-z,now`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Example of recompiling FFmpeg with Full RELRO support:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Get GOT entry of `memalign()`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Adjust [Example 4-1](ch04s02.html#little_helper_program_to "Example 4-1. Little
+    helper program to use brute force to find the appropriate value for current_track
+    (addr_brute_force.c)") and use brute force to get the value for `current_track`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Make a new proof-of-concept file (*poc_relro.4xm*) and test it in the debugger
+    (see Section B.4 for a description of the following debugger commands):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'FFmpeg crashed again while trying to parse the malformed media file. To see
+    what exactly caused the crash, I asked the debugger to display the current register
+    values as well as the last instruction executed by FFmpeg:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'I also displayed the address where FFmpeg had attempted to store the value
+    of `EAX`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, FFmpeg tried to write the value of `EAX` to the supplied address
+    (`0x855ffd0`) of `memalign()`’s GOT entry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: This time FFmpeg crashed with a segmentation fault while trying to overwrite
+    the read-only GOT entry (see the `r--p` permissions of the GOT at `0855f000-08560000`).
+    It seems that Full RELRO can indeed successfully mitigate GOT overwrites.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.4 Lessons Learned
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As a programmer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t mix different data types.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Learn about the hidden transformations done automatically by the compiler. These
+    implicit conversions are subtle and cause a lot of security bugs^([[43](ch04s05.html#ftn.CHP-4-FN-7)])
+    (also see Section A.3).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Get a solid grasp of C’s type conversions.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Not all NULL pointer dereferences in user space are simple denial-of-service
+    conditions. Some of them are really bad vulnerabilities that can lead to arbitrary
+    code execution.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Full RELRO helps to mitigate the GOT overwrite exploitation technique.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'As a user of media players:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Never trust media file extensions (see Section 2.5).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 4.5 Addendum
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*Wednesday, January 28, 2009*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The vulnerability was fixed ([Figure 4-9](ch04s05.html#timeline_of_the_ffmpeg_bug_from_notifica
+    "Figure 4-9. Timeline of the FFmpeg bug from notification to the release of a
+    fixed version of FFmpeg") shows the timeline) and a new version of FFmpeg is available,
+    so I released a detailed security advisory on my website.^([[44](ch04s05.html#ftn.CHP-4-FN-8)])
+    The bug was assigned CVE-2009-0385.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Timeline of the FFmpeg bug from notification to the release of a fixed version
+    of FFmpeg](httpatomoreillycomsourcenostarchimages939279.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4-9. Timeline of the FFmpeg bug from notification to the release of a
+    fixed version of FFmpeg
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ^([[37](#ftn.CHP-4-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[38](#ftn.CHP-4-FN-2)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[39](#ftn.CHP-4-FN-3)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[40](#ftn.CHP-4-FN-4)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[41](#ftn.CHP-4-FN-5)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[42](#ftn.CHP-4-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[43](#ftn.CHP-4-FN-7)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[44](#ftn.CHP-4-FN-8)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[37](#CHP-4-FN-1)]) See [http://wiki.multimedia.cx/index.php?title=YouTube](http://wiki.multimedia.cx/index.php?title=YouTube).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[38](#CHP-4-FN-2)]) See [http://ffmpeg.org/download.html](http://ffmpeg.org/download.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[39](#CHP-4-FN-3)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[40](#CHP-4-FN-4)]) A detailed description of the 4X movie file format can
+    be found at [http://wiki.multimedia.cx/index.php?title=4xm_Format](http://wiki.multimedia.cx/index.php?title=4xm_Format).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[41](#CHP-4-FN-5)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[42](#CHP-4-FN-6)]) The patch from the FFmpeg maintainers can be found at
+    [http://git.videolan.org/?p=ffmpeg.git;a=commitdiff;h=0838cfdc8a10185604db5cd9d6bffad71279a0e8](http://git.videolan.org/?p=ffmpeg.git;a=commitdiff;h=0838cfdc8a10185604db5cd9d6bffad71279a0e8).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[43](#CHP-4-FN-7)]) For more information on type conversions and associated
+    security problems consult Mark Dowd, John McDonald, and Justin Schuh, *The Art
+    of Software Security Assessment: Identifying and Preventing Software Vulnerabilities*
+    (Indianapolis, IN: Addison-Wesley Professional, 2007). See also the sample chapter
+    available at [http://ptgmedia.pearsoncmg.com/images/0321444426/samplechapter/Dowd_ch06.pdf](http://ptgmedia.pearsoncmg.com/images/0321444426/samplechapter/Dowd_ch06.pdf).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[44](#CHP-4-FN-8)]) My security advisory that describes the details of the
+    FFmpeg vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2009-004.txt](http://www.trapkit.de/advisories/TKADV2009-004.txt).
+  prefs: []
+  type: TYPE_NORMAL

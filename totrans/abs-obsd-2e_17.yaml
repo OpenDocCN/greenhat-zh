@@ -1,0 +1,966 @@
+- en: Chapter 17. Desktop OpenBSD
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Spend summer days with*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*blowfish at your fingertips:*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*no passwords stolen!*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](httpatomoreillycomsourcenostarchimages1616079.png) OpenBSD is best known
+    as a server operating system, but it can be a very effective and powerful desktop
+    system. The X Window System is the standard graphic desktop software for Unix-like
+    operating systems, and OpenBSD includes tools for using it. As this book assumes
+    that you have some Unix experience, I won’t cover all the applications that make
+    X Windows comfortable. You’ll need to experiment to find your preferred mail client,
+    web browser, and text editors—most of which aren’t OpenBSD-specific. Instead,
+    this chapter covers items that are unique to OpenBSD, originated with OpenBSD,
+    or require specific configuration.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenBSD includes the Xenocara framework for modifying and building X.Org in
+    a manner tightly integrated with OpenBSD. We’ll discuss making OpenBSD boot into
+    a graphical desktop using the `cwm` desktop environment, as well as a text console
+    using the `tmux` terminal multiplexer. But we’ll start by customizing the console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring Your Console with wscons
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `wscons(4)` hardware-independent console driver lets you configure your
+    boring, black-and-white, nongraphical console in many ways.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start by viewing the current console settings using `wsconsctl(8)`. Run the
+    following on a text console, not in an X session (changes made in `wscons` can
+    carry over to an X session, but once you start X, you’re mostly stuck with X’s
+    configuration system).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Each line contains a system variable and a setting, many of which you can change.
+    The `keyboard.type` variable represents the type of keyboard on the system. Because
+    this is an amd64 system, it uses the `pc-xt` keyboard common to consumer computers,
+    but you’ll see different keyboard types with different hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can also change these settings with `wsconsctl`. For example, in the previous
+    listing, the variable `keyboard.bell.volume` sets the volume of the computer’s
+    beep. Now, I’m a `tcsh` user, and I frequently use tab completion (type a character
+    or two, press TAB, and the shell fills in the name of the command or file you’re
+    about to type). Unfortunately, when tab completion hits an ambiguous spot, it
+    stops. That’s not a problem when I’m logged in over SSH, because I can just type
+    a character or two and press TAB again. But when I’m on the local console, each
+    ambiguity is accompanied by a beep (or bell) from the computer. When I’m trying
+    to fix a problem, and the bell rings, shouting “*beep* WRONG! *beep* WRONG! *beep*
+    WRONG!” I have only one thought:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The beep must die.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now silence reigns and I can resolve the problem without the computer nagging
+    me. (You could choose to turn up the volume, if you’re a masochist. I won’t judge
+    you—at least not in public.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, we’ll look at a couple other things you can do with `wscons`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Screen Blanking
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you leave the system alone for a few minutes, the screen should go blank
+    to reduce power usage. Modern monitors often do this on their own, but you can
+    also configure this behavior in the operating system, especially for older platforms.
+    OpenBSD turns off the display only once it knows how to reactivate the display.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You have three choices:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '****`display.kbdact`****. Wake on keyboard activity'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '****`display.msact`****. Wake on mouse activity'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '****`display.outact`****. Wake on monitor output'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Set one of these `wscons` variables to `on`, and OpenBSD will realize it should
+    start blanking the monitor after the idle timeout. The variable `display.screen_off`
+    gives the idle timeout in milliseconds; the default, `600000`, is 10 minutes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also choose between turning the screen black and putting the monitor
+    into “power-saver” mode, also known as *sleep*. A monitor showing a black screen
+    reactivates immediately when triggered, but uses more power. A sleeping monitor
+    really is off, and needs a few seconds to reactivate. To set power-saver mode,
+    change the variable `display.vblank` to `on`. (Some old monitors don’t believe
+    in saving power, so this won’t work on them.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting wscons Variables at Boot
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Users can adjust console settings, but those settings will disappear at the
+    next reboot. To set `wscons` variables at boot, add them to */etc/wsconsctl.conf*.
+    The boot process reads this file and applies any variables it finds to the console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running Virtual Terminals with tmux
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The terminal multiplexer `tmux(1)` lets you run multiple virtual terminals inside
+    one OpenBSD terminal window. While standard virtual terminals disappear when you
+    disconnect from the system, `tmux` virtual terminals continue to run even after
+    you disconnect. `tmux` is small, fast, easy to use, and written with the same
+    care as the rest of OpenBSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why would you need `tmux`? One example is for building programs. Just before
+    I leave the office, I use my laptop to make an SSH connection into an OpenBSD
+    server, create a virtual terminal, start building a huge program (such as OpenOffice.org),
+    and shut down my laptop. Normally, the build on the server would terminate when
+    my session is interrupted, but the `tmux` virtual terminal continues to run even
+    when I log out. The build continues in the disconnected virtual terminal while
+    I drive home, and when I reconnect to it later, I can see how the build has progressed.
+    Virtual terminal sessions even survive accidental disconnections caused by network
+    or client failures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This section provides an introduction to `tmux`. For complete details on the
+    features discussed here, as well as dozens of other features, read `tmux(1)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The tmux Status Bar and Window Names
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To start a virtual terminal session, run `tmux`. Your terminal window will
+    show the command prompt and a green `tmux` status bar along the bottom, with information
+    like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is a virtual terminal session. The left side of the status bar displays
+    the `tmux` session number in brackets `[0]` and the list of `tmux` windows `0:ksh*`
+    (beginning with window number 0). The right side shows the first part of your
+    machine name (`caddis.blackhelicopters.org`), followed by the time and date. You’ll
+    learn how to customize things in [Setting tmux Options](ch17.html#setting_tmux_options
+    "Setting tmux Options") and [Configuring tmux](ch17.html#configuring_tmux "Configuring
+    tmux").
+  prefs: []
+  type: TYPE_NORMAL
+- en: The window name defaults to the name of the program running in that `tmux(1)`
+    window. For example, if you start a command that continues until interrupted,
+    such as `iostat -w 5`, the session name will change to match the command. Interrupt
+    the command, return to a shell prompt, and the status bar should change its name
+    to match your shell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The status bar is normally green, but if it turns yellow, `tmux` is expecting
+    input. When it’s yellow, any typing is interpreted as a `tmux` command. If you
+    reach this mode accidentally, press ENTER to return to a green status bar and
+    normal operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: tmux Commands and Window Management
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Pressing CTRL-B tells `tmux` that the next command is for `tmux`, not for the
+    program running in the virtual terminal. (If pressing CTRL-B interferes with another
+    program you use frequently, you can change this key combination, as you’ll see
+    in [Unmapping and Remapping Keys](ch17.html#unmapping_and_remapping_keys "Unmapping
+    and Remapping Keys").)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The most commonly used `tmux` commands are single characters. For example, to
+    create a second terminal window in this `tmux` session, press CTRL-B-C. Your screen
+    will display only a command prompt and a new status bar.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You have two windows: window 0 shows `iostat` output, and window 1 displays
+    the `ksh` prompt. The asterisk next to window 1 means that you’re currently looking
+    at it. Run an ongoing command in your new window, such as `top`, and the window
+    name should automatically change to the name of that command.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changing the Current Window
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'To view another window, use one of the following key combinations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To see the next window, press CTRL-B-N.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To switch to the previous window, press CTRL-B-P.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Keep in mind that window ordering wraps. For example, if you are on the last
+    window and press CTRL-B-N, you should see the first window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To jump directly to a window by number, press CTRL-B followed by the window
+    number.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To open a menu of all windows, press CTRL-B-W, and then select a window with
+    the arrow keys.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: I find the next and previous sequences sufficient, but if you end up with a
+    dozen windows in one terminal, you might think otherwise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Renaming Windows
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Terminal windows take the name of the currently running program, but that’s
+    not always useful. For example, if I’m compiling the newest source with `make
+    build`, the window name will continually change to reflect the command running
+    in the build at that moment. The only problem is that the constant flickering
+    change in my status bar drives me nuts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you don’t want to see the window name change with each command, use CTRL-B
+    to assign a static name to the window. A yellow `[rename-window]` prompt will
+    appear in the status bar. Enter your preferred window name, such as `upgrade`,
+    and then press ENTER.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Terminating Windows
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: To kill a window and end any processes running in it, change to that window
+    and press CTRL-B-&. You will get a confirmation prompt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting Online Help
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Press CTRL-B-? to see a complete list of all `tmux` commands.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now you can easily explore `tmux` without reading the manual page. You’ll use
+    this list to remap keys in [Unmapping and Remapping Keys](ch17.html#unmapping_and_remapping_keys
+    "Unmapping and Remapping Keys").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Disconnecting, Reconnecting, and Managing Sessions
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A collection of `tmux` windows is called a *session*. Conveniently, `tmux` can
+    disconnect from a running session without interrupting its windows. Press CTRL-B-D
+    to disconnect your terminal from the current `tmux` session. Your terminal should
+    now show what it held before starting `tmux`. To reconnect to your `tmux` session,
+    run `tmux attach`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can have multiple `tmux` sessions simultaneously. The session number appears
+    on the far left of the status bar. (In our sample status bars, the `tmux` session
+    is 0.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: To start a new `tmux` session without attaching to your previous session, run
+    `tmux` without any arguments. For example, I type `tmux` instead of `tmux attach`
+    in order to spawn a new `tmux` session when I want to pick up where I left off.
+    You can change your `tmux` session within `tmux` itself, using a `tmux` command,
+    but I usually just end the session and enter the correct command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you can have all these `tmux` sessions, how can you be sure that you haven’t
+    left old, useless sessions lying around, with abandoned commands running in them?
+    Use `tmux list-sessions`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: I can see from the last line of this output that I left session 2 running on
+    my other workstation, and am still attached to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To connect to session 2, use `attach-session` and option `-t` to choose a target
+    session. Here, I attach to `tmux` session 2:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: I’m now connected to the same session from two separate SSH sessions—in this
+    case, from two separate client workstations. My typing in one screen is echoed
+    on the other.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To destroy a session, use the `kill-session` command, specifying the session
+    number with `-t`. Here, I kill `tmux` session 2:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Any programs running in windows in `tmux` session 2 will also be killed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using tmux Commands
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Command mode in `tmux` offers a prompt for entering more complicated commands.
+    To enter command mode, press CTRL-B-:. The status bar will turn yellow, and a
+    single colon replaces all window names. For example, to create a new window dedicated
+    to running `systat(1)`, press CTRL-B-: and enter **`neww systat`**. A window named
+    `systat` will appear. Switch to that window, and then press CTRL-C to stop `systat`.
+    That window will disappear.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can do all sorts of things with `tmux` commands, including split windows
+    into multiple panels, copy and paste text, and so on. (Read `tmux(1)` for the
+    full list.) If you want to cut and paste from one window to another, it’s easiest
+    if you use multiple terminal windows, but if you are working in a text-only console
+    or another restricted environment, you might find these `tmux` features useful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `tmux` command mode is most commonly used to set options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting tmux Options
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Options change how `tmux` windows, sessions, and the `tmux` server itself behave.
+    The most common changes involve the appearance of windows, colors, or items displayed
+    in the status bar. Some options affect the entire `tmux` session; others affect
+    only a specific window. You can change options on the fly with the `tmux` command
+    `set-option`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Go ahead and open a `tmux` session to follow along. Press CTRL-B-: to enter
+    command mode. When the colon appears, enter **`set-option status-fg green`**,
+    and then press ENTER. Your status bar should now be solid green bar. Congratulations!
+    You’ve set the status bar text color identical to the background color, making
+    it unreadable. Return to command mode, and change the color to black to make it
+    readable again. (If this bugs you, you can kill this `tmux` session and start
+    a new one to reset all options.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When making changes, use **`set-option`** (or just `set`) for options that affect
+    the `tmux` server and the entire session. Use **`set-window-option`** (abbreviated
+    `setw`) for options that affect only a single window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most people won’t need many (if any) `tmux` options, but they can prove useful.
+    For example, say you want the status bar clock to display time in 24-hour format,
+    or you want a visual bell instead of a beep. Options let you control these behaviors,
+    as well as run commands in the status bar. To change basic `tmux` appearance and
+    behavior, see the options in `tmux(1)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Be sure to try any interesting options interactively. Once you have a `tmux`
+    session running the way you like, enter **`show-options`** for an accurate list
+    of the current options. Copy that list because we’ll use it to build a configuration
+    file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring tmux
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Modify *$HOME/.tmux.conf* in your home directory to configure your `tmux` sessions,
+    or use */etc/tmux.conf* to inflict your `tmux` preferences on every system user.
+    Personal `tmux` configurations override global settings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a simple example, I’ve set the left side of my status bar (containing the
+    session number) to blue, and the right side (the hostname, time, and date) to
+    red. If I decide I like this, I can make this change permanent by entering the
+    following in *tmux.conf*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `-g` flag sets an option globally, so it takes effect for all sessions and
+    windows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This should get you comfortable with using `tmux`. If you need multiple terminal
+    windows simultaneously, use a graphical desktop. Stay tuned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting Up X
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The OpenBSD developers modified the industry-standard X graphic interface provided
+    by X.Org to better fit with OpenBSD. The combination of X.Org and OpenBSD-specific
+    patches is called Xenocara.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In most cases, Xenocara works exactly like X.Org, and X.Org documentation is
+    applicable to OpenBSD. Most of Xenocara is there for security and for the convenience
+    of developers building X, but there are a few additions. In my opinion, OpenBSD’s
+    best enhancement to X.Org is the `cwm(1)` window manager. Here, we’ll cover configuring
+    and starting X. The next section provides details about using the window manager.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring X
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Configuring X can be simple or agonizing, depending on your hardware.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most video cards require special access to system memory, though some new Intel
+    video cards can work without this access. For other cards, you must adjust the
+    `machdep.allowaperture=2` sysctl in */etc/sysctl.conf* and reboot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most amd64 and i386 systems need `machdep.allowaperture` set to `2`, but other
+    platforms might require `1` or `2`. Without this sysctl setting, the kernel will
+    not permit X to communicate with the graphics card. If you’re in doubt, try X
+    without changing the sysctl, and when you find out your hardware is too old or
+    the wrong model to work that way, set it to `2`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After rebooting, see if X.Org can automatically set up your graphics interface
+    by running `startx`. If it works, you should see the `fvwm(1)` desktop and a very
+    bland gray background with a couple of terminal windows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If X doesn’t start, see the OpenBSD FAQ, the X.Org documentation, and */var/log/Xorg.0.log*.
+    Many things can go wrong with X autoconfiguration. Read your error log and search
+    the Internet for solutions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you know that X works, it’s time to decide whether you want to start X
+    manually each time you need it or if you want OpenBSD to boot in to X automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Starting X Manually
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: After logging into the text console, run `startx(1)`. This command starts the
+    commands in *$HOME/.xinitrc* and starts X.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Booting into X
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'OpenBSD includes an */etc/rc.conf* hook for starting the X Display Manager,
+    `xdm(1)`, at boot time with a login prompt, but the default is to not use `xdm`.
+    Here’s the line to add to your *rc.conf.local* to have `xdm` without any flags
+    start X at boot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: After booting, the console will show a graphical login prompt. Once a user logs
+    in, `xdm` runs any commands in *$HOME/.xsession*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Because this is a chapter about using OpenBSD as a desktop, I assume that you’re
+    using `xdm(1)`. Examples refer to *$HOME/.xsession*. If you use `startx(1)` instead,
+    substitute *.xinitrc*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Emulating a Three-Button Mouse
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A lot of X software expects you to have a mouse with three or more buttons,
+    but many have only two buttons. Xenocara lets you pretend that you have a third
+    mouse button, and when you press both mouse buttons simultaneously, it interprets
+    that as pressing the nonexistent third button.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, the best solution is to buy a real mouse with three or more buttons.
+    They’re much easier to get than they used to be.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you have X ready to use, let’s explore that `cwm` window manager I
+    mentioned earlier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the cwm Window Manager
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: While X provides operating system support for a graphical interface, management
+    of that interface falls to the window manager. OpenBSD has packages for button-heavy,
+    pointy-clicky window managers such as KDE, Gnome, and Xfce. These window managers
+    might provide a comfortable bridge between consumer-friendly operating systems
+    and OpenBSD, but they’re not designed for the more hard-core Unix user.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Xenocara includes three window managers: the classic `fvwm(1)` and `twm(1)`
+    window managers that have shipped with X since the last millennium, and the OpenBSD-specific
+    `cwm(1)`. OpenBSD developers wrote `cwm` specifically as a modern, fast, keyboard-friendly
+    interface.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To start `cwm` at login, invoke it in *$HOME/.xsession*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: When your `cwm` session ends, `xdm` returns you to the login screen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring cwm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Rather than using mouse-driven configuration menus, `cwm` uses a single configuration
+    file, *$HOME/.cwmrc*. You can read the complete documentation in `cwmrc(5)`. Here,
+    as I discuss various `cwm` features, I’ll mention how each can be configured or
+    changed in *.cwmrc*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Modifier Keys
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Most `cwm` operations require you to press a configurable combination of keys.
+    For example, CTRL-ALT-DEL locks the screen. The `cwm` documentation lists the
+    modifier keys shown in [Table 17-1](ch17.html#cwm_modifier_keys "Table 17-1. Table
+    17-1: cwm Modifier Keys").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Table 17-1. Table 17-1: cwm Modifier Keys'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Symbol | Key |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| C | CTRL |'
+  prefs: []
+  type: TYPE_TB
+- en: '| S | SHIFT |'
+  prefs: []
+  type: TYPE_TB
+- en: '| M | META/ALT |'
+  prefs: []
+  type: TYPE_TB
+- en: For example, `CS-r` in *.cwmrc* means CTRL-SHIFT-R. `CM-W` represents CTRL-ALT-W.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Choosing a New Window Manager
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: The default `cwm` configuration allows you to choose a new window manager with
+    CTRL-ALT-W from any command on the system. Enter **`cwm`**, and `cwm` should restart
+    without losing any of your windows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You can also enter a command that isn’t a window manager, such as `grep`. If
+    you do, OpenBSD will silently log you out. It won’t say, “Please step away from
+    the keyboard before I hurt you.” Not threatening you passes for user-friendly
+    in OpenBSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Binding a Key Sequence to a Command
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'You can also bind a key sequence to any `cwm` command listed in `cwmrc(5)`.
+    For example, suppose you want to use the key sequence CTRL-ALT-R to delete your
+    current window. Add the following to *.cwmrc*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: The change will take effect only once you use CTRL-ALT-W to restart `cwm` or
+    you log out and back in again. After you’ve done one or the other, use CTRL-ALT-R
+    to delete the current window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Warning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If you make an entry in *.cwmrc* that `cwm` cannot parse, `cwm` will not process
+    the configuration file, and you will lose all of your custom `cwm` settings as
+    soon as you load the configuration file. If your custom settings vanish, your
+    most recent changes to *.cwmrc* are wrong. If you make an error that `cwm` *can*
+    parse, `cwm` will accept it. No one except the user will have trouble in this
+    case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating cwm Windows
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When you are running the graphical desktop, everything on screen is a *window*.
+    A terminal runs in a window, as do web browsers and games. Managing windows—raising,
+    hiding, resizing, naming, and so on—is the core task of a window manager.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A default `cwm` session starts with a plain gray screen and a small `xconsole(1)`
+    window. Create a new terminal window with CTRL-SHIFT-ENTER. The window manager
+    should focus on whatever window your mouse is over. (Press SHIFT-+ to increase
+    the font size of the terminal windows.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you press CTRL-SHIFT-ENTER repeatedly, you won’t see additional terminal
+    windows. Oh, the new windows will be created, but on top of one another. Press
+    ALT and the left mouse button to move the currently active window, and you should
+    expose another terminal window beneath that one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: I find the default terminal size too small; I want wider terminals with more
+    rows. To resize the terminal window, press ALT and the center mouse button (or
+    both buttons simultaneously). The mouse will move to the lower-right corner of
+    the window and change to a right angle bracket. The window will continue to resize
+    as long as you hold down the mouse button.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To maximize windows vertically, press CTRL-ALT-=. To maximize windows horizontally,
+    press CTRL-ALT- SHIFT-=. To destroy a window, focus on it and press CTRL-ALT-X.
+    You will not be asked to confirm your decision; `cwm` will obey and exterminate
+    the window immediately.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To exit `cwm` and return to the login screen, press CTRL-ALT-Q.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing Windows
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now that you can create windows, let’s look at ways to manage them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, switch between visible windows with ALT-TAB. The newly active window
+    should rise to the foreground.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To assign a name to a window, press CTRL-ALT-N to access the label prompt, and
+    then enter the window’s desired name. Names are useful when you choose to hide
+    a window without destroying it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To hide a window, focus on it, and then press ALT-ENTER to make it disappear.
+    Pressing ALT-TAB won’t bring it back because it’s hidden. Press the left mouse
+    button for a list of all hidden windows, arranged by name. Any windows you didn’t
+    name will show up as the program name. All terminals show up as `xterm`. Click
+    the name to unhide the window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: It’s a good idea to name windows that have a specific purpose, such as a long-running
+    software build. That way, you can minimize the window when it’s not interesting,
+    and quickly find it again when necessary. I name windows created by SSH sessions
+    after the connected server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can search for windows by name. Press CTRL-ALT-/ to get a `window>>` prompt,
+    and then start typing the name of the window. `cwm` will list all matching windows.
+    Hidden windows have an ampersand (`&`) before their name. Exclamation points indicate
+    the window with focus.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Locking the Screen
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Don’t walk away from an active workstation without locking it, especially if
+    you’re logged on to sensitive systems or as root. Press CTRL-ALT-DEL to lock your
+    desktop, and the screen will go blank. Press another key, and `cwm` will request
+    your password to unlock the workstation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The default screensaver is a blank screen, provided with `xlock(1)`. To use
+    a different screensaver, set a path to it in *.cwmrc*, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For example, to use `xlock`’s flow mode as a screensaver, add the following
+    to *.cwmrc*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you don’t like any of the screensavers in Xenocara’s `xlock(1)`, try the
+    `xscreensaver` package.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '`xlock` is easily bypassed by anyone with console access. You can’t count on
+    it for security, but it does make a decent reminder for your coworkers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Connecting to Other Machines with SSH
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: One common task is to connect to remote machines with SSH. To do so, press ALT-.
+    to display an `ssh>>` prompt, and then enter the name of the machine to which
+    you want to make the connection. Conveniently, `cwm` supports autocompletion,
+    based on entries in *known_hosts*. As you type a hostname at the `ssh` prompt,
+    `cwm` checks for matching names in the system’s and users’ *known_hosts*. Press
+    the down-arrow key to find your desired hosts, or keep typing the hostname to
+    connect to a new host. (Autocompletion won’t work if you hash *known_hosts* entries.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: And by the way, if you open multiple SSH sessions, name them, because sorting
+    through multiple sessions labeled `ssh` is annoying.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating an Application Menu
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Click the right mouse button on the background to bring up the application
+    menu. The `cwm` developers have no idea which programs are important to you, so
+    they don’t even try to provide a default application menu. You need to build that
+    yourself with *.cwmrc* entries. Each command has the following format:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Yes, this is exactly the same as the format for setting the screensaver. The
+    `lock` command is actually one of two special command keywords. Here, I’ve created
+    an application menu with two choices, which are my web browser and my PDF reader:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: When I right-click the desktop background, I’ll see a menu with these two choices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Keyboard Navigation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Almost everyone has a mouse these days, but sometimes you’re in a situation
+    where it’s best to ignore that mouse. Perhaps your desk is too small, your mouse
+    is broken, repeatedly removing your hands from the keyboard slows you down (as
+    in you don’t have a sensible mouse-in-keyboard), or you just hate your mouse today
+    (which is both valid and respectable).
+  prefs: []
+  type: TYPE_NORMAL
+- en: To control the mouse cursor with the keyboard, use CTRL and the arrow keys to
+    move the pointer a small amount, or press CTRL-SHIFT and an arrow key to make
+    larger pointer movements. On my system CTRL-SHIFT-up arrow moves the mouse pointer
+    up about a terminal line, but that varies with font size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can also use keyboard commands to shift window placement and size, as shown
+    in [Table 17-2](ch17.html#cwm_window_movement_direction_keys "Table 17-2. Table
+    17-2: cwm Window Movement Direction Keys").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Table 17-2. Table 17-2: cwm Window Movement Direction Keys'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Key Combination | Direction |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| alt-shift–H | Left |'
+  prefs: []
+  type: TYPE_TB
+- en: '| alt-shift–J | Down |'
+  prefs: []
+  type: TYPE_TB
+- en: '| alt-shift–K | Up |'
+  prefs: []
+  type: TYPE_TB
+- en: '| alt-shift–l | Right |'
+  prefs: []
+  type: TYPE_TB
+- en: Use ALT and a direction key to move a window a small amount, or ALT-SHIFT to
+    move the window a larger amount. To resize a window by a small amount, use CTRL-ALT
+    and a direction key. CTRL-ALT-SHIFT and a direction key resizes the window a larger
+    amount. Just as if you were resizing with the mouse, the size change occurs from
+    the lower-right corner of the window. Place a window’s upper-left corner where
+    you want it, and then resize the window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Decorating cwm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The default `cwm` desktop is rather bland, but a few adjustments make it easier
+    on the eyes. One of the first things I set is a background color: black. Use `xsetroot(1)`
+    to set your background color.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can include this command in *.xsession* or run it in a terminal. The file
+    */usr/X11R6/share/X11/rgb.txt* lists the colors X recognizes. If a color name
+    is two words, either remove the spaces in the name or put the name in single quotes,
+    like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you want an image in the background, use `feh` (*/usr/ports/graphics/feh*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To make window edges easier to identify, put borders around them. The default
+    border is 1 pixel wide, in your choice of colors. I prefer 3-pixel borders, blue
+    for the active window and dark blue for the inactive windows. That requires the
+    following entries in *.cwmrc*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you grow more accustomed to `cwm`, you might find that you want particular
+    applications—perhaps an MP3 player, a clock, and a fancy graphic system load indicator—to
+    always be visible. Maximizing a window can bury these applications. To address
+    this, define a gap in *.cwmrc*, which sets the number of pixels to be kept clear
+    even when you maximize a window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For example, when I must keep track of time, I run `xclock(1)` on the right
+    side of my screen. Experimentation has shown that my clock is about 175 pixels
+    wide. I leave a gap of 180 pixels, so that even when I maximize a window, it doesn’t
+    cover the clock. Here’s my `gap` entry in *.cwmrc*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now I can no longer use the excuse that I missed work because I lost my clock
+    on my desktop. Fortunately, I have many other handy excuses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unmapping and Remapping Keys
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: While the `cwm` authors did their best to choose keyboard shortcuts that wouldn’t
+    conflict with those used by other programs, they could not avoid every possible
+    conflict. If you run into such a conflict, you can solve the problem by modifying
+    entries in *.cwmrc* to replace conflicting `cwm` key bindings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, `cwm` uses CTRL and CTRL-SHIFT with the arrow keys to move the
+    pointer, but OpenOffice also uses these key combinations to move the pointer and
+    highlight within a text document. I’ve used OpenOffice for more than 10 years,
+    and have written millions of words in it. My fingers have been well-trained, and
+    I’m not going to try to retrain them. The `cwm` key assignments must change.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use the `bind` command to remap keys. Start by disconnecting the CTRL and CTRL-SHIFT
+    and arrow key combinations from `cwm` with the `unmap` option. Remember that *.cwmrc*
+    uses `C` to represent CTRL and `S` to represent SHIFT (as shown earlier in [Table 17-1](ch17.html#cwm_modifier_keys
+    "Table 17-1. Table 17-1: cwm Modifier Keys")).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: These keystrokes will now pass through to applications, such as OpenOffice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To determine how to move the pointer with the keyboard, I check `cwmrc(5)` for
+    the list of commands that can be bound to a key. The manual defines commands with
+    a brief name and a description of their functionality. The pointer movement commands
+    begin with `ptrmove` and `bigptrmove`, plus a direction. I find them and use the
+    Windows key (also known as modifier 4) to replace the functions I removed from
+    the CTRL key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: I can now use both OpenOffice and `cwm`’s keyboard functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, I’ve covered everything I’ve used since OpenBSD introduced `cwm`,
+    which should get you started. For more information, read `cwm(1)` and `cwmrc(5)`.
+    You’ll see that `cwm` supports many more features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve covered OpenBSD’s appearance, let’s dive deep into the operating
+    system core.
+  prefs: []
+  type: TYPE_NORMAL

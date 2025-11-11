@@ -1,0 +1,548 @@
+- en: Chapter 13. Storage Drivers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In FreeBSD, *storage drivers* provide access to devices that transfer randomly
+    accessible data in blocks (such as disk drives, flash memory, and so on). A *block*
+    is a fixed-size chunk of data (Corbet et al., 2005). In this chapter I’ll discuss
+    how to manage devices that employ block-centric I/O. To that end, some familiarity
+    with disk and bio structures is needed, so that is where we’ll start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: disk Structures
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A `disk` structure is the kernel’s representation of an individual disk-like
+    storage device. It is defined in the `<geom/geom_disk.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Many of the fields in `struct disk` must be initialized by a storage driver.
+    These fields are described in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Descriptive Fields
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `d_name` and `d_unit` fields specify the storage device’s name and unit
+    number, respectively. These fields must be defined in every `disk` structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `d_flags` field further qualifies the storage device’s characteristics.
+    Valid values for this field are shown in [Table 13-1](ch13.html#disk_structure_symbolic_constants
+    "Table 13-1. disk Structure Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 13-1. disk Structure Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `DISKFLAG_NEEDSGIANT` | Indicates that the storage device needs to be protected
+    by `Giant` |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `DISKFLAG_CANDELETE` | Indicates that the storage device wants to be notified
+    when a block is no longer required so that it can perform some special handling
+    (for example, drivers for solid-state drives that support the `TRIM` command employ
+    this flag) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `DISKFLAG_CANFLUSHCACHE` | Indicates that the storage device can flush its
+    local write cache |'
+  prefs: []
+  type: TYPE_TB
+- en: The `d_flags` field is optional and may be undefined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Storage Device Methods
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `d_open` field identifies the storage device’s open routine. If no function
+    is provided, open will always succeed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `d_close` field identifies the storage device’s close routine. If no function
+    is provided, close will always succeed. The `d_close` routine should always terminate
+    anything set up by the `d_open` routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `d_strategy` field identifies the storage device’s strategy routine. *Strategy
+    routines* are called to process block-centric reads, writes, and other I/O operations.
+    Accordingly, `d_strategy` must be defined in every `disk` structure. I’ll discuss
+    block-centric I/O and strategy routines in greater detail later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `d_ioctl` field identifies the storage device’s ioctl routine. This field
+    is optional and may be undefined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `d_dump` field identifies the storage device’s dump routine. *Dump routines*
+    are called after a kernel panic to record the contents of physical memory to a
+    storage device. Note that `d_dump` is optional and may be undefined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mandatory Media Properties
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `d_sectorsize` and `d_mediasize` fields specify the storage device’s sector
+    and media size in bytes, respectively. These fields must be defined in every `disk`
+    structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `d_maxsize` field denotes the maximum size in bytes that an I/O operation,
+    for the storage device, can be. This field must be defined in every `disk` structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that you can safely modify the values for `d_sectorsize`, `d_mediasize`,
+    and `d_maxsize` in the `d_open` routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optional Media Properties
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `d_fwsectors` and `d_fwheads` fields identify the number of sectors and
+    heads on the storage device. These fields are optional and may be undefined; however,
+    certain platforms require these fields for disk partitioning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `d_stripesize` field specifies the width of any natural request boundaries
+    for the storage device (for example, the size of a stripe on a RAID-5 unit), and
+    the `d_stripeoffset` field represents the location or offset to the first stripe.
+    These fields are optional and may be undefined. For more on `d_stripesize` and
+    `d_stripeoffset`, see */sys/geom/notes*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `d_ident` field denotes the storage device’s serial number. This field is
+    optional and may be undefined, but it’s good practice to define it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that you can safely modify the abovementioned fields in the `d_open` routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Driver Private Data
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `d_drv1` field may be used by the storage driver to house data. Typically,
+    `d_drv1` will contain a pointer to the storage driver’s `softc` structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: disk Structure Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following functions for working with `disk`
+    structures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: A `disk` structure is a dynamically allocated structure that’s owned by the
+    kernel. That is, you cannot allocate a `struct disk` on your own. Instead, you
+    must call `disk_alloc`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Allocating a `disk` structure does not make the storage device available to
+    the system. To do that, you must initialize the structure (by defining the necessary
+    fields) and then call `disk_create`. The `version` argument must always be `DISK_VERSION`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that as soon as `disk_create` returns, the device is “live” and its routines
+    can be called at any time. Therefore, you should call `disk_create` only when
+    your driver is completely ready to handle any operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a `disk` structure is no longer needed, it should be freed with `disk_destroy`.
+    You can destroy an opened `disk` structure. Of course, you’ll need to free any
+    resources that were allocated during `d_open` afterward, as `d_close` can no longer
+    be called.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Block I/O Structures
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A `bio` structure represents a block-centric I/O request. Loosely speaking,
+    when the kernel needs to transfer some data to or from a storage device, it puts
+    together a `bio` structure to describe that operation; then it passes that structure
+    to the appropriate driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`struct bio` is defined in the `<sys/bio.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: We’ll examine `struct bio` in greater detail later. In the interim, you just
+    need to remember that strategy routines are called to process newly received `bio`
+    structures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Block I/O Queues
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: All storage drivers maintain a *block I/O queue* to house any pending block-centric
+    I/O requests. Generally speaking, these requests are stored in increasing or decreasing
+    device-offset order so that when they are processed, the disk head will move in
+    a single direction (instead of bouncing around) to maximize performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following functions for working with block
+    I/O queues:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: A block I/O queue is a statically allocated structure that’s owned by the driver.
+    To initialize a block I/O queue, you must call `bioq_init`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To perform an ordered insertion, call `bioq_disksort`. To return the head of
+    the queue (that is, the next request to process), use `bioq_first`. Lastly, to
+    return and remove the head of the queue, call `bioq_takefirst`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The abovementioned functions are the main methods for managing a block I/O queue.
+    If a queue is manipulated using only these functions, it will contain at most
+    one inversion point (that is, two sorted sequences).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bioq_insert_head` function inserts a request at the head of the queue.
+    Additionally, it creates a “barrier” so that all subsequent insertions performed
+    using `bioq_disksort` will end up after this request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bioq_insert_tail` function is similar to `bioq_insert_head`, but it inserts
+    the request at the end of the queue. Note that `bioq_insert_tail` also creates
+    a barrier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generally speaking, you’d utilize a barrier to ensure that all preceding requests
+    are serviced before continuing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bioq_remove` function removes a request from the queue. If `bioq_remove`
+    is invoked on the head of the queue, its effect is identical to `bioq_takefirst`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If a block I/O queue is manipulated using `bioq_insert_head`, `bioq_insert_tail`,
+    or `bioq_remove`, it may contain multiple inversion points.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `bioq_flush` function expunges all of the queued requests and causes them
+    to return the error code `error`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For storage devices that incorporate request scheduling (such as SATA Native
+    Command Queuing, SCSI Tagged Command Queuing, and so on), `bioq_disksort` is essentially
+    pointless, as the devices will (re)sort the requests internally. In those cases,
+    a straightforward FIFO block I/O queue that uses `bioq_insert_tail` will suffice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tying Everything Together
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that you’ve gained some familiarity with `disk` and `bio` structures, let’s
+    dissect a real-world storage driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Example 13-1](ch13s05.html#at45d.c "Example 13-1. at45d.c") is the storage
+    driver for Atmel’s AT45D series of DataFlash chips. DataFlash is Atmel’s serial
+    interface for flash memory, employed on the Serial Peripheral Interface (SPI)
+    bus. In short, [Example 13-1](ch13s05.html#at45d.c "Example 13-1. at45d.c") is
+    a storage driver for flash memory on the SPI bus.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take a quick look at this code and try to discern some of its structure. If
+    you don’t understand all of it, don’t worry; an explanation follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 13-1. at45d.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: The following sections describe the functions defined in [Example 13-1](ch13s05.html#at45d.c
+    "Example 13-1. at45d.c") roughly in the order they would execute.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Incidentally, because ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `at45d_probe` and ![](httpatomoreillycomsourcenostarchimages1137501.png) `at45d_detach`
+    are extremely rudimentary and because you’ve seen similar code elsewhere, I’ll
+    omit discussing them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: at45d_attach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `at45d_attach` function is the `device_attach` implementation for this
+    storage driver. Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) initializes
+    the mutex `at45d_mtx`, which will protect `at45d`’s block I/O queue. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    schedules ![](httpatomoreillycomsourcenostarchimages1137501.png) `at45d_delayed_attach`
+    to execute when interrupts are enabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: During the initial autoconfiguration phase (that is, right after the system
+    boots), interrupts are disabled. However, some drivers (such as `at45d`) require
+    interrupts for device initialization. In those cases, you’d use `config_intrhook_establish`,
+    which schedules a function to execute as soon as interrupts are enabled but before
+    root is mounted; if the system has already passed this point, the function is
+    called immediately.
+  prefs: []
+  type: TYPE_NORMAL
+- en: at45d_delayed_attach Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `at45d_delayed_attach` function is, loosely speaking, the second half of
+    `at45d_attach`. That is, it completes the device’s initialization. Here is its
+    function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can be split into multiple parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    gets the device’s manufacturer ID. Then `at45d_delayed_attach` ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    hangs until the device is ready. These two actions require interrupts to be enabled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second part ![](httpatomoreillycomsourcenostarchimages1137503.png) allocates
+    and defines `at45d`’s `disk` structure, ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    initializes `at45d`’s block I/O queue, and ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    creates a new kernel process (to execute the ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `at45d_task` function).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, `at45d`’s device node is ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    created, and `at45d_delayed_attach` is ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    torn down.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: During the boot process—before root is mounted—the system stalls until every
+    function scheduled via `config_intrhook_establish` completes and tears itself
+    down. In other words, if `at45d_delayed_attach` didn’t call `config_intrhook_disestablish`,
+    the system would hang.
+  prefs: []
+  type: TYPE_NORMAL
+- en: at45d_get_info Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `at45d_get_info` function gets the storage device’s manufacturer ID. Here
+    is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function begins by zeroing its ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    transmit and ![](httpatomoreillycomsourcenostarchimages1137501.png) receive buffers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Every SPI data transfer is a full-duplex data transmission. That is, it always
+    requires a transmit and receive buffer, because the master and slave both transmit
+    data—even if the data to be sent is meaningless or garbage, it’s still transferred.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The remainder of this function ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    places `MANUFACTURER_ID` in the transmit buffer, sets up the `spi_command` structure
+    (which denotes the ![](httpatomoreillycomsourcenostarchimages1137505.png) transmit
+    and ![](httpatomoreillycomsourcenostarchimages1137507.png) receive buffers and
+    their ![](httpatomoreillycomsourcenostarchimages1137509.png) ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    data lengths), ![](httpatomoreillycomsourcenostarchimages1137513.png) initiates
+    the data transfer, and finally ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    returns the manufacturer ID to the caller.
+  prefs: []
+  type: TYPE_NORMAL
+- en: at45d_wait_for_device_ready Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `at45d_wait_for_device_ready` function “spins” until the storage device
+    is ready. Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function continually calls ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `at45d_get_status` until `0x80`, which designates that the device is not busy
+    and is ready to accept the next command, is returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: at45d_get_status Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `at45d_get_status` function gets the storage device’s status. Here is its
+    function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, this function is nearly identical to the `at45d_get_info` function,
+    except that it ![](httpatomoreillycomsourcenostarchimages1137499.png) employs
+    a different command. As such, I’ll omit walking through it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: at45d_strategy Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `at45d_strategy` function is defined in `at45d_delayed_attach` as the `d_strategy`
+    routine; it is executed anytime `at45d` receives a `bio` structure. Here is its
+    function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function simply takes a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `bio` structure and ![](httpatomoreillycomsourcenostarchimages1137501.png) adds
+    it to `at45d`’s block I/O queue. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    gets `at45d_task` to actually process the `bio` structure(s).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Most strategy routines do something similar. That is to say, they don’t actually
+    process the `bio` structures; they only place them on the block I/O queue, and
+    another function or thread sees to them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: at45d_task Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As mentioned in the previous section, the `at45d_task` function processes the
+    `bio` structures on `at45d`’s block I/O queue. Here is its function definition
+    (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can be split into four parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    determines whether `at45d`’s block I/O queue is empty. If so, `at45d_task` ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    sleeps; otherwise, it ![](httpatomoreillycomsourcenostarchimages1137503.png) acquires
+    (and removes) the head of the queue. The second part determines whether the block-centric
+    I/O request is a ![](httpatomoreillycomsourcenostarchimages1137507.png) read or
+    a ![](httpatomoreillycomsourcenostarchimages1137509.png) write.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Block-centric I/O requests are seen from the driver’s point of view. So, `BIO_READ`
+    means reading *from* the device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second part also ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    calculates the offset in `bio_data` (that is, the location in main memory) to
+    read from or write to. This is crucial because each I/O operation transmits 1
+    block of data, not 1 byte (that is, the abovementioned offset is a multiple of
+    1 block).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In case you have trouble following the offset calculation, here is a brief
+    description of each variable involved: The `ss` variable is the device’s sector
+    size. The `bio_pblkno` variable is the first block of device memory to read from
+    or write to, `end` is the last block, and `block` is the current block `at45d_task`
+    is working with.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third part sets up the `spi_command` structure and ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    initiates the data transfer. Finally, the fourth part ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    tells the kernel that the block-centric I/O request `bp` has been serviced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Block I/O Completion Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As seen in the previous section, after processing a block-centric I/O request,
+    you must inform the kernel with:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `biodone` function tells the kernel that the block-centric I/O request `bp`
+    has been serviced successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `biofinish` function is identical to `biodone`, except that it sets `bp`
+    to return the error code `error` (that is to say, `biofinish` can tell the kernel
+    that `bp` was invalid, successful, or unsuccessful).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Typically, the `stat` argument is set to `NULL`. For more on `struct devstat`,
+    see the `devstat(9)` manual page (though it’s somewhat antiquated).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter focused on implementing and understanding storage drivers. You
+    learned how to manage both `disk` and `bio` structures and studied a real-world
+    storage driver.
+  prefs: []
+  type: TYPE_NORMAL

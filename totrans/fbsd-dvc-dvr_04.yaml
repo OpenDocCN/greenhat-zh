@@ -1,0 +1,1069 @@
+- en: Chapter 4. Thread Synchronization
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This chapter deals with the problem of data and state corruption caused by concurrent
+    threads. When multiple threads executing on different CPUs simultaneously modify
+    the same data structure, that structure can be corrupted. Similarly, when a thread
+    gets interrupted and another thread manipulates the data that the first thread
+    was manipulating, that data can be corrupted (Baldwin, 2002).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fortunately, FreeBSD provides a set of synchronization primitives to deal with
+    these issues. Before I describe what synchronization primitives do, you’ll need
+    an in-depth understanding of the abovementioned concurrency issues, also known
+    as synchronization problems. To that end, let’s analyze a few.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Simple Synchronization Problem
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Consider the following scenario in which two threads increment the same global
+    variable. On *i386*, this operation might utilize the following processor instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Imagine that `count` is currently `0` and that the first thread manages to load
+    the current value of `count` into `%eax` (that is, it completes the first instruction)
+    just before the second thread preempts it. As part of the thread switch, FreeBSD
+    saves the value of `%eax`, which is `0`, into the outgoing thread’s context. Now,
+    suppose that the second thread manages to complete all three instructions, thereby
+    incrementing count from `0` to `1`. If the first thread preempts the second thread,
+    FreeBSD will restore its thread context, which includes setting `%eax` to `0`.
+    The first thread, which resumes execution at the second instruction, will now
+    proceed to add `1` to `%eax` and then store the result in `count`. At this point,
+    count equals `1` when it should equal `2`. Thus, because of a synchronization
+    problem, we lost an update. This can also occur when the two threads are executing
+    concurrently but just slightly out of step (that is, one thread begins executing
+    the first instruction when the other thread begins executing the second instruction).
+  prefs: []
+  type: TYPE_NORMAL
+- en: A More Complex Synchronization Problem
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 4-1](ch04s02.html#race.c "Example 4-1. race.c") is a complete character
+    driver that lets you manipulate a doubly linked list through its `d_ioctl` function.
+    You can add or remove an item from the list, determine whether an item is on the
+    list, or print every item on the list. [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")
+    also contains some synchronization problems.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take a quick look at this code and try to identify the synchronization problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 4-1. race.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Before I identify [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")’s
+    synchronization problems, let’s walk through it. [Example 4-1](ch04s02.html#race.c
+    "Example 4-1. race.c") begins by ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    defining and ![](httpatomoreillycomsourcenostarchimages1137505.png) initializing
+    a doubly linked list of `race_softc` structures named `race_list`. Each `race_softc`
+    structure contains a (unique) ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    unit number and a ![](httpatomoreillycomsourcenostarchimages1137499.png) structure
+    that maintains a pointer to the previous and next `race_softc` structure in `race_list`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")’s ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    character device switch table is defined. The constant ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `RACE_NAME` is defined in the `race_ioctl.h` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note how [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")’s character
+    device switch table doesn’t define `d_open` and `d_close`. Recall, from [Chapter 1](ch01.html
+    "Chapter 1. Building and Running Modules"), that if a `d_foo` function is undefined
+    the corresponding operation is unsupported. However,`d_open` and `d_close` are
+    unique; when they’re undefined the kernel will automatically define them as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: This ensures that every registered character device can be opened and closed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Drivers commonly forgo defining a `d_open` and `d_close` function when they
+    don’t need to prepare their devices for I/O—like [Example 4-1](ch04s02.html#race.c
+    "Example 4-1. race.c").
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")’s `d_ioctl`
+    function, named ![](httpatomoreillycomsourcenostarchimages1137511.png) `race_ioctl`,
+    is defined. This function is like the `main` function for [Example 4-1](ch04s02.html#race.c
+    "Example 4-1. race.c"). It uses three helper functions to do its work:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`race_new`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`race_find`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`race_destroy`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Before I describe `race_ioctl`, I’ll describe these functions first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: race_new Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `race_new` function creates a new `race_softc` structure, which is then
+    inserted at the head of `race_list`. Here is the function definition for `race_new`
+    (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) iterates
+    through `race_list` looking for the largest unit number, which it stores in ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `max.` Next, `unit` is set to ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `max` plus one. Then `race_new` ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    allocates memory for a new `race_softc` structure, assigns it the unit number
+    ![](httpatomoreillycomsourcenostarchimages1137507.png) `unit`, and ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    inserts it at the head of `race_list`. Lastly, `race_new` ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    returns a pointer to the new `race_softc` structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: race_find Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `race_find` function takes a unit number and finds the associated `race_softc`
+    structure on `race_list`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: If `race_find` is successful, a pointer to the `race_softc` structure is returned;
+    otherwise, `NULL` is returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: race_destroy Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `race_destroy` function destroys a `race_softc` structure on `race_list`.
+    Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function takes a ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    pointer to a `race_softc` structure and ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    removes that structure from `race_list`. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    frees the allocated memory for that structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: race_ioctl Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Before I walk through `race_ioctl`, an explanation of its ioctl commands, which
+    are defined in `race_ioctl.h`, is needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, three of `race_ioctl`’s ioctl commands transfer an integer value.
+    As you’ll see, this integer value is a unit number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the function definition for `race_ioctl` (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function can perform one of four ioctl-based operations. The first, ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `RACE_IOC_ATTACH`, ![](httpatomoreillycomsourcenostarchimages1137501.png) creates
+    a new `race_softc` structure, which is then inserted at the head of `race_list`.
+    Afterward, the unit number of the new `race_softc` structure is ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second operation, ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `RACE_IOC_DETACH`, removes a user-specified `race_softc` structure from `race_list`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The third operation, ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `RACE_IOC_QUERY`, determines whether a user-specified `race_softc` structure is
+    on `race_list`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lastly, the fourth operation, ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `RACE_IOC_LIST`, prints the unit number of every `race_softc` structure on `race_list`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: race_modevent Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `race_modevent` function is the module event handler for [Example 4-1](ch04s02.html#race.c
+    "Example 4-1. race.c"). Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, this function includes a new case: ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `MOD_QUIESCE`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Because `MOD_LOAD` and `MOD_UNLOAD` are extremely rudimentary and because you’ve
+    seen similar code elsewhere, I’ll omit discussing them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When one issues the `kldunload(8)` command, `MOD_QUIESCE` is run before `MOD_UNLOAD`.
+    If `MOD_QUIESCE` returns an error, `MOD_UNLOAD` does not get executed. In other
+    words, `MOD_QUIESCE` verifies that it is safe to unload your module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `kldunload -f` command ignores every error returned by `MOD_QUIESCE`. So
+    you can always unload a module, but it may not be the best idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, `MOD_QUIESCE` ![](httpatomoreillycomsourcenostarchimages1137501.png) guarantees
+    that `race_list` is empty (before [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")
+    is unloaded). This is done to prevent memory leaks from any potentially unclaimed
+    `race_softc` structures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Root of the Problem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that we’ve walked through [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c"),
+    let’s run it and see if we can identify its synchronization problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Example 4-2](ch04s02.html#race_underscore_config.c "Example 4-2. race_config.c")
+    presents a command-line utility designed to invoke the `race_ioctl` function in
+    [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 4-2. race_config.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '[Example 4-2](ch04s02.html#race_underscore_config.c "Example 4-2. race_config.c")
+    is a bog-standard command-line utility. As such, I won’t cover its program structure.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following shows an example execution of [Example 4-2](ch04s02.html#race_underscore_config.c
+    "Example 4-2. race_config.c"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Above, two threads simultaneously add a `race_softc` structure to `race_list`,
+    which results in two `race_softc` structures with the “unique” unit number `0`—this
+    is a problem, yes?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s another example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Above, one thread adds a `race_softc` structure to `race_list` while another
+    thread unloads *race.ko*, which causes a memory leak. Recall that `MOD_QUIESCE`
+    is supposed to prevent this, but it didn’t. Why?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem, in both examples, is a race condition. *Race conditions* are errors
+    caused by a sequence of events. In the first example, both threads check `race_list`
+    simultaneously, discover that it is empty, and assign `0` as the unit number.
+    In the second example, `MOD_QUIESCE` returns error-free, a `race_softc` structure
+    is then added to `race_list`, and finally `MOD_UNLOAD` completes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: One characteristic of race conditions is that they’re hard to reproduce. Ergo,
+    the results were doctored in the preceding examples. That is, I caused the threads
+    to context switch at specific points to achieve the desired outcome. Under normal
+    conditions, it would have taken literally millions of attempts before those race
+    conditions would occur, and I didn’t want to spend that much time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preventing Race Conditions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Race conditions are prevented using locks. *Locks*, also known as *synchronization
+    primitives*, are used to serialize the execution of two or more threads. For example,
+    the race conditions in [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c"),
+    which are caused by concurrent access to `race_list`, can be prevented by using
+    a lock to serialize access to `race_list`. Before a thread can access `race_list`,
+    it must first a cquire the foo lock. Only one thread can hold foo at a time. If
+    a thread cannot acquire `foo`, it cannot access `race_list` and must wait for
+    the current owner to relinquish `foo`. This protocol guarantees that at any moment
+    in time only one thread can access `race_list`, which eliminates [Example 4-1](ch04s02.html#race.c
+    "Example 4-1. race.c")’s race conditions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are several different types of locks in FreeBSD, each having its own characteristics
+    (for example, some locks can be held by more than one thread). The remainder of
+    this chapter describes the different types of locks available in FreeBSD and how
+    to use them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mutexes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Mutex locks (mutexes)* ensure that at any moment in time, only one thread
+    can access a shared object. Mutex is an amalgamation of mutual and exclusion.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `foo` lock described in the previous section was a mutex lock.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'FreeBSD provides two types of mutex locks: spin mutexes and sleep mutexes.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Spin Mutexes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Spin mutexes* are simple spin locks. If a thread attempts to acquire a spin
+    lock that is being held by another thread, it will “spin” and wait for the lock
+    to be released. *Spin*, in this case, means to loop infinitely on the CPU. This
+    spinning can result in deadlock if a thread that is holding a spin lock is interrupted
+    or if it context switches, and all subsequent threads attempt to acquire that
+    lock. Consequently, while holding a spin mutex all interrupts are blocked on the
+    local processor and a context switch cannot be performed.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Spin mutexes should be held only for short periods of time and should be used
+    only to protect objects related to nonpreemptive interrupts and low-level scheduling
+    code (McKusick and Neville-Neil, 2005). Ordinarily, you’ll never use spin mutexes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sleep Mutexes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Sleep mutexes* are the most commonly used lock. If a thread attempts to acquire
+    a sleep mutex that is being held by another thread, it will context switch (that
+    is, sleep) and wait for the mutex to be released. Because of this behavior, sleep
+    mutexes are not susceptible to the deadlock described above.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sleep mutexes support priority propagation. When a thread sleeps on a sleep
+    mutex and its priority is higher than the sleep mutex’s current owner, the current
+    owner will inherit the priority of this thread (Baldwin, 2002). This characteristic
+    prevents a lower priority thread from blocking a higher priority thread.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Sleeping (for example, calling a `*sleep` function, which is discussed in [Chapter 5](ch05.html
+    "Chapter 5. Delaying Execution")) while holding a mutex is never safe and must
+    be avoided; otherwise, there are numerous assertions that will fail and the kernel
+    will panic (McKusick and Neville-Neil, 2005).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mutex Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following seven functions for working with
+    mutexes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `mtx_init` function initializes the mutex ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `mutex`. The ![](httpatomoreillycomsourcenostarchimages1137501.png) `name` argument
+    is used during debugging to identify `mutex`. The ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `type` argument is used during lock-order verification by `witness(4)`. If `type`
+    is `NULL`, `name` is used instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You’ll typically pass `NULL` as `type`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](httpatomoreillycomsourcenostarchimages1137505.png) `opts` argument modifies
+    `mtx_init`’s behavior. Valid values for `opts` are shown in [Table 4-1](ch04s05.html#mtx_underscore_init_symbolic_constants
+    "Table 4-1. mtx_init Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 4-1. mtx_init Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `MTX_DEF` | Initializes `mutex` as a sleep mutex; this bit or `MTX_SPIN`
+    must be present |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `MTX_SPIN` | Initializes `mutex` as a spin mutex; this bit or `MTX_DEF` must
+    be present |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `MTX_RECURSE` | Specifies that `mutex` is a recursive lock; more on recursive
+    locks later |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `MTX_QUIET` | Instructs the system to *not* log the operations done on this
+    lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `MTX_NOWITNESS` | Causes `witness(4)` to ignore this lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `MTX_DUPOK` | Causes `witness(4)` to ignore duplicates of this lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `MTX_NOPROFILE` | Instructs the system to *not* profile this lock |'
+  prefs: []
+  type: TYPE_TB
+- en: Threads acquire sleep mutexes by calling `mtx_lock`. If another thread is currently
+    holding ![](httpatomoreillycomsourcenostarchimages1137507.png) `mutex`, the caller
+    will sleep until `mutex` is available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads acquire spin mutexes by calling `mtx_lock_spin`. If another thread is
+    currently holding ![](httpatomoreillycomsourcenostarchimages1137509.png) `mutex`,
+    the caller will spin until `mutex` is available. Note that all interrupts are
+    blocked on the local processor during the spin, and they remain disabled following
+    the acquisition of `mutex`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A thread can recursively acquire ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `mutex` (with no ill effects) if `MTX_RECURSE` was passed to ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `opts`. A recursive lock is useful if it’ll be acquired at two or more levels.
+    For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: By using a recursive lock, lower levels don’t need to check if `mutex` has been
+    acquired by a higher level. They can simply acquire and release mutex as needed
+    (McKusick and Neville-Neil, 2005).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: I would avoid recursive mutexes. You’ll learn why in [Avoid Recursing on Exclusive
+    Locks](ch04s14.html#avoid_recursing_on_exclusive_locks "Avoid Recursing on Exclusive
+    Locks") in [Memory Management Routines](ch02.html#memory_management_routines "Memory
+    Management Routines")
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `mtx_trylock` function is identical to `mtx_lock` except that if another
+    thread is currently holding ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `mutex`, it returns `0` (that is, the caller does not sleep).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads release sleep mutexes by calling `mtx_unlock`. Note that recursive locks
+    “remember” the number of times they’ve been acquired. Consequently, each successful
+    lock acquisition must have a corresponding lock release.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads release spin mutexes by calling `mtx_unlock_spin`. The `mtx_unlock_spin`
+    function also restores the interrupt state to what it was before ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `mutex` was acquired.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `mtx_destroy` function destroys the mutex ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    `mutex`. Note that `mutex` can be held when it is destroyed. However, mutex cannot
+    be held recursively orhave other threads waiting for it when it is destroyed or
+    else the kernel will panic (McKusick and Neville-Neil, 2005).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing Mutexes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")
+    is a revision of [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c") that
+    uses a mutex to serialize access to `race_list`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To save space, the functions `race_ioctl`, `race_new`, `race_find`, and `race_destroy`
+    aren’t listed here, as they haven’t been changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 4-3. race_mtx.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: This driver ![](httpatomoreillycomsourcenostarchimages1137499.png) declares
+    a mutex named `race_mtx`, which gets initialized as a ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    sleep mutex in the module event handler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As you’ll see, a mutex is not the ideal solution for [Example 4-1](ch04s02.html#race.c
+    "Example 4-1. race.c"). However, for now, I just want to cover how to use mutexes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c"), the main source
+    of concurrent access to `race_list` is the `race_ioctl` function. This should
+    be obvious, because `race_ioctl` manages `race_list`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")
+    remedies the race conditions caused by `race_ioctl by` serializing its execution
+    via the ![](httpatomoreillycomsourcenostarchimages1137503.png) `race_ioctl_mtx`
+    function. `race_ioctl_mtx` is defined as the ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    `d_ioctl` function. It begins by ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    acquiring `race_mtx`. Then ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `race_ioctl` is called and subsequently `race_mtx` is ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    released.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, it takes just three lines (or one mutex) to serialize the execution
+    of `race_ioctl`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: race_modevent Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `race_modevent` function is the module event handler for [Example 4-3](ch04s06.html#race_underscore_mtx.c
+    "Example 4-3. race_mtx.c"). Here is its function definition (again):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'On module load, this function ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    initializes `race_mtx` as a ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    sleep mutex. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png) creates
+    [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")’s
+    device node: `race`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: On `MOD_QUIESCE`, this function ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    acquires `race_mtx`, ![](httpatomoreillycomsourcenostarchimages1137515.png) confirms
+    that `race_list` is empty, and then ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    releases `race_mtx`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On module unload, this function first calls ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `destroy_dev` to destroy the `race` device node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The `destroy_dev` function does not return until every `d_foo` function currently
+    executing completes. Consequently, one should not hold a lock while calling `destroy_dev`;
+    otherwise, you could deadlock your driver or panic your system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, `race_modevent` ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    confirms that `race_list` is still empty. See, after the execution of `MOD_QUIESCE`,
+    a `race_softc` structure could have been added to `race_list`. So, `race_list`
+    is checked again and every `race_softc` structure found is ![](httpatomoreillycomsourcenostarchimages1137509.png)
+    released. Once this is done, `race_mtx` is ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    destroyed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, every time `race_list` was accessed, `mtx_lock(&race_mtx)` was
+    called first. This was necessary in order to serialize access to `race_list` throughout
+    [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don’t Panic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now that we’ve examined [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c"),
+    let’s give it a try:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Unsurprisingly, it works. Yet using a mutex has introduced a new problem. See,
+    the function definition for `race_new` contains this line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, ![](httpatomoreillycomsourcenostarchimages1137499.png) `M_WAITOK` means
+    that it’s okay to sleep. But it’s *never* okay to sleep while holding a mutex.
+    Recall that sleeping while holding a mutex causes the kernel to panic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two solutions to this problem: First, change `M_WAITOK` to `M_NOWAIT`.
+    Second, use a lock that can be held while sleeping. As the first solution changes
+    the functionality of [Example 4-1](ch04s02.html#race.c "Example 4-1. race.c")
+    (that is, currently, `race_new` never fails), let’s go with the second.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shared/Exclusive Locks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Shared/exclusive locks (sx locks)* are locks that threads can hold while asleep.
+    As the name implies, multiple threads can have a *shared hold* on an sx lock,
+    but only one thread can have an *exclusive hold* on an sx lock. When a thread
+    has an exclusive hold on an sx lock, other threads cannot have a shared hold on
+    that lock.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: sx locks do not support priority propagation and are inefficient compared to
+    mutexes. The main reason for using sx locks is that threads can sleep while holding
+    one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shared/Exclusive Lock Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following 14 functions for working with sx
+    locks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `sx_init` function initializes the sx lock ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `sx`. The ![](httpatomoreillycomsourcenostarchimages1137501.png) `description`
+    argument is used during debugging to identify `sx`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `sx_init_flags` function is an alternative to `sx_init`. The ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    opts argument modifies `sx_init_flags`’s behavior. Valid values for `opts` are
+    shown in [Table 4-2](ch04s08.html#sx_underscore_init_underscore_flags_symb "Table 4-2. sx_init_flags
+    Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 4-2. sx_init_flags Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SX_NOADAPTIVE` | If this bit is passed and the kernel is compiled without
+    options `NO_ADAPTIVE_SX`, then threads holding `sx` will spin instead of sleeping.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SX_RECURSE` | Specifies that `sx` is a recursive lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SX_QUIET` | Instructs the system to *not* log the operations done on this
+    lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SX_NOWITNESS` | Causes `witness(4)` to ignore this lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SX_DUPOK` | Causes `witness(4)` to ignore duplicates of this lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `SX_NOPROFILE` | Instructs the system to *not* profile this lock |'
+  prefs: []
+  type: TYPE_TB
+- en: Threads acquire a shared hold on `sx` by calling `sx_slock`. If another thread
+    currently has an exclusive hold on `sx`, the caller will sleep until `sx` is available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads acquire an exclusive hold on `sx` by calling `sx_xlock`. If any threads
+    currently have a shared or exclusive hold on `sx`, the caller will sleep until
+    `sx` is available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `sx_slock_sig` and `sx_xlock_sig` functions are identical to `sx_slock`
+    and `sx_xlock` except that when the caller sleeps it can be woken up by signals.
+    If this occurs, a nonzero value is returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Normally, threads sleeping on locks cannot be woken up early.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `sx_try_slock` and `sx_try_xlock` functions are identical to `sx_slock`
+    and `sx_xlock` except that if `sx` cannot be acquired, they return `0` (that is,
+    the caller does not sleep).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads release a shared hold on `sx` by calling `sx_sunlock`, and they release
+    an exclusive hold by calling `sx_xunlock`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `sx_unlock` function is a front end to `sx_sunlock` and `sx_xunlock`. This
+    function is used when the hold state on `sx` is unknown.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads can upgrade a shared hold to an exclusive hold by calling `sx_try_upgrade`.
+    If the hold cannot be immediately upgraded, 0 is returned. Threads can downgrade
+    an exclusive hold to a shared hold by calling `sx_downgrade`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `sx_destroy` function destroys the sx lock ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `sx`. Note that `sx` cannot be held when it is destroyed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing Shared/Exclusive Locks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[Example 4-4](ch04s09.html#race_underscore_sx.c "Example 4-4. race_sx.c") is
+    a revision of [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")
+    that uses an sx lock instead of a mutex.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To save space, the functions `race_ioctl`, `race_new`, `race_find`, and `race_destroy`
+    aren’t listed here, as they haven’t been changed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example 4-4. race_sx.c
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[Example 4-4](ch04s09.html#race_underscore_sx.c "Example 4-4. race_sx.c") is
+    identical to [Example 4-3](ch04s06.html#race_underscore_mtx.c "Example 4-3. race_mtx.c")
+    except that every mutex management function has been replaced by its sx lock equivalent.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The numbered balls in [Example 4-4](ch04s09.html#race_underscore_sx.c "Example 4-4. race_sx.c")
+    highlight the differences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the results from interacting with [Example 4-4](ch04s09.html#race_underscore_sx.c
+    "Example 4-4. race_sx.c"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Naturally, everything works, and no new problems were introduced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reader/Writer Locks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Reader/writer locks (rw locks)* are basically mutexes with sx lock semantics.
+    Like sx locks, threads can hold rw locks as a *reader*, which is identical to
+    a shared hold, or as a *writer*, which is identical to an exclusive hold. Like
+    mutexes, rw locks support priority propagation and threads cannot hold them while
+    sleeping (or the kernel will panic).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: rw locks are used when you need to protect an object that is mostly going to
+    be read from instead of written to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reader/Writer Lock Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following 11 functions for working with rw
+    locks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `rw_init` function initializes the rw lock ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `rw`. The ![](httpatomoreillycomsourcenostarchimages1137501.png) `name` argument
+    is used during debugging to identify `rw`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `rw_init_flags` function is an alternative to `rw_init`. The ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    `opts` argument modifies `rw_init_flags`’s behavior. Valid values for `opts` are
+    shown in [Table 4-3](ch04s11.html#rw_underscore_init_underscore_flags_symb "Table 4-3. rw_init_flags
+    Symbolic Constants").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Table 4-3. rw_init_flags Symbolic Constants
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Constant | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RW_RECURSE` | Specifies that `rw` is a recursive lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RW_QUIET` | Instructs the system to *not* log the operations done on this
+    lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RW_NOWITNESS` | Causes `witness(4)` to ignore this lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RW_DUPOK` | Causes `witness(4)` to ignore duplicates of this lock |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `RW_NOPROFILE` | Instructs the system to *not* profile this lock |'
+  prefs: []
+  type: TYPE_TB
+- en: Threads acquire a shared hold on `rw` by calling `rw_rlock`. If another thread
+    currently has an exclusive hold on `rw`, the caller will sleep until `rw` is available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads acquire an exclusive hold on `rw` by calling `rw_wlock`. If any threads
+    currently have a shared or exclusive hold on `rw`, the caller will sleep until
+    `rw` is available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `rw_try_rlock` and `rw_try_wlock` functions are identical to `rw_rlock`
+    and `rw_wlock` except that if `rw` cannot be acquired, they return `0` (that is,
+    the caller does not sleep).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads release a shared hold on `rw` by calling `rw_runlock`, and they release
+    an exclusive hold by calling `rw_wunlock`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads can upgrade a shared hold to an exclusive hold by calling `rw_try_upgrade`.
+    If the hold cannot be immediately upgraded, `0` is returned. Threads can downgrade
+    an exclusive hold to a shared hold by calling `rw_downgrade`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `rw_destroy` function destroys the `rw` lock ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    `rw`. Note that `rw` cannot be held when it is destroyed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, you should be comfortable with locks—there’s really nothing to
+    them. So, I’m going to omit discussing an example that uses rw locks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Condition Variables
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Condition variables* synchronize the execution of two or more threads based
+    upon the value of an object. In contrast, locks synchronize threads by controlling
+    their access to objects.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Condition variables are used in conjunction with locks to “block” threads until
+    a condition is true. It works like this: A thread first acquires the `foo` lock.
+    Then it examines the condition. If the condition is false, it sleeps on the `bar`
+    condition variable. While asleep on `bar`, threads relinquish `foo`. A thread
+    that causes the condition to be true wakes up the threads sleeping on bar. Threads
+    woken up in this manner reacquire `foo` before proceeding.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Condition Variable Management Routines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The FreeBSD kernel provides the following 11 functions for working with condition
+    variables:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `cv_init` function initializes the condition variable ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `cvp`. The ![](httpatomoreillycomsourcenostarchimages1137501.png) `d` argument
+    describes `cvp`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `cv_wmesg` function gets the ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    description of ![](httpatomoreillycomsourcenostarchimages1137503.png) `cvp`. This
+    function is primarily used in error reporting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads sleep on ![](httpatomoreillycomsourcenostarchimages1137513.png) `cvp`
+    by calling `cv_wait`. The ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `lock` argument demands a sleep mutex, sx `lock`, or `rw` lock. Threads must hold
+    lock before calling `cv_wait`. Threads must not sleep on `cvp` with `lock` held
+    recursively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `cv_wait_unlock` function is a variant of `cv_wait`. When threads wake up
+    from sleeping on ![](httpatomoreillycomsourcenostarchimages1137509.png) `cvp`,
+    they forgo reacquiring ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `lock`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `cv_wait_sig` function is identical to `cv_wait` except that when the caller
+    is asleep it can be woken up by signals. If this occurs, the error code `EINTR`
+    or `ERESTART` is returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Normally, threads sleeping on condition variables cannot be woken up early.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `cv_timedwait` function is identical to `cv_wait` except that the caller
+    sleeps at most ![](httpatomoreillycomsourcenostarchimages1137513.png) `timo` /
+    `hz` seconds. If the sleep times out, the error code `EWOULDBLOCK` is returned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `cv_timedwait_sig` function is like `cv_wait_sig` and `cv_timedwait`. The
+    caller can be woken up by signals and sleeps at most `timo` / `hz` seconds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Threads wake up one thread sleeping on `cvp` by calling `cv_signal`, and they
+    wake up every thread sleeping on `cvp` by calling `cv_broadcast`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `cv_broadcastpri` function is identical to `cv_broadcast` except that all
+    threads woken up have their priority raised to ![](httpatomoreillycomsourcenostarchimages1137515.png)
+    `pri`. Threads with a priority higher than `pri` do not have their priority lowered.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `cv_destroy` function destroys the condition variable ![](httpatomoreillycomsourcenostarchimages1137517.png)
+    `cvp`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We’ll walk through an example that uses condition variables in [Chapter 5](ch05.html
+    "Chapter 5. Delaying Execution").
+  prefs: []
+  type: TYPE_NORMAL
+- en: General Guidelines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Here are some general guidelines for lock usage. Note that these aren’t hard-and-fast
+    rules, just things to keep in mind.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Avoid Recursing on Exclusive Locks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When an exclusive hold or lock is acquired, the holder usually assumes that
+    it has exclusive access to the objects the lock protects. Unfortunately, recursive
+    locks can break this assumption in some cases. As an example, suppose function
+    `F1` uses a recursive lock `L` to protect object O. If function `F2` acquires
+    `L`, modifies `O`, leaving it in an inconsistent state, and then calls `F1`, `F1`
+    will recursively acquire `L` and falsely assume that `O` is in a consistent state.^([[7](#ftn.CHP-4-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: One solution to this problem is to use a nonrecursive lock and to rewrite `F1`
+    so that it does not acquire `L`. Instead, `L` must be acquired before calling
+    `F1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Avoid Holding Exclusive Locks for Long Periods of Time
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Exclusive locks reduce concurrency and should be released as soon as possible.
+    Note that it is better to hold a lock for a short period of time when it is not
+    needed than to release the lock only to reacquire it (Baldwin, 2002). This is
+    because the operations to acquire and release a lock are relatively expensive.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[7](#CHP-4-FN-1)]) This paragraph is adapted from `Locking in the Multithreaded
+    FreeBSD Kernel by John H`. Baldwin (2002)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conclusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter dealt with the problem of data and state corruption caused by concurrent
+    threads. In short, whenever an object is accessible by multiple threads, its access
+    must be managed.
+  prefs: []
+  type: TYPE_NORMAL
