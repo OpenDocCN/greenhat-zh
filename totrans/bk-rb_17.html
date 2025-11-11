@@ -1,0 +1,323 @@
+<html><head></head><body><div class="chapter" title="Chapter&#xA0;17.&#xA0;Threads"><div class="titlepage"><div><div><h1 class="title"><a id="threads"/>Chapter 17. Threads</h1></div></div></div><div class="informalfigure"><a id="image_no_caption-id20"/><div class="mediaobject"><a id="I_mediaobject17_d1e19315"/><img src="httpatomoreillycomsourcenostarchimages860138.png.jpg" alt="image with no caption"/></div></div><p>There may be times when your programs need to perform more than one action at a time. For example, maybe you want to do some disk operations and simultaneously display some feedback to the user. Or you might want to copy or upload some files “in the background” while still allowing the user to carry on with some other task “in the foreground.”</p><p>In Ruby, if you want to do more than one task at a time, you can run each task in its own <span class="emphasis"><em>thread</em></span>. A thread is like a program within a program. It runs some particular piece of code independently of any other threads.<a id="IDX-CHP-17-0001" class="indexterm"/></p><p>However, as you will see shortly, multiple threads may need to find ways of cooperating with each other so that, for example, they can share the same data and they don’t hog all the processing time available, thereby preventing other threads from running. When reading this chapter, you need to be aware that the behavior of threads in Ruby 1.9 and newer is substantially different from threads in 1.8 and older. I’ll explain why that is shortly.</p><div class="sect1" title="Creating Threads"><div class="titlepage"><div><div><h1 class="title"><a id="creating_threads"/>Creating Threads</h1></div></div></div><p>Threads can be created like any other object, using the <code class="literal">new</code> method. When you do this, you must pass to the thread a block containing the code you want the thread to run.</p><p>What follows is my first attempt at creating two threads, one of which should print four strings while the other prints ten numbers:<a id="IDX-CHP-17-0002" class="indexterm"/></p><p><span class="emphasis"><em>threads1.rb</em></span></p><a id="I_programlisting17_d1e19350"/><pre class="programlisting"># This is a simple threading example that, however,
+# doesn't work as anticipated!
+
+words = ["hello", "world", "goodbye", "mars" ]
+numbers = [1,2,3,4,5,6,7,8,9,10]
+
+Thread.new{
+    words.each{ |word| puts( word ) }
+}
+
+Thread.new{
+    numbers.each{ |number| puts( number ) }
+}</pre><p>In all probability, when you run this, you may see nothing or, anyway, very little. It may display some strings and some numbers but not all of them and not in any easily predictable order. In the sample code in the archive, I’ve added a report of the time taken for the program to execute, which shows that the darn thing finishes before it has time to get started!</p></div></div>
+<div class="sect1" title="Running Threads"><div class="titlepage"><div><div><h1 class="title"><a id="running_threads"/>Running Threads</h1></div></div></div><p>Here is a simple fix to the thread-running problem. Right at the end of the code, add this:<a id="IDX-CHP-17-0003" class="indexterm"/></p><p><span class="emphasis"><em>threads2.rb</em></span></p><a id="I_programlisting17_d1e19367"/><pre class="programlisting">sleep( 5 )</pre><p>This inserts a five-second delay. Now when you run the code again, you should see all the strings and all the numbers, albeit a bit jumbled up, like this:</p><a id="I_programlisting17_d1e19371"/><pre class="programlisting">hello1
+
+2world
+3
+
+4goodbye
+
+5mars
+6
+7
+8
+9</pre><p>This is, in fact, exactly what you want since it shows that time is now being divided between the two threads. That’s why the words and numbers are jumbled, sometimes with even the carriage returns printed by the <code class="literal">puts</code> statements being mixed up, with either no carriage return or two at once being displayed. This happens because the threads are madly competing with one another for the available time—first one thread executes and displays a word, then the next thread executes and displays a number, then execution returns to the first thread, and so on, until the first thread ends (when all four words have been displayed), at which point the second thread can run without interruption.<a id="IDX-CHP-17-0004" class="indexterm"/><a id="IDX-CHP-17-0005" class="indexterm"/></p><p>Now compare this with the first version of the program. In that program, I created two threads, but just as Ruby was getting itself ready to run the code inside each thread—<span class="emphasis"><em>bam!</em></span>—it arrived at the end of the program and shut everything down, including my two threads. So, in effect, the threads were killed off before they had time to do anything of any interest.</p><p>But when I add a call to <code class="literal">sleep( 5 )</code> to insert a five-second delay, Ruby has plenty of time to run the threads before the program exits. There is just one problem with this technique—and it’s a <span class="emphasis"><em>big</em></span> problem. Adding unnecessary delays to your programs in order to let threads run defeats the object of the exercise. The timer display now shows that the program takes all of five whole seconds to run, which is about 4.99 seconds or so longer than is strictly necessary! You’ll be learning more civilized ways of handling threads shortly. First, however, I need to say a few words about an important difference between threads in Ruby 1.8 and threads in Ruby 1.9.<a id="IDX-CHP-17-0006" class="indexterm"/></p></div>
+<div class="sect1" title="Going Native"><div class="titlepage"><div><div><h1 class="title"><a id="going_native"/>Going Native</h1></div></div></div><p>In all versions of Ruby up to and including Ruby 1.8.<span class="emphasis"><em>x</em></span>, there was no access to “native” threads (that is, threads handled by the operating system). In effect, Ruby 1.8 threads exist inside the closed world of a Ruby program, with multiple threads each being allocated time, using a procedure called <span class="emphasis"><em>time-slicing</em></span>, within a single process. Ruby 1.9 (and newer) uses a new interpreter, YARV (Yet Another Ruby Virtual-machine). This allows Ruby 1.9 to make use of native threads, albeit with some limitations that I’ll explain shortly.<a id="IDX-CHP-17-0007" class="indexterm"/><a id="IDX-CHP-17-0008" class="indexterm"/><a id="IDX-CHP-17-0009" class="indexterm"/></p><p>In principle, native threads allow more efficient execution (using <span class="emphasis"><em>preemptive multitasking</em></span>) whereby the operating system takes care of the execution of threads on one or more processors. Even though Ruby 1.9 uses native threads, it does not perform preemptive multitasking. For reasons of compatibility with existing Ruby programs, Ruby 1.9 native threads work in a similar fashion to Ruby 1.8 non-native (or <span class="emphasis"><em>green</em></span>) threads. In other words, although Ruby 1.9 may in fact run a native thread, it is the Ruby virtual machine, rather than the operating system, that schedules the execution of threads. This means Ruby threads sacrifice efficiency; however, they do at least benefit from portability: Threads written on one operating system will also run on a different operating system.<a id="IDX-CHP-17-0010" class="indexterm"/></p></div>
+<div class="sect1" title="The Main Thread"><div class="titlepage"><div><div><h1 class="title"><a id="the_main_thread"/>The Main Thread</h1></div></div></div><p>Even if you don’t explicitly create any threads, there is always at least one thread executing—the main thread in which your Ruby program is running. You can verify this by entering the following:<a id="IDX-CHP-17-0011" class="indexterm"/><a id="IDX-CHP-17-0012" class="indexterm"/><a id="IDX-CHP-17-0013" class="indexterm"/></p><p><span class="emphasis"><em>thread_main.rb</em></span></p><a id="I_programlisting17_d1e19466"/><pre class="programlisting">p( Thread.main )</pre><p>This will display something like this:</p><a id="I_programlisting17_d1e19470"/><pre class="programlisting">#&lt;Thread:0x28955c8 run&gt;</pre><p>Here, Thread is the thread’s class, <code class="literal">0x28955c8</code> (or some other number) is its hexadecimal object identifier, and <code class="literal">run</code> is the thread’s current status.</p></div>
+<div class="sect1" title="Thread Status"><div class="titlepage"><div><div><h1 class="title"><a id="thread_status"/>Thread Status</h1></div></div></div><p>Each thread has a status that may be one of the following:</p><div class="informaltable"><table style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; "><colgroup><col/><col/></colgroup><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">run</code></p></td><td style="text-align: left" valign="top"><p>When the thread is executing</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">sleep</code></p></td><td style="text-align: left" valign="top"><p>When the thread is sleeping or waiting on I/O</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">aborting</code></p></td><td style="text-align: left" valign="top"><p>When the thread is aborting</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">false</code></p></td><td style="text-align: left" valign="top"><p>When the thread terminated normally</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">nil</code></p></td><td style="text-align: left" valign="top"><p>When the thread terminated with an exception</p></td></tr></tbody></table></div><p>You can obtain the status of a thread using the <code class="literal">status</code> method. The status is also shown when you inspect a thread, in which case either a <code class="literal">nil</code> or a <code class="literal">false</code> status is shown as <code class="literal">dead</code>.</p><p><span class="emphasis"><em>thread_status.rb</em></span></p><a id="I_programlisting17_d1e19547"/><pre class="programlisting">puts( Thread.main.inspect )               #=&gt; #&lt;Thread:0x28955c8 run&gt;
+puts( Thread.new{ sleep }.kill.inspect )  #=&gt; #&lt;Thread:0x28cddc0 dead&gt;
+puts( Thread.new{ sleep }.inspect )       #=&gt; #&lt;Thread:0x28cdd48 sleep&gt;
+thread1 = Thread.new{ }
+puts( thread1.status )                    #=&gt; false
+thread2 = Thread.new{ raise( "Exception raised!" ) }
+puts( thread2 )                           #=&gt; nil</pre><p>Note that the status shown may differ according to the version of Ruby being used and also when the program is run at different times. This is because actions on threads may not occur instantly, and the timing of a change in status may vary with each execution. For example, sometimes you may see the status of a killed thread shown as “aborting” and at other times as “dead.” The thread aborts before it dies, and its change in status may happen in milliseconds. Here is an example taken from the Ruby class library documentation. The documented status of each thread is shown in the comments:</p><p><span class="emphasis"><em>thread_status2.rb</em></span></p><a id="I_programlisting17_d1e19554"/><pre class="programlisting">p   d.kill                  #=&gt; #&lt;Thread:0x401b3678 aborting&gt;
+p   a.status                #=&gt; nil
+p   b.status                #=&gt; "sleep"
+p   c.status                #=&gt; false
+p   d.status                #=&gt; "aborting"
+p   Thread.current.status   #=&gt; "run"</pre><p>But when I run this code with Ruby 1.9, the status varies greatly, and it does not always match the status shown in the documented example shown earlier. At one moment, this is what I see:</p><a id="I_programlisting17_d1e19558"/><pre class="programlisting">#&lt;Thread:0x401b3678 aborting&gt;
+"run"
+"sleep"
+false
+false
+"run"</pre><p>But when I run it again, this is what I see:</p><a id="I_programlisting17_d1e19563"/><pre class="programlisting">#&lt;Thread:0x401b3678 aborting&gt;
+"run"
+"run"
+"run"
+false
+"run"</pre><p>Now look at this program:</p><p><span class="emphasis"><em>thread_status3.rb</em></span></p><a id="I_programlisting17_d1e19570"/><pre class="programlisting">t =  Thread.new{  }
+p t
+p t.kill
+# sleep( 1 )      # try uncommenting this
+puts( t.inspect )</pre><p>Once again the output varies each time it is run. I often see the following, which shows that even after I have “killed” the thread, it may still be “aborting” when I test its status:</p><a id="I_programlisting17_d1e19574"/><pre class="programlisting">#&lt;Thread:0x2be6420 run&gt;
+#&lt;Thread:0x2be6420 aborting&gt;
+#&lt;Thread:0x2be6420 aborting&gt;</pre><p>Now I force a time delay by calling <code class="literal">sleep</code> for one second:</p><a id="I_programlisting17_d1e19581"/><pre class="programlisting">sleep( 1 )
+puts( t.inspect )</pre><p>This time the thread has time to be terminated, and this is displayed:</p><a id="I_programlisting17_d1e19585"/><pre class="programlisting">#&lt;Thread:0x2be6420 dead&gt;</pre><p>These timing issues are more likely to arise in Ruby 1.9 than in older versions. You need to be aware of them and, if necessary, check a thread’s status repeatedly in order to verify that it is in the state expected at any given moment.<a id="IDX-CHP-17-0014" class="indexterm"/><a id="IDX-CHP-17-0015" class="indexterm"/><a id="IDX-CHP-17-0016" class="indexterm"/></p></div>
+<div class="sect1" title="Ensuring That a Thread Executes"><div class="titlepage"><div><div><h1 class="title"><a id="ensuring_that_a_thread_executes"/>Ensuring That a Thread Executes</h1></div></div></div><p>Let’s return to the problem I had in the previous programs. Recall that I created two threads, but the program finished before either of them had a chance to run fully. I fixed this by inserting a fixed-length delay using the <code class="literal">sleep</code> method. Deliberately introducing gratuitous delays into your programs is not something you would want to do as a general rule. Fortunately, Ruby has a more civilized way of ensuring that a thread has time to execute. The <code class="literal">join</code> method forces the calling thread (for example, the <span class="emphasis"><em>main</em></span> thread) to suspend its own execution (so it doesn’t just terminate the program) until the thread that calls <code class="literal">join</code> has completed:</p><p><span class="emphasis"><em>join.rb</em></span></p><a id="I_programlisting17_d1e19625"/><pre class="programlisting">words = ["hello", "world", "goodbye", "mars" ]
+numbers = [1,2,3,4,5,6,7,8,9,10]
+
+Thread.new{
+    words.each{ |word| puts( word ) }
+}.join
+
+Thread.new{
+    numbers.each{ |number| puts( number ) }
+}.join</pre><p>At first sight, this looks like progress since both threads get the time they need to execute and you haven’t had to introduce any unnecessary delays. However, when you take a look at the output, you will see that the threads run in sequence—<span class="emphasis"><em>the second thread starts to run after the first thread has finished</em></span>. This is why the output shows first all the words, displayed in the first Thread, and then all the numbers, displayed in the second Thread. But what you really want to do is get the two threads to run simultaneously, with Ruby switching from one to the next to give each thread a slice of the available processing time.</p><p>The next program, <span class="emphasis"><em>threads3.rb</em></span>, shows one way of achieving this. It creates two threads, as before; however, this time it assigns each thread to a variable, namely, <code class="literal">wordsThread</code> and <code class="literal">numbersThread</code>:</p><p><span class="emphasis"><em>threads3.rb</em></span></p><a id="I_programlisting17_d1e19646"/><pre class="programlisting">wordsThread = Thread.new{
+    words.each{ |word| puts( word ) }
+}
+numbersThread = Thread.new{
+    numbers.each{ |number| puts( number ) }
+}</pre><p>Now it puts these threads into an array and calls the <code class="literal">each</code> method to pass them into a block where they are received by the block variable, <code class="literal">t</code>, which simply calls the <code class="literal">join</code> method on each thread:<a id="IDX-CHP-17-0017" class="indexterm"/><a id="IDX-CHP-17-0018" class="indexterm"/></p><a id="I_programlisting17_d1e19667"/><pre class="programlisting">[wordsThread, numbersThread].each{ |t| t.join }</pre><p>As you will see from the output, the two threads now run “in parallel,” so their output is jumbled up, but there is no artificial delay, and the total execution time is negligible.</p></div>
+<div class="sect1" title="Thread Priorities"><div class="titlepage"><div><div><h1 class="title"><a id="thread_priorities"/>Thread Priorities</h1></div></div></div><p>So far, I’ve given Ruby total freedom in slicing up the time between threads in any way it wants. But sometimes one thread is more important than the others. For example, if you are writing a file-copying program with one thread to do the actual copying and another thread to display the progress bar, it would make sense to give the file-copying thread most of the time.</p><div class="note" title="Note"><h3 class="title">Note</h3><p>There may be times when the currently executing thread specifically wants to give execution time to other threads. This is done by calling the <code class="literal">Thread.pass</code> method. However, this may not produce quite the results you expect. The <code class="literal">pass</code> method is discussed in more detail in <a class="xref" href="ch17s10.html#digging_deeper-id16" title="Digging Deeper">Digging Deeper</a> in <a class="xref" href="ch17s10.html#digging_deeper-id16" title="Digging Deeper">Digging Deeper</a>.</p></div><p>Ruby lets you assign integer values to indicate the priority of each thread. In theory, threads with higher priorities are allocated more execution time than threads with lower priorities. In practice, things aren’t that simple since other factors (such as the order in which threads are run) may affect the amount of time given to each thread. Moreover, in very short programs, the effects of varying the priorities may be impossible to determine. The little words-and-numbers thread example you’ve used up to now is far too short to show any clear differences. So, let’s take a look at a slightly more labor-intensive program—one that runs three threads, each of which calls a method fifty times in order to compute the factorial of 50. For our purposes, it’s not important to understand how the code calculates factorials. Bear in mind, though, that it uses the shorthand (ternary operator) <span class="emphasis"><em>if..else</em></span> notation (<em class="replaceable"><code>&lt; Test Condition &gt;</code></em> <code class="literal">?</code> <em class="replaceable"><code>&lt;if true do this&gt; : &lt;else do this&gt;</code></em>) explained in <a class="xref" href="ch06.html" title="Chapter 6. Conditional Statements">Chapter 6</a>:<a id="IDX-CHP-17-0019" class="indexterm"/></p><p><span class="emphasis"><em>threads4.rb</em></span></p><a id="I_programlisting17_d1e19715"/><pre class="programlisting">def fac(n)
+    n == 1 ? 1 : n * fac(n-1)
+end
+
+t1 = Thread.new{
+    0.upto(50) {fac(50); print( "t1\n" )}
+}
+
+t2 = Thread.new{
+    0.upto(50) {fac(50); print( "t2\n" )}
+}
+
+t3 = Thread.new{
+    0.upto(50) {fac(50); print( "t3\n" )}
+}</pre><p>You can now set specific priorities for each thread:<a id="IDX-CHP-17-0020" class="indexterm"/><a id="IDX-CHP-17-0021" class="indexterm"/><a id="IDX-CHP-17-0022" class="indexterm"/></p><a id="I_programlisting17_d1e19740"/><pre class="programlisting">t1.priority = 0
+t2.priority = 0
+t3.priority = 0</pre><p>In this case, the priorities are the same for each thread, so, in principle, no thread will be given the biggest slice of the action, and the results from all three threads should appear in the usual jumble. This is indeed the case in Ruby 1.8, but be aware that thread priorities may not always produce the expected results in some versions of Ruby 1.9.</p><div class="sidebar"><a id="thread_priority_problems_in_ruby_1.9"/><p class="title">Thread Priority Problems in Ruby 1.9</p><p>In Ruby 1.9, thread priorities do not always work as documented. Here is an example taken from the Ruby class library documentation:</p><a id="I_programlisting17_d1e19749"/><pre class="programlisting">count1 = count2 = 0
+a = Thread.new do
+        loop { count1 += 1 }
+    end
+a.priority = −1
+
+b = Thread.new do
+        loop { count2 += 1 }
+    end
+
+b.priority = −2
+p sleep 1   #=&gt; 1
+p count1    #=&gt; 622504
+
+p count2    #=&gt; 5832</pre><p><span class="emphasis"><em>priority_test.rb</em></span></p><p>In principle, <code class="literal">count1</code> is incremented on a higher-priority thread (<code class="literal">b</code>) than <code class="literal">count2</code> (on thread <code class="literal">a</code>), and it should, therefore, always result in a higher value number as indicated in the comments in this example. In practice (at least when running this program using Ruby 1.9.2 on Windows), <code class="literal">count1</code> is sometimes higher and sometimes lower than <code class="literal">count2</code>. This behavior has been reported and documented, and its status as either a “bug” or a “feature” is open to debate. I personally regard it as undesirable and still hope that it will be remedied. However, you must be sure to verify the effect of thread priorities before using them in your own programs. Most of the discussion of thread priorities in this chapter assumes you are using a version of Ruby in which priorities work as documented.</p></div><p>Now, in <span class="emphasis"><em>threads4.rb</em></span> try changing the priority of <code class="literal">t3</code>:</p><a id="I_programlisting17_d1e19784"/><pre class="programlisting">t3.priority = 1</pre><p>This time when you run the code, <code class="literal">t3</code> will (at least in Ruby 1.8) grab most of the time and execute (mostly) before the other threads. The other threads may get a look in at the outset because they are created with equal priorities and the priority is changed only after they have started running. When <code class="literal">t3</code> has finished, <code class="literal">t1</code> and <code class="literal">t2</code> should share the time more or less equally.</p><p>So, let’s suppose you want <code class="literal">t1</code> and <code class="literal">t2</code> to run first, sharing time more or less equally and running <code class="literal">t3</code> only after those two threads have finished. Here’s my first attempt; you may want to try it yourself:</p><a id="I_programlisting17_d1e19811"/><pre class="programlisting">t1.priority = 2
+t2.priority = 2
+t3.priority = 1</pre><p>Hmm, the end result is not what I wanted! It seems that the threads are run in sequence with no time-slicing at all! Okay, just for the heck of it, let’s try some negative numbers:</p><a id="I_programlisting17_d1e19815"/><pre class="programlisting">t1.priority = −1
+t2.priority = −1
+t3.priority = −2</pre><p>Hurrah! That’s more like it. This time (at least in Ruby 1.8), <code class="literal">t1</code> and <code class="literal">t2</code> run concurrently though you may also see <code class="literal">t3</code> executing briefly before the thread priorities are set; then <code class="literal">t3</code> runs. So, why do negative values work but positive values don’t?</p><p>There is nothing special about negative values <span class="emphasis"><em>per se</em></span>. However, you need to bear in mind that every process has at least one thread running—the <span class="emphasis"><em>main</em></span> thread—and this too has a priority. Its priority happens to be 0.<a id="IDX-CHP-17-0023" class="indexterm"/></p></div>
+<div class="sect1" title="The Main Thread Priority"><div class="titlepage"><div><div><h1 class="title"><a id="the_main_thread_priority"/>The Main Thread Priority</h1></div></div></div><p>You can easily verify the priority of the main thread:</p><p><span class="emphasis"><em>main_thread.rb</em></span></p><a id="I_programlisting17_d1e19852"/><pre class="programlisting">puts( Thread.main.priority )        #=&gt; 0</pre><p>So, in the previous program (<span class="emphasis"><em>threads4.rb</em></span>), if you set the priority of <code class="literal">t1</code> to 2, it will “outrank” the main thread itself and will then be given all the execution time it needs until the next thread, <code class="literal">t2</code>, comes along, and so on. By setting the priorities lower than that of the main thread, you can force the three threads to compete only with themselves since the main thread will always outrank them. If you prefer working with positive numbers, you can specifically set the priority of the main thread to a higher value than all other threads:</p><a id="I_programlisting17_d1e19865"/><pre class="programlisting">Thread.main.priority=100</pre><p>Ruby 1.9 may not respect all values assigned in this way. For example, when I display that the priority of a thread to 100 has been assigned, Ruby 1.9 shows 3, whereas Ruby 1.8 shows 100.<a id="IDX-CHP-17-0024" class="indexterm"/><a id="IDX-CHP-17-0025" class="indexterm"/><a id="IDX-CHP-17-0026" class="indexterm"/></p><p>If you want <code class="literal">t2</code> and <code class="literal">t3</code> to have the same priority and <code class="literal">t1</code> to have a lower one, you need to set the priorities for those three threads plus the main thread:<a id="IDX-CHP-17-0027" class="indexterm"/></p><p><span class="emphasis"><em>threads5.rb</em></span></p><a id="I_programlisting17_d1e19901"/><pre class="programlisting">Thread.main.priority = 200
+t1.priority = 0
+t2.priority = 1
+t3.priority = 1</pre><p>Once again, this assumes you are using a version of Ruby (such as Ruby 1.8) in which thread priorities are respected. If you look closely at the output, you may spot one tiny but undesirable side effect. It is possible (not <span class="emphasis"><em>certain</em></span>, but <span class="emphasis"><em>possible</em></span>) that you will see some output from the <code class="literal">t1</code> thread right at the outset, just before <code class="literal">t2</code> and <code class="literal">t3</code> kick in and assert their priorities. This is the same problem noted earlier: Each of the threads tries to start running as soon as it is created, and <code class="literal">t1</code> may get its own slice of the action before the priorities of the other threads are “upgraded.” To prevent this, you can specifically suspend the thread at the time of creation using <code class="literal">Thread.stop</code> like this:</p><p><span class="emphasis"><em>stop_run.rb</em></span></p><a id="I_programlisting17_d1e19931"/><pre class="programlisting">t1 = Thread.new{
+   Thread.stop
+   0.upto(50){print( "t1\n" )}
+}</pre><p>Now, when you want to start the thread running (in this case, after setting the thread priorities), you call its <code class="literal">run</code> method:</p><a id="I_programlisting17_d1e19938"/><pre class="programlisting">t1.run</pre><p>Note that the use of some Thread methods may cause <span class="emphasis"><em>deadlocks</em></span> in Ruby 1.9. A deadlock occurs when two or more threads are waiting for one another to release a resource. To avoid deadlocks, you may prefer to use mutexes, as I’ll explain next.<a id="IDX-CHP-17-0028" class="indexterm"/><a id="IDX-CHP-17-0029" class="indexterm"/><a id="IDX-CHP-17-0030" class="indexterm"/></p></div>
+<div class="sect1" title="Mutexes"><div class="titlepage"><div><div><h1 class="title"><a id="mutexes"/>Mutexes</h1></div></div></div><p>There may be occasions when multiple threads each need to access some kind of global resource. This has the potential of producing erroneous results because the current state of the global resource may be modified by one thread and this modified value may be unpredictable when it is used by some other thread. For a simple example, look at this code:</p><p><span class="emphasis"><em>no_mutex.rb</em></span></p><a id="I_programlisting17_d1e19968"/><pre class="programlisting">$i = 0
+
+def addNum(aNum)
+    aNum + 1
+end
+
+somethreads = (1..3).collect {
+    Thread.new {
+        1000000.times{ $i = addNum($i)  }
+    }
+}
+
+
+somethreads.each{|t| t.join }
+puts( $i )</pre><p>My intention here is to create and run three threads, each of which increments the global variable, <code class="literal">$i</code>, 1 million times. I do this by enumerating from 1 to 3 and creating an array using the <code class="literal">collect</code> method (the <code class="literal">map</code> method is synonymous with <code class="literal">collect</code> so could also be used) from the results returned by the block. This array of threads, <code class="literal">somethreads</code>, subsequently passes each thread, <code class="literal">t</code>, into a block to be executed using <code class="literal">join</code>, as explained earlier. Each thread calls the <code class="literal">addNum</code> method to increment the value of <code class="literal">$i</code>. The expected result of <code class="literal">$i</code> at the end of this would (naturally) be 3 million. But, in fact, when I run this, the end value of <code class="literal">$i</code> is 1,068,786 (though you may see a different result).<a id="IDX-CHP-17-0031" class="indexterm"/><a id="IDX-CHP-17-0032" class="indexterm"/><a id="IDX-CHP-17-0033" class="indexterm"/></p><p>The explanation of this is that the three threads are, in effect, competing for access to the global variable, <code class="literal">$i</code>. This means, at certain times, thread <code class="literal">a</code> may get the current value of <code class="literal">$i</code> (let’s suppose it happens to be 100), and simultaneously thread <code class="literal">b</code> gets the current value of <code class="literal">$i</code> (still 100). Now, <code class="literal">a</code> increments the value it just got (<code class="literal">$i</code> becomes 101), and <code class="literal">b</code> increments the value <span class="emphasis"><em>it</em></span> just got, which was 100 (so <code class="literal">$i</code> becomes 101 once again). In other words, when multiple threads simultaneously access a shared resource, some of them may be working with out-of-date values, that is, values that do not take into account any modifications that have been made by other threads. Over time, errors resulting from these operations accumulate until you end up with results that differ substantially from those you might have anticipated.</p><p>To deal with this problem, you need to ensure that when one thread has access to a global resource, it blocks the access of other threads. This is another way of saying that the access to global resources granted to multiple threads should be “mutually exclusive.” You can implement this using Ruby’s Mutex class, which uses a semaphore to indicate whether a resource is currently being accessed and provides the <code class="literal">synchronize</code> method to prevent access to resources inside a block. Note that you must, in principle, <code class="literal">require 'thread'</code> to use the Mutex class, but in some versions of Ruby this is provided automatically. Here is my rewritten code:</p><p><span class="emphasis"><em>mutex.rb</em></span></p><a id="I_programlisting17_d1e20062"/><pre class="programlisting">require 'thread'
+
+$i = 0
+semaphore = Mutex.new
+
+def addNum(aNum)
+    aNum + 1
+end
+
+somethreads = (1..3).collect {
+    Thread.new {
+        semaphore.synchronize{
+            1000000.times{ $i = addNum($i)  }
+        }
+    }
+}
+
+somethreads.each{|t| t.join }
+puts( $i )</pre><p>This time, the end result of <code class="literal">$i</code> is 3,000,000.</p><p>Finally, for a slightly more useful example of using threads, take a look at <span class="emphasis"><em>file_find2.rb</em></span>. This sample program uses Ruby’s <code class="literal">Find</code> class to traverse directories on disk. For a nonthreaded example, see <span class="emphasis"><em>file_find.rb</em></span>. Compare this with the <span class="emphasis"><em>file_info3.rb</em></span> program in <a class="xref" href="ch13s07.html" title="Sorting by Size">Sorting by Size</a>, which uses the <code class="literal">Dir</code> class.</p><p>This program sets two threads running. The first, <code class="literal">t1</code>, calls the <code class="literal">processFiles</code> method to find and display file information (you will need to edit the call to <code class="literal">processFiles</code> to pass to it a directory name on your system). The second thread, <code class="literal">t2</code>, simply prints out a message, and this thread runs while <code class="literal">t1</code> is “alive” (that is, running or sleeping):</p><p><span class="emphasis"><em>file_find2.rb</em></span></p><a id="I_programlisting17_d1e20110"/><pre class="programlisting">require 'find'
+require 'thread'
+
+$totalsize = 0
+$dirsize = 0
+
+semaphore = Mutex.new
+
+def processFiles( baseDir )
+    Find.find( baseDir ) { |path|
+        $dirsize += $dirsize    # if a directory
+     if (FileTest.directory?(path)) &amp;&amp; (path != baseDir ) then
+            print( "\n#{path} [#{$dirsize / 1024}K]" )
+            $dirsize = 0
+        else                    # if a file
+            $filesize = File.size(path)
+            print( "\n#{path} [#{$filesize} bytes]" )
+            $dirsize += $filesize
+            $totalsize += $filesize
+        end
+    }
+end
+
+t1 = Thread.new{
+    semaphore.synchronize{
+        processFiles( '..' ) # you may edit this directory name
+    }
+}
+
+
+t2 = Thread.new{
+    semaphore.synchronize{
+        while t1.alive? do
+            print( "\n\t\tProcessing..." )
+            Thread.pass
+        end
+    }
+}
+
+t2.join
+
+printf( "\nTotal: #{$totalsize} bytes, #{$totalsize/1024}K, %0.02
+fMB\n\n",  "#{$totalsize/1048576.0}" )
+puts( "Total file size: #{$filesize}, Total directory size: #{$dirsize}" )</pre><p>In a real application, you could adapt this technique to provide user feedback of some kind while some intensive process (such as directory walking) is taking place.<a id="IDX-CHP-17-0034" class="indexterm"/><a id="IDX-CHP-17-0035" class="indexterm"/><a id="IDX-CHP-17-0036" class="indexterm"/></p></div>
+<div class="sect1" title="Fibers"><div class="titlepage"><div><div><h1 class="title"><a id="fibers"/>Fibers</h1></div></div></div><p>Ruby 1.9 introduces a new class called a Fiber, which is a bit like a thread and a bit like a block. Fibers are intended for the implementation of “lightweight concurrency.” This broadly means they operate like blocks (see <a class="xref" href="ch10.html" title="Chapter 10. Blocks, Procs, and Lambdas">Chapter 10</a>) whose execution can be paused and restarted just as you can with threads. Unlike threads, however, the execution of fibers is not scheduled by the Ruby virtual machine; it has to be controlled explicitly by the programmer. Another difference between threads and fibers is that threads run automatically when they are created; fibers do not. To start a fiber, you must call its <code class="literal">resume</code> method. To yield control to code outside the fiber, you must call the <code class="literal">yield</code> method.<a id="IDX-CHP-17-0037" class="indexterm"/><a id="IDX-CHP-17-0038" class="indexterm"/><a id="IDX-CHP-17-0039" class="indexterm"/></p><p>Let’s look at some simple examples:</p><p><span class="emphasis"><em>fiber_test.rb</em></span></p><a id="I_programlisting17_d1e20162"/><pre class="programlisting">f = Fiber.new do
+    puts( "In fiber" )
+    Fiber.yield( "yielding" )
+    puts( "Still in fiber" )
+    Fiber.yield( "yielding again" )
+    puts( "But still in fiber" )
+end
+
+puts( "a" )
+puts( f.resume )
+puts( "b" )
+puts( f.resume )
+puts( "c" )
+puts( f.resume )
+puts( "d" )
+puts( f.resume )   # dead fiber called</pre><p>Here I create a new fiber, <code class="literal">f</code>, but don’t immediately start it running. First I display “a”, <code class="literal">puts( "a" )</code>, and then I start the fiber, <code class="literal">f.resume</code>. The fiber starts executing and displays the “In fiber” message. But then it calls <code class="literal">yield</code> with the “yielding” string. This suspends the execution of the fiber and allows the code outside the fiber to continue. The code that called <code class="literal">f.resume</code> now puts the string that’s been yielded, so “yielding” is displayed. Another call to <code class="literal">f.resume</code> restarts the fiber where you left off, so “Still in fiber” is displayed, and so on. With each call to <code class="literal">yield</code>, execution returns to code outside the fiber. And, when that code calls <code class="literal">f.resume</code>, the remaining code in the fiber is executed. Once there is no more code left to be executed, the fiber terminates. When an inactive (or <span class="emphasis"><em>dead</em></span>) fiber is called by <code class="literal">f.resume</code>, a FiberError occurs. This is the output from the program shown earlier:<a id="IDX-CHP-17-0040" class="indexterm"/><a id="IDX-CHP-17-0041" class="indexterm"/><a id="IDX-CHP-17-0042" class="indexterm"/></p><a id="I_programlisting17_d1e20211"/><pre class="programlisting">a
+In fiber
+yielding
+b
+Still in fiber
+c
+But still in fiber
+d
+C:/bookofruby/ch17/fiber_test.rb:18:in `resume': dead fiber called (FiberError)
+from C:/bookofruby/ch17/fiber_test.rb:18:in `&lt;main&gt;'</pre><p>You can avoid “dead fiber” errors by testing the state of a fiber using the <code class="literal">alive?</code> method. This returns true if the fiber is active and returns false if inactive. You must <code class="literal">require 'fiber'</code> in order to use this method:<a id="IDX-CHP-17-0043" class="indexterm"/></p><p><span class="emphasis"><em>fiber_alive.rb</em></span></p><a id="I_programlisting17_d1e20229"/><pre class="programlisting">require 'fiber'
+
+if (f.alive?) then
+    puts( f.resume )
+else
+    puts("Error: Call to dead fiber" )
+end</pre><p>The <code class="literal">resume</code> method accepts an arbitrary number of parameters. On the first call to <code class="literal">resume</code>, they are passed as block arguments. Otherwise, they become the return value of the call to <code class="literal">yield</code>. The following example is taken from the documentation in the Ruby class library:<a id="IDX-CHP-17-0044" class="indexterm"/></p><p><span class="emphasis"><em>fiber_test2.rb</em></span></p><a id="I_programlisting17_d1e20251"/><pre class="programlisting">fiber = Fiber.new do |first|
+    second = Fiber.yield first + 2
+end
+
+puts fiber.resume 10    #=&gt; 12
+puts fiber.resume 14    #=&gt; 14
+puts fiber.resume 18    #=&gt; dead fiber called (FiberError)</pre><p>Here’s a simple example illustrating the use of two fibers:</p><a id="I_programlisting17_d1e20255"/><pre class="programlisting">f = Fiber.new {
+    | s |
+    puts( "In Fiber #1 (a) : " +  s )
+    puts( "In Fiber #1 (b) : " +  s )
+    Fiber.yield
+    puts( "In Fiber #1 (c) : " +  s )
+}
+
+f2 = Fiber.new {
+    | s |
+    puts( "In Fiber #2 (a) : " +  s )
+    puts( "In Fiber #2 (b) : " +  s )
+    Fiber.yield
+    puts( "In Fiber #2 (c) : " +  s )
+}
+
+f.resume( "hello"  )
+f2.resume( "hi" )
+puts( "world" )
+f2.resume
+f.resume</pre><p>This starts the first fiber, <code class="literal">f</code>, which runs until the call to <code class="literal">yield</code>. Then it starts the second fiber, <code class="literal">f2</code>, which runs until it too calls <code class="literal">yield</code>. Then the main program displays the string “world,” and finally <code class="literal">f2</code> and <code class="literal">f</code> are resumed. This is the output:</p><a id="I_programlisting17_d1e20278"/><pre class="programlisting">In Fiber #1 (a) : hello
+In Fiber #1 (b) : hello
+In Fiber #2 (a) : hi
+In Fiber #2 (b) : hi
+world
+In Fiber #2 (c) : hi
+In Fiber #1 (c) : hello</pre><div class="sidebar"><a id="digging_deeper-id16"/><p class="title">Digging Deeper</p><p>Here you will learn how to pass execution from one thread to another. You will discover some things that the Ruby documentation doesn’t tell you and some oddities about different versions of Ruby.<a id="IDX-CHP-17-0045" class="indexterm"/></p><p><span class="bolditalic">Passing Execution to Other Threads</span></p><p>Sometimes you might specifically want a certain thread to yield execution to any other threads that happen to be running. For example, if you have multiple threads doing steadily updated graphics operations or displaying various bits of “as it happens” statistical information, you may want to ensure that once one thread has drawn X number of pixels or displayed Y number of statistics, the other threads are guaranteed to get their chances to do something.<a id="IDX-CHP-17-0046" class="indexterm"/></p><p>In theory, the <code class="literal">Thread.pass</code> method takes care of this. Ruby’s source code documentation states that <code class="literal">Thread.pass</code> “invokes the thread scheduler to pass execution to another thread.” This is the example provided by the Ruby documentation:</p><p><span class="emphasis"><em>pass0.rb</em></span></p><a id="I_programlisting17_d1e20311"/><pre class="programlisting">a = Thread.new {    print "a"; Thread.pass;
+                    print "b"; Thread.pass;
+                    print "c" }
+b = Thread.new {    print "x"; Thread.pass;
+                    print "y"; Thread.pass;
+                    print "z" }
+a.join
+b.join</pre><p>According to the documentation, this code, when run, produces the output <code class="literal">axbycz</code>. And, sure enough, it does. In theory, then, this seems to show that by calling <code class="literal">Thread.pass</code> after each call to <code class="literal">print</code>, these threads pass execution to another thread, which is why the output from the two threads alternates.</p><p>Being of a suspicious turn of mind, I wondered what the effect would be with the calls to <code class="literal">Thread.pass</code> removed. Would the first thread hog all the time, yielding to the second thread only when it has finished? The best way to find out is to try it:</p><p><span class="emphasis"><em>pass1.rb</em></span></p><a id="I_programlisting17_d1e20332"/><pre class="programlisting">a = Thread.new {    print "a";
+                    print "b";
+                    print "c" }
+b = Thread.new {    print "x";
+                    print "y";
+                    print "z" }
+a.join
+b.join</pre><p>If my theory is correct (that thread <code class="literal">a</code> will hog all the time until it’s finished), this would be the expected output: <code class="literal">abcdef</code>. In fact (to my surprise!), the output actually produced was <code class="literal">axbycz</code>.</p><p>In other words, the result was the <span class="emphasis"><em>same</em></span> with or without all those calls to <code class="literal">Thread.pass</code>. So what, if anything, is <code class="literal">Thread.pass</code> doing? And is the documentation wrong when it claims that the <code class="literal">pass</code> method invokes the thread scheduler to pass execution to another thread?<a id="IDX-CHP-17-0047" class="indexterm"/></p><p>For a brief and cynical moment I confess that I toyed with the possibility that the documentation was simply incorrect and that <code class="literal">Thread.pass</code> didn’t do anything at all. A look into Ruby’s C-language source code soon dispelled my doubts; <code class="literal">Thread.pass</code> certainly does something, but its behavior is not quite as predictable as the Ruby documentation seems to suggest. Before explaining why this is, let’s try an example of my own:</p><p><span class="emphasis"><em>pass2.rb</em></span></p><a id="I_programlisting17_d1e20376"/><pre class="programlisting">s = 'start '
+a = Thread.new { (1..10).each{
+    s &lt;&lt; 'a'
+    Thread.pass
+    }
+}
+b = Thread.new { (1..10).each{
+    s &lt;&lt; 'b'
+    Thread.pass
+    }
+}
+
+a.join
+b.join
+puts( "#{s} end" )</pre><p>At first sight, this may look very similar to the previous example. It sets two threads running, but instead of printing out something repeatedly, these threads repeatedly add a character to a string—“a” being added by the <code class="literal">a</code> thread and “b” by the <code class="literal">b</code> thread. After each operation, <code class="literal">Thread.pass</code> passes execution to the other thread. At the end, the entire string is displayed. When run with Ruby 1.8, it comes as no surprise that the string contains an alternating sequence of “a” and “b” characters: <code class="literal">abababababababababab</code>. However, in Ruby 1.9, the characters do not alternate, and this is what I see: <code class="literal">aaaaaaaaaabbbbbbbbbb</code>. In my view, the <code class="literal">pass</code> method is not to be trusted with Ruby 1.9, and the remaining discussion applies to Ruby 1.8 only.</p><p>Now, remember that in the previous program, I obtained the same alternating output even when I removed the calls to <code class="literal">Thread.pass</code>. Based on that experience, I guess I should expect similar results if I delete <code class="literal">Thread.pass</code> in this program. Let’s try it:</p><p><span class="emphasis"><em>pass3.rb</em></span></p><a id="I_programlisting17_d1e20410"/><pre class="programlisting">s = 'start '
+a = Thread.new { (1..10).each{
+    s &lt;&lt; 'a'
+    }
+}
+b = Thread.new { (1..10).each{
+    s &lt;&lt; 'b'
+    }
+}
+
+a.join
+b.join
+puts( "#{s} end" )</pre><p>This time, this is the output: <code class="literal">aaaaaaaaaabbbbbbbbbb</code>.</p><p>In other words, this program shows the kind of differing behavior that I had originally anticipated in the first program (the one I copied out of Ruby’s embedded documentation), which is to say that when the two threads are left to run under their own steam, the first thread, <code class="literal">a</code>, grabs all the time for itself and only when it’s finished does the second thread, <code class="literal">b</code>, get a look in. But by explicitly adding calls to <code class="literal">Thread.pass</code> in Ruby 1.8, you can force each thread to pass execution to any other threads.</p><p>So, how can you explain this difference in behavior? In essence, <span class="emphasis"><em>pass0.rb</em></span> and <span class="emphasis"><em>pass3.rb</em></span> are doing the same things—running two threads and displaying strings from each. The only real difference is that, in <span class="emphasis"><em>pass3.rb</em></span>, the strings are concatenated inside the threads rather than printed. This might not seem like a big deal, but it turns out that printing a string takes a bit more time than concatenating one. In effect, then, a call to <code class="literal">print</code> introduces a time delay. And as you found out earlier (when I deliberately introduced a delay using <code class="literal">sleep</code>), time delays have profound effects on threads.</p><p>If you still aren’t convinced, try my rewritten version of <span class="emphasis"><em>pass0.rb</em></span>, which I have creatively named <span class="emphasis"><em>pass0_new.rb</em></span>. This simply replaces the prints with concatenations. Now if you comment and uncomment the calls to <code class="literal">Thread.pass</code>, you will indeed, in Ruby 1.8, see differing results:</p><p><span class="emphasis"><em>pass0_new.rb</em></span></p><a id="I_programlisting17_d1e20460"/><pre class="programlisting">s = ""
+a = Thread.new { s &lt;&lt; "a"; Thread.pass;
+    s &lt;&lt; "b"; Thread.pass;
+    s &lt;&lt; "c" }
+
+b = Thread.new { s &lt;&lt; "x"; Thread.pass;
+    s &lt;&lt; "y"; Thread.pass;
+    s &lt;&lt; "z" }
+
+a.join
+b.join
+puts( s )</pre><p>With <code class="literal">Thread.pass</code>, Ruby 1.8 displays the following:</p><a id="I_programlisting17_d1e20467"/><pre class="programlisting">axbycz</pre><p>Without <code class="literal">Thread.pass</code>, Ruby 1.8 displays the following:</p><a id="I_programlisting17_d1e20474"/><pre class="programlisting">abcxyz</pre><p>In Ruby 1.9, the presence or absence of <code class="literal">Thread.pass</code> has no obvious effect. And, with or without it, this is displayed:<a id="IDX-CHP-17-0048" class="indexterm"/><a id="IDX-CHP-17-0049" class="indexterm"/></p><a id="I_programlisting17_d1e20491"/><pre class="programlisting">abcxyz</pre><p>Incidentally, my tests were conducted on a PC running Windows. It is quite possible that different results will be seen on other operating systems. This is because the implementation of the Ruby scheduler, which controls the amount of time allocated to threads, is different on Windows and other operating systems.</p><p>As a final example, you may want to take a look at the <span class="emphasis"><em>pass4.rb</em></span> program, which is intended for Ruby 1.8 only. This creates two threads and immediately suspends them (<code class="literal">Thread.stop</code>). In the body of each thread the thread’s information, including its <code class="literal">object_id</code> is appended to an array, <code class="literal">arr</code>, and then <code class="literal">Thread.pass</code> is called. Finally, the two threads are run and joined, and the array, <code class="literal">arr</code>, is displayed. Try experimenting by uncommenting <code class="literal">Thread.pass</code> to verify its effect (pay close attention to the execution order of the threads as indicated by their <code class="literal">object_id</code> identifiers):</p><p><span class="emphasis"><em>pass4.rb</em></span></p><a id="I_programlisting17_d1e20526"/><pre class="programlisting">arr = []
+t1 = Thread.new{
+    Thread.stop
+    (1..10).each{
+        arr &lt;&lt; Thread.current.to_s
+        Thread.pass
+    }
+}
+t2 = Thread.new{
+    Thread.stop
+    (1..10).each{ |i|
+        arr &lt;&lt; Thread.current.to_s
+        Thread.pass
+    }
+}
+puts( "Starting threads..." )
+t1.run
+t2.run
+t1.join
+t2.join
+puts( arr )</pre></div></div></body></html>
