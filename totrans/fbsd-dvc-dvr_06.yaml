@@ -1,148 +1,226 @@
 - en: 'Chapter 6. Case Study: Virtual Null Modem'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第 6 章。案例研究：虚拟 Null Modem
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
 - en: This chapter is the first of several case studies that’ll guide you through
     a real-world device driver. The purpose of these case studies is to expose you
     to genuine driver code—warts and all—and to consolidate the information presented
     in earlier chapters.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章是几个案例研究中的第一个，这些案例研究将引导您通过一个真实的设备驱动程序。这些案例研究的目的让您接触到真正的驱动程序代码——包括所有缺点——并巩固前面章节中呈现的信息。
 - en: In this chapter, we’ll go through `nmdm(4)`, the virtual null modem terminal
     driver. This driver creates two `tty(4)` devices that are connected by a virtual
     null modem cable. In other words, the output of one `tty(4)` device is the input
     for the other `tty(4)` device, and vice versa. I chose to profile `nmdm(4)` because
     it uses event handlers, callouts, and taskqueues, all of which were described,
     but not demonstrated, in [Chapter 5](ch05.html "Chapter 5. Delaying Execution").
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 在本章中，我们将遍历 `nmdm(4)`，这是一个虚拟 null modem 终端驱动程序。此驱动程序创建两个通过虚拟 null modem 电缆连接的
+    `tty(4)` 设备。换句话说，一个 `tty(4)` 设备的输出是另一个 `tty(4)` 设备的输入，反之亦然。我选择分析 `nmdm(4)`，因为它使用了事件处理器、回调和任务队列，这些都在
+    [第 5 章](ch05.html "第 5 章。延迟执行") 中描述过，但未进行演示。
 - en: Prerequisites
+  id: totrans-4
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 先决条件
 - en: 'Before I can walk you through `nmdm(4)`, you’ll need to grok the following
     functions:'
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我可以向您介绍 `nmdm(4)` 之前，您需要理解以下函数：
 - en: '[PRE0]'
+  id: totrans-6
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: The `tty_alloc_mutex` function creates a TTY device. The `tsw` argument expects
     a pointer to a TTY device switch table, which is like a character device switch
     table, but for TTY devices. The `softc` argument is the software context (or instance
     variables) for the TTY device. The `mtx` argument specifies the mutex that’ll
     protect the TTY device.
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: '`tty_alloc_mutex` 函数创建一个 TTY 设备。`tsw` 参数期望一个指向 TTY 设备切换表的指针，这类似于字符设备切换表，但用于
+    TTY 设备。`softc` 参数是 TTY 设备的软件上下文（或实例变量）。`mtx` 参数指定将保护 TTY 设备的互斥锁。'
 - en: Note
+  id: totrans-8
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: At some point in the near future, the `tty_alloc_mutex` function is supposed
     to be deprecated and removed.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 在不久的将来，`tty_alloc_mutex` 函数将被弃用并删除。
 - en: The `tty_makedev` function creates a TTY device node under */dev*. The `tp`
     argument expects a pointer to a TTY device (for example, the return value from
     `tty_alloc_mutex`). The cred argument is the credentials for the device node.
     If `cred` is `NULL`, `UID_ROOT` and `GID_WHEEL` are used. The `fmt` argument specifies
     the name for the device node.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: '`tty_makedev` 函数在 */dev* 下创建一个 TTY 设备节点。`tp` 参数期望一个指向 TTY 设备的指针（例如，`tty_alloc_mutex`
+    的返回值）。`cred` 参数是设备节点的凭证。如果 `cred` 是 `NULL`，则使用 `UID_ROOT` 和 `GID_WHEEL`。`fmt`
+    参数指定设备节点的名称。'
 - en: The `tty_softc` function returns the software context of the TTY device `tp`.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: '`tty_softc` 函数返回 TTY 设备 `tp` 的软件上下文。'
 - en: Code Analysis
+  id: totrans-12
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 代码分析
 - en: '[Example 6-1](ch06s02.html#nmdm.c "Example 6-1. nmdm.c") provides a terse,
     source-level overview of `nmdm(4)`.'
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 6-1](ch06s02.html#nmdm.c "示例 6-1. nmdm.c") 提供了 `nmdm(4)` 的简洁、源代码级别的概述。'
 - en: Example 6-1. nmdm.c
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 6-1. nmdm.c
 - en: '[PRE1]'
+  id: totrans-15
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: '[Example 6-1](ch06s02.html#nmdm.c "Example 6-1. nmdm.c") is provided as a convenience;
     as I go through the code for `nmdm(4)` you can refer to it to see how `nmdm(4)`’s
     functions and structures are laid out.'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 6-1](ch06s02.html#nmdm.c "示例 6-1. nmdm.c") 提供作为方便；当我遍历 `nmdm(4)` 的代码时，您可以参考它以查看
+    `nmdm(4)` 的函数和结构是如何布局的。'
 - en: To make things easier to understand, I’ll detail the functions and structures
     in `nmdm(4)` in the order I would’ve written them (instead of in the order they
     appear). To that end, we’ll begin with the module event handler.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了使事情更容易理解，我将按照我本会编写的顺序详细说明 `nmdm(4)` 中的函数和结构（而不是它们出现的顺序）。为此，我们将从模块事件处理器开始。
 - en: nmdm_modevent Function
+  id: totrans-18
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: nmdm_modevent 函数
 - en: 'The `nmdm_modevent` function is the module event handler for `nmdm(4)`. Here
     is its function definition:'
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nmdm_modevent` 函数是 `nmdm(4)` 的模块事件处理器。以下是它的函数定义：'
 - en: '[PRE2]'
+  id: totrans-20
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: On module load, this function ![](httpatomoreillycomsourcenostarchimages1137499.png)
     registers the function ![](httpatomoreillycomsourcenostarchimages1137503.png)
     `nmdm_clone` with the event handler ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `dev_clone`.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 在模块加载时，此函数 ![httpatomoreillycomsourcenostarchimages1137499.png](httpatomoreillycomsourcenostarchimages1137499.png)
+    将函数 ![httpatomoreillycomsourcenostarchimages1137503.png](httpatomoreillycomsourcenostarchimages1137503.png)
+    `nmdm_clone` 注册到事件处理器 ![httpatomoreillycomsourcenostarchimages1137501.png](httpatomoreillycomsourcenostarchimages1137501.png)
+    `dev_clone`。
 - en: Note
+  id: totrans-22
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The `dev_clone` event handler was described in [Table 5-1](ch05s03.html#kernel_event_handlers-id1
     "Table 5-1. Kernel Event Handlers") in [Don’t Panic](ch05s02.html#donat_panic-id4
     "Don’t Panic").
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: '`dev_clone` 事件处理程序在 [表 5-1](ch05s03.html#kernel_event_handlers-id1 "表 5-1.
+    内核事件处理程序") 中描述，见 [Don’t Panic](ch05s02.html#donat_panic-id4 "Don’t Panic")。'
 - en: Recall that functions registered with `dev_clone` are called when a solicited
     item under `/dev` does not exist. So when a `nmdm(4)` device node is accessed
     for the first time, `nmdm_clone` will be called to create the device node on the
     fly. Interestingly, this on-the-fly device creation lets one create an unlimited
     number of `nmdm(4)` device nodes.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 回想一下，当 `/dev` 下的请求项不存在时，会调用注册到 `dev_clone` 的函数。因此，当第一次访问 `nmdm(4)` 设备节点时，会调用
+    `nmdm_clone` 动态创建设备节点。有趣的是，这种动态设备创建允许创建无限数量的 `nmdm(4)` 设备节点。
 - en: On module unload, this function begins by ![](httpatomoreillycomsourcenostarchimages1137505.png)
     checking the value of `nmdm_count`.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 在模块卸载时，此函数首先检查 `nmdm_count` 的值。
 - en: Note
+  id: totrans-26
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The variable `nmdm_count` is declared near the beginning of [Example 6-1](ch06s02.html#nmdm.c
     "Example 6-1. nmdm.c") as an integer initialized to `0`.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 变量 `nmdm_count` 在 [示例 6-1](ch06s02.html#nmdm.c "示例 6-1. nmdm.c") 的开头附近声明，为一个初始化为
+    `0` 的整数。
 - en: '`nmdm_count` counts the number of active `nmdm(4)` device nodes. If it equals
     `0`, `nmdm_clone` is ![](httpatomoreillycomsourcenostarchimages1137509.png) removed
     from the event handler `dev_clone`; otherwise, `EBUSY` (which stands for *error:
     device busy*) is ![](httpatomoreillycomsourcenostarchimages1137507.png) returned.'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nmdm_count` 计算活动 `nmdm(4)` 设备节点的数量。如果它等于 `0`，则 `nmdm_clone` 从事件处理程序 `dev_clone`
+    中移除；否则，返回 `EBUSY`（代表 *错误：设备繁忙*）。'
 - en: nmdm_clone Function
+  id: totrans-29
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: nmdm_clone 函数
 - en: 'As mentioned in the previous section, `nmdm_clone` creates `nmdm(4)` device
     nodes on the fly. Note that all `nmdm(4)` device nodes are created in pairs named
     `nmdm%lu%c`, where `%lu` is the unit number and `%c` is either `A` or `B`. Here
     is the function definition for `nmdm_clone`:'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前节所述，`nmdm_clone` 会动态创建 `nmdm(4)` 设备节点。请注意，所有 `nmdm(4)` 设备节点都是以成对的形式创建的，名称为
+    `nmdm%lu%c`，其中 `%lu` 是单元号，`%c` 是 `A` 或 `B`。以下是 `nmdm_clone` 函数的定义：
 - en: '[PRE3]'
+  id: totrans-31
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) checks
     the value of `*dev` (which is a character device pointer). If `*dev` does not
     equal `NULL`, which implies that a device node already exists, `nmdm_clone` exits
@@ -158,116 +236,172 @@
     `nmdm_alloc` is called to actually create the device nodes. Finally, `*dev` is
     set to the solicited device node (either ![](httpatomoreillycomsourcenostarchimages1137511.png)
     `nmdm%luA` or ![](httpatomoreillycomsourcenostarchimages1137513.png) `nmdm%luB`).
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先检查 `*dev`（字符设备指针）的值。如果 `*dev` 不等于 `NULL`，这意味着已经存在设备节点，则 `nmdm_clone` 退出（因为没有节点需要创建）。接下来，`nmdm_clone`
+    确保 `name` 中的前四个字符等于 `nmdm`；否则退出（因为请求的设备节点是为另一个驱动程序）。然后，`name` 中的第五个字符，应该是单元号，被转换为无符号长整型并存储在
+    `unit` 中。接下来的 `if` 语句检查转换是否成功。之后，`nmdm_clone` 确保 `name` 中的单元号之后是字母 `A` 或 `B`；否则退出。现在，确认请求的设备节点确实是为此驱动程序后，调用
+    `nmdm_alloc` 实际创建设备节点。最后，将 `*dev` 设置为请求的设备节点（要么是 `nmdm%luA`，要么是 `nmdm%luB`）。
 - en: Note that since `nmdm_clone` is registered with `dev_clone`, its function prototype
     must conform to the type expected by `dev_clone`, which is defined in `<sys/conf.h>`.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，由于`nmdm_clone`已与`dev_clone`注册，其函数原型必须符合`dev_clone`所期望的类型，`dev_clone`在`<sys/conf.h>`中定义。
 - en: nmdm_alloc Function
+  id: totrans-34
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: nmdm_alloc 函数
 - en: As mentioned in the previous section, `nmdm_alloc` actually creates `nmdm(4)`’s
     device nodes. Before I describe this function, an explanation of `nmdm_class`
     is needed.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，`nmdm_alloc`实际上创建了`nmdm(4)`的设备节点。在描述此函数之前，需要先解释`nmdm_class`。
 - en: Note
+  id: totrans-36
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The data structure `nmdm_class` is declared near the beginning of [Example 6-1](ch06s02.html#nmdm.c
     "Example 6-1. nmdm.c") as a TTY device switch table.
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 数据结构`nmdm_class`在[示例 6-1](ch06s02.html#nmdm.c "示例 6-1. nmdm.c")的开头被声明为一个 TTY
+    设备切换表。
 - en: '[PRE4]'
+  id: totrans-38
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: The flag ![](httpatomoreillycomsourcenostarchimages1137499.png) `TF_NOPREFIX`
     means `don’t prefix tty to the device name`. The other definitions are the operations
     that `nmdm_class` supports. These operations will be described as we encounter
     them.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 标志![http://atomoreilly.com/source/nostarch/images/1137499.png](http://atomoreilly.com/source/nostarch/images/1137499.png)`TF_NOPREFIX`表示`不要在设备名称前加
+    tty 前缀`。其他定义是`nmdm_class`支持的运算。这些运算将在遇到时进行描述。
 - en: Now that you’re familiar with `nmdm_class`, let’s walk through `nmdm_alloc`.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 既然你已经熟悉了`nmdm_class`，让我们来了解一下`nmdm_alloc`。
 - en: '[PRE5]'
+  id: totrans-41
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: This function can be split into four parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
     increments `nmdm_count` by one via the `atomic_add_int` function. As its name
     implies, `atomic_add_int` is atomic. Consequently, we don’t need a lock to protect
     `nmdm_count` when we increment it.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数可以分为四个部分。第一部分![http://atomoreilly.com/source/nostarch/images/1137499.png](http://atomoreilly.com/source/nostarch/images/1137499.png)通过`atomic_add_int`函数将`nmdm_count`增加一个。正如其名称所暗示的，`atomic_add_int`是原子的。因此，在增加它时，我们不需要锁来保护`nmdm_count`。
 - en: 'The second part ![](httpatomoreillycomsourcenostarchimages1137501.png) allocates
     memory for a new `nmdm_softc` structure. After that, its mutex is ![](httpatomoreillycomsourcenostarchimages1137503.png)
     initialized. Besides a mutex, `nmdm_softc` contains two additional member variables:
     `ns_partA` and `ns_partB`. These variables are `nmdm_part` structures and will
     maintain data relating to `nmdm%luA` or `nmdm%luB`.'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二部分![http://atomoreilly.com/source/nostarch/images/1137501.png](http://atomoreilly.com/source/nostarch/images/1137501.png)为新的`nmdm_softc`结构分配内存。之后，它的互斥锁![http://atomoreilly.com/source/nostarch/images/1137503.png](http://atomoreilly.com/source/nostarch/images/1137503.png)被初始化。除了互斥锁外，`nmdm_softc`还包含两个额外的成员变量：`ns_partA`和`ns_partB`。这些变量是`nmdm_part`结构，并将维护与`nmdm%luA`或`nmdm%luB`相关的数据。
 - en: Note
+  id: totrans-44
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '`st`ruct `nmdm_softc` is defined near the beginning of [Example 6-1](ch06s02.html#nmdm.c
     "Example 6-1. nmdm.c").'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 结构`nmdm_softc`在[示例 6-1](ch06s02.html#nmdm.c "示例 6-1. nmdm.c")的开头定义。
 - en: The third part ![](httpatomoreillycomsourcenostarchimages1137505.png) ![](httpatomoreillycomsourcenostarchimages1137511.png)
     connects the member variables `ns_partA` and `ns_partB`, so that given `ns_partA`
     we can find `ns_partB`, and vice versa. The third part also initializes `ns_partA`’s
     and `ns_partB`’s ![](httpatomoreillycomsourcenostarchimages1137507.png) ![](httpatomoreillycomsourcenostarchimages1137513.png)
     `task` and ![](httpatomoreillycomsourcenostarchimages1137509.png) ![](httpatomoreillycomsourcenostarchimages1137515.png)
     `callout` structures.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三部分![http://atomoreilly.com/source/nostarch/images/1137505.png](http://atomoreilly.com/source/nostarch/images/1137505.png)![http://atomoreilly.com/source/nostarch/images/1137511.png]将成员变量`ns_partA`和`ns_partB`连接起来，以便给定`ns_partA`可以找到`ns_partB`，反之亦然。第三部分还初始化了`ns_partA`和`ns_partB`的![http://atomoreilly.com/source/nostarch/images/1137507.png](http://atomoreilly.com/source/nostarch/images/1137507.png)![http://atomoreilly.com/source/nostarch/images/1137513.png]`task`和![http://atomoreilly.com/source/nostarch/images/1137509.png](http://atomoreilly.com/source/nostarch/images/1137509.png)![http://atomoreilly.com/source/nostarch/images/1137515.png]`callout`结构。
 - en: Finally, the fourth part creates `nmdm(4)`’s device nodes (that is, `nmdm%luA`
     and `nmdm%luB`).
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，第四部分创建了`nmdm(4)`的设备节点（即`nmdm%luA`和`nmdm%luB`）。
 - en: nmdm_outwakeup Function
+  id: totrans-48
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: nmdm_outwakeup 函数
 - en: 'The `nmdm_outwakeup` function is defined in `nmdm_class` as the `tsw_outwakeup`
     operation. It is executed when output from `nmdm%luA` or `nmdm%luB` is available.
     Here is its function definition:'
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nmdm_outwakeup`函数在`nmdm_class`中定义为`tsw_outwakeup`操作。当`nmdm%luA`或`nmdm%luB`有输出时执行。以下是它的函数定义：'
 - en: '[PRE6]'
+  id: totrans-50
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: This function ![](httpatomoreillycomsourcenostarchimages1137499.png) queues
     `ns_partA`’s or `ns_partB`’s ![](httpatomoreillycomsourcenostarchimages1137503.png)
     `task` structure on ![](httpatomoreillycomsourcenostarchimages1137501.png) `taskqueue_swi`
     (that is to say, it defers processing the output from `nmdm%luA` and `nmdm%luB`).
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数![http://atomoreilly.com/source/nostarch/images/1137499.png](http://atomoreilly.com/source/nostarch/images/1137499.png)将`ns_partA`或`ns_partB`![http://atomoreilly.com/source/nostarch/images/1137503.png](http://atomoreilly.com/source/nostarch/images/1137503.png)的`task`结构排队到![http://atomoreilly.com/source/nostarch/images/1137501.png](http://atomoreilly.com/source/nostarch/images/1137501.png)`taskqueue_swi`（也就是说，它将`nmdm%luA`和`nmdm%luB`的输出处理延迟）。
 - en: nmdm_task_tty Function
+  id: totrans-52
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: nmdm_task_tty 函数
 - en: 'The `nmdm_task_tty` function transfers data from `nmdm%luA` to `nmdm%luB`,
     and vice versa. This function is queued on `taskqueue_swi` by `nmdm_outwakeup`
     (for verification, see the third argument to `TASK_INIT` in `nmdm_alloc`). Here
     is its function definition:'
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nmdm_task_tty` 函数将数据从 `nmdm%luA` 传输到 `nmdm%luB`，反之亦然。此函数由 `nmdm_outwakeup`
+    （验证见 `nmdm_alloc` 中 `TASK_INIT` 的第三个参数）在 `taskqueue_swi` 上排队。以下是它的函数定义：'
 - en: '[PRE7]'
+  id: totrans-54
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: Note
+  id: totrans-55
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: In this function’s explanation, “our TTY” refers to the TTY device (that is,
     `nmdm%luA` or `nmdm%luB`) that queued this function on `taskqueue_swi`.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 在此函数的解释中，“我们的 TTY”指的是排队在 `taskqueue_swi` 上的 TTY 设备（即 `nmdm%luA` 或 `nmdm%luB`）。
 - en: This function is composed of two parts. The first changes the connection state
     between the two TTYs to match the status of our TTY. If our TTY is ![](httpatomoreillycomsourcenostarchimages1137501.png)
     closed and the other TTY’s Data Carrier Detect (DCD) flag is ![](httpatomoreillycomsourcenostarchimages1137499.png)
@@ -281,8 +415,16 @@
     is, there is data to transfer), the other TTY will have a carrier signal. A carrier
     signal indicates a connection. In other words, loss of the carrier equates to
     termination of the connection.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数由两部分组成。第一部分改变两个 TTY 之间的连接状态以匹配我们的 TTY 的状态。如果我们的 TTY ![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    已关闭且其他 TTY 的数据载波检测 (DCD) 标志 ![图片](httpatomoreillycomsourcenostarchimages1137499.png)
+    已开启，我们 ![图片](httpatomoreillycomsourcenostarchimages1137503.png) 关闭该标志并 ![图片](httpatomoreillycomsourcenostarchimages1137505.png)
+    关闭它们的载波信号。另一方面，如果我们的 TTY 已 ![图片](httpatomoreillycomsourcenostarchimages1137509.png)
+    打开且其他 TTY 的 DCD 标志 ![图片](httpatomoreillycomsourcenostarchimages1137507.png) 已关闭，我们打开该标志并
+    ![图片](httpatomoreillycomsourcenostarchimages1137503.png) 打开它们的载波信号。简而言之，这部分确保如果我们的
+    TTY 已关闭（即没有数据要传输），其他 TTY 将不会有载波信号，如果我们的 TTY 已打开（即有数据要传输），其他 TTY 将会有载波信号。载波信号表示连接。换句话说，载波丢失等同于连接终止。
 - en: The second part transfers data from our TTY’s output queue to the other TTY’s
     input queue. This part first ![](httpatomoreillycomsourcenostarchimages1137511.png)
     polls the other TTY to determine whether it can accept data. Then one character
@@ -290,56 +432,85 @@
     output queue and ![](httpatomoreillycomsourcenostarchimages1137515.png) placed
     in the other TTY’s input queue. These steps are repeated until the transfer is
     complete.
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二部分将数据从我们的 TTY 输出队列传输到其他 TTY 的输入队列。这部分首先 ![图片](httpatomoreillycomsourcenostarchimages1137511.png)
+    轮询其他 TTY 以确定它是否可以接收数据。然后从我们的 TTY 输出队列中移除一个字符 ![图片](httpatomoreillycomsourcenostarchimages1137513.png)
+    并将其放置到其他 TTY 的输入队列中。这些步骤会重复进行，直到传输完成。
 - en: nmdm_inwakeup Function
+  id: totrans-59
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: nmdm_inwakeup 函数
 - en: 'The `nmdm_inwakeup` function is defined in `nmdm_class` as the `tsw_inwakeup`
     operation. It is called when input for `nmdm%luA` or `nmdm%luB` can be received
     again. That is, when `nmdm%luA`’s or `nmdm%luB`’s input queue is full and then
     space becomes available, this function is executed. Here is its function definition:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nmdm_inwakeup` 函数在 `nmdm_class` 中定义为 `tsw_inwakeup` 操作。它在 `nmdm%luA` 或 `nmdm%luB`
+    可以再次接收输入时被调用。也就是说，当 `nmdm%luA` 或 `nmdm%luB` 的输入队列已满然后空间变得可用时，此函数被执行。以下是它的函数定义：'
 - en: '[PRE8]'
+  id: totrans-61
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: Note
+  id: totrans-62
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: In this function’s explanation, “our TTY” refers to the TTY device (that is,
     `nmdm%luA` or `nmdm%luB`) that executed this function.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 在此函数的解释中，“我们的 TTY”指的是执行此函数的 TTY 设备（即 `nmdm%luA` 或 `nmdm%luB`）。
 - en: This function ![](httpatomoreillycomsourcenostarchimages1137499.png) queues
     the other TTY’s ![](httpatomoreillycomsourcenostarchimages1137503.png) task structure
     on ![](httpatomoreillycomsourcenostarchimages1137501.png) `taskqueue_swi`. In
     other words, when input for our TTY can be received again, our TTY tells the other
     TTY to transfer data to it.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 在 `taskqueue_swi`
+    上排队其他 TTY 的 ![图片](httpatomoreillycomsourcenostarchimages1137503.png) 任务结构。换句话说，当我们的
+    TTY 可以再次接收输入时，我们的 TTY 告诉其他 TTY 将数据传输给它。
 - en: nmdm_modem Function
+  id: totrans-65
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: nmdm_modem 函数
 - en: 'The `nmdm_modem` function is defined in `nmdm_class` as the `tsw_modem` operation.
     This function sets or gets the modem control line state. Here is its function
     definition:'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nmdm_modem` 函数在 `nmdm_class` 中定义为 `tsw_modem` 操作。此函数设置或获取调制解调器控制线状态。以下是它的函数定义：'
 - en: '[PRE9]'
+  id: totrans-67
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: Note
+  id: totrans-68
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: In this function’s explanation, “our TTY” refers to the TTY device (that is,
     `nmdm%luA` or `nmdm%luB`) that executed this function.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个函数的解释中，“我们的 TTY”指的是执行此函数的 TTY 设备（即 `nmdm%luA` 或 `nmdm%luB`）。
 - en: This function sets the modem control lines when the `sigon` (signal on) or the
     `sigoff` (signal off) argument is ![](httpatomoreillycomsourcenostarchimages1137499.png)
     nonzero. If `sigon` ![](httpatomoreillycomsourcenostarchimages1137501.png) contains
@@ -348,8 +519,14 @@
     contains the DTR flag, the other TTY’s DCD flag is ![](httpatomoreillycomsourcenostarchimages1137507.png)
     turned off. The other TTY’s carrier signal is ![](httpatomoreillycomsourcenostarchimages1137509.png)
     turned on or off alongside its DCD flag.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 当 `sigon`（信号开启）或 `sigoff`（信号关闭）参数不为零时，此函数设置调制解调器控制线。如果 `sigon` ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    包含数据终端就绪（DTR）标志，则另一个 TTY 的 DCD 标志 ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    被打开。如果 `sigoff` ![](httpatomoreillycomsourcenostarchimages1137505.png) 包含 DTR
+    标志，则另一个 TTY 的 DCD 标志 ![](httpatomoreillycomsourcenostarchimages1137507.png) 被关闭。另一个
+    TTY 的载波信号 ![](httpatomoreillycomsourcenostarchimages1137509.png) 将与其 DCD 标志一起打开或关闭。
 - en: 'If the preceding discussion didn’t make any sense to you, this should help:
     A null modem connects the DTR output of each serial port to the DCD input of the
     other. The DTR output is kept off until a program accesses the serial port and
@@ -357,68 +534,105 @@
     Thus, the DCD input is used to detect the readiness of the other side. This is
     why when our TTY’s DTR is sigon’d or `sigoff`’d, the other TTY’s DCD flag and
     carrier signal are also turned on or off.'
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果前面的讨论对你来说没有意义，这应该会帮助：一个 null 调制解调器将每个串行端口的 DTR 输出连接到另一个串行端口的 DCD 输入。DTR 输出保持关闭，直到程序访问串行端口并将其打开；另一个串行端口将此感知为其
+    DCD 输入打开。因此，DCD 输入用于检测另一方的就绪状态。这就是为什么当我们的 TTY 的 DTR 被sigon’d 或 `sigoff`’d 时，另一个
+    TTY 的 DCD 标志和载波信号也会打开或关闭。
 - en: This function gets the modem control line state when sigon and sigoff are 0\.
     If our TTY’s DCD flag is ![](httpatomoreillycomsourcenostarchimages1137511.png)
     on, `SER_DCD` is ![](httpatomoreillycomsourcenostarchimages1137513.png) returned.
     If the other TTY’s DCD flag is ![](httpatomoreillycomsourcenostarchimages1137515.png)
     on, indicating that our TTY’s DTR flag is on, `SER_DTR` is ![](httpatomoreillycomsourcenostarchimages1137517.png)
     returned.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数在 sigon 和 sigoff 为 0 时获取调制解调器控制线状态。如果我们的 TTY 的 DCD 标志 ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    亮起，则返回 `SER_DCD`。如果另一个 TTY 的 DCD 标志 ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    亮起，表示我们的 TTY 的 DTR 标志亮起，则返回 `SER_DTR`。
 - en: nmdm_param Function
+  id: totrans-73
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: nmdm_param 函数
 - en: The `nmdm_param` function is defined in `nmdm_class` as the `tsw_param` operation.
     This function sets up `nmdm_task_tty` to be executed at regular intervals. That
     is, it sets `nmdm%luA` to periodically transfer data to `nmdm%luB`, and vice versa.
     This periodic data transfer requires flow control to prevent one side from overrunning
     the other with data. Flow control works by halting the sender when the receiver
     can’t keep up.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nmdm_param` 函数在 `nmdm_class` 中定义为 `tsw_param` 操作。此函数设置 `nmdm_task_tty` 以定期执行。也就是说，它将
+    `nmdm%luA` 设置为定期向 `nmdm%luB` 传输数据，反之亦然。这种定期数据传输需要流量控制以防止一方数据溢出另一方。流量控制通过在接收方跟不上的情况下停止发送方来实现。'
 - en: 'Here is the function definition for `nmdm_param`:'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是 `nmdm_param` 函数的定义：
 - en: '[PRE10]'
+  id: totrans-76
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: This function can be split into three parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
     determines whether flow control is disabled. If it is, `ns_partA`’s and `ns_partB`’s
     `np_rate` variable is zeroed and `nmdm_param` exits. The `np_rate` variable is
     the rate at which `nmdm_task_tty` will be executed. This rate can differ for `nmdm%luA`
     and `nmdm%luB`.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数可以分为三个部分。第一个部分 ![](httpatomoreillycomsourcenostarchimages1137499.png) 确定是否禁用了流量控制。如果是，则将
+    `ns_partA` 和 `ns_partB` 的 `np_rate` 变量置零，并退出 `nmdm_param`。`np_rate` 变量是 `nmdm_task_tty`
+    将被执行的速率。这个速率对于 `nmdm%luA` 和 `nmdm%luB` 可能不同。
 - en: The second part calculates the ![](httpatomoreillycomsourcenostarchimages1137507.png)
     value for `np_rate`. This calculation takes into consideration the ![](httpatomoreillycomsourcenostarchimages1137503.png)
     speed of `nmdm%luA` and `nmdm%luB` and the ![](httpatomoreillycomsourcenostarchimages1137501.png)
     number of bits per character. The second part also determines the ![](httpatomoreillycomsourcenostarchimages1137505.png)
     maximum number of characters to transfer per execution of `nmdm_task_tty`.
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二部分计算 `np_rate` 的 ![图片](httpatomoreillycomsourcenostarchimages1137507.png)
+    值。此计算考虑了 `nmdm%luA` 和 `nmdm%luB` 的 ![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    速度以及 ![图片](httpatomoreillycomsourcenostarchimages1137501.png) 每个字符的位数。第二部分还确定每次执行
+    `nmdm_task_tty` 时可传输的最大字符数。
 - en: Lastly, the third part causes ![](httpatomoreillycomsourcenostarchimages1137511.png)
     `nmdm_timeout` to execute one time after ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `rate` / `hz` seconds. The `nmdm_timeout` function queues `nmdm_task_tty` on `taskqueue_swi`.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，第三部分导致在 `rate / hz` 秒后执行一次 `nmdm_timeout`，如 ![图片](httpatomoreillycomsourcenostarchimages1137511.png)
+    所示。`nmdm_timeout` 函数将 `nmdm_task_tty` 在 `taskqueue_swi` 上排队。
 - en: The second and third parts are executed twice, once for `nmdm%luA` and once
     for `nmdm%luB`.
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二和第三部分各执行两次，一次为 `nmdm%luA`，一次为 `nmdm%luB`。
 - en: nmdm_timeout Function
+  id: totrans-81
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: nmdm_timeout 函数
 - en: 'As indicated in the previous section, the `nmdm_timeout` function queues `nmdm_task_tty`
     on `taskqueue_swi` at regular intervals. Here is its function definition:'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，`nmdm_timeout` 函数以固定间隔在 `taskqueue_swi` 上排队 `nmdm_task_tty`。以下是其函数定义：
 - en: '[PRE11]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) checks
     the value of `np_rate`. If it equals 0, `nmdm_timeout` exits. Next, `ns_partA`’s
     or `ns_partB`’s `np_quota` variable is assigned the ![](httpatomoreillycomsourcenostarchimages1137501.png)
@@ -430,55 +644,90 @@
     and ![](httpatomoreillycomsourcenostarchimages1137511.png) `nmdm_timeout` is ![](httpatomoreillycomsourcenostarchimages1137507.png)
     rescheduled to execute after ![](httpatomoreillycomsourcenostarchimages1137509.png)
     `np_rate` / `hz` seconds.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 检查 `np_rate`
+    的值。如果它等于 0，则 `nmdm_timeout` 退出。接下来，`ns_partA` 或 `ns_partB` 的 `np_quota` 变量被分配
+    ![图片](httpatomoreillycomsourcenostarchimages1137501.png) 最大字符传输数（如果你回到 [nmdm_task_tty
+    函数](ch06s02.html#nmdm_underscore_task_underscore_tty_func "nmdm_task_tty 函数")
+    在 [nmdm_outwakeup 函数](ch06s02.html#nmdm_underscore_outwakeup_function "nmdm_outwakeup
+    函数")，应该很明显 `np_quota` 是如何使用的）。一旦完成，`nmdm_task_tty` 就 ![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    在 ![图片](httpatomoreillycomsourcenostarchimages1137505.png) `taskqueue_swi` 上排队，![图片](httpatomoreillycomsourcenostarchimages1137511.png)
+    `nmdm_timeout` 就 ![图片](httpatomoreillycomsourcenostarchimages1137507.png) 重新安排在
+    ![图片](httpatomoreillycomsourcenostarchimages1137509.png) `np_rate` / `hz` 秒后执行。
 - en: The `nmdm_param` and `nmdm_timeout` functions are used to emulate the TTYs’
     baud rate. Without these two functions, data transfers would be slower.
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: '`nmdm_param` 和 `nmdm_timeout` 函数用于模拟 TTY 的波特率。没有这两个函数，数据传输会变慢。'
 - en: bits_per_char Function
+  id: totrans-86
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: bits_per_char 函数
 - en: 'The `bits_per_char` function returns the number of bits used to represent a
     single character for a given TTY. This function is used only in `nmdm_param`.
     Here is its function definition:'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: '`bits_per_char` 函数返回用于表示单个字符的位数，对于给定的 TTY。此函数仅在 `nmdm_param` 中使用。以下是其函数定义：'
 - en: '[PRE12]'
+  id: totrans-88
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: Notice that the ![](httpatomoreillycomsourcenostarchimages1137509.png) return
     value takes into account the ![](httpatomoreillycomsourcenostarchimages1137501.png)
     variable character size, ![](httpatomoreillycomsourcenostarchimages1137499.png)
     start bit, ![](httpatomoreillycomsourcenostarchimages1137503.png) stop bit, ![](httpatomoreillycomsourcenostarchimages1137505.png)
     parity enabled bit, and ![](httpatomoreillycomsourcenostarchimages1137507.png)
     second stop bit.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，![图片](httpatomoreillycomsourcenostarchimages1137509.png) 返回值考虑了 ![图片](httpatomoreillycomsourcenostarchimages1137501.png)
+    变量字符大小、![图片](httpatomoreillycomsourcenostarchimages1137499.png) 起始位、![图片](httpatomoreillycomsourcenostarchimages1137503.png)
+    停止位、![图片](httpatomoreillycomsourcenostarchimages1137505.png) 奇偶校验启用位和 ![图片](httpatomoreillycomsourcenostarchimages1137507.png)
+    第二停止位。
 - en: Don’t Panic
+  id: totrans-90
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 不要慌张
 - en: 'Now that we’ve walked through `nmdm(4)`, let’s give it a try:'
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 既然我们已经走过了 `nmdm(4)`，让我们试一试：
 - en: '[PRE13]'
+  id: totrans-92
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: Excellent. We’re able to connect to `nmdm0A`, which is running `getty(8)`, from
     `nmdm0B`.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 极好。我们能够从`nmdm0B`连接到正在运行`getty(8)`的`nmdm0A`。
 - en: Conclusion
+  id: totrans-94
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: This chapter described the entire code base of `nmdm(4)`, the virtual null modem
     terminal driver. If you noticed the complete lack of locking in this driver and
     are alarmed, don’t be. The `ns_mtx` mutex, which gets initialized in `nmdm_alloc`,
     is implicitly acquired by the TTY subsystem before `nmdm_outwakeup`, `nmdm_inwakeup`,
     `nmdm_modem`, and `nmdm_param` are called. In short, every operation between `nmdm%luA`
     and `nmdm%luB` is serialized.
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章描述了虚拟空调制解调器驱动程序`nmdm(4)`的整个代码库。如果你注意到这个驱动程序中完全缺乏锁定并且感到担忧，请不要担心。在`nmdm_alloc`中初始化的`ns_mtx`互斥锁，在调用`nmdm_outwakeup`、`nmdm_inwakeup`、`nmdm_modem`和`nmdm_param`之前，被TTY子系统隐式获取。简而言之，`nmdm%luA`和`nmdm%luB`之间的每个操作都是串行化的。
