@@ -1,0 +1,282 @@
+<html><head></head><body>
+
+<div class="calibre21" id="calibre_pb_0"/><div class="calibre1" id="calibre_toc_105">
+<a name="ch07" class="calibre6" id="ch07"/>
+<div class="calibre1">
+<h2 class="lot-title" id="calibre_pb_1"><a name="109" class="calibre16" id="109"/><a name="ch07lev1sec14" class="calibre16" id="ch07lev1sec14"/><span class="chapter-titlelabel">Program 94: </span>Speed Kills</h2><p class="b24-bookeditorial">The <span>new</span> and <span>delete</span> function calls are costly. If you want to speed up your program and you know what you are doing, you can override them and create your own class-specific <span>new</span> and <span>delete</span>. That's what this programmer has done. The allocation algorithm is surprising simple, yet somehow memory gets corrupted. Why?</p>
+<div class="calibre1">
+<pre class="literallayout-normal">
+  1 /***********************************************
+  2  * bit_test -- Test out our new high speed     *
+  3  *      bit_array.                             *
+  4  ***********************************************/
+  5 #include &lt;iostream&gt;
+  6 #include &lt;memory.h&gt;
+  7
+  8 // The size of a fast bit_array.
+  9 // (Private to fast bit array)
+ 10 const int BIT_ARRAY_MAX = 64;   // Size in bits
+ 11
+ 12 // Number of bits in a byte
+ 13 const int BITS_PER_BYTE = 8;
+ 14 /************************************************
+ 15  * fast_bit_array -- A bit array using fast    *
+ 16  * allocate technology.                         *
+ 17  *                                              *
+ 18  * Member functions:                            *
+ 19  *      get -- Get an element from the          *
+ 20  *              array.                          *
+ 21  *      set -- Set the value of an element      *
+ 22  *              in the array.                   *
+ 23  *                                              *
+ 24  *      new -- used to quickly allocate a bit   *
+ 25  *              array.                          *
+ 26  *      delete -- used to quickly deallocate    *
+ 27  *                      a bit array.            *
+ 28  ************************************************/
+ 29 class fast_bit_array
+ 30 {
+ 31     protected:
+ 32         // Array data
+ 33         unsigned char
+ 34             data[BIT_ARRAY_MAX/BITS_PER_BYTE];
+ 35
+ 36     public:
+ 37         fast_bit_array(void)
+ 38         {
+ 39            memset(data, '\0', sizeof(data));
+ 40         }
+ 41         // Destructor defaults
+ 42     private:
+ 43         // No copy constructor
+ 44         fast_bit_array(const fast_bit_array &amp;);
+ 45
+ 46         // No assignment operator
+ 47         fast_bit_array &amp; operator =
+ 48             (const fast_bit_array &amp;);
+ 49     public:
+ 50         // Set the value on an item
+ 51         void set(
+ 52             // Index into the array
+ 53             const unsigned int index,
+ 54
+ 55             // Value to put in the array
+ 56             const unsigned int value
+ 57         )
+ 58         {
+ 59             // Index into the bit in the byte
+ 60             unsigned int bit_index = index % 8;
+ 61
+ 62             // Byte in the array to use
+ 63             unsigned int byte_index = index / 8;
+ 64
+ 65             if (value)
+ 66             {
+ 67                 data[byte_index] |=
+ 68                     (1 &lt;&lt; bit_index);
+ 69             }
+ 70             else
+ 71             {
+ 72                 data[byte_index] &amp;=
+ 73                     ~(1 &lt;&lt; bit_index);
+ 74             }
+ 75         }
+ 76         // Return the value of an element
+ 77         int get(unsigned int index)
+ 78         {
+ 79             // Index into the bit in the byte
+ 80             unsigned int bit_index = index % 8;
+ 81             // Byte in the array to use
+ 82             unsigned int byte_index = index / 8;
+ 83
+ 84             return (
+ 85                 (data[byte_index] &amp;
+ 86                        (1 &lt;&lt; bit_index)) != o);
+ 87        }
+ 88        // Allocate a new fast_bit_array
+ 89        void *operator new(const size_t);
+ 90
+ 91        // Delete a fast bit array.
+ 92        void operator delete(void *ptr);
+ 93 };
+ 94
+ 95 /************************************************
+ 96  * The following routines handle the local      *
+ 97  * new/delete for the fast_bit_array.           *
+ 98  ************************************************/
+ 99 // Max number of fast_bit_arrays we can use at once
+100 const int N_FAST_BIT_ARRAYS = 30;
+101
+102 // If true, the bit array slot is allocated
+103 // false indicates a free slot
+104 static bool
+105     bit_array_used[N_FAST_BIT_ARRAYS] = {false};
+106
+107 // Space for our fast bit arrays.
+108 static char
+109     bit_array_mem[N_FAST_BIT_ARRAYS]
+110                 [sizeof(fast_bit_array)];
+111
+112 // Handle new for "fast_bit_array".
+113 // (This is much quicker than the
+114 //      system version of new)
+115 /************************************************
+116  * fast_bit_array -- new                        *
+117  *                                              *
+118  * This is a high speed allocation routine for  *
+119  * the fast_bit_array class.   The method used  *
+120  * for this is simple, but we know that only    *
+121  * a few bit_arrays will be allocated.          *
+122  *                                              *
+123  * Returns a pointer to the new memory.         *
+124  ************************************************/
+125 void *fast_bit_array::operator new(const size_t)
+126 {
+127     int i;      // Index into the bit array slots
+128
+129     // Look for a free slot
+130     for (i = 0; i &lt; N_FAST_BIT_ARRAYS; ++i)
+131     {
+132         if (!bit_array_used[i])
+133         {
+134             // Free slot found, allocate the space
+135             bit_array_used[i] = true;
+136             return(bit_array_mem[i]);
+137         }
+138     }
+139     std::cout &lt;&lt; "Error: Out of local memory\n";
+140     exit (8);
+141 }
+142
+143 /************************************************
+144  * fast_bit_array -- delete                     *
+145  *                                              *
+146  * Quickly free the space used by a             *
+147  * fast bit array.                              *
+148  ************************************************/
+149 void fast_bit_array::operator delete(
+150     void *ptr   // Pointer to the space to return
+151 )
+152 {
+153     int i;      // Slot index
+154
+155     for (i = 0; i &lt; N_FAST_BIT_ARRAYS; ++i)
+156     {
+157         // Is this the right slot
+158         if (ptr == bit_array_mem[i])
+159         {
+160             // Right slot, free it
+161             bit_array_used[i] = false;
+162             return;
+163         }
+164     }
+165     std::cout &lt;&lt;
+166         "Error: Freed memory we didn't have\n";
+167     exit (8);
+168 }
+169
+170
+171 /************************************************
+172  * safe_bit_array -- A safer bit array.         *
+173  *                                              *
+174  * Like bit array, but with error checking.     *
+175  ************************************************/
+176 class safe_bit_array : public fast_bit_array
+177 {
+178     public:
+179         // Sequence number generator
+180         static int bit_array_counter;
+181
+182         // Our bit array number
+183         int sequence;
+184
+185         safe_bit_array(void)
+186         {
+187             sequence = bit_array_counter;
+188             ++bit_array_counter;
+189         };
+190         // Destructor defaults
+191     private:
+192         // No copy constructor
+193         safe_bit_array(const safe_bit_array &amp;);
+194
+195         // No assignment operator
+196         safe_bit_array &amp; operator = (
+197                 const safe_bit_array &amp;);
+198     public:
+199         // Set the value on an item
+200         void set(
+201             // Where to put the item
+202             const unsigned int index,
+203             // Item to put
+204             const unsigned int value
+205         )
+206         {
+207             if (index &gt;= (BIT_ARRAY_MAX-1))
+208             {
+209                 std::cout &lt;&lt;
+210                    "Bit array set error "
+211                    "for bit array #"
+212                    &lt;&lt; sequence &lt;&lt; "\n";
+213                 exit (8);
+214             }
+215             fast_bit_array::set(index, value);
+216         }
+217         // Return the value of an element
+218         int get(unsigned int index)
+219         {
+220             if (index &gt;= (BIT_ARRAY_MAX-1))
+221             {
+222                 std::cout &lt;&lt;
+223                    "Bit array get error "
+224                    "for bit array #"
+225                    &lt;&lt; sequence &lt;&lt; "\n";
+226                 exit (8);
+227             }
+228             return (fast_bit_array::get(index));
+229         }
+230 };
+231
+232 // Sequence information
+233 int safe_bit_array::bit_array_counter = 0;
+234
+235 int main()
+236 {
+237     // Create a nice new safe bit array
+238     safe_bit_array *a_bit_array =
+239         new safe_bit_array;
+240
+241     a_bit_array-&gt;set(5, 1);
+242     // Return the bit_array to the system
+243     delete a_bit_array;
+244     return (0); 245 }
+</pre>
+</div>
+<p class="b24-bookeditorial">(Next <a href="LiB0120.html#441" target="_parent" class="calibre2">Hint 305</a>. <a href="LiB0121.html#554" target="_parent" class="calibre2">Answer 56</a>.)</p>
+<div class="calibre1">
+<table class="calibre3" border="0" cellspacing="0" cellpadding="0" width="100%">
+<tr class="calibre4">
+<td class="bluecell"><span class="calibre22"><b class="calibre13"><img src="_1.gif" alt="Start Sidebar" border="0" class="calibre23"/></b></span></td>
+</tr>
+</table>
+<blockquote class="blockquote">
+<p class="b24-bookeditorial">A sufficiently high level of technology is indistinguishable from magic.</p>
+<p class="b24-bookeditorial">— Arthur C. Clarke</p>
+</blockquote>
+<table class="calibre3" border="0" cellspacing="0" cellpadding="0" width="100%">
+<tr class="calibre4">
+<td class="bluecell"><span class="calibre22"><b class="calibre13"><img src="_1.gif" alt="End Sidebar" border="0" class="calibre23"/></b></span></td>
+</tr>
+</table>
+</div>
+<table class="calibre3" border="0" cellspacing="0" cellpadding="0" width="100%">
+<tr class="calibre4">
+<td height="16" class="calibre8"/>
+</tr>
+</table>
+</div>
+</div>
+
+
+
+</body></html>
