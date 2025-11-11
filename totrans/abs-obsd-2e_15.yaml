@@ -1,131 +1,187 @@
 - en: Chapter 15. System Maintenance
+  id: totrans-0
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第15章 系统维护
 - en: '*When hardware complains,*'
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: '*当硬件抱怨时，*'
 - en: '*OpenBSD listens.*'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: '*OpenBSD倾听。*'
 - en: '*You should listen too.*'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: '*你也应该倾听。*'
 - en: '![](httpatomoreillycomsourcenostarchimages1616079.png) No computer runs itself.
     If it did, you would be out of a job. Even the best-configured server generates
     a constant low burn of maintenance needs.'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: '![图片](http://atomoreilly.com/source/nostarch/images/1616079.png) 没有电脑会自己运行。如果它会，你就不需要这份工作了。即使是配置最好的服务器也会产生持续的维护需求。'
 - en: OpenBSD includes a variety of tools to make maintenance easier, to alert you
     when maintenance is needed, and to tell you about the system’s status. Every day,
     week, and month, OpenBSD performs maintenance tasks and notifies you of the results.
     OpenBSD takes daily backups of critical system features and files, and uses them
     to monitor system integrity. It can manage its own log files, keep its own time,
     and alert you when the hardware is failing.
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD包括各种工具，使维护更容易，在需要维护时提醒你，并告诉你系统的状态。每天、每周和每月，OpenBSD都会执行维护任务，并通知你结果。OpenBSD会对关键系统功能和文件进行每日备份，并使用它们来监控系统完整性。它可以管理自己的日志文件，保持自己的时间，并在硬件出现故障时提醒你。
 - en: All of this starts with scheduled maintenance.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有这些都始于定期维护。
 - en: Scheduled Tasks
+  id: totrans-7
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 计划任务
 - en: OpenBSD includes scheduled tasks that run once a day, week, and month. These
     jobs run as root and email the results to root. The daily maintenance script is
     the most complicated; the monthly script is the simplest.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD包括每天、每周和每月运行的计划任务。这些任务以root身份运行，并将结果发送给root。每日维护脚本是最复杂的；每月脚本是最简单的。
 - en: If a server runs well, I might not log in to it for weeks or even months. In
     fact, I’ve had a few servers run for more than a year without a human being ever
     logging in to it. I read the daily reports from the machine and say “Yep, it’s
     okay,” and get on with my day, confident that what the regular status reports
     don’t tell me the monitoring system will.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果服务器运行良好，我可能几周甚至几个月都不会登录到它。事实上，我有一些服务器已经运行了一年多，没有人登录过。我阅读机器的每日报告，说“是的，没问题”，然后继续我的日常生活，自信监控系统会告诉我那些常规状态报告没有告诉我的事情。
 - en: The scheduled maintenance jobs email their results to the local root user, but
     if no one ever logs in to the machine, no one will see those results. Always set
     an email alias for root in */etc/aliases*, so that these messages go to someone
     who will actually read them.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 定期维护任务会将结果发送到本地root用户，但如果没有人登录到机器，就没有人会看到这些结果。始终在*/etc/aliases*中为root设置一个电子邮件别名，这样这些消息就会发送给会实际阅读它们的人。
 - en: Reading every email message from every machine every day is annoying, but much
     less annoying than finding out that I have a bad service by a user telling me
     about it. These messages often alert me to system problems before anyone (including
     me) notices them. Sites with hundreds of machines often write scripts to parse
     incoming email messages and flag interesting details.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 每天阅读每台机器的每封电子邮件都很烦人，但比发现用户告诉我服务有问题时更不烦人。这些消息通常在任何人（包括我）注意到之前就会提醒我系统问题。拥有数百台机器的站点通常会编写脚本来解析传入的电子邮件消息并标记有趣的细节。
 - en: You should send maintenance email to the person ultimately responsible for the
     system—whoever is most interested in system changes and most likely to be aware
     of any day-to-day system changes. If you delegate the job of reading maintenance
     email to a minion who is less aware of the system, he will either annoy you with
     endless questions about what you did yesterday or learn to ignore anything actually
     in the status mail messages.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 你应该将维护电子邮件发送给最终负责系统的人——无论谁最感兴趣系统变化，最有可能意识到任何日常系统变化。如果你将阅读维护电子邮件的任务委托给对系统不太了解的下属，他可能会用关于你昨天做了什么的无尽问题来烦扰你，或者学会忽略状态邮件中的任何实际内容。
 - en: Here, we’ll take a look at how the daily, weekly, and monthly routines work.
     Complete documentation of the maintenance jobs appears in `daily(8)`.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这里，我们将看看每日、每周和每月例程是如何工作的。维护任务的完整文档出现在`daily(8)`中。
 - en: Daily Maintenance
+  id: totrans-14
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 每日维护
 - en: The daily maintenance job starts by running any custom maintenance jobs (covered
     at the end of this section) from */etc/daily.local*. Daily maintenance includes
     checking partitions, running the reminder service `calendar(1)`, running `rdist(1)`,
     removing scratch files, and a few other boring things.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 每日维护任务首先从*/etc/daily.local*运行任何自定义维护任务（在本节末尾介绍），包括检查分区、运行提醒服务`calendar(1)`、运行`rdist(1)`、删除临时文件，以及其他一些无聊的事情。
 - en: 'OpenBSD can also do a few other interesting things as part of its daily maintenance:'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD 还可以在其日常维护中执行一些其他有趣的事情：
 - en: Create a backup root filesystem, */altroot*.
+  id: totrans-17
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 创建备份根文件系统，*/altroot*。
 - en: Perform system security checks.
+  id: totrans-18
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 执行系统安全检查。
 - en: Back up vital system files in */var/backup*.
+  id: totrans-19
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在 */var/backup* 中备份重要的系统文件。
 - en: Check for changes in vital system files.
+  id: totrans-20
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 检查重要系统文件的变化。
 - en: Check filesystem integrity.
+  id: totrans-21
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 检查文件系统完整性。
 - en: Run `rdist(1)`.
+  id: totrans-22
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 运行 `rdist(1)`。
 - en: I discussed */altroot* in [Chapter 9](ch09.html "Chapter 9. More Filesystems")
     because it requires a dedicated filesystem partition. Each of the other tasks
     can be configured later.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 我在 [第9章](ch09.html "第9章。更多文件系统") 中讨论了 */altroot*，因为它需要一个专用的文件系统分区。其他每个任务都可以稍后配置。
 - en: Security Checks
+  id: totrans-24
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 安全检查
 - en: 'Some things that go wrong don’t necessarily mean your system has experienced
     an intrusion, but are nonetheless suspicious. The daily security check looks for
     a whole slew of misconfigurations and problems that arise from either malice or
     incompetence. You can read the list of checks in `security(8)`, but they break
     down into fairly broad categories:'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些出错的情况并不一定意味着你的系统已经遭受了入侵，但仍然令人怀疑。日常安全检查会寻找一系列由恶意或疏忽引起的配置错误和问题。你可以在 `security(8)`
+    中阅读检查列表，但它们可以分为相当广泛的类别：
 - en: Device node changes and privileges
+  id: totrans-26
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 设备节点变更和权限
 - en: ''
+  id: totrans-27
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
@@ -136,14 +192,19 @@
     perform the change and the change doesn’t appear, this is when you ask them what
     they did all day yesterday. If you didn’t make a change that appears, you want
     to know about it.
+  id: totrans-28
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 新的设备节点、设备节点权限变更、新的软件包、以及新的或变更过的磁盘或分区可能表明恶意活动，也可能只是正常的系统管理。安全脚本会标记所有这些情况。如果你进行了这些变更，你会点头然后继续你的日常。如果你要求一个从属进程执行变更但变更没有出现，这时你应该问他们昨天整天都做了什么。如果你没有进行显示的变更，你希望了解这些情况。
 - en: Insecure NFS exports
+  id: totrans-29
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 不安全的NFS导出
 - en: ''
+  id: totrans-30
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
@@ -151,28 +212,38 @@
     These services, like printing and NFS, should not allow access from any host just
     anywhere, but only from hosts you approve. The security job checks for configurations
     that permit global access.
+  id: totrans-31
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: OpenBSD 包含了许多用于导出文件系统和远程运行命令的软件。这些服务，如打印和NFS，不应允许来自任何主机的访问，而只应允许来自你批准的主机。安全任务会检查允许全局访问的配置。
 - en: Misconfigured accounts
+  id: totrans-32
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 配置不当的账户
 - en: ''
+  id: totrans-33
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
 - en: Another popular attack route has been the password database and related files.
     Accounts without passwords, duplicate entries, improperly closed accounts, and
     so on could all be used to compromise a system. The script checks for these issues.
+  id: totrans-34
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 另一个流行的攻击途径是密码数据库和相关文件。无密码的账户、重复条目、不当关闭的账户等问题都可能被用来危害系统。脚本会检查这些问题。
 - en: Permissions
+  id: totrans-35
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 权限
 - en: ''
+  id: totrans-36
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
@@ -180,14 +251,19 @@
     `setuid` or `setgid` file on the system? If so, the security script notifies you.
     If you installed that file with those privileges, you’re okay. If it’s unexpected,
     you should investigate.
+  id: totrans-37
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 权限设置不当可能导致权限提升。例如，系统上是否有新的 `setuid` 或 `setgid` 文件？如果有，安全脚本会通知你。如果你用这些权限安装了该文件，那么你没问题。如果这是意外的，你应该进行调查。
 - en: User environment
+  id: totrans-38
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 用户环境
 - en: ''
+  id: totrans-39
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
@@ -199,191 +275,275 @@
     anonymous email account. By having correct permissions on home directories, dotfiles,
     mail files, and so on, you make this class of attack more difficult. The security
     script verifies that permissions are set up correctly.
+  id: totrans-40
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 如果你能够更改一个用户的环境，无论是root还是其他账户，你都可以诱使他们泄露他们的认证凭证或运行可疑命令。如果入侵者可以编辑用户的点文件，如 *.cshrc*
+    或 *.login*，他可以更改他运行的命令版本。也许他的shell被设置为运行一个要求用户输入密码并发送给入侵者匿名电子邮件账户的程序。通过正确设置家目录、点文件、邮件文件等的权限，你可以使这类攻击更困难。安全脚本会验证权限是否设置正确。
 - en: Note that the security check is *not* an intrusion-detection system. The changes
     it checks for are the sort that script kiddies and newbie intruders are most likely
     to make, but skilled intruders familiar with OpenBSD could get around it. They
     could even replace the security check with a shell script that sends a daily email
     message that looks like an innocuous security check.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，安全检查**不是**一个入侵检测系统。它检查的更改类型是脚本小子和新手入侵者最有可能做出的，但熟悉OpenBSD的熟练入侵者可能会绕过它。他们甚至可以用一个shell脚本替换安全检查，该脚本每天发送一封看似无害的安全检查的电子邮件。
 - en: Fortunately, competent intruders are relatively rare. Just keep in mind that
     receiving a security check with no mention of problems is encouraging, but it’s
     not proof that your server is secure.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 幸运的是，有能力的入侵者相对较少。只需记住，收到没有提及问题的安全检查是令人鼓舞的，但这并不是你的服务器安全的证据。
 - en: Vital File Backup and Testing
+  id: totrans-43
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 重要文件备份和测试
 - en: The daily security check tests for changes in the files listed in */etc/changelist*
     and rotates their backups, since these files are generally critical system files,
     such as */etc/master.passwd*, */etc/boot.conf*, and */var/cron/tabs/root*. It
     also checks for changes to disk partitioning and mounted filesystems, as well
     as changes to device nodes.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 每日安全检查会检查 */etc/changelist* 中列出的文件的变化，并轮换它们的备份，因为这些文件通常是关键系统文件，如 */etc/master.passwd*、*/etc/boot.conf*
+    和 */var/cron/tabs/root*。它还会检查磁盘分区和挂载文件系统的变化，以及设备节点的变化。
 - en: 'Look in */var/backups*, and you’ll see files like this:'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 查看*/var/backups*，你会看到如下文件：
 - en: '[PRE0]'
+  id: totrans-46
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: The files ending in *.current* are copies of these files as they existed when
     the daily maintenance job was last run. The files ending in *.backup* are the
     previous version of those files.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 以*.current*结尾的文件是当每日维护任务上次运行时这些文件的副本。以*.backup*结尾的文件是这些文件的上一版本。
 - en: The first time the security script runs, it copies all of these files to */var/backup*.
     Following that initial setup, the security script checks the original file against
     the current copy for changes. If the file changes, the previous version of the
     file is copied to the *.backup* filename, and the new version is copied to the
     *.current* file.
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 安全脚本第一次运行时，会将所有这些文件复制到 */var/backup*。在初始设置之后，安全脚本会检查原始文件与当前副本之间的变化。如果文件发生变化，则将文件的上一版本复制到*.backup*文件名，并将新版本复制到*.current*文件。
 - en: In the preceding example, the list shows that I edited my */etc/fstab* at some
     time, prompting the security script to move its copy of the old filesystem table
     to a *.backup* file. I have never edited */etc/ftpchroot* or */etc/ftpusers*,
     so there is no *.backup* version of these files, but only the *.current* one.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 在前面的例子中，列表显示我在某个时间编辑了我的 */etc/fstab*，这促使安全脚本将其旧文件系统表的副本移动到*.backup*文件。我从未编辑过
+    */etc/ftpchroot* 或 */etc/ftpusers*，因此这些文件没有*.backup*版本，只有*.current*版本。
 - en: The security script doesn’t copy all of the files that it watches. For example,
     files containing private keys or that might contain private keys are not copied,
     but the security script does take a checksum. (Files monitored by checksum have
     a plus sign before their name in */etc/changelist*.) There’s no reason to manually
     edit */etc/ssh/ssh_host_ecdsa_key*, and if the file changes, either you know why
     or you need to restore from a trusted backup.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 安全脚本不会复制它所监视的所有文件。例如，包含私钥或可能包含私钥的文件不会被复制，但安全脚本会计算校验和。（使用校验和监控的文件在 */etc/changelist*
+    中的名称前有一个加号。）手动编辑 */etc/ssh/ssh_host_ecdsa_key* 没有理由，如果文件发生变化，要么你知道原因，要么你需要从受信任的备份中恢复。
 - en: '*/etc/changelist* is itself listed in */etc/changelist*. This seems recursive,
     but the system backs up the list of files you want backed up, and also notifies
     you when someone adds or removes a file in */etc/changelist*.'
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: '*/etc/changelist* 本身也被列在 */etc/changelist* 中。这看起来是递归的，但系统会备份你想要备份的文件列表，并在有人向
+    */etc/changelist* 中添加或删除文件时通知你。'
 - en: Adding Vital Files
+  id: totrans-52
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 添加重要文件
 - en: You can add files to the change list and even use wildcards to back up all the
     files in a directory. But note that if you did use wildcards in */etc/changelist*,
     you won’t be notified when a file is removed.
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以向更改列表中添加文件，甚至可以使用通配符来备份目录中的所有文件。但请注意，如果你在 */etc/changelist* 中使用了通配符，当文件被删除时，你不会收到通知。
 - en: 'Consider this example of using wildcards. In [Chapter 13](ch13.html "Chapter 13. Software
     Management"), I added the `apache2` port to one of my machines. I put the configuration
     files in */etc/apache2*. I could add a line like this to the change list:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 考虑这个使用通配符的例子。在 [第 13 章](ch13.html "第 13 章。软件管理") 中，我将 `apache2` 端口添加到我的机器之一。我将配置文件放在
+    */etc/apache2* 中。我可以在更改列表中添加这样的行：
 - en: '[PRE1]'
+  id: totrans-55
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: This would automatically copy all files in the *apache2* configuration directory
     to */var/backup* and test them for changes. However, I would not be notified when
     files are removed from this directory. If you’re using a configuration mechanism
     that says, “include all the *.conf* files in such-and-such directory,” this might
     not be desirable. A better option would be to list each file individually and
     update the list when you add critical files.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将自动将 *apache2* 配置目录中的所有文件复制到 */var/backup* 并检查它们是否有变化。然而，当文件从这个目录中删除时，我不会收到通知。如果你使用的是一种配置机制，它说，“包含此类目录中的所有
+    *.conf* 文件”，这可能不是你想要的。更好的选择是逐个列出每个文件，并在添加关键文件时更新列表。
 - en: One of the most convenient things about the file-integrity check is that it
     automatically creates a local backup of critical system files. That means that
     if you decide to learn how to use `vipw(8)` and utterly trash your user database
     in doing so, you can grab yesterday’s copy out of */var/backups*, install it,
     and no one will be the wiser. The same applies to every other critical system
     file.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 文件完整性检查最方便的一点是它会自动创建关键系统文件的本地备份。这意味着如果你决定学习如何使用 `vipw(8)` 并在这样做时彻底破坏用户数据库，你可以从
+    */var/backups* 中抓取昨天的副本，安装它，而且没有人会察觉。这同样适用于每个其他关键系统文件。
 - en: Filesystem Integrity Checks
+  id: totrans-58
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 文件系统完整性检查
 - en: You can’t run a full-on Unix File System (UFS) check while a system is in multiuser
     mode, but you can have `fsck(8)` perform filesystem integrity checks to try to
     identify problems before they’re serious. Doing so won’t fix any problems, but
     it will notify you that they exist so you can schedule downtime for repairs.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 当系统处于多用户模式时，你不能运行完整的 Unix 文件系统 (UFS) 检查，但你可以让 `fsck(8)` 执行文件系统完整性检查，以尝试在问题变得严重之前识别它们。这样做不会修复任何问题，但它会通知你它们的存在，这样你就可以安排停机时间进行维修。
 - en: To enable these checks, set `CHECKFILESYSTEMS` to `1` in */etc/daily.local*.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 要启用这些检查，请在 */etc/daily.local* 中将 `CHECKFILESYSTEMS` 设置为 `1`。
 - en: Copying Files with rdist
+  id: totrans-61
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 使用 rdist 复制文件
 - en: The `rdist(1)` program is used to copy files to other servers, letting you maintain
     identical copies of critical files on many servers. If you’re interested in using
     it, see `rdistd(8)`.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: '`rdist(1)` 程序用于将文件复制到其他服务器，让你在许多服务器上维护关键文件的相同副本。如果你有兴趣使用它，请参阅 `rdistd(8)`。'
 - en: Silencing /etc/daily
+  id: totrans-63
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 静音 /etc/daily
 - en: Some of us have monitoring systems that track a server’s disk, network, and
     other basic information. If you don’t need this sort of information to appear
     in your daily status mail, set `VERBOSESTATUS` to `0` in */etc/daily.local*. This
     turns off these parts of daily maintenance, reducing the amount you need to read.
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们中的一些人拥有监控系统，可以跟踪服务器的磁盘、网络和其他基本信息。如果你不需要这种信息出现在你的日常状态邮件中，请在 */etc/daily.local*
+    中将 `VERBOSESTATUS` 设置为 `0`。这将关闭日常维护的这些部分，减少你需要阅读的内容。
 - en: If the remaining daily maintenance doesn’t generate any output, the server should
     not send a status email that day. In environments where you don’t trust the monitoring
     system, you could use the daily status messages to assure you that the system
     is running as expected. OpenBSD gives you the choice.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果剩余的每日维护没有生成任何输出，服务器当天不应发送状态电子邮件。在不信任监控系统的环境中，你可以使用每日状态消息来确保系统按预期运行。OpenBSD
+    给你选择。
 - en: Weekly Maintenance
+  id: totrans-66
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 周维护
 - en: 'The weekly script is simpler than the daily script with only three common functions:'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 每周脚本比每日脚本简单，只有三个常用功能：
 - en: First, it runs the custom weekly script */etc/weekly.local*.
+  id: totrans-68
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 首先，它运行自定义的每周脚本 */etc/weekly.local*。
 - en: Second, it updates the `locate(1)` database.
+  id: totrans-69
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 其次，它更新了 `locate(1)` 数据库。
 - en: Finally, it rebuilds the `whatis(1)` man page database.
+  id: totrans-70
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 最后，它重建了 `whatis(1)` 手册页数据库。
 - en: Monthly Maintenance
+  id: totrans-71
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 月维护
 - en: OpenBSD doesn’t need any generic monthly maintenance, but for consistency, the
     */etc/monthly* script runs the custom script */etc/monthly.local*.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD 不需要任何通用的月维护，但为了保持一致性，*/etc/monthly* 脚本运行自定义脚本 */etc/monthly.local*。
 - en: Custom Maintenance Scripts
+  id: totrans-73
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 自定义维护脚本
 - en: Each maintenance script runs a custom script before performing any other tasks.
     You can put any tasks you need in */etc/daily.local*, */etc/weekly.local*, and
     */etc/monthly.local*. These commands are run by root, so don’t use them for tasks
     that should be performed by another user. If your database needs to be backed
     up, create a separate script, and have the unprivileged user running your database
     run that script via `cron(8)`.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个维护脚本在执行其他任务之前都会运行一个自定义脚本。你可以将任何需要的任务放在*/etc/daily.local*、*/etc/weekly.local*和*/etc/monthly.local*中。这些命令由root运行，因此不要将它们用于应由其他用户执行的任务。如果你的数据库需要备份，创建一个单独的脚本，并让运行数据库的非特权用户通过`cron(8)`运行该脚本。
 - en: Some sites use the scheduled maintenance jobs to run complex software that perform
     site-specific duties. For example, I know of one security firm that collects data
     from hundreds of machines, and uses the daily jobs to send that data to a central
     management system. Really, you can use the local scripts any way you choose.
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些网站使用计划中的维护任务来运行执行特定任务的复杂软件。例如，我知道有一家安全公司从数百台机器收集数据，并使用每日任务将数据发送到中央管理系统。实际上，你可以根据需要以任何方式使用本地脚本。
 - en: If you have a maintenance task that can run under another user account, but
     you want to attach it to the scheduled maintenance jobs, you can have the local
     script call another script. Start that script by using `su(1)` to switch users
     and drop privileges.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你有一个可以在其他用户账户下运行的维护任务，但你想将其附加到计划中的维护任务，你可以让本地脚本调用另一个脚本。通过使用`su(1)`切换用户并降低权限来启动该脚本。
 - en: Custom maintenance scripts may be most useful for altering the way the standard
     maintenance scripts perform their work. For example, say you have a system with
     many scratch directories containing temporary files. The weekly maintenance script
@@ -392,642 +552,954 @@
     files immediately before */etc/weekly* creates the new locate database, and schedule
     this as a separate task. By adding it to */etc/weekly.local*, you would know that
     it will finish before */etc/weekly* runs any other tasks.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 自定义维护脚本可能最有用，可以改变标准维护脚本执行工作的方式。例如，假设你有一个包含临时文件的许多临时目录的系统。每周维护脚本更新locate数据库，但你不想这些临时文件包含在locate结果中。你可以在*/etc/weekly*创建新的locate数据库之前立即使用自定义维护脚本删除所有临时文件，并将此作为单独的任务进行安排。通过将其添加到*/etc/weekly.local*，你就会知道它将在*/etc/weekly*运行其他任务之前完成。
 - en: System Logs
+  id: totrans-78
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 系统日志
 - en: The system log used by Unix-like operating systems has become the industry standard
     for logging, but that’s not necessarily a good thing, because the log mechanism
     can be cantankerous. Once you properly configure log collection and rotation,
     however, OpenBSD’s logging system mostly manages itself.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: Unix-like操作系统使用的系统日志已成为日志记录的行业标准，但这并不一定是好事，因为日志机制可能会很麻烦。然而，一旦你正确配置了日志收集和轮换，OpenBSD的日志系统大部分可以自行管理。
 - en: OpenBSD uses the standard logging system for Unix-like (and many embedded) systems,
     `syslog(3)`. The syslog protocol marks messages with a facility and a priority,
     and hands those messages to a daemon.
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD使用Unix-like（以及许多嵌入式）系统的标准日志系统`syslog(3)`。syslog协议使用设施和优先级标记消息，并将这些消息交给守护进程。
 - en: Any program can write to the local `syslogd(8)` server, but the key in log management
     is deciding how those messages are sorted and stored. OpenBSD’s `syslogd` can
     sort messages based on facility, priority, and source program.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 任何程序都可以写入本地的`syslogd(8)`服务器，但在日志管理中关键是要决定如何对这些消息进行排序和存储。OpenBSD的`syslogd`可以根据设施、优先级和源程序对消息进行排序。
 - en: Facilities
+  id: totrans-82
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 设施
 - en: A *facility* indicates the source of a message. In most cases, each program
     that needs a separate log file uses a different facility. Many programs or protocols,
     such as FTP, have facilities dedicated to them. The syslog protocol also has a
     variety of generic facilities that you can use as you wish.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: '*设施*表示消息的来源。在大多数情况下，每个需要单独日志文件的程序都使用不同的设施。许多程序或协议，如FTP，都有专门为它们设置的设施。syslog协议也有各种通用的设施，你可以按需使用。'
 - en: '[Table 15-1](ch15.html#standard_openbsd_facilities "Table 15-1. Table 15-1:
     Standard OpenBSD Facilities") lists the standard facilities and provides some
     notes on their usage.'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: '[表15-1](ch15.html#standard_openbsd_facilities "表15-1. 表15-1：标准OpenBSD设施")列出了标准设施并提供了一些关于它们使用的说明。'
 - en: 'Table 15-1. Table 15-1: Standard OpenBSD Facilities'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 表15-1. 表15-1：标准OpenBSD设施
 - en: '| Facility | Usage |'
+  id: totrans-86
   prefs: []
   type: TYPE_TB
+  zh: '| 设施 | 用途 |'
 - en: '| --- | --- |'
+  id: totrans-87
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `auth` | Public information about authentication, such as when someone logged
     on or when someone uses `su`. |'
+  id: totrans-88
   prefs: []
   type: TYPE_TB
+  zh: '| `auth` | 关于身份验证的公共信息，例如某人登录或某人使用 `su` 时的情况。|'
 - en: '| `authpriv` | Private information about user authentication, normally accessible
     only to privileged users. |'
+  id: totrans-89
   prefs: []
   type: TYPE_TB
+  zh: '| `authpriv` | 关于用户身份验证的私人信息，通常只有特权用户可以访问。|'
 - en: '| `cron` | Messages from the system scheduler `cron(8)`. |'
+  id: totrans-90
   prefs: []
   type: TYPE_TB
+  zh: '| `cron` | 来自系统调度程序 `cron(8)` 的消息。|'
 - en: '| `daemon` | A catchall for processes that neither need nor require a dedicated
     facility. |'
+  id: totrans-91
   prefs: []
   type: TYPE_TB
+  zh: '| `daemon` | 对于既不需要也不需要专用设施的进程的捕获。|'
 - en: '| `ftp` | Messages from FTP and Trivial File Transfer Protocol (TFTP) servers.
     |'
+  id: totrans-92
   prefs: []
   type: TYPE_TB
+  zh: '| `ftp` | 来自 FTP 和简单文件传输协议 (TFTP) 服务器的消息。|'
 - en: '| `kern` | Kernel-generated messages. |'
+  id: totrans-93
   prefs: []
   type: TYPE_TB
+  zh: '| `kern` | 内核生成的消息。|'
 - en: '| `local0` through `local7` | These facilities are provided for the sysadmin.
     Many programs let sysadmins configure their facility. Use these eight facilities
     for such programs. |'
+  id: totrans-94
   prefs: []
   type: TYPE_TB
+  zh: '| `local0` 通过 `local7` | 这些设施是为系统管理员提供的。许多程序允许系统管理员配置它们的设施。对于此类程序，请使用这八个设施。|'
 - en: '| `lpr` | Messages from the printing system. |'
+  id: totrans-95
   prefs: []
   type: TYPE_TB
+  zh: '| `lpr` | 来自打印系统的消息。|'
 - en: '| `mail` | Messages from mail servers. |'
+  id: totrans-96
   prefs: []
   type: TYPE_TB
+  zh: '| `mail` | 来自邮件服务器的消息。|'
 - en: '| `mark` | This special facility writes a message every 20 minutes. |'
+  id: totrans-97
   prefs: []
   type: TYPE_TB
+  zh: '| `mark` | 这个特殊设施每 20 分钟写入一条消息。|'
 - en: '| `news` | Messages from Usenet news servers. |'
+  id: totrans-98
   prefs: []
   type: TYPE_TB
+  zh: '| `news` | 来自 Usenet 新闻服务器的消息。|'
 - en: '| `syslog` | Messages from the syslog server itself. |'
+  id: totrans-99
   prefs: []
   type: TYPE_TB
+  zh: '| `syslog` | 来自 syslog 服务器的消息。|'
 - en: '| `user` | The catchall message facility. If a userland program doesn’t specify
     a logging facility, the messages wind up here. |'
+  id: totrans-100
   prefs: []
   type: TYPE_TB
+  zh: '| `user` | 捕获所有消息的设施。如果用户空间程序没有指定日志设施，消息将最终在这里。|'
 - en: '| `uucp` | Messages from the Unix-to-Unix Copy Protocol (UUCP) servers. You
     will probably never encounter this pre-Internet email protocol. |'
+  id: totrans-101
   prefs: []
   type: TYPE_TB
+  zh: '| `uucp` | 来自 Unix 到 Unix 复制协议 (UUCP) 服务器的消息。你可能会永远遇到这种互联网之前的电子邮件协议。|'
 - en: While most programs have sensible defaults, it’s your job as the system administrator
     to manage which programs log to which facilities. If possible, use the local facilities
     for your server-specific daemons. While it’s entirely possible to use facilities
     for purposes other than originally intended, try not to reassign the `uucp` facility
     to some other daemon unless you really have no other option.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然大多数程序都有合理的默认设置，但作为系统管理员，你的工作是管理哪些程序将日志记录到哪些设施。如果可能，请为你的服务器特定守护进程使用本地设施。虽然完全有可能将设施用于原本的目的之外，但除非你真的没有其他选择，否则尽量不要将
+    `uucp` 设施重新分配给其他守护进程。
 - en: Priority
+  id: totrans-103
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 优先级
 - en: 'A log message’s priority represents its importance. Programs usually send their
     logging data to `syslogd`, but `syslogd` decides what to retain and what to discard.
     You get to decide how much detail you want in your logs. Use the following nine
     `syslog` levels to decide what to record and what to discard (in order from most
     to least important):'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 日志消息的优先级表示其重要性。程序通常将它们的日志数据发送到 `syslogd`，但 `syslogd` 决定保留什么和丢弃什么。你可以决定你日志中需要多少细节。使用以下九个
+    `syslog` 级别来决定记录什么和丢弃什么（从最重要到最不重要）：
 - en: '****`emerg`****. System emergency. This message appears on every active terminal.
     The computer might be crashing, or it may have some other error that requires
     immediate attention.'
+  id: totrans-105
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`emerg`****. 系统紧急情况。此消息出现在每个活动终端上。计算机可能正在崩溃，或者可能有一些其他需要立即注意的错误。'
 - en: '****`alert`****. An emergency. The system can continue to function, but attend
     to this error very soon.'
+  id: totrans-106
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`alert`****. 紧急情况。系统可以继续运行，但必须尽快处理此错误。'
 - en: '****`critical`****. Critical problems. These indicate serious errors, such
     as hard-drive failures.'
+  id: totrans-107
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`critical`****. 严重问题。这表明严重的错误，例如硬盘故障。'
 - en: '****`err`****. Errors. These are in regard to problems that require attention
     but won’t destroy your system.'
+  id: totrans-108
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`err`****. 错误。这些是关于需要关注但不会破坏你的系统的问题。'
 - en: '****`warning`****. Miscellaneous warnings. These could be attended to, but
     will not prevent the process that generated them from running normally.'
+  id: totrans-109
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`warning`****. 各种警告。这些可能需要关注，但不会阻止生成它们的进程正常运行。'
 - en: '****`notice`****. Important information, such as daemon startup and shutdown
     notifications.'
+  id: totrans-110
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`notice`****. 重要信息，例如守护进程启动和关闭通知。'
 - en: '****`info`****. Basic information. This usually includes transactional data,
     such as individual messages in a mail server or individual queries to a web server.'
+  id: totrans-111
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`info`****. 基本信息通常包括事务数据，例如邮件服务器中的单个消息或对 Web 服务器的单个查询。'
 - en: '****`debug`****. Trivia. This level is usually of interest only to programmers,
     but occasionally useful to sysadmins trying to figure out why a program is behaving
     in a certain way. Debugging logs can contain anything, including information that
     violates user privacy, such as plaintext passwords.'
+  id: totrans-112
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`debug`****. 知识点。这个级别通常只对程序员感兴趣，但偶尔对试图弄清楚程序为何以某种方式运行的系统管理员有用。调试日志可以包含任何内容，包括违反用户隐私的信息，例如明文密码。'
 - en: '****`none`****. Don’t log anything from this facility here. This is most commonly
     used to exclude information from log files, as discussed shortly.'
+  id: totrans-113
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`none`****. 不要记录此设施中的任何内容。这最常用于排除日志文件中的信息，如稍后所述。'
 - en: By combining levels with priority, you can sort log messages into individual
     files or other targets.
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过结合优先级，你可以将日志消息分类到单独的文件或其他目标中。
 - en: Sorting Messages via syslogd(8)
+  id: totrans-115
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 通过syslogd(8)排序消息
 - en: '`syslogd` compares received messages to entries in */etc/syslog.conf*. This
     file has two columns: the first (the *selector*) describes a type of log message,
     and the second (the *action*) tells `syslogd` what to do when a message matches
     the description. Neither column can have whitespace; whitespace can appear only
     between the columns. For example, here’s a line from the default *syslog.conf*:'
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: '`syslogd`将接收到的消息与*/etc/syslog.conf*中的条目进行比较。此文件有两列：第一列（*选择器*）描述了一种日志消息类型，第二列（*操作*）告诉`syslogd`当消息与描述匹配时该做什么。两列都不能有空格；空格只能出现在列之间。例如，以下是从默认的*syslog.conf*中的一行：'
 - en: '[PRE2]'
+  id: totrans-117
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: Any log message that has a facility of daemon and a priority of `info` or higher
     is appended to the file */var/log/daemon*. Of course, if all logs were so easily
     managed, this would be a short section.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 任何具有守护进程设施和`info`或更高优先级的日志消息都将附加到文件*/var/log/daemon*。当然，如果所有日志都如此容易管理，这将是一个简短的章节。
 - en: '`syslogd` compares all log messages to all *syslog.conf* entries. If a log
     message matches multiple selectors, it is sent to all matching destinations.'
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: '`syslogd`将所有日志消息与所有*syslog.conf*条目进行比较。如果日志消息与多个选择器匹配，它将被发送到所有匹配的目的地。'
 - en: Wildcards
+  id: totrans-120
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 通配符
 - en: 'You can use wildcards in either the facility or priority. For example, this
     line logs every message from the mail facility:'
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以在设施或优先级中使用通配符。例如，此行记录来自邮件设施的所有消息：
 - en: '[PRE3]'
+  id: totrans-122
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'To capture messages of a given priority or higher from all facilities, use
     an asterisk (`*`). Here’s how to send all priority `err` and higher messages to
     the console:'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 要从所有设施中捕获给定优先级或更高优先级的消息，请使用星号（`*`）。以下是如何将所有优先级`err`或更高消息发送到控制台的方法：
 - en: '[PRE4]'
+  id: totrans-124
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: You can also use a double-wildcard to send all log messages to one place.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 你还可以使用双通配符将所有日志消息发送到同一个地方。
 - en: '[PRE5]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: Logging everything to one location isn’t terribly useful or wise. You should
     *not* send `authpriv` debugging to a world-readable file.
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 不要将所有内容记录到同一个位置，这既不实用也不明智。你不应该将`authpriv`调试信息发送到任何世界可读的文件。
 - en: Excluding Information
+  id: totrans-128
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 排除信息
 - en: Use the `none` level to exclude information from a log. For example, the following
     line excludes private authentication information from an otherwise all-inclusive
     log.
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用`none`级别排除日志中的信息。例如，以下行排除了其他情况下包含的所有私人认证信息。
 - en: '[PRE6]'
+  id: totrans-130
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: The semicolon (`;`) allows you to combine selection criteria on a single line.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 分号（`;`）允许你在单行上组合选择标准。
 - en: Warning
+  id: totrans-132
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 警告
 - en: If you combine entries with a semicolon like this, do not put whitespace after
     the semicolon. The only whitespace can appear between the selector and the destination.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你像这样使用分号组合条目，不要在分号后留空格。唯一的空格只能出现在选择器和目的地之间。
 - en: Combining Facilities
+  id: totrans-134
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 组合设施
 - en: 'You can combine multiple facilities in a single entry by using commas. Here’s
     how to capture all messages of `info` priority or higher from several facilities:'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以使用逗号在单个条目中组合多个设施。以下是如何从多个设施中捕获所有`info`优先级或更高消息的方法：
 - en: '[PRE7]'
+  id: totrans-136
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: Any log message from the `auth`, `daemon`, `syslog`, and `user` facilities,
     and of priority `info` or higher, is sent across the network to the host `loghost`.
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 来自`auth`、`daemon`、`syslog`和`user`设施，以及优先级`info`或更高的任何日志消息，都将通过网络发送到主机`loghost`。
 - en: Marking Time
+  id: totrans-138
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 标记时间
 - en: 'While all log messages have a timestamp, you might want a marker in a log file
     to indicate that time has passed. The special facility `mark` creates a message
     every 20 minutes, letting you add an extra timestamp to a file. Here’s how to
     add a timestamp to the mail log every 20 minutes:'
+  id: totrans-139
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然所有日志消息都有时间戳，但你可能想在日志文件中有一个标记来指示时间的流逝。特殊的`mark`设施每20分钟创建一条消息，让你可以向文件添加额外的时间戳。以下是如何每20分钟向邮件日志添加一个时间戳的方法：
 - en: '[PRE8]'
+  id: totrans-140
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: Local Facilities
+  id: totrans-141
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 本地设施
 - en: 'The eight facilities `local0` through `local7` are for your use. Many programs
     can be configured to use a specific facility, so you can aim them at a particular
     file. I’ve configured a daemon to use the facility `local7`. Here, I send messages
     from that facility to a file:'
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 八个设施`local0`到`local7`可供你使用。许多程序可以配置为使用特定设施，因此你可以将它们指向特定的文件。我已经配置了一个守护进程使用设施`local7`。在这里，我将来自该设施的消息发送到文件：
 - en: '[PRE9]'
+  id: totrans-143
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: Some programs have a hard-coded preference for a specific facility. For example,
     the flow-tools package (see my book *Network Flow Analysis*, No Starch Press,
     2010) has facility `local6` hard-wired into the code. Don’t be shocked when you
     see something like this. Fortunately, OpenBSD’s `syslogd` can filter based on
     program name, so you can easily filter your logs despite this sort of daftness.
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些程序对特定设施有硬编码的偏好。例如，flow-tools软件包（见我的书《网络流量分析》，No Starch Press，2010年）将设施`local6`硬编码到代码中。当你看到类似的情况时，不要感到惊讶。幸运的是，OpenBSD的`syslogd`可以根据程序名称进行过滤，因此你可以轻松地过滤日志，尽管这种做法有些愚蠢。
 - en: Selecting by Program Name
+  id: totrans-145
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 按程序名称选择
 - en: 'If you’re out of facilities, you can use the name of the program generating
     the syslog messages as a selector. Using a program name requires two lines: The
     first contains the program name with a leading exclamation mark, and the second
     sets up logging. OpenBSD offers the following example of `sudo(8)` logging:'
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你没有设施，你可以使用生成syslog消息的程序名称作为选择器。使用程序名称需要两行：第一行包含带有前导感叹号的程序名称，第二行设置日志记录。OpenBSD提供了以下`sudo(8)`日志记录的示例：
 - en: '[PRE10]'
+  id: totrans-147
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: All log messages from `sudo` go to the specified log file.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有来自`sudo`的日志消息都发送到指定的日志文件。
 - en: You can also select by program name and stop all subsequent selections of matching
     messages by using two exclamation points (`!!`) before the program name. This
     example sends all messages from `sudo` to */var/log/sudo*, but prevents `sudo`
     messages from going to any other log.
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: 你也可以通过程序名称进行选择，并在程序名称前使用两个感叹号（`!!`）来停止所有后续匹配消息的选择。以下示例将所有来自`sudo`的消息发送到*/var/log/sudo*，但防止`sudo`消息发送到任何其他日志。
 - en: '[PRE11]'
+  id: totrans-150
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: The `!*` after the end of the `sudo` entry is a way to say “all programs”—in
     other words, don’t sort by program name anymore. You need this only if you use
     the double-exclamation-point “stop processing matching messages here” syntax.
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sudo`条目末尾的`!*`是一种表示“所有程序”的方式——换句话说，不再按程序名称排序。只有在你使用双感叹号“在此处停止处理匹配消息”语法时才需要此语法。'
 - en: Log Actions
+  id: totrans-152
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 记录日志操作
 - en: Now that you know how to sort your log messages into different buckets, let’s
     see how to take different actions with those messages. Messages can be written
     to a file, piped to a program, sent to another host, or written to users.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你已经知道如何将日志消息分类到不同的桶中，让我们看看如何对这些消息采取不同的操作。消息可以写入文件、通过管道发送到程序、发送到另一个主机或写入用户。
 - en: Logging to Files
+  id: totrans-154
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 将日志记录到文件
 - en: 'Most of our examples so far send log messages to a file, giving the full path
     to the file as the action. Here’s how to send all of the messages from facility
     `local6` to a log file:'
+  id: totrans-155
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止的大多数示例都是将日志消息发送到文件，给出文件的完整路径作为操作。以下是将来自`local6`设施的所有消息发送到日志文件的步骤：
 - en: '[PRE12]'
+  id: totrans-156
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: You can also send the messages to a device by giving the full path to the device
     node, but this will make sense to very few devices, such as the console. This
     is because writing the log message to the disk device */dev/wd0d* will not store
     the message on disk.
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 你也可以通过给出设备节点的完整路径将消息发送到设备，但这只对非常少的设备有意义，例如控制台。这是因为将日志消息写入磁盘设备*/dev/wd0d*不会将消息存储在磁盘上。
 - en: Logging to a Program
+  id: totrans-158
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 将日志记录到程序
 - en: 'To send selected logs to a program, use a pipe (`|`) and the full path to the
     program, like this:'
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 要将选定的日志发送到程序，请使用管道（`|`）和程序的完整路径，如下所示：
 - en: '[PRE13]'
+  id: totrans-160
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: The logging system should start the destination program, and then feed log messages
     into the program’s standard input.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 日志系统应该启动目标程序，然后将日志消息喂入程序的标准输入。
 - en: Notifying Users
+  id: totrans-162
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 通知用户
 - en: You can also direct log messages to logged-in users by listing multiple users
     in a comma-separated list. For example, to send a message to all users, use an
     asterisk.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 你还可以通过列出逗号分隔的用户列表将日志消息直接发送到已登录用户。例如，要发送消息给所有用户，请使用星号。
 - en: '[PRE14]'
+  id: totrans-164
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: This example will notify all logged-in users of real emergencies, but deeply
     annoy `lasnyder`.^([[41](#ftn.id367882)])
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
+  zh: 此示例将通知所有已登录用户真正的紧急情况，但会深深惹恼`lasnyder`.^([[41](#ftn.id367882)])
 - en: Logging to a Remote Host
+  id: totrans-166
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 将日志记录到远程主机
 - en: I usually have a logging host that collects log messages from everywhere—not
     only from my OpenBSD boxes, but from all my other Unix-like systems, as well as
     routers, switches, and anything else that speaks syslog. This reduces my maintenance
     needs and conserves disk space. And, since, every log message includes a hostname,
     I can easily sort them out later.
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: 我通常有一个日志主机，它从各个地方收集日志消息——不仅从我的 OpenBSD 服务器，还包括所有其他类 Unix 系统、路由器、交换机以及其他任何支持
+    syslog 的设备。这减少了我的维护需求并节省了磁盘空间。而且，由于每个日志消息都包含一个主机名，我可以在稍后轻松地对它们进行分类。
 - en: To send messages to another host, use the `@` symbol.
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 要向另一个主机发送消息，请使用 `@` 符号。
 - en: '[PRE15]'
+  id: totrans-169
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: This dumps everything of priority `info` and above to my logging host.
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 这会将优先级为 `info` 及以上的所有内容都转到我的日志主机。
 - en: Your logging host must accept syslog messages from the network. If your host
     is an OpenBSD machine, run `syslogd` with the `-u` flag. And be sure to protect
     your log host with a packet filter, so random hosts can’t write logs to it and
     fill up your disks.
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: 你的日志主机必须接受来自网络的 syslog 消息。如果你的主机是 OpenBSD 机器，请使用 `-u` 标志运行 `syslogd`。并且务必使用数据包过滤器保护你的日志主机，这样随机主机就不能向它写入日志并填满你的磁盘。
 - en: Customizing syslogd
+  id: totrans-172
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 自定义 syslogd
 - en: OpenBSD runs `syslogd` by default, and you can customize how `syslogd` behaves.
     Common customizations include adding more log sockets and listening to the network.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD 默认运行 `syslogd`，你可以自定义 `syslogd` 的行为。常见的自定义包括添加更多的日志套接字和监听网络。
 - en: Adding Extra Log Sockets
+  id: totrans-174
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 添加额外的日志套接字
 - en: Programs write log messages to the socket */dev/log*, but software inside a
     `chroot` won’t be able to access that device. To have a program that’s locked
     inside a `chroot` send messages to `syslogd`, you must put an additional log socket
     at */dev/log* inside the `chroot`.
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
+  zh: 程序将日志消息写入 */dev/log* 套接字，但 `chroot` 内部的软件无法访问该设备。要使一个被锁定在 `chroot` 内的程序向 `syslogd`
+    发送消息，必须在 `chroot` 内的 */dev/log* 处放置一个额外的日志套接字。
 - en: For example, since the integrated BIND DNS server is `chroot`ed into */var/named*,
     the DNS server expects to find the log socket at */dev/log*, which means that
     the new log socket should be at */var/named/dev/log*. To create this log socket,
     use `syslogd`’s `-a` option, and give the full path to the log socket in */etc/rc.conf.local*.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，由于集成的 BIND DNS 服务器被 `chroot` 到 */var/named*，DNS 服务器期望在 */dev/log* 找到日志套接字，这意味着新的日志套接字应该位于
+    */var/named/dev/log*。要创建此日志套接字，请使用 `syslogd` 的 `-a` 选项，并在 *etc/rc.conf.local*
+    中给出日志套接字的完整路径。
 - en: '[PRE16]'
+  id: totrans-177
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: You can use about 20 additional logging sockets.
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以使用大约 20 个额外的日志套接字。
 - en: Listening to the Network
+  id: totrans-179
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 监听网络
 - en: If you want your OpenBSD box to act as a log host, accepting logs from remote
     hosts, use the `-u` flag.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你想让你的 OpenBSD 服务器充当日志主机，接受来自远程主机的日志，请使用 `-u` 标志。
 - en: '[PRE17]'
+  id: totrans-181
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: Because the syslog protocol has no access control, anyone with access to port
     514/UDP on the log host can write to your log files.
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于 syslog 协议没有访问控制，任何可以访问日志主机上 514/UDP 端口的用户都可以写入你的日志文件。
 - en: Note
+  id: totrans-183
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Filling a host’s logs with junk to fill the hard disk is an old attack. Use
     OpenBSD’s packet filtering system (discussed in [Chapter 21](ch21.html "Chapter 21. Packet
     Filtering") and [Chapter 22](ch22.html "Chapter 22. Advanced PF")) to protect
     your logging host.
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 用垃圾填充主机的日志以填满硬盘是一种旧攻击。使用 OpenBSD 的数据包过滤系统（在第 21 章 [Packet Filtering](ch21.html
+    "第 21 章。数据包过滤") 和第 22 章 [Advanced PF](ch22.html "第 22 章。高级 PF") 中讨论）来保护你的日志主机。
 - en: Syslog and Embedded Systems
+  id: totrans-185
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: Syslog 和嵌入式系统
 - en: OpenBSD supports writing log messages to an in-memory buffer, which allows logging
     on systems that have no writable disk, such as diskless systems and embedded routers
     and firewalls. `syslogd` retains these logs in a memory buffer, and clients can
     connect to `syslogd` through a reporting socket and read the logs. As you would
     expect, logs in memory disappear when `syslogd` is shut down.
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD 支持将日志消息写入内存缓冲区，这允许在没有任何可写磁盘的系统上进行日志记录，例如无盘系统、嵌入式路由器和防火墙。`syslogd` 在内存缓冲区中保留这些日志，并且客户端可以通过报告套接字连接到
+    `syslogd` 并读取日志。正如你所期望的，当 `syslogd` 关闭时，内存中的日志会消失。
 - en: 'To use `syslogd` for reporting, first provide a reporting socket with the `-s`
     option and give it a full path to a reporting socket. Here’s an *rc.conf.local*
     entry for a reporting socket in */var/run/syslog*:'
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用 `syslogd` 进行报告，首先使用 `-s` 选项提供一个报告套接字，并给出报告套接字的完整路径。以下是一个在 */var/run/syslog*
+    中的报告套接字的 *rc.conf.local* 条目：
 - en: '[PRE18]'
+  id: totrans-188
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: To log to the buffer, make a *syslog.conf* action. Specify logging to a buffer
     with a colon (`:`), the number of kilobytes to give the buffer, another colon,
     and the name of the memory buffer. (The maximum buffer size is 256KB.)
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
+  zh: 要将日志记录到缓冲区，在 *syslog.conf* 中创建一个动作。指定使用冒号 (`:`) 将日志记录到缓冲区，指定缓冲区的大小（以千字节为单位），然后是另一个冒号，以及内存缓冲区的名称。（最大缓冲区大小为
+    256KB。）
 - en: 'For example, here we capture all log messages of `err` priority or higher and
     write them to the 128KB memory buffer called `errors`:'
+  id: totrans-190
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，这里我们捕获所有 `err` 级别或更高的日志消息，并将它们写入名为 `errors` 的 128KB 内存缓冲区：
 - en: '[PRE19]'
+  id: totrans-191
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: 'Use `syslogc(8)` to read a memory buffer, and use the `-s` option to tell `syslogc`
     where to find `syslogd`’s reporting socket, and provide the name of the log buffer.
     Here’s how to read the reporting socket */var/run/syslog* and read the `errors`
     buffer:'
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 `syslogc(8)` 读取内存缓冲区，并使用 `-s` 选项告诉 `syslogc` 在哪里找到 `syslogd` 的报告套接字，并提供日志缓冲区的名称。以下是如何读取报告套接字
+    */var/run/syslog* 并读取 `errors` 缓冲区的方法：
 - en: '[PRE20]'
+  id: totrans-193
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: If you’ve forgotten the name of the buffer you want to read, ask `syslogc` to
     query the list of available memory logs with `-q`. Be sure to provide the reporting
     socket.
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你忘记了要读取的缓冲区名称，请使用 `-q` 选项让 `syslogc` 查询可用的内存日志列表。务必提供报告套接字。
 - en: Note
+  id: totrans-195
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Even if you’re not a programmer, you can still use real syslog features. Logging
     to syslog is available to shell scripts via the `logger(1)` program. See the `logger`
     man page for details.
+  id: totrans-196
   prefs: []
   type: TYPE_NORMAL
+  zh: 即使你不是程序员，你仍然可以使用真实的 syslog 功能。通过 `logger(1)` 程序，shell 脚本可以将日志记录到 syslog。有关详细信息，请参阅
+    `logger` 的 man 页。
 - en: Log File Maintenance
+  id: totrans-197
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 日志文件维护
 - en: You can capture logs. Fantastic! Now just let the log files grow until they
     fill your hard disk and leave room for nothing else, right? Or you can discard
     old logs and have the system keep the logs to a manageable size. This is called
     *log rotation*.
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以捕获日志。太棒了！现在只需让日志文件增长，直到它们填满你的硬盘，没有空间留给其他东西，对吧？或者你可以丢弃旧日志，让系统将日志保持在一个可管理的尺寸。这被称为
+    *日志轮转*。
 - en: 'Look at the system messages log, */var/log/messages*, and you should see six
     *messages* files: *messages*, *messages.0.gz*, *messages.1.gz*, *messages.2.gz*,
     *messages.3.gz*, and *messages.4.gz*. The plain *messages* file is the current
     log file. The other files are older logs; *messages.0.gz* is the newest, and *messages.4.gz*
     is the oldest.'
+  id: totrans-199
   prefs: []
   type: TYPE_NORMAL
+  zh: 查看系统消息日志 */var/log/messages*，你应该看到六个 *messages* 文件：*messages*，*messages.0.gz*，*messages.1.gz*，*messages.2.gz*，*messages.3.gz*，和
+    *messages.4.gz*。未压缩的 *messages* 文件是当前日志文件。其他文件是旧日志；*messages.0.gz* 是最新的，*messages.4.gz*
+    是最旧的。
 - en: When the current log file hits either a certain age or a specific size, log
     rotation discards the oldest log file (*messages.4.gz*), and the second-oldest
     file, *messages.3.gz*, is renamed to *messages.4.gz*; *messages.2.gz* is renamed
     to *messages.3.gz*; and so on. The existing *messages* file is renamed to *messages.0*
     and compressed, and a new *messages* file is created.
+  id: totrans-200
   prefs: []
   type: TYPE_NORMAL
+  zh: 当当前日志文件达到一定年龄或特定大小时，日志轮转会丢弃最旧的日志文件 (*messages.4.gz*)，并将次旧的文件 *messages.3.gz*
+    重命名为 *messages.4.gz*；*messages.2.gz* 重命名为 *messages.3.gz*；依此类推。现有的 *messages*
+    文件被重命名为 *messages.0* 并压缩，然后创建一个新的 *messages* 文件。
 - en: The `newsyslog(8)` program rotates log files, restarts daemons, runs commands,
     shuffles old files into other directories, and handles all routine tasks. `root`
     runs `newsyslog` once per hour via `cron(8)`. When `newsyslog` starts, it reads
     */etc/newsyslog.conf* and examines each log file listed. If the conditions for
     rotating the log file are met, the log is rotated and other configured actions
     are taken.
+  id: totrans-201
   prefs: []
   type: TYPE_NORMAL
+  zh: '`newsyslog(8)` 程序轮转日志文件，重启守护进程，运行命令，将旧文件移动到其他目录，并处理所有常规任务。`root` 通过 `cron(8)`
+    每小时运行一次 `newsyslog`。当 `newsyslog` 启动时，它会读取 */etc/newsyslog.conf* 并检查列出的每个日志文件。如果满足轮转日志文件的条件，则轮转日志并执行其他配置的操作。'
 - en: newsyslog.conf Fields
+  id: totrans-202
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: newsyslog.conf 字段
 - en: '*newsyslog.conf* uses one line per log file. Each line has seven fields, like
     this:'
+  id: totrans-203
   prefs: []
   type: TYPE_NORMAL
+  zh: '*newsyslog.conf* 使用每行一个日志文件。每一行包含七个字段，如下所示：'
 - en: '[PRE21]'
+  id: totrans-204
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: From left to right, the fields are log file, owner, permissions, number of files
     to retain, size, time, and flags. After the flags field, you might see a number
     of optional arguments. We’ll look at each of the fields in order.
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
+  zh: 从左到右，字段依次是日志文件、所有者、权限、保留文件数、大小、时间和标志。在标志字段之后，你可能还会看到一些可选参数。我们将按顺序查看每个字段。
 - en: Log File
+  id: totrans-206
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 日志文件
 - en: The first entry on each line is the full path to the log file to be processed
     (`/var/log/authlog` in this example). This must exactly match the current log
     file.
+  id: totrans-207
   prefs: []
   type: TYPE_NORMAL
+  zh: 每行的第一个条目是要处理的日志文件的完整路径（在这个例子中是 `/var/log/authlog`）。这必须与当前日志文件完全匹配。
 - en: Owner
+  id: totrans-208
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 所有者
 - en: The second field (`root:wheel` in our example) lists the log file’s owner and
     group, separated by a colon. This field is optional, and is not present in many
     of the default entries.
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二个字段（在我们的示例中为 `root:wheel`）列出了日志文件的所有者和组，由冒号分隔。此字段是可选的，并且在许多默认条目中不存在。
 - en: By default, log files are owned by the root user and the `wheel` group, but
     `newsyslog` can change the owner of log files. While changing ownership isn’t
     common, you might want to explicitly declare it for specific files.
+  id: totrans-210
   prefs: []
   type: TYPE_NORMAL
+  zh: 默认情况下，日志文件属于 root 用户和 `wheel` 组，但 `newsyslog` 可以更改日志文件的所有权。虽然更改所有权并不常见，但您可能希望明确声明特定文件的所有权。
 - en: You can choose to change only the owner or only the group. In these cases, use
     a colon with a name on only one side of it, such as `:wheel` or `root:`. You must
     always include the colon if you’re changing ownership.
+  id: totrans-211
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以选择只更改所有者或只更改组。在这些情况下，只需在名称的一侧使用冒号，例如 `:wheel` 或 `root:`。如果您正在更改所有权，则必须始终包含冒号。
 - en: Permissions
+  id: totrans-212
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 权限
 - en: The third field (`640` in our example) gives the rotated file’s permissions
     in standard octal notation, as discussed in `chmod(1)`. This field is optional,
     and it is not present in many default entries.
+  id: totrans-213
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三字段（在我们的示例中为 `640`）给出了旋转文件的权限，使用标准八进制表示法，如 `chmod(1)` 中所述。此字段是可选的，并且在许多默认条目中不存在。
 - en: Count
+  id: totrans-214
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 计数
 - en: The fourth field specifies the number of archived log files that *newsyslog*
     keeps. In our example, */var/log/messages* has the current log file and five archives,
     numbered 0 through 4\. *newsyslog.conf* has a count of `5` for */var/log/messages*.
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
+  zh: 第四字段指定 `newsyslog` 保留的归档日志文件的数量。在我们的示例中，*/var/log/messages* 有当前日志文件和五个归档，编号为
+    0 到 4。*newsyslog.conf* 为 */var/log/messages* 设置了 `5` 的计数。
 - en: Size
+  id: totrans-216
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 大小
 - en: The fifth field is a file size in kilobytes. When `newsyslog` runs, it checks
     the size of the log file. If the log is larger than the size given here, `newsyslog`
     rotates the log. If you don’t want the file size to affect when `newsyslog` rotates
     the file, put an asterisk here.
+  id: totrans-217
   prefs: []
   type: TYPE_NORMAL
+  zh: 第五字段是千字节大小的文件。当 `newsyslog` 运行时，它会检查日志文件的大小。如果日志文件的大小超过此处给出的值，`newsyslog` 将旋转日志。如果您不希望文件大小影响
+    `newsyslog` 何时旋转文件，请在此处放置一个星号。
 - en: Time
+  id: totrans-218
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 时间
 - en: 'To rotate the log based on time, use the sixth field, which has four possible
     values: an asterisk, a number, and a time in one of two standard formats. If you
     rotate the log based on size rather than age, put an asterisk here. If you put
     a number here, you are specifying a number of hours after which the log will rotate.
     Our example of */var/log/authlog* rotates every 168 hours.'
+  id: totrans-219
   prefs: []
   type: TYPE_NORMAL
+  zh: 要根据时间旋转日志，请使用第六个字段，它有四个可能的值：一个星号，一个数字，以及两种标准格式之一的时间。如果您根据大小而不是年龄旋转日志，请在此处放置一个星号。如果您在此处放置一个数字，则指定日志将在多少小时后旋转。我们的示例
+    */var/log/authlog* 每 168 小时旋转一次。
 - en: The time formats—ISO 8601 restricted and `newsyslog`-specific—are a little more
     complicated.
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
+  zh: 时间格式——ISO 8601 限制和 `newsyslog` 特定——要复杂一些。
 - en: ISO 8601 restricted
+  id: totrans-221
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: ISO 8601 限制
 - en: ''
+  id: totrans-222
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
@@ -1036,10 +1508,14 @@
     systems, because it was the time format used in MIT’s primordial `newsyslog`.
     The ISO 8601 format is a bit obtuse, but every Unix-like operating system I’m
     aware of supports it.
+  id: totrans-223
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 以 `@` 符号开始的日期条目是 ISO 8601 限制时间格式。ISO 8601 限制时间格式在大多数类 Unix 系统上由 `newsyslog`
+    使用，因为它曾是麻省理工学院原始 `newsyslog` 使用的日期格式。ISO 8601 格式有点晦涩，但我所了解的每个类 Unix 操作系统都支持它。
 - en: ''
+  id: totrans-224
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
@@ -1051,20 +1527,27 @@
     at 3:18 and 58 seconds PM is expressed as `20130913T151858`. (Specifying a specific
     date and time to rotate a log wouldn’t be terribly useful because the log would
     rotate only once.)
+  id: totrans-225
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 完整日期以 ISO 8601 格式表示为中间有 `T` 的 14 位数字。前四位是年份，接下来的两位是月份，接下来的两位是月份中的日期。（`T` 类似于小数点，将整个天数与一天的小数部分分开。）接下来的两位是小时，接下来的两位是分钟，最后两位是秒。例如，2013
+    年 9 月 13 日下午 3:18 和 58 秒的日期表示为 `20130913T151858`。（指定特定日期和时间来旋转日志不会非常有用，因为日志只会旋转一次。）
 - en: ''
+  id: totrans-226
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
 - en: You can choose to specify only the fields near the `T`, leaving fields farther
     away blank. Again, if you think of the `T` as a decimal point, you don’t need
     to write 5.87 as 005.8700; the leading and trailing zeros are irrelevant.
+  id: totrans-227
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 您可以选择仅指定靠近 `T` 的字段，而将较远的字段留空。再次强调，如果您将 `T` 视为小数点，则不需要将 5.87 写成 005.8700；前导和尾随零是不相关的。
 - en: ''
+  id: totrans-228
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
@@ -1073,10 +1556,13 @@
     hour, or 11 PM, every day. If *newsyslog.conf* lists the time `@T2359`, the log
     rotates at 11:59 PM every day. (Of course, `newsyslog` runs once an hour, so the
     log won’t rotate exactly then.)
+  id: totrans-229
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 在`newsyslog`的情况下，空字段是通配符。例如，`4T00`匹配每月第四天的午夜，而`T23`匹配每天的二十三点，即晚上11点。如果`newsyslog.conf`中列出时间为`@T2359`，则日志每天晚上11:59旋转。（当然，`newsyslog`每小时运行一次，因此日志不会正好在那个时间旋转。）
 - en: ''
+  id: totrans-230
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
@@ -1086,32 +1572,43 @@
     be better to specify a time of `@9T01`, which would rotate the log at 1 AM on
     the ninth day of the month. You don’t need to specify times any more closely than
     the hour, as `newsyslog` runs only hourly.
+  id: totrans-231
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 与`cron(8)`一样，需要详细指定时间单位。例如，`@9T`，表示每月的第九天，每小时旋转一次日志，这意味着在这一天全天都会旋转日志。可能更好的做法是指定时间为`@9T01`，这样日志就会在每月的第九天凌晨1点旋转。由于`newsyslog`每小时运行一次，因此不需要比小时更精确地指定时间。
 - en: newsyslog times
+  id: totrans-232
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: newsyslog时间
 - en: ''
+  id: totrans-233
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
 - en: Because ISO 8601 time doesn’t let you easily specify weekly jobs, and it’s impossible
     to specify the last day of the month, OpenBSD includes a `newsyslog`-specific
     time format that lets you easily specify these common times.
+  id: totrans-234
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 由于ISO 8601时间格式无法轻松指定每周的任务，并且无法指定每月的最后一天，OpenBSD包含一个针对`newsyslog`特定的日期格式，允许您轻松指定这些常见时间。
 - en: ''
+  id: totrans-235
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
 - en: Any entry with a leading dollar sign (`$`) is written in *month week day* format.
+  id: totrans-236
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 任何以美元符号（`$`）开头的条目都使用*月份 星期 天*格式。
 - en: ''
+  id: totrans-237
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
@@ -1122,162 +1619,228 @@
     with `L` or `l` representing the last day of the month. For example, to rotate
     a log on the fifth of each month at noon, use `$M5H12`. To start the month-end
     accounting at 11 PM on the last day of the month, use `$MLH23`.'
+  id: totrans-238
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 此特定格式使用三个标识符：*`M`*（月份中的某一天）、*`W`*（星期中的某一天）和*`H`*（一天中的某个小时）。每个标识符后面跟着一个数字，表示您正在使用的单位。小时范围从`0`到`23`，星期范围从`0`（星期日）到`6`（星期六）。月份中的天数从`1`开始到`31`结束，`L`或`l`代表月份的最后一天。例如，要在每月的第五天中午旋转日志，请使用`$M5H12`。要在每月最后一天的晚上11点开始月末会计，请使用`$MLH23`。
 - en: ''
+  id: totrans-239
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
 - en: If you don’t specify an hour, the time defaults to midnight on the chosen day.
     And if a *newsyslog.conf* entry lists both a time and a size for file rotation,
     `newsyslog` rotates the log if either requirement is met.
+  id: totrans-240
   prefs:
   - PREF_BQ
   type: TYPE_NORMAL
+  zh: 如果您没有指定小时，则默认时间为所选日期的午夜。如果`newsyslog.conf`条目同时列出文件旋转的时间和大小，则`newsyslog`会在满足任一要求时旋转日志。
 - en: Flags
+  id: totrans-241
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 标志
 - en: 'The seventh field, which is optional, instructs `newsyslog` on special processing
     for the file itself. OpenBSD uses four flags:'
+  id: totrans-242
   prefs: []
   type: TYPE_NORMAL
+  zh: 第七字段是可选的，它指导`newsyslog`对文件本身进行特殊处理。OpenBSD使用四个标志：
 - en: '****`Z`****. Compress the file with `gzip(1)`.'
+  id: totrans-243
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`Z`****. 使用`gzip(1)`压缩文件。'
 - en: '****`B`****. Do not add a “log file turned over” message to the file (for binary
     files).'
+  id: totrans-244
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`B`****. 对于二进制文件，不要向文件中添加“日志文件已切换”的消息。'
 - en: '****`F`****. Follow symlinks.'
+  id: totrans-245
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`F`****. 跟踪符号链接。'
 - en: '****`M`****. A user is monitoring this log.'
+  id: totrans-246
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`M`****. 用户正在监控此日志。'
 - en: While the `B` and `Z` flags are not, strictly speaking, mutually incompatible,
     most log files need only one of them, and most binary files don’t compress well
     anyway. (The default *newsyslog.conf* compresses the packet filtering log file,
     but that’s something of an oddity.) If you see the `Z` flag with the `M` flag,
     the old log file will be sent to the user before the log is compressed.
+  id: totrans-247
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然`B`和`Z`标志在严格意义上不是互斥的，但大多数日志文件只需要其中一个，而且大多数二进制文件本身压缩效果不佳。（默认的`newsyslog.conf`压缩了包过滤日志文件，但这有点奇怪。）如果您看到带有`M`标志的`Z`标志，则在压缩日志之前，旧日志文件将被发送给用户。
 - en: Monitoring Logs
+  id: totrans-248
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 监控日志
 - en: 'OpenBSD’s `newsyslog` can email logs to a user before rotating them. If you
     carefully control how you sort your logs, this feature can be useful. For example,
     `sudo(8)` logs successful uses at priority `notice`, but failed uses at priority
     `alert`. You might split these into separate log files in *syslog.conf*, like
     this:'
+  id: totrans-249
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD的`newsyslog`可以在旋转日志之前将日志通过电子邮件发送给用户。如果您仔细控制日志的排序方式，此功能可能很有用。例如，`sudo(8)`日志记录成功的使用情况为`notice`优先级，但失败的用法为`alert`优先级。您可以在`syslog.conf`中将这些拆分为单独的日志文件，如下所示：
 - en: '[PRE22]'
+  id: totrans-250
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: The file */var/log/sudofail* should now contain only `sudo` failures, such as
     users entering incorrect passwords or exceeding their privileges.
+  id: totrans-251
   prefs: []
   type: TYPE_NORMAL
+  zh: '`/var/log/sudofail`文件现在应只包含`sudo`失败，例如用户输入错误的密码或超出其权限。'
 - en: Now you could tell `newsyslog` to check for monitored logs by running it with
     the `-m` flag. (`newsyslog` runs as one of root’s cron jobs.)
+  id: totrans-252
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在你可以通过运行带有`-m`标志的`newsyslog`来告诉`newsyslog`检查受监控的日志。（`newsyslog`作为root的cron作业之一运行。）
 - en: To have the `sudo` failure log emailed to you every time the log rotates, you
     can put your account in the monitor field.
+  id: totrans-253
   prefs: []
   type: TYPE_NORMAL
+  zh: 要在日志轮换时每次都通过电子邮件将`sudo`失败日志发送给你，你可以将你的账户放入监控字段。
 - en: '[PRE23]'
+  id: totrans-254
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: This assumes that email to the account `mwlucas` on this machine reaches me.
     The simplest way to ensure that would be to forward the email in */etc/mail/aliases*.
+  id: totrans-255
   prefs: []
   type: TYPE_NORMAL
+  zh: 这假设这台机器上`mwlucas`账户收到的电子邮件会到达我这里。确保这一点的最简单方法是将电子邮件转发到`/etc/mail/aliases`。
 - en: Note
+  id: totrans-256
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: If you’re serious about watching these kinds of failures, monitor logs on a
     logging host that end users cannot access. A user who becomes root on the local
     machine can edit logs before they are emailed and rotated.
+  id: totrans-257
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你认真对待观察这类故障，请在用户无法访问的日志主机上监控日志。一个成为本地机器root的用户可以在日志被电子邮件发送和轮换之前编辑日志。
 - en: Adding a PID File
+  id: totrans-258
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 添加PID文件
 - en: If `newsyslog` tries to rotate and compress a file, but the process writing
     the file is still writing to the file, the file can become corrupted. Some programs
     need a right proper slapping before they will let go of their log files. How?
     Just list a PID file here, and `newsyslog` will send that process ID a `SIGHUP`
     (like a `kill -1`).
+  id: totrans-259
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果`newsyslog`试图轮换和压缩文件，但写入文件的进程仍在写入文件，文件可能会损坏。一些程序在释放其日志文件之前需要受到适当的打击。如何？只需在这里列出PID文件，然后`newsyslog`将向该进程ID发送`SIGHUP`（类似于`kill
+    -1`）。
 - en: Note that PID files are not a terribly secure way to identify specific processes
     because they are subject to race conditions and other attacks. If the server has
     a command for rotating its logs, that’s probably a wiser choice than signaling
     a process indicated in a PID file.
+  id: totrans-260
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，PID文件并不是识别特定进程的非常安全的方法，因为它们容易受到竞争条件和其它攻击。如果服务器有一个轮换日志的命令，那可能比向PID文件中指示的进程发送信号更明智的选择。
 - en: Signal Name
+  id: totrans-261
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 信号名称
 - en: To send a signal other than `SIGHUP` to a process with a PID file, use a different
     *signal name*. The signal name must begin with `SIG` and be specified by name.
     You can find a full list of signals in `signal(3)`, but the software documentation
     should tell you which signal the process needs to release in order to restart
     its log file. This field is optional, but if you use it, you must enter a full
     path to a PID file immediately before it.
+  id: totrans-262
   prefs: []
   type: TYPE_NORMAL
+  zh: 要向具有PID文件的进程发送除`SIGHUP`之外的信号，请使用不同的*信号名称*。信号名称必须以`SIG`开头，并按名称指定。你可以在`signal(3)`中找到信号的全列表，但软件文档应该告诉你进程需要释放哪个信号才能重新启动其日志文件。此字段是可选的，但如果你使用它，你必须立即在它之前输入PID文件的完整路径。
 - en: Command to Execute
+  id: totrans-263
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 要执行的命令
 - en: Rather than signaling a process, you can have `newsyslog` run a command when
     rotating logs by giving the full path to the command in double quotes. While this
     field is optional, it cannot be combined with a PID file. You can use a PID file
     or a command name, but not both.
+  id: totrans-264
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以通过在双引号中给出命令的完整路径，让`newsyslog`在轮换日志时运行一个命令，而不是向进程发送信号。虽然此字段是可选的，但它不能与PID文件结合使用。你可以使用PID文件或命令名称，但不能两者都使用。
 - en: System Time
+  id: totrans-265
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 系统时间
 - en: There’s no excuse for a system having incorrect time. Once you set the time
     zone, having OpenBSD correct its own clock on an ongoing basis from any number
     of freely available network time servers is easy. Virtual machines in particular
     are notorious for skewing clocks, but time correction works on them as well, so
     as I said, no excuse.
+  id: totrans-266
   prefs: []
   type: TYPE_NORMAL
+  zh: 系统时间不正确没有借口。一旦你设置了时区，从任何数量可自由获取的网络时间服务器持续校正OpenBSD的时钟是很容易的。特别是虚拟机因时钟偏移而臭名昭著，但时间校正对它们也有效，所以，正如我说的，没有借口。
 - en: OpenBSD includes its own NTP client, OpenNTPD, which is written to be safe and
     secure. Before `ntpd(8)` can do anything though, it needs some configuration.
+  id: totrans-267
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD包括其自己的NTP客户端，OpenNTPD，它被编写为安全且安全。然而，在`ntpd(8)`能够做任何事情之前，它需要一些配置。
 - en: Configuring ntpd(8)
+  id: totrans-268
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 配置`ntpd(8)`
 - en: OpenBSD comes with a perfectly acceptable generic `ntpd` configuration that
     uses public time servers. If your host is on the public Internet and you only
     want to set your system time, not provide time to other hosts, use the defaults.
     Otherwise, you must customize */etc/ntpd.conf* by selecting time sources and deciding
     if `ntpd` will accept time requests from other machines.
+  id: totrans-269
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD自带了一个完全可接受的通用`ntpd`配置，该配置使用公共时服务器。如果您的宿主机在公共互联网上，并且您只想设置系统时间，而不是为其他主机提供时间，请使用默认设置。否则，您必须通过选择时间源并决定`ntpd`是否将接受来自其他机器的时间请求来定制`/etc/ntpd.conf`。
 - en: Time Redundancy
+  id: totrans-270
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 时间冗余
 - en: NTP gets the time by querying remote servers. If you have a single server, that
     time is assumed to be correct. However, if you have multiple time servers, the
     times are not simply averaged. If one time server is wildly off from all of the
@@ -1285,36 +1848,52 @@
     the remainder is selected. If you have only two time servers, and the times obtained
     from them differ, `ntpd` can’t determine which one is correct. To help `ntpd`
     make sensible decisions, always list at least three time servers.
+  id: totrans-271
   prefs: []
   type: TYPE_NORMAL
+  zh: NTP通过查询远程服务器来获取时间。如果您只有一个服务器，那么假定该时间是正确的。然而，如果您有多个时服务器，时间并不是简单地平均。如果一个时服务器与其他所有时服务器的时间相差甚远，那么该服务器的时间将被丢弃，并从剩余的时间中选择中位数。如果您只有两个时服务器，并且从它们那里获取的时间不同，`ntpd`无法确定哪个是正确的。为了帮助`ntpd`做出合理的决策，请始终列出至少三个时服务器。
 - en: Time Sources
+  id: totrans-272
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 时间源
 - en: Choose your time sources with the `server`, `servers`, and `sensor` keywords.
+  id: totrans-273
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用`server`、`servers`和`sensor`关键字选择您的时间源。
 - en: The `server` option tells `ntpd` to get the time from a single server, which
     might have multiple IP addresses. If that’s the case, `ntpd` tries to use the
     first IP address. If the first address doesn’t work, it tries the second, and
     so on, until it gets an answer. Use the `server` option if you have specific time
     servers to use, and be sure to list at least three time servers.
+  id: totrans-274
   prefs: []
   type: TYPE_NORMAL
+  zh: '`server`选项告诉`ntpd`从一个单独的服务器获取时间，该服务器可能有多个IP地址。如果是这种情况，`ntpd`会尝试使用第一个IP地址。如果第一个地址不可用，它会尝试第二个，依此类推，直到得到响应。如果您有特定的时服务器要使用，请使用`server`选项，并确保列出至少三个时服务器。'
 - en: '[PRE24]'
+  id: totrans-275
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: 'The `servers` option tells `ntpd` to get the time from multiple hosts that
     share a common hostname. The default *ntpd.conf* includes this entry:'
+  id: totrans-276
   prefs: []
   type: TYPE_NORMAL
+  zh: '`servers`选项告诉`ntpd`从共享相同主机名的多个主机获取时间。默认的`ntpd.conf`包括以下条目：'
 - en: '[PRE25]'
+  id: totrans-277
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: The host *pool.ntp.org* has four IP addresses, and `ntpd` will try to get time
     from all of those hosts.
+  id: totrans-278
   prefs: []
   type: TYPE_NORMAL
+  zh: 主机`pool.ntp.org`有四个IP地址，`ntpd`将尝试从所有这些主机获取时间。
 - en: If you have a hardware time sensor, you can tell `ntpd` to read time from it.
     Hardware time sensors include `nmea(4)`, `udcf(4)`, and `mbg(4)`. The `sensor`
     option tells `ntpd` to use a hardware sensor. If you’ve invested in a hardware
@@ -1322,41 +1901,59 @@
     between the transmitter and the receiver, and adjust the time based on the speed
     of light delay. The `correction` keyword lets you specify a number of microseconds
     that your sensor is behind.
+  id: totrans-279
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您有一个硬件时间传感器，您可以告诉`ntpd`从它那里读取时间。硬件时间传感器包括`nmea(4)`、`udcf(4)`和`mbg(4)`。`sensor`选项告诉`ntpd`使用硬件传感器。如果您投资了硬件时间传感器，您可能会对时间测量发射器和接收器之间的距离，并根据光速延迟调整时间感到足够关心。`correction`关键字允许您指定传感器落后于标准时间的微秒数。
 - en: As I wrote this, a 40-millisecond (ms) delay caused a furor in the scientific
     world when researchers thought they might have seen a neutrino go faster than
     light, so we’ll put a 40 ms correction into our time sensor.
+  id: totrans-280
   prefs: []
   type: TYPE_NORMAL
+  zh: 当我写下这段文字时，一个40毫秒（ms）的延迟在科学界引起了轩然大波，因为研究人员认为他们可能看到了一个中微子以比光速更快的速度移动，所以我们将40毫秒的修正值放入我们的时间传感器中。
 - en: '[PRE26]'
+  id: totrans-281
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: Note
+  id: totrans-282
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Be warned that OpenBSD is not a real-time operating system. You should not be
     measuring neutrino speed with it anyway!
+  id: totrans-283
   prefs: []
   type: TYPE_NORMAL
+  zh: 警告：OpenBSD不是一个实时操作系统。您无论如何都不应该用它来测量中微子速度！
 - en: Serving Time
+  id: totrans-284
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 提供时间服务
 - en: I run time servers on only closed networks, where very few hosts have access
     to the public Internet. I would also run time servers if I had hardware time sensors,
     but most of the time, I just use the public time servers.
+  id: totrans-285
   prefs: []
   type: TYPE_NORMAL
+  zh: 我只在封闭网络上运行时间服务器，在这些网络上，很少的主机可以访问公共互联网。如果我有硬件时间传感器，我也会运行时间服务器，但大多数时候，我只是使用公共时服务器。
 - en: To have `ntpd` answer time queries from other hosts, use the `listen on` directive.
     You can either specify an IP address or use an asterisk to say “every IP on the
     system.”
+  id: totrans-286
   prefs: []
   type: TYPE_NORMAL
+  zh: 要让`ntpd`从其他主机回答时间查询，请使用`listen on`指令。您可以选择一个IP地址或使用星号表示“系统上的所有IP地址”。
 - en: '[PRE27]'
+  id: totrans-287
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: Because `ntpd` has no access controls, any host that can connect to port 123/UDP
     can get time from this server. If this worries you, use packet filtering (discussed
     in [Chapter 21](ch21.html "Chapter 21. Packet Filtering") and [Chapter 22](ch22.html
@@ -1365,323 +1962,485 @@
     3100 with 16MB (yes, that’s an *M*) of RAM without the NTP process using more
     than 5 percent of the processor, so the load imposed by NTP is negligible on modern
     systems.
+  id: totrans-288
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于 `ntpd` 没有访问控制，任何可以连接到端口 123/UDP 的主机都可以从这个服务器获取时间。如果您担心这一点，可以使用数据包过滤（在[第 21
+    章](ch21.html "第 21 章。数据包过滤")和[第 22 章](ch22.html "第 22 章。高级 PF")中讨论）来限制时间检查仅限于您网络上的主机。OpenNTP
+    的作者在他的整个公司以及公众中，使用一个带有 16MB（是的，是一个 *M*）RAM 的 MicroVAX 3100 上运行 NTP 进程，处理器使用率不超过
+    5%，因此 NTP 在现代系统上施加的负载是可以忽略不计的。
 - en: Now that `ntpd` is configured, let’s use it.
+  id: totrans-289
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在 `ntpd` 已经配置好了，让我们来使用它。
 - en: Using ntpd(8)
+  id: totrans-290
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 使用 ntpd(8)
 - en: You can correct time slowly or do it in one fell swoop. I recommend fully correcting
     time at boot, and then letting `ntpd` slowly adjust the system clock as the system
     runs. This corrects time before anything relies on it, but keeps everything synchronized
     on an ongoing basis.
+  id: totrans-291
   prefs: []
   type: TYPE_NORMAL
+  zh: 您可以缓慢地纠正时间，或者一次性完成。我建议在启动时完全纠正时间，然后让 `ntpd` 在系统运行时缓慢调整系统时钟。这样可以在任何东西依赖它之前纠正时间，但又能持续保持同步。
 - en: To correct time when starting `ntpd`, use the `-s` flag.
+  id: totrans-292
   prefs: []
   type: TYPE_NORMAL
+  zh: 在启动 `ntpd` 时纠正时间，请使用 `-s` 标志。
 - en: '[PRE28]'
+  id: totrans-293
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: You’ll get a command prompt back once `ntpd` receives a response from a time
     server and adjusts the clock. At boot, this delays other software starting so
     that it has the correct time, and when you check your clock, you should see the
     correct time. You can configure this at boot with `ntpd_flags` in */etc/rc.conf.local*.
+  id: totrans-294
   prefs: []
   type: TYPE_NORMAL
+  zh: 一旦 `ntpd` 从时间服务器收到响应并调整了时钟，您将获得一个命令提示符。在启动时，这会延迟其他软件的启动，以便它有正确的时间，并且当您检查时钟时，应该看到正确的时间。您可以在启动时使用
+    */etc/rc.conf.local* 中的 `ntpd_flags` 来配置此设置。
 - en: '[PRE29]'
+  id: totrans-295
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: If the clock is off on a running system and you’re running software that would
     be corrupted by the clock moving backward or a time jump forward (as with many
     databases), you might need to tell `ntpd` to correct the clock more slowly. To
     do so, run `ntpd` without any flags, or set it in *rc.conf.local* to have it run
     in this mode at boot.
+  id: totrans-296
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果运行中的系统时钟不准确，并且您正在运行可能会因时钟倒退或时间跳跃（如许多数据库）而损坏的软件，您可能需要告诉 `ntpd` 更慢地纠正时钟。为此，请不带任何标志运行
+    `ntpd`，或者在 `rc.conf.local` 中设置它，以便在启动时以这种方式运行。
 - en: Note
+  id: totrans-297
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Your starting time may be so far off that it will be impossible to make a gradual
     adjustment to the correct time in any reasonable period. To fix the clock, schedule
     a clock change when you can shut down your sensitive software, and make sure NTP
     runs afterwards so that the problem remains fixed. It’s better to fix your clock
     right away and be done with it.
+  id: totrans-298
   prefs: []
   type: TYPE_NORMAL
+  zh: 您的起始时间可能偏差太大，以至于在任何合理的时间内都无法逐渐调整到正确的时间。为了修复时钟，在您能够关闭敏感软件时安排时钟更改，并确保在之后运行 NTP
+    以确保问题得到解决。最好是立即修复时钟并完成它。
 - en: Hardware Sensors
+  id: totrans-299
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 硬件传感器
 - en: Sensors are physical probes that check the health and status of hardware. Manufacturers
     have put more and more sensors in hardware, providing low-level hardware information
     to the operating systems. OpenBSD supports a wide variety of hardware sensors,
     and uses the `sensorsd` daemon to query them and act upon error states.
+  id: totrans-300
   prefs: []
   type: TYPE_NORMAL
+  zh: 传感器是检查硬件健康和状态的物理探头。制造商在硬件中放置了越来越多的传感器，为操作系统提供低级硬件信息。OpenBSD 支持广泛的硬件传感器，并使用 `sensorsd`
+    守护进程查询它们并处理错误状态。
 - en: Resolving many hardware errors requires shutting down the machine, but advance
     warning that a component has stopped working changes a hardware failure from an
     unexpected middle-of-the-day catastrophe to an after-hours annoyance. Some hardware,
     such as hot-swappable hard drives, can be replaced without interrupting service
     once you know the hardware has failed.
+  id: totrans-301
   prefs: []
   type: TYPE_NORMAL
+  zh: 解决许多硬件错误需要关闭机器，但提前警告某个组件已停止工作，将硬件故障从意外的白天灾难转变为下班后的烦恼。一些硬件，如热插拔硬盘，一旦知道硬件已故障，就可以在不中断服务的情况下更换。
 - en: Device Drivers
+  id: totrans-302
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 设备驱动程序
 - en: 'Each physical sensor has a device driver. The device driver extracts information
     from the hardware and publishes it in a sysctl (discussed in [Chapter 18](ch18.html
     "Chapter 18. Kernel Configuration")). `sensorsd` reads the sysctl values and can
     act when they change or cross critical values. For example, here are the sensor-related
     sysctl values from my laptop:'
+  id: totrans-303
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个物理传感器都有一个设备驱动程序。设备驱动程序从硬件中提取信息，并在sysctl（在第18章中讨论）中发布。`sensorsd`读取sysctl值，并在它们更改或超过临界值时采取行动。例如，以下是我笔记本电脑的与传感器相关的sysctl值：
 - en: '[PRE30]'
+  id: totrans-304
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: This comparatively simple and generic hardware has two temperature sensors and
     all kinds of power sensors. You can get hundreds of lines of sensor output, depending
     on your hardware.
+  id: totrans-305
   prefs: []
   type: TYPE_NORMAL
+  zh: 这款相对简单通用的硬件具有两个温度传感器和各种功率传感器。根据你的硬件，你可以获得数百行传感器输出。
 - en: 'Many RAID controllers have their own sensors, and will report when an array
     has failed. Here, we see three virtual disks provided by an AMI RAID controller:'
+  id: totrans-306
   prefs: []
   type: TYPE_NORMAL
+  zh: 许多RAID控制器有自己的传感器，并在阵列失败时报告。这里，我们看到由AMI RAID控制器提供的三个虚拟磁盘：
 - en: '[PRE31]'
+  id: totrans-307
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: If you didn’t have sensors, you would need to look at the blinking lights on
     the drive enclosure. Or you could listen for the really annoying “beep, beep,
     beep,” which is *so* easy to hear over the roar of 5,000 server fans, the air
     conditioners, and someone else’s hardware that has been beeping every time you’ve
     come in for the last six months.
+  id: totrans-308
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果没有传感器，你需要查看驱动器外壳上的闪烁灯光。或者你可以听那令人讨厌的“哔哔哔哔”声，这在5,000个服务器风扇、空调和某人其他硬件的哔哔声中是如此容易听到。
 - en: Note
+  id: totrans-309
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Some sensors require the Intelligent Platform Management Interface (IPMI). This
     is a kernel feature that’s disabled by default in OpenBSD, because it makes some
     machines behave really badly. [Chapter 18](ch18.html "Chapter 18. Kernel Configuration")
     discusses enabling IPMI.
+  id: totrans-310
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些传感器需要智能平台管理接口（IPMI）。这是一个默认在OpenBSD中禁用的内核功能，因为它会使某些机器表现得很糟糕。[第18章](ch18.html
+    "第18章。内核配置")讨论了启用IPMI。
 - en: The device drivers attach to sensors automatically, and the values get into
     the kernel automatically, but to do anything with these results in any automated
     manner, you need `sensorsd(8)`, or you need to configure an external SNMP-based
     management system and use `snmpd(8)`. We’ll look at using `sensorsd(8)` here.
     Using `snmpd(8)` is discussed in [Chapter 16](ch16.html "Chapter 16. Network Servers").
+  id: totrans-311
   prefs: []
   type: TYPE_NORMAL
+  zh: 设备驱动程序会自动连接到传感器，值会自动进入内核，但要以任何自动化的方式对这些结果进行处理，你需要`sensorsd(8)`，或者你需要配置一个基于SNMP的外部管理系统并使用`snmpd(8)`。我们将在这里查看使用`sensorsd(8)`。在[第16章](ch16.html
+    "第16章。网络服务器")中讨论了使用`snmpd(8)`。
 - en: Sensor Configuration
+  id: totrans-312
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 传感器配置
 - en: The sensors daemon `sensorsd(8)` watches sensor monitoring data. It logs changes
     and can execute commands if needed. Because all hardware is different and all
     environments are different, by default, `sensorsd` notices changes only in sensor
     readings. To take action, you must configure `sensorsd` in */etc/sensorsd.conf*.
+  id: totrans-313
   prefs: []
   type: TYPE_NORMAL
+  zh: 传感器守护进程`sensorsd(8)`监视传感器监控数据。它记录更改，并在需要时执行命令。由于所有硬件都不同，所有环境都不同，默认情况下，`sensorsd`只注意传感器读数的变化。要采取行动，你必须配置`/etc/sensorsd.conf`中的`sensorsd`。
 - en: Sensor Types
+  id: totrans-314
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 传感器类型
 - en: 'OpenBSD supports many types of sensors, as listed in [Table 15-2](ch15.html#supported_sensor_types
     "Table 15-2. Table 15-2: Supported Sensor Types").'
+  id: totrans-315
   prefs: []
   type: TYPE_NORMAL
+  zh: OpenBSD支持许多类型的传感器，如[表15-2](ch15.html#supported_sensor_types "表15-2。表15-2：支持的传感器类型")所示。
 - en: 'Table 15-2. Table 15-2: Supported Sensor Types'
+  id: totrans-316
   prefs: []
   type: TYPE_NORMAL
+  zh: 表15-2. 表15-2：支持的传感器类型
 - en: '| Name | Function |'
+  id: totrans-317
   prefs: []
   type: TYPE_TB
+  zh: '| 名称 | 功能 |'
 - en: '| --- | --- |'
+  id: totrans-318
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| temp | Temperature (C) |'
+  id: totrans-319
   prefs: []
   type: TYPE_TB
+  zh: '| 温度 | 温度（摄氏度） |'
 - en: '| fan | Fan speed (RPM) |'
+  id: totrans-320
   prefs: []
   type: TYPE_TB
+  zh: '| 风扇 | 风扇速度（RPM） |'
 - en: '| volt | DC voltage |'
+  id: totrans-321
   prefs: []
   type: TYPE_TB
+  zh: '| 电压 | 直流电压 |'
 - en: '| acvolt | AC voltage |'
+  id: totrans-322
   prefs: []
   type: TYPE_TB
+  zh: '| 交流电压 | 交流电压 |'
 - en: '| resistance | Ohms resistance |'
+  id: totrans-323
   prefs: []
   type: TYPE_TB
+  zh: '| 电阻 | 欧姆电阻 |'
 - en: '| power | Wattage |'
+  id: totrans-324
   prefs: []
   type: TYPE_TB
+  zh: '| 功率 | 瓦特 |'
 - en: '| current | Amperage |'
+  id: totrans-325
   prefs: []
   type: TYPE_TB
+  zh: '| 电流 | 安培 |'
 - en: '| watthour | Power capacity |'
+  id: totrans-326
   prefs: []
   type: TYPE_TB
+  zh: '| 瓦特时 | 功率容量 |'
 - en: '| amphour | Power capacity |'
+  id: totrans-327
   prefs: []
   type: TYPE_TB
+  zh: '| 安培时 | 功率容量 |'
 - en: '| indicator | Device-dependent yes/no |'
+  id: totrans-328
   prefs: []
   type: TYPE_TB
+  zh: '| 指示器 | 设备相关是/否 |'
 - en: '| raw | Device-dependent value |'
+  id: totrans-329
   prefs: []
   type: TYPE_TB
+  zh: '| 原始值 | 设备相关值 |'
 - en: '| percentage | Device-dependent percentage |'
+  id: totrans-330
   prefs: []
   type: TYPE_TB
+  zh: '| 百分比 | 设备相关百分比 |'
 - en: '| illuminance | Lighting |'
+  id: totrans-331
   prefs: []
   type: TYPE_TB
+  zh: '| 照度 | 照明 |'
 - en: '| drive | Hard drives |'
+  id: totrans-332
   prefs: []
   type: TYPE_TB
+  zh: '| 硬盘驱动器 | 硬盘 |'
 - en: '| timedelta | Time difference between operating system and hardware |'
+  id: totrans-333
   prefs: []
   type: TYPE_TB
+  zh: '| 时间差 | 操作系统与硬件之间的时间差 |'
 - en: '| humidity | Percent humidity |'
+  id: totrans-334
   prefs: []
   type: TYPE_TB
+  zh: '| 湿度 | 百分比湿度 |'
 - en: '| frequency | Microhertz |'
+  id: totrans-335
   prefs: []
   type: TYPE_TB
+  zh: '| 频率 | 微赫兹 |'
 - en: '| angle | Microdegrees |'
+  id: totrans-336
   prefs: []
   type: TYPE_TB
+  zh: '| 角度 | 微度 |'
 - en: You’ll need to check your hardware manual in order to learn how to use some
     of these sensors effectively.
+  id: totrans-337
   prefs: []
   type: TYPE_NORMAL
+  zh: 你需要检查你的硬件手册，才能了解如何有效地使用这些传感器中的某些传感器。
 - en: Some sensors appear to overlap. For example, why does OpenBSD have all those
     separate values for power, when you could probably do some math and get a common
     power gauge? The reason is that these are the values that the actual sensors report,
     and the developers would prefer to give you the actual measurements. OpenBSD does
     perform some data rationalization, but only for simple data; all temperature sensors
     are normalized to degrees Celsius, for example.
+  id: totrans-338
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些传感器似乎有重叠。例如，为什么OpenBSD有那么多关于功率的单独值，当你可能通过一些数学运算得到一个共同的功率表时？原因是这些是实际传感器报告的值，开发者更愿意给你实际的测量值。OpenBSD确实执行了一些数据合理化，但仅限于简单数据；例如，所有温度传感器都被归一化到摄氏度。
 - en: Now let’s see what you can do with these sensors.
+  id: totrans-339
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们看看你可以用这些传感器做什么。
 - en: Settings in sensorsd.conf
+  id: totrans-340
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: sensorsd.conf中的设置
 - en: The file *sensorsd.conf* has example entries, but because environments differ
     so widely, they’re all commented out. It uses a `termcap`-style configuration
     syntax, much like */etc/remote* (see [Chapter 5](ch05.html "Chapter 5. The Boot
     Process")) or */etc/login.access* (see [Chapter 6](ch06.html "Chapter 6. User
     Management")), with colons separating the terms in an entry. Each entry starts
     with the sensor to be measured, followed by attribute names and settings.
+  id: totrans-341
   prefs: []
   type: TYPE_NORMAL
+  zh: 文件*sensorsd.conf*有示例条目，但由于环境差异很大，它们都被注释掉了。它使用`termcap`风格的配置语法，类似于*/etc/remote*（见第5章“引导过程”）或*/etc/login.access*（见第6章“用户管理”），其中用冒号分隔条目中的术语。每个条目以要测量的传感器开始，后跟属性名称和设置。
 - en: 'For example, here’s an entry for a temperature sensor in the default *sensorsd.conf*:'
+  id: totrans-342
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，这是默认*sensorsd.conf*中的一个温度传感器的条目：
 - en: '[PRE32]'
+  id: totrans-343
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: For the sensor `lm0.temp0`, the attribute `high` is set to `50C`.
+  id: totrans-344
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于传感器`lm0.temp0`，`high`属性设置为`50C`。
 - en: '`sensorsd` supports four attributes:'
+  id: totrans-345
   prefs: []
   type: TYPE_NORMAL
+  zh: '`sensorsd`支持四个属性：'
 - en: '****`high`****. An upper limit'
+  id: totrans-346
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`high`****. 上限'
 - en: '****`low`****. A lower limit'
+  id: totrans-347
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`low`****. 下限'
 - en: '****`command`****. A command to run when a limit is crossed or a state changes'
+  id: totrans-348
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`command`****. 当超过限制或状态改变时运行的命令'
 - en: '****`istatus`****. Ignore this status'
+  id: totrans-349
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`istatus`****. 忽略此状态'
 - en: The values reported for a sensor type depend on what makes sense. Where high
     and low limits make sense for temperature and voltage, some sensors report specific
     values instead. The RAID controller shown earlier reports drives as degraded,
     failed, or healthy. A hard-drive sensor that reports a scalar value isn’t useful,
     as you want to know if a RAID container is healthy or if drives have failed. There’s
     no middle ground.
+  id: totrans-350
   prefs: []
   type: TYPE_NORMAL
+  zh: 报告的传感器类型值取决于什么是有意义的。对于温度和电压，当高限和低限有意义时，一些传感器会报告特定的值。前面显示的RAID控制器报告驱动器为降级、故障或健康。报告标量值的硬盘传感器没有用，因为你想知道RAID容器是否健康或驱动器是否已故障。没有中间地带。
 - en: You can have both high and low values for a single sensor. For example, whereas
     temperature might not have a low value in most data centers, voltage certainly
     will. I work in all sorts of weird places, and not all of them have clean power.
+  id: totrans-351
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于单个传感器，你可以有高值和低值。例如，在大多数数据中心，温度可能没有低值，但电压肯定有。我在各种奇怪的地方工作，并不是所有这些地方都有干净的电源。
 - en: '[PRE33]'
+  id: totrans-352
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: With a line like this, if the electricity supply to my laptop drops below 11
     volts or goes above 13 volts, I will know.
+  id: totrans-353
   prefs: []
   type: TYPE_NORMAL
+  zh: 有这样的行，如果我的笔记本电脑的电源低于11伏或高于13伏，我会知道。
 - en: Some systems might have dozens of sensors of a given type, which could make
     configuration tricky. If my motherboard has 15 temperature sensors, I don’t want
     to configure each separately. Fortunately, you can configure sensors en masse
     by type, and since I don’t care which temperature sensor goes above 80 degrees
     Celsius (if any of them do, I want an alarm), that works.
+  id: totrans-354
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些系统可能具有数十种特定类型的传感器，这可能会使配置变得复杂。如果我的主板有15个温度传感器，我不想单独配置每个。幸运的是，你可以按类型批量配置传感器，而且由于我不关心哪个温度传感器会超过80摄氏度（如果任何一个超过，我想要一个警报），这很有效。
 - en: '[PRE34]'
+  id: totrans-355
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: 'When this rule is applied, `sensorsd` first looks for a configuration item
     for a specific sensor. If it doesn’t find that specific rule, it looks for a general
     rule. You can have one rule for most of your temperature sensors, and then override
     it for specific sensors, like this:'
+  id: totrans-356
   prefs: []
   type: TYPE_NORMAL
+  zh: 当应用此规则时，`sensorsd`首先寻找特定传感器的配置项。如果没有找到该特定规则，它会寻找通用规则。你可以为大多数温度传感器设置一个规则，然后为特定传感器覆盖它，如下所示：
 - en: '[PRE35]'
+  id: totrans-357
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: This rule says that most of my temperature sensors alarm at 80 degrees, but
     one specific sensor doesn’t alarm until 90 degrees.
+  id: totrans-358
   prefs: []
   type: TYPE_NORMAL
+  zh: 这条规则说明，我的大多数温度传感器在80度时发出警报，但一个特定的传感器直到90度才会发出警报。
 - en: I care about temperature, but I don’t care if my fancy keyboard sees that there’s
     no light and wants to trigger its back lighting. You can ignore a sensor, or a
     type of sensor, with the `istatus` keyword.
+  id: totrans-359
   prefs: []
   type: TYPE_NORMAL
+  zh: 我关心温度，但我不在乎我的花哨键盘看到没有光，想要触发其背光。你可以使用 `istatus` 关键字忽略一个传感器或传感器类型。
 - en: '[PRE36]'
+  id: totrans-360
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: You should categorically ignore certain types of alarms based on your environment
     and gear. Make up your own mind.
+  id: totrans-361
   prefs: []
   type: TYPE_NORMAL
+  zh: 你应该根据你的环境和设备完全忽略某些类型的警报。自己做出决定。
 - en: Sensors Triggering Action
+  id: totrans-362
   prefs:
   - PREF_H4
   type: TYPE_NORMAL
+  zh: 传感器触发动作
 - en: Having an entry in */var/log/daemon* for when a hard drive fails is nice, but
     it would be better if the system would send email, page you, or trigger your monitoring
     system. It should do something—*anything*—that doesn’t require you to log in and
     look at a log file. Fortunately, `sensorsd` can run arbitrary commands upon detecting
     a problem or crossing a threshold, using the `command` attribute.
+  id: totrans-363
   prefs: []
   type: TYPE_NORMAL
+  zh: 当硬盘故障时在 */var/log/daemon* 中有一个条目是好的，但如果系统会发送电子邮件、给你发短信或触发你的监控系统就更好了。它应该做些事情——*任何事*——不需要你登录并查看日志文件。幸运的是，`sensorsd`
+    可以在检测到问题或超过阈值时运行任意命令，使用 `command` 属性。
 - en: Thanks to the wide variety of sensors and their possible error states and conditions,
     `sensorsd` doesn’t have a fine-grained “run this command for an error, but run
     that other command for recovery.” There are too many possible error states and
@@ -1689,14 +2448,21 @@
     upon crossing any threshold or upon any state change, including when it starts
     up and the state of an individual sensor goes from “unknown” to whatever it starts
     at.
+  id: totrans-364
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于传感器种类繁多及其可能的错误状态和条件，`sensorsd` 没有细粒度的“对于错误运行此命令，但对于恢复运行那个其他命令。” 有太多可能的错误状态和条件，这使得这样做没有意义。相反，`sensorsd`
+    在超过任何阈值或任何状态变化时运行单个命令，包括启动时和单个传感器的状态从“未知”变为它开始时的状态。
 - en: 'Consider this *sensorsd.conf* entry:'
+  id: totrans-365
   prefs: []
   type: TYPE_NORMAL
+  zh: 考虑这个 *sensorsd.conf* 条目：
 - en: '[PRE37]'
+  id: totrans-366
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: At first glance, this reads “If the temperature is high, reboot the machine.”
     You think that will unquestionably kill whatever runaway process is saturating
     your heat-generating CPU (completely setting aside the fact that other hardware
@@ -1704,67 +2470,103 @@
     temperature state changes. The state changes at boot time, when the first temperature
     reading is taken, which means that your system will boot, and then immediately
     reboot. Your script needs intelligence.
+  id: totrans-367
   prefs: []
   type: TYPE_NORMAL
+  zh: 初看，这看起来像是“如果温度高，重启机器。” 你认为这将毫无疑问地杀死任何占用你发热 CPU 的失控进程（完全不考虑除了 CPU 之外的其他硬件也会产生热量的事实），但
+    `sensorsd` 将在温度状态变化时运行该命令。状态在启动时变化，当第一次读取温度时，这意味着你的系统将启动，然后立即重启。你的脚本需要智能。
 - en: 'To make scripting easier, `sensorsd` has a set of variables it can pass to
     a script:'
+  id: totrans-368
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了使脚本编写更容易，`sensorsd` 可以将一组变量传递给脚本：
 - en: '****`%1`****. Is the value within the limit set in *sensorsd.conf*? This can
     be one of `below`, `above`, `within`, `invalid`, or `uninitialized`.'
+  id: totrans-369
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`%1`****. 值是否在 *sensorsd.conf* 中设置的范围内？这可以是 `below`、`above`、`within`、`invalid`
+    或 `uninitialized` 之一。'
 - en: '****`%n`****. Sensor number.'
+  id: totrans-370
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`%n`****. 传感器编号。'
 - en: '****`%s`****. Sensor status.'
+  id: totrans-371
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`%s`****. 传感器状态。'
 - en: '****`%x`****. Which device the sensor sits on.'
+  id: totrans-372
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`%x`****. 传感器所在设备。'
 - en: '****`%t`****. Sensor type.'
+  id: totrans-373
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`%t`****. 传感器类型。'
 - en: '****`%2`****. Sensor’s current value.'
+  id: totrans-374
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`%2`****. 传感器的当前值。'
 - en: '****`%3`****. Sensor’s low limit'
+  id: totrans-375
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`%3`****. 传感器的下限'
 - en: '****`%4`****. Sensor’s high limit.'
+  id: totrans-376
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '****`%4`****. 传感器的上限。'
 - en: 'You might run a temperature command like this:'
+  id: totrans-377
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能运行一个温度命令如下：
 - en: '[PRE38]'
+  id: totrans-378
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: 'Your script */usr/local/script/temp* would take three arguments: the error
     condition, the temperature, and the sensor name. Your script would check these
     values and see if a reboot is warranted.'
+  id: totrans-379
   prefs: []
   type: TYPE_NORMAL
+  zh: 你的脚本 */usr/local/script/temp* 将接受三个参数：错误条件、温度和传感器名称。你的脚本将检查这些值，看看是否需要重启。
 - en: With `sensorsd`, proper timekeeping, and log file management, your OpenBSD system
     can largely look after itself.
+  id: totrans-380
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 `sensorsd`、正确的时间管理和日志文件管理，你的 OpenBSD 系统可以很大程度上自我管理。
 - en: In the next chapter, we’ll look at how OpenBSD can take care of other hosts.
+  id: totrans-381
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下一章中，我们将探讨 OpenBSD 如何照顾其他主机。
 - en: '* * *'
+  id: totrans-382
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[41](#id367882)]) Hey, I was running out of ways to annoy lasnyder—plausible
     ways, at least.
+  id: totrans-383
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[41](#id367882)]) 嘿，我快想不出怎么让 lasnyder 不高兴了——至少是合理的办法。
