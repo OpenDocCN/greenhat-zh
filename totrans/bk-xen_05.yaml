@@ -1,126 +1,183 @@
 - en: Chapter 5. NETWORKING
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第5章 网络
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题图片](httpatomoreillycomsourcenostarchimages333191.png.jpg)'
 - en: So you've got your nice, shiny Xen box all set up and running, and now you want
     it to talk to the outside world. This seems eminently reasonable. After all, Xen's
     primary use is server consolidation—and a non-networked server is a contradiction
     in terms. Well, you're in luck. Xen has a robust and well-tested network foundation,
     which is versatile and easy to set up.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，您已经拥有了一个漂亮、闪亮的Xen盒子，并且现在您希望它能够与外界通信。这似乎是理所当然的。毕竟，Xen的主要用途是服务器整合——一个没有网络的服务器在术语上就是矛盾的。好吧，您很幸运。Xen有一个强大且经过充分测试的网络基础，它既灵活又易于设置。
 - en: Like much of the rest of Xen, the networking infrastructure reuses as many standard
     tools as possible. In this case, Xen uses the standard bridge utilities and the
     `ip` command^([[33](#ftn.CHP-5-FNOTE-1)]) all glued together with some clever
     bash and Python scripts to handle traffic between the dom0 and domU network interfaces.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 就像Xen的许多其他部分一样，网络基础设施尽可能地重用标准工具。在这种情况下，Xen使用标准的桥接工具和`ip`命令^([[33](#ftn.CHP-5-FNOTE-1)])，所有这些都被一些巧妙的bash和Python脚本粘合在一起，以处理dom0和domU网络接口之间的流量。
 - en: As an administrator, your primary interaction with Xen virtual net devices is
     through the various config files. As you might expect, global parameters and initial
     setup are mostly handled by directives in *xend-config.sxp*. Domain-specific configuration
     is done within the domain's config file.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为管理员，您与Xen虚拟网络设备的主要交互是通过各种配置文件。正如您所预期的，全局参数和初始设置主要由*xend-config.sxp*中的指令处理。特定域的配置是在域的配置文件中完成的。
 - en: More advanced configuration can be done by modifying Xen's network scripts,
     stored in */etc/xen/scripts*.
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 可以通过修改存储在*/etc/xen/scripts*中的Xen网络脚本来进行更高级的配置。
 - en: If you are the sort that avoids a reboot at all costs, you can often directly
     manipulate Xen's network infrastructure while the VM is running through `brctl,
     iptables`, and the `xm` command, but these changes don't always successfully propagate
     to the domU. We will focus on the "manipulate the config file and reboot the domU"
     method here because it works in all situations.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您是那种不惜一切代价避免重启的人，您可以在VM运行时通过`brctl, iptables`和`xm`命令直接操作Xen的网络基础设施，但这些更改并不总是成功传播到domU。我们将重点关注“操作配置文件并重启domU”的方法，因为它在所有情况下都有效。
 - en: Xen's Network Setup Process
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: Xen的网络设置过程
 - en: 'Xen runs its network scripts at two points: at `xend` startup and at domain
     startup. (There are corresponding scripts for domain shutdown and `xend` stop.)'
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen在其网络脚本的两个点上运行：在`xend`启动时和在域启动时。（有对应于域关闭和`xend`停止的脚本。）
 - en: The role of the script run at `xend` startup (usually either `network-bridge`
     or `network-route`) is to switch from standard, non-Xen networking to Xen-based
     networking. In the case of `network-bridge`, for example, this script creates
     a bridge and assigns the physical Ethernet device to it. Then it initializes dom0's
     networking, creates a virtual interface, adds it to the bridge, and copies the
     configuration over to the bridged network device.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 在`xend`启动时运行的脚本（通常是`network-bridge`或`network-route`）的作用是将标准、非Xen网络切换到基于Xen的网络。例如，在`network-bridge`的情况下，此脚本创建一个桥接并分配物理以太网设备给它。然后它初始化dom0的网络，创建一个虚拟接口，将其添加到桥接中，并将配置复制到桥接网络设备上。
 - en: When Xen starts a domain, it executes the appropriate `vif-*` script—for example,
     `vif-bridge` in the case of `network-bridge`. The following shows the various
     scripts that would be run with the default setup.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 当Xen启动一个域时，它会执行适当的`vif-*`脚本——例如，在`network-bridge`的情况下，执行`vif-bridge`。以下显示了默认设置下将运行的各个脚本。
 - en: '[PRE0]'
+  id: totrans-11
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: Most of these scripts aren't terribly important to our purposes at the moment.
     For example, *logging.sh* is just sourced to provide a `log()` function. The main
     points we're interested in are the ones marked with ![](httpatomoreillycomsourcenostarchimages333215.png.jpg).
     These are good scripts to edit or good places to introduce a wrapper script.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些脚本中的大多数对我们目前的目的并不是非常重要。例如，*logging.sh*只是被源引用以提供`log()`函数。我们感兴趣的主要点是标记为![](httpatomoreillycomsourcenostarchimages333215.png.jpg)的地方。这些是编辑的好脚本或引入包装脚本的好地方。
 - en: These scripts are bash shell scripts (rather than Python, as one might expect
     from the fact that many of the other Xen configuration files are in Python). They
     all live in the */etc/xen/scripts* directory by default, alongside scripts to
     support the other classes of Xen virtual devices.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些脚本都是 bash shell 脚本（而不是像许多其他 Xen 配置文件那样是 Python）。它们默认都位于 */etc/xen/scripts*
+    目录中，与支持其他类 Xen 虚拟设备的脚本放在一起。
 - en: '* * *'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[33](#CHP-5-FNOTE-1)]) The IP command */sbin/ip* is the modern (unfortunately
     named) replacement for `ifconfig`. Get it as part of the iproute2 tool set, which
     offers similar functionality to net-tools but with added features.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[33](#CHP-5-FNOTE-1)]) IP 命令 */sbin/ip* 是现代（不幸地命名）的 `ifconfig` 替代品。它是 iproute2
+    工具集的一部分，提供了与 net-tools 类似的功能，但增加了额外的功能。
 - en: Defining Virtual Interfaces
+  id: totrans-16
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 定义虚拟接口
 - en: All of the Xen networking options work by creating virtual interfaces in dom0
     to serve as targets for bridging, `iptables` rules, and so on. Each virtual interface
     is defined by a section in the `vif=` line of the config file, delimited by a
     pair of single quotes.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有的 Xen 网络选项都是通过在 dom0 中创建虚拟接口来实现的，这些虚拟接口作为网桥、`iptables` 规则等的目标。每个虚拟接口都由配置文件中
+    `vif=` 行的一个部分定义，由一对单引号分隔。
 - en: Xen 3 supports up to eight virtual interfaces per domain (three prior to 3.1.)
     For example,
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen 3 支持每个域最多八个虚拟接口（3.1 之前是三个）。例如，
 - en: '[PRE1]'
+  id: totrans-19
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: defines three virtual interfaces and tells Xen to configure them with sensible
     defaults. Note that they're comma-separated *and* delimited, in accord with Python
     array syntax.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 定义了三个虚拟接口，并告诉 Xen 使用合理的默认值来配置它们。请注意，它们是逗号分隔的，并且与 Python 数组语法一致。
 - en: You can examine these virtual interfaces from the dom0 by typing
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可以通过在 dom0 中输入以下命令来检查这些虚拟接口
 - en: '[PRE2]'
+  id: totrans-22
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: This will output information for a bunch of devices of the form
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将输出一系列设备的详细信息
 - en: '[PRE3]'
+  id: totrans-24
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: where *`x`* and *`y`* are numbers. (You might see `tap` devices as well if you're
     using HVM. Just treat them like vifs for now.)
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 其中 *`x`* 和 *`y`* 是数字。（如果你在使用 HVM，你可能会看到 `tap` 设备。现在先将其视为 vifs 处理。）
 - en: Note
+  id: totrans-26
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Under recent Red Hat–derived distros (including CentOS 5.1 and Fedora 8),
     libvirt will create another bridge called* *`virbr0`*. *This bridge is set up
     for NAT by default and should be considered part of libvirt, rather than Xen.
@@ -130,8 +187,14 @@
     *to use Xen''s bridge, rather than libvirt''s. For the curious*, *`virbr`* *is
     configured by* /etc/libvirt/qemu/networks/default.xml. *You can disable the* *`virbr`*
     *devices by removing the symlink in* /etc/libvirt/qemu/networks/autostart.'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 在最近的基于 Red Hat 的发行版（包括 CentOS 5.1 和 Fedora 8）中，libvirt 将创建另一个名为 *`virbr0`* 的网桥。*这个网桥默认设置为
+    NAT，应被视为 libvirt 的一部分，而不是 Xen。它的工作方式与 Xen 的 *`network-nat`* 实现非常相似：dom0 在 *`virbr0`*
+    上运行 dnsmasq 服务器并为 domUs NAT 数据包。这对于桌面系统来说是一个合理的默认设置，但可能不适合服务器。要使用 Xen 的网桥而不是 libvirt
+    的，请指定 *`bridge=xenbr0`*。对于好奇者，*`virbr`* 是通过 /etc/libvirt/qemu/networks/default.xml
+    配置的。*你可以通过删除 /etc/libvirt/qemu/networks/autostart 中的符号链接来禁用 *`virbr`* 设备。*
 - en: Xen's default behavior is to give each virtual interface a name based on the
     domain number, where *`x`* is the domain number and *`y`* is the sequential number
     of the interface in the domU. For example, `vif2.0` is `eth0` in domain 2; `vif2.1`
@@ -140,163 +203,239 @@
     virtual interfaces on behalf of domains on domain startup. Thus, you'll see a
     varying number of them, depending on how many domains are running and how many
     network devices they have.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen 的默认行为是为每个虚拟接口分配一个基于域编号的名称，其中 *`x`* 是域编号，*`y`* 是 domU 中接口的顺序编号。例如，`vif2.0`
+    是域 2 中的 `eth0`；`vif2.1` 是域 2 中的 `eth1`。此外，机器中的每个物理网卡都会显示为一个 `peth` 设备（代表 *物理以太网*）。`xend`
+    在域启动时代表域创建这些虚拟接口。因此，你会看到不同数量的它们，这取决于运行了多少个域以及它们有多少个网络设备。
 - en: As we've stated before, the dom0 is a domain just like the rest, except for
     its ability to perform control-plane functions and its access to PCI devices.
     Therefore, `vif0.0` is domain 0's virtual `eth0` interface, and `vif0.1` is `eth1`
     in the dom0\. (Xen conveniently creates an alias from `eth`*`X`* to `vif0.`*`x`*.)
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们之前所述，dom0 是一个与其它一样的主域，只是它具有执行控制平面功能的能力以及访问 PCI 设备的能力。因此，`vif0.0` 是 dom0
+    的虚拟 `eth0` 接口，而 `vif0.1` 是 dom0 中的 `eth1`。（Xen 便利地通过将 `eth`*`X`* 映射到 `vif0.`*`x`*
+    来创建别名。）
 - en: Note
+  id: totrans-30
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*`veth`* *devices also show up in the dom0\. Don''t worry about them. They''re
     just used as scratch paper while* *`xend`* *copies information around*.'
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: '*`veth`* 设备也会出现在 dom0 中。不用担心它们。它们只是作为 *`xend`* 复制信息时的草稿纸。'
 - en: 'Ordinarily you can ignore the vifs while interacting with dom0\. However, there
     are a few things to note: Because `eth0` in dom0 is actually an alias for a virtual
     interface, it only sees traffic directed at dom0—domU traffic never reaches the
     alias. If you want to see the traffic going to the domUs with `tcpdump` or similar
     in dom0, you must look at the physical Ethernet card—that is, the appropriate
     `peth` interface.'
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常在与 dom0 交互时可以忽略 vifs。然而，有几个需要注意的事项：因为 dom0 中的 `eth0` 实际上是虚拟接口的别名，它只能看到指向 dom0
+    的流量——domU 流量永远不会到达这个别名。如果你想在 dom0 中使用 `tcpdump` 或类似工具查看发送到 domUs 的流量，你必须查看物理以太网卡——即适当的
+    `peth` 接口。
 - en: Also, the `peth` might have a strange MAC, usually FF:FF:FF:FF:FF:FF. Because
     no packets actually originate or terminate at the `peth` device, it doesn't need
     an actual MAC address.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 此外，`peth` 可能有一个奇怪的 MAC 地址，通常是 FF:FF:FF:FF:FF:FF。因为没有任何数据包实际上在 `peth` 设备上起源或终止，所以它不需要实际的
+    MAC 地址。
 - en: 'Finally, the virtual devices are provided by the netloop driver, and it defaults
     to only allowing eight virtual devices at a time. This value can be raised by
     increasing the value of the `nloopbacks` parameter:'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，虚拟设备由 netloop 驱动程序提供，默认情况下一次只允许八个虚拟设备。可以通过增加 `nloopbacks` 参数的值来提高这个值：
 - en: '[PRE4]'
+  id: totrans-35
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: If it's built into the kernel, you can boot the dom0 kernel with a higher value
     for `loopback.nloopbacks`. Simply append `netloop.nloopbacks=128` (or a similarly
     large value) to the `module` line that loads the Linux kernel in */boot/grub/menu.lst*.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果它是内置于内核中的，你可以使用更高的 `loopback.nloopbacks` 值来引导 dom0 内核。只需将 `netloop.nloopbacks=128`（或类似的大值）追加到
+    */boot/grub/menu.lst* 中的加载 Linux 内核的 `module` 行即可。
 - en: Naming Virtual Interfaces
+  id: totrans-37
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 虚拟接口命名
 - en: 'Accounting for bandwidth usage with this elaborate scheme of virtual interfaces
     can be tricky. Because the interface names are based on the domain number, and
     the domain number changes each time the domain reboots, it''s impractical to simply
     monitor bandwidth using the dom0''s internal counters—you''ll wind up with stuff
     like this:'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用这种复杂的虚拟接口方案来计算带宽使用情况可能很棘手。因为接口名称基于域编号，而域编号每次域重新启动时都会改变，所以简单地使用 dom0 的内部计数器来监控带宽是不切实际的——你最终会得到类似这样的东西：
 - en: '[PRE5]'
+  id: totrans-39
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: RE-INDEXING NAMES
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 重新索引名称
 - en: If you decide to use vifnames, you should probably note that the `mib` number
     of the interface might change on every reboot of the domU, though the symbolic
     name will remain the same.
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你决定使用 vifnames，你可能需要注意，尽管符号名称保持不变，但接口的 `mib` 数字在 domU 的每次重新启动时可能会改变。
 - en: Some SNMP monitoring software expects mib numbers to remain the same. When they
     change, the software interprets this as a new interface of the same name, which
     makes collecting cumulative statistics … difficult. You can often fix the madness
     by configuring your SNMP software to aggressively reindex names to numbers, rather
     than relying on its cache. It's just something to watch out for—not unfixable,
     but annoying. Check your specific monitoring software for details.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 一些 SNMP 监控软件期望 mib 数字保持不变。当它们改变时，软件将其解释为具有相同名称的新接口，这使得收集累积统计信息……变得困难。你通常可以通过配置你的
+    SNMP 软件以积极重新索引名称到数字，而不是依赖其缓存来解决这个问题。这只是需要注意的一点——不是无法修复，但很烦人。请查看您特定的监控软件的详细信息。
 - en: One way around this is to name the virtual interfaces so that the name becomes
     independent of the domain number. You can name virtual interfaces from within
     the domU config file by specifying the `vifname` parameter as part of the `vif=`
     configuration directive. For example,
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 一种解决方法是命名虚拟接口，使得名称与域编号无关。你可以在 domU 配置文件中通过指定 `vifname` 参数作为 `vif=` 配置指令的一部分来命名虚拟接口。例如，
 - en: '[PRE6]'
+  id: totrans-44
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'would cause the `vif` in the dom0 to become `http` rather than `vif`*`x`*`.`*`y`*.
     (Within the domain, of course, it just shows up as `eth0`.) If the domain has
     multiple interfaces, specify them as follows:'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 这将导致 dom0 中的 `vif` 变为 `http` 而不是 `vif`*`x`*`.`*`y`*。（当然，在域内部，它只显示为 `eth0`。）如果域有多个接口，可以按照以下方式指定它们：
 - en: '[PRE7]'
+  id: totrans-46
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: As of this writing, you'll then need to stop and start the domain to force it
     to reread the config file; a simple reboot won't work.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，你需要停止和启动域以强制它重新读取配置文件；简单的重启不起作用。
 - en: 'With the `vifname` specified, we can stop and start the domain. Here we shut
     down a domain:'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 指定了 `vifname` 后，我们可以停止和启动域。这里我们关闭一个域：
 - en: '[PRE8]'
+  id: totrans-49
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: Note that the device is simply `vif6.0`. Now start it up.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE9]'
+  id: totrans-51
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: TRUNCATED VIFNAMES
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
 - en: Linux silently truncates the `vifname` to 15 characters—it'll ignore any input
     beyond that without raising an error. Thus, for a `vif named wiki.xen.prgmr.com`,
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE10]'
+  id: totrans-54
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: first 15 characters, including the dot) or
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE11]'
+  id: totrans-56
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: or
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE12]'
+  id: totrans-58
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: will work, but
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE13]'
+  id: totrans-60
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: will fail with an `ENODEV` (a "no such device" or "device not found" error).
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
 - en: Note that 15-character vifnames cause problems with some versions of iptables.
     Keep your vifnames to 8 characters to be safe.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
 - en: Autoconfiguration
+  id: totrans-63
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'You can just leave the `vif=` line blank and let `xm` generate the entire configuration
     automatically, like so:'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE14]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: This scenario has the advantage of allowing the domU administrator to configure
     the network with complete freedom from within the domU, using whatever tools are
     most convenient. This is the most accurate way of simulating a physical machine.
     Xen can generate IP and MAC addresses itself, if need be, and configure them to
     work without administrator intervention.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
 - en: However, we don't recommend this because it leaves configuration of the network
@@ -305,9 +444,11 @@
     faking the source or destination address in his IP header, and specify a MAC address
     to avoid the possiblity of conflict. An IP or MAC address conflict can take down
     your network! Avoid it if at all possible.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
 - en: MYSTERIOUS INCREASING INTERFACE NUMBERS
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
 - en: One other problem that you can avoid by specifying a MAC address is the domU
@@ -315,15 +456,18 @@
     believe that each new address is a new card, so that it uses eth1 on the second
     boot, eth2 on the third, and so on. Upon seeing the new MAC address, udev believes
     it's found a new card.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
 - en: The easy solution is to specify a MAC address in the domain config file, and
     clear out udev's cache in */etc/udev/rules.d/z25_persistent-net.rules*. This should
     cause the device to come up as eth0 on the next boot and stay eth0, since it's
     not getting a random address anymore.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
 - en: Specifying a MAC Address
+  id: totrans-71
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -331,6 +475,7 @@
     job of ensuring that each Ethernet device has a unique MAC address. With Xen,
     however, it becomes the administrator's responsibility to ensure that each virtual
     interface has a unique hardware address.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
 - en: First, think back for a moment to the 7-layer OSI network model. Xen interacts
@@ -339,6 +484,7 @@
     of these layers require the Xen domain to have a unique address. The antispoof
     rules and `ip` directive can take care of that for layer 3; however, you are also
     likely going to want to specify a MAC address.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
 - en: 'Xen can simply make one up, but this results in a relatively high probability
@@ -350,11 +496,17 @@
     for your obscure math trivia.) Considering the huge yuckiness of a MAC address
     conflict, we suggest always manually specifying the MAC address. Do this by changing
     your `vif=` line to include a `mac=` section, like so:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen 可以简单地创建一个，但这会导致相对较高的冲突概率。当 Xen 为您选择 MAC 地址时，它从 IEEE 注册机构分配给 Xen 的 00:16:3e
+    前缀开始，并随机选择剩余的三个字节；这意味着您有 3 个字节的熵。在一个网络上的 1,000 个主机（大多数是 /22 的部分）中，这给您大约 3% 的冲突概率。（您可以使用生日悖论来计算这一点——这是您那些不为人知的数学趣闻的绝佳用途。）考虑到
+    MAC 地址冲突的巨大问题，我们建议始终手动指定 MAC 地址。这样做是通过更改您的 `vif=` 行以包含一个 `mac=` 部分，如下所示：
 - en: '[PRE15]'
+  id: totrans-75
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'Here at prgmr.com, we pick a 2-byte prefix and append the IP address in hex
     because the IP address is already unique. There are some important rules when
     doing this, though: First, the most significant bit should be zero; second, the
@@ -363,52 +515,78 @@
     basic formula: Make the second hex digit of the first octet (*e* in the above
     example) one of 2, 6, A, or E. (Of course, you can avoid having to worry about
     this by using the Xen prefix mentioned above.)'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 prgmr.com，我们选择一个 2 字节前缀，并以十六进制形式附加 IP 地址，因为 IP 地址已经唯一。尽管如此，在进行此操作时还有一些重要的规则：首先，最高有效位应该是零；其次，地址应该是“本地分配”块的一部分，以避免与真实以太网硬件可能发生的冲突。幸运的是，这些规则可以简化为一个基本公式：将第一个八位字节（如上例中的
+    *e*）的第二十六进制位设置为 2、6、A 或 E。（当然，您可以通过使用上面提到的 Xen 前缀来避免担心这一点。）
 - en: Manipulating vifs with xm
+  id: totrans-77
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 xm 操作 vif
 - en: Although we ordinarily modify networking settings indirectly through the config
     files, it's also possible to make changes directly using `xm`.
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 尽管我们通常通过配置文件间接修改网络设置，但也可以直接使用 `xm` 进行更改。
 - en: The relevant commands are `network-attach` and `network-detach`. Using `network-attach`,
     you can create a new virtual NIC as if it had been specified in the config file,
     with options specified on the command line. For example,
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 相关的命令是 `network-attach` 和 `network-detach`。使用 `network-attach`，您可以通过命令行指定选项来创建一个新的虚拟网卡，就像它在配置文件中指定过一样。例如，
 - en: '[PRE16]'
+  id: totrans-80
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: If you don't specify the various parameters, Xen will supply default values,
     just as if they'd been unspecified in the `vif=` line of the config file.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果您没有指定各种参数，Xen 将提供默认值，就像它们在配置文件的 `vif=` 行中未指定一样。
 - en: Similarly, `network-detach` will detach a `vif` from the domU and destroy it.
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 类似地，`network-detach` 将从 domU 中断开一个 `vif` 并将其销毁。
 - en: '[PRE17]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: The preceding command will remove `eth0` from the domain [wiki.xen.prgmr.com](http://wiki.xen.prgmr.com).
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 上述命令将从域 [wiki.xen.prgmr.com](http://wiki.xen.prgmr.com) 中移除 `eth0`。
 - en: Securing Xen's Virtual Network
+  id: totrans-85
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 保护 Xen 的虚拟网络
 - en: From a security standpoint, there are two aspects of Xen networking that bear
     mentioning. First, we want to make sure that the users can't pretend to be someone
     they're not. This is addressed by specifying an IP address and enabling the antispoofing
     rules. Second, we want to protect the dom0 while letting traffic through to the
     domUs. This is easily handled by appropriate `iptables` rules.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 从安全角度来看，Xen 网络有两个方面值得注意。首先，我们想确保用户不能假装成他们不是的人。这通过指定 IP 地址和启用反欺骗规则来解决。其次，我们想保护
+    dom0 同时允许流量通过到 domUs。这可以通过适当的 `iptables` 规则轻松处理。
 - en: Specifying an IP Address
+  id: totrans-87
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 指定 IP 地址
 - en: The antispoofing rules use `iptables` to ensure that the Xen box will drop packets
     that don't match the expected address for the `vif` that they're coming from,
     thus protecting your network from a rogue domU. The network scripts set this up
@@ -416,119 +594,176 @@
     that IP address to pass to the domU's network device. (The function that does
     this is in *vif-common.sh*, for the curious.) For this to work, your FORWARD chain
     should have a policy of DROP—`network-bridge` should handle that automatically.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 防欺骗规则使用`iptables`确保Xen盒子会丢弃不匹配来自`vif`的预期地址的数据包，从而保护您的网络免受恶意domU的侵害。网络脚本使用`iptables`添加规则到FORWARD链，允许匹配该IP地址的数据包通过到domU的网络设备。（执行此操作的功能在*vif-common.sh*中，供好奇者参考。）为了使其工作，您的FORWARD链应该有一个DROP策略——`network-bridge`应该自动处理这一点。
 - en: We use antispoofing with `network-bridge. network-route` adds similar rules.
     It's known to not work with `network-nat`.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们使用防欺骗功能，`network-route`通过添加类似规则来实现。已知它不与`network-nat`一起工作。
 - en: 'Add the following to */etc/xen/xend-config.sxp*:'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 将以下内容添加到*/etc/xen/xend-config.sxp*：
 - en: '[PRE18]'
+  id: totrans-91
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'and set the following in the domain config file:'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 并在域配置文件中设置以下内容：
 - en: '[PRE19]'
+  id: totrans-93
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: (Use an appropriate IP and bridge for your site, obviously.)
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: (显然，为您的站点使用合适的IP和网桥。)
 - en: You can also specify a range of IP addresses in CIDR format (*CIDR* stands for
     *Classless Inter-Domain Routing*); that is, with a slash and the number of bits
     set in the netmask, in decimal. For example, to allow 10\. anything, the previous
     line could be rewritten as
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 您还可以指定CIDR格式的IP地址范围（*CIDR*代表*无类别域间路由*）；即，使用斜杠和设置在子网掩码中的位数，以十进制表示。例如，要允许10\.
+    anything，上一行可以重写为
 - en: '[PRE20]'
+  id: totrans-96
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: This doesn't keep the domU administrator from changing the domU's IP address,
     but it does block any packets from that changed IP address.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 这并不能阻止domU管理员更改domU的IP地址，但它确实阻止了来自该更改IP地址的任何数据包。
 - en: Firewalling the Dom0
+  id: totrans-98
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 防火墙Dom0
 - en: With Xen's networking, the INPUT and OUTPUT chains don't affect packets aimed
     at the domUs. Thus, standard firewalls on the INPUT chain, like Red Hat's, won't
     affect domU packets. (domUs themselves, of course, can firewall their own virtual
     network devices as needed.)
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 在Xen的网络中，INPUT和OUTPUT链不会影响针对domUs的数据包。因此，标准防火墙的INPUT链，如Red Hat的，不会影响domU数据包。（当然，domUs本身可以根据需要防火墙自己的虚拟网络设备。）
 - en: Note
+  id: totrans-100
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Many systems, by default, don''t send bridge traffic through the FORWARD chain
     as you would expect—RHEL/CentOS 5.1 is an example of this problem. This causes
     the antispoofing rules to not work. A simple* *`echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables`*
     *solves the problem. Add that line to* /etc/xen/scripts/network-bridge *to have
     it run automatically when Xen sets up its networking*.'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: '*许多系统默认情况下不会像预期的那样将桥接流量发送到FORWARD链——RHEL/CentOS 5.1就是这个问题的一个例子。这导致防欺骗规则无法工作。简单的*
+    *`echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables`* *可以解决这个问题。将该行添加到* /etc/xen/scripts/network-bridge
+    *以使其在Xen设置其网络时自动运行*。'
 - en: 'The only problem that we''ve seen with sending domU packets through the FORWARD
     chain is that, by default, the dom0 includes them in its connection tracking.
     On heavily loaded machines, the connection table will fill up, and the machine
     will drop packets. Our solution is to edit the `frob_iptable()` function in `vif-bridge`
     to include a rule like the following:'
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们在通过FORWARD链发送domU数据包时遇到的问题仅在于，默认情况下，dom0会将它们包含在其连接跟踪中。在负载很重的机器上，连接表会填满，机器会丢弃数据包。我们的解决方案是编辑`vif-bridge`中的`frob_iptable()`函数，添加如下规则：
 - en: '[PRE21]'
+  id: totrans-103
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: This lets antispoof work and keeps the domU traffic from interfering with the
     dom0, while allowing the domUs to have unhindered access to their packets.
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 这使得防欺骗功能可以正常工作，同时阻止domU流量干扰dom0，同时允许domUs无障碍地访问其数据包。
 - en: Networking with network-route
+  id: totrans-105
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用network-route进行网络连接
 - en: '`network-route` is the original option chosen by the Xen team (and few have
     used it since). It works by creating an internal IP router, which forwards traffic
     to and from the guest domains. Note that it doesn''t do address translation—for
     that you''ll want `network-nat`, or `virbr`. It has largely been superseded by
     `network-bridge`, which allows considerably more flexibility.'
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: '`network-route`是Xen团队最初选择的原选项（并且自那时以来很少有人使用）。它通过创建一个内部IP路由器来实现，该路由器将流量转发到和从客户域。请注意，它不执行地址转换——为此您需要`network-nat`或`virbr`。它已被`network-bridge`取代，这提供了更多的灵活性。'
 - en: '`network-route` does have its place, however. For one thing, it is transparent
     to the upstream network hardware, unlike `network-bridge`. For another thing,
     it''s much simpler. `network-route` simply enables IP forwarding and then creates
     `iptables` rules in the dom0 to forward traffic to the correct virtual interfaces.'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 然而，`network-route`确实有其用武之地。一方面，它与上游网络硬件相比是透明的，与`network-bridge`不同。另一方面，它要简单得多。`network-route`只是启用IP转发，然后在dom0中创建`iptables`规则以将流量转发到正确的虚拟接口。
 - en: To use `network-route`, just uncomment the lines
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 要使用`network-route`，只需取消注释相应的行
 - en: '[PRE22]'
+  id: totrans-109
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'and comment out the corresponding `network-bridge` and `vif-bridge` lines.
     That''s really all there is to it. Restart `xend`, and `iptables` will show a
     new rule that handles forwarding to the `vif`:'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 并取消注释相应的`network-bridge`和`vif-bridge`行。这就是全部内容。重新启动`xend`，`iptables`将显示一个新的规则来处理转发到`vif`：
 - en: '[PRE23]'
+  id: totrans-111
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: 'One common "gotcha" with `network-route` is that it only works if the IP address
     is specified in the `vif=` line—otherwise the script doesn''t know what rules
     to add. So, at minimum, the interface definition for the example above should
     look like this:'
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: '`network-route`的一个常见“陷阱”是它只有在`vif=`行中指定了IP地址时才起作用——否则脚本不知道要添加哪些规则。因此，至少，上述示例的接口定义应该如下所示：'
 - en: '[PRE24]'
+  id: totrans-113
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: Networking with network-bridge
+  id: totrans-114
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用`network-bridge`进行网络连接
 - en: '`network-bridge` is the currently accepted standard way of handling networking
     for guest domains in Xen. It uses the bridge tools in Linux to create a virtual
     layer 2 switch, to which it "plugs in" Xen virtual interfaces, as shown in [Figure 5-1](ch05s06.html#some_of_network-bridges_capabilities
@@ -537,16 +772,21 @@
     AoE, the pre-TCP/IP version of AppleTalk, NetBEUI, IPX, and a host of other protocols
     that date from the dark ages. It''ll also work seamlessly with DHCP, which relies
     on broadcast packets. It''s simple, logical, and robust.'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: '`network-bridge`是处理Xen中虚拟域网络的标准方式。它使用Linux中的桥接工具创建一个虚拟的第二层交换机，并将Xen虚拟接口“插入”其中，如图[图5-1](ch05s06.html#some_of_network-bridges_capabilities
+    "图5-1. `network-bridge`的一些功能")所示。它具有与期望未受污染的以太网帧的协议一起工作的优势。这包括AoE、TCP/IP之前的AppleTalk版本、NetBEUI、IPX以及许多来自黑暗时代的其他协议。它还将无缝地与DHCP一起工作，DHCP依赖于广播数据包。它简单、逻辑性强且稳健。'
 - en: The biggest disadvantage of `network-bridge` (apart from its complexity) is
     that it tears down and rebuilds the real network interface when `xend` starts.
     In some scenarios (for example, when dom0 has an NFS root) this can be unacceptable.
     This isn't a limitation of bridging, per se, only of attaching the bridge to the
     dom0 network device using the Xen scripts—if a dedicated physical device is used
     for the bridge, the problem goes away.
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: '`network-bridge`（除了其复杂性之外）的最大缺点是当`xend`启动时，它会拆解并重建真实的网络接口。在某些场景下（例如，当dom0有NFS根时），这可能是不被接受的。这并不是桥接本身的限制，而是使用Xen脚本将桥接附加到dom0网络设备时的限制——如果为桥接使用专用物理设备，问题就会消失。'
 - en: Another issue with `network-bridge` is that it places the physical Ethernet
     device into promiscuous mode. This can be a tremendous resource hog on busy networks
     because the CPU has to intercept all packets rather than just those intended for
@@ -555,274 +795,411 @@
     wireless networking hardware. This also throws many layer 2 http load balancers
     through a loop—anything that expects only one MAC address down each Ethernet port
     will be sorely confused.
+  id: totrans-117
   prefs: []
   type: TYPE_NORMAL
+  zh: '`network-bridge`的另一个问题是它将物理以太网设备置于混杂模式。在繁忙的网络中，这可能会极大地消耗资源，因为CPU必须拦截所有数据包，而不仅仅是那些针对其地址的数据包。最后，出站数据包将具有与物理卡上不同的MAC地址，这可能导致与某些无线网络硬件的问题。这也使许多第二层HTTP负载均衡器陷入循环——任何只期望每个以太网端口只有一个MAC地址的东西都会感到非常困惑。'
 - en: '![Some of network-bridge''s capabilities](httpatomoreillycomsourcenostarchimages333217.png.jpg)'
+  id: totrans-118
   prefs: []
   type: TYPE_IMG
+  zh: '![`network-bridge`的一些功能](httpatomoreillycomsourcenostarchimages333217.png.jpg)'
 - en: Figure 5-1. Some of network-bridge's capabilities
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 图5-1. `network-bridge`的一些功能
 - en: Even with these caveats, we recommend `network-bridge` for most Xen servers.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 即使有这些注意事项，我们仍然推荐在大多数Xen服务器上使用`network-bridge`。
 - en: 'You can start the `network-bridge` script by hand if you like. For example,
     to manually create a bridge with the default name `xenbr0` attached to `eth0`,
     type the following:'
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你喜欢，可以手动启动`network-bridge`脚本。例如，要手动创建一个名为`xenbr0`的桥接器，并将其附加到`eth0`，请输入以下内容：
 - en: '[PRE25]'
+  id: totrans-122
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: Note
+  id: totrans-123
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*If you have* *`vifnum`* *set above* *`nloopbacks`*, *even if you only have
     one bridge, Linux will complain as if you had more bridges than loopbacks. This
     is because Xen uses the* *`vifnum`* *to determine the number of the virtual device
     it uses for the frontend, which presupposes the existence of the preceding virtual
     devices. Increase* *`nloopbacks`*, *and everyone is happy*.'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: '*如果你将* *`vifnum`* *设置在* *`nloopbacks`* *之上* *，即使你只有一个桥接，Linux 也会抱怨好像你有比回环更多的桥接。这是因为
+    Xen 使用 *`vifnum`* 来确定它用于前端虚拟设备的数量，这假设了前面虚拟设备的存在。增加 *`nloopbacks`*，*这样每个人都会满意*。'
 - en: '`network-bridge` is the default networking option, thus `xend` shouldn''t need
     any configuration to use it. However, for completeness—to configure Xen to use
     `network-bridge`, modify *xend-config.sxp* to include the line'
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: '`network-bridge` 是默认的网络选项，因此 `xend` 不需要任何配置即可使用。然而，为了完整性——要配置 Xen 使用 `network-bridge`，修改
+    *xend-config.sxp* 以包含以下行'
 - en: '[PRE26]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: Note
+  id: totrans-127
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*OpenSUSE users might find that NetworkManager interferes with Xen''s bridging.
     To fix this problem, go to* YaST ► Network Devices ► Network Card *and select
     the* Traditional Method with ifup *option*.'
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: '*OpenSUSE 用户可能会发现 NetworkManager 会干扰 Xen 的桥接。要解决这个问题，请前往* YaST ► 网络设备 ► 网络卡
+    *并选择* 使用 ifup 的传统方法 *选项*。'
 - en: 'This script causes Xen to use a bridge setup much like the following:'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 此脚本导致 Xen 使用类似于以下设置的桥接：
 - en: '[PRE27]'
+  id: totrans-130
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: '`xenbr0` is, obviously, the name of the bridge. It bridges dom0''s virtual
     Ethernet interface (`vif0.0`), the physical Ethernet card, and a domU''s virtual
     interface. We can also see that STP (Spanning Tree Protocol) is disabled. In the
     default configuration, further domUs will simply have their interfaces added to
     this bridge.'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: '`xenbr0` 显然是桥的名字。它连接了 dom0 的虚拟以太网接口 (`vif0.0`)、物理以太网卡和一个 domU 的虚拟接口。我们还可以看到
+    STP（生成树协议）已被禁用。在默认配置中，进一步的 domUs 将简单地将其接口添加到该桥上。'
 - en: STP is aimed at preventing loops in the network. You may want to turn STP on
     if you're doing anything complex with the virtual bridges. If you have multiple
     bridges and multiple network ports that you're using with Xen, it would probably
     be a good idea.
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: STP 的目的是防止网络中的环路。如果你在使用虚拟桥接进行任何复杂操作，你可能需要开启 STP。如果你有多个桥接和多个你与 Xen 一起使用的网络端口，这可能是个好主意。
 - en: 'To rename the bridge, you can specify the bridge name as an option to the `network-bridge`
     script:'
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 要重命名桥，你可以在 `network-bridge` 脚本中指定桥名作为选项：
 - en: '[PRE28]'
+  id: totrans-134
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: Note also that `network-bridge` defaults to binding `eth0` to the bridge. To
     change the physical network card, use
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 还要注意，`network-bridge` 默认将 `eth0` 绑定到桥接。要更改物理网络卡，请使用
 - en: '[PRE29]'
+  id: totrans-136
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: Then the bridge setup becomes
+  id: totrans-137
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后桥接设置变为
 - en: '[PRE30]'
+  id: totrans-138
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: Networking with network-nat
+  id: totrans-139
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用 network-nat 进行网络连接
 - en: '`network-nat` is an extension of `network-route` that incorporates network
     address translation (NAT for short, or IP masquerade in some contexts).'
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: '`network-nat` 是 `network-route` 的扩展，它包含了网络地址转换（简称 NAT，或在某些情况下称为 IP 伪装）。'
 - en: 'The `network-nat` script supplied with Xen works around `network-route`''s
     problem with DHCP in two ways. First, it can start a local DHCP server (so that
     guest domains can get addresses because they''re now behind a router). If that''s
     undesirable, it can create locally unique IP addresses using the domain ID. Then
     it sets up a standard `iptables` rule for IP `masq`:'
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: Xen 伴随提供的 `network-nat` 脚本以两种方式绕过 `network-route` 的 DHCP 问题。首先，它可以启动一个本地 DHCP
+    服务器（因此虚拟域可以获得地址，因为它们现在位于路由器后面）。如果这不可取，它可以使用域 ID 创建本地唯一的 IP 地址。然后它设置一个标准的 `iptables`
+    规则用于 IP `masq`：
 - en: '[PRE31]'
+  id: totrans-142
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: When a domain starts, it gets an IP address and adds appropriate `iptables`
     rules for itself. Xen passes the address to the kernel using the kernel-level
     IP autoconfiguration mechanism at boot (and isn't that a mouthful). `network-nat`
     can also integrate with your DHCP server.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
+  zh: 当域启动时，它会获得一个 IP 地址并为自身添加适当的 `iptables` 规则。Xen 在引导时使用内核级 IP 自动配置机制将地址传递给内核（这不是很复杂吗）。`network-nat`
+    也可以与你的 DHCP 服务器集成。
 - en: '[PRE32]'
+  id: totrans-144
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: This shows the default configured IP address for `eth0` in domain 2\. Actual
     numbers will vary depending on your setup, of course.
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
+  zh: 这显示了域 2 中 `eth0` 的默认配置 IP 地址。实际数字当然会根据你的设置而变化。
 - en: Configuration Variables
+  id: totrans-146
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 配置变量
 - en: 'As we''ve mentioned, the two basic places where the administrator interacts
     with Xen''s networking are in */etc/xen/xend-config.sxp* and in the domain config
     file. In each of these, you focus on one line: the `(network-script)` line in
     the former case and the `vif=` line in the latter.'
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如我们提到的，管理员与 Xen 网络交互的两个基本地方是在 */etc/xen/xend-config.sxp* 和域配置文件中。在这些文件中，你关注的是一行：前者的
+    `(network-script)` 行和后者的 `vif=` 行。
 - en: Each of these will fail horribly, without explanation, over trivial errors in
     syntax. (This is Python, after all. You can put arbitrary Python code right in
     your config files, if you like. Configuration files should always be written in
     a language that's Turing-complete. Just ask Eric Allman.)
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些都会因为语法上的微小错误而严重失败，没有任何解释。（毕竟，这是Python。如果你喜欢，你可以在配置文件中直接放置任意Python代码。配置文件应该始终使用一种Turing完整的语言编写。问问埃里克·奥勒曼就知道了。）
 - en: 'The `network-script` line is wrapped in parentheses, with arguments in quotes
     and separated by spaces. For example, the following is valid:'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
+  zh: '`network-script`行被括号包围，参数用引号括起来，并用空格分隔。例如，以下是一个有效的示例：'
 - en: '[PRE33]'
+  id: totrans-150
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: 'We''ve already discussed the `vif=` line a bit. Note that the `vif` configuration
     uses a completely different syntax from the network script setting, though: brackets
     with commas between arguments.'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们已经讨论了`vif=`行。请注意，`vif`配置使用与网络脚本设置完全不同的语法，即参数之间用逗号分隔的括号。
 - en: '[PRE34]'
+  id: totrans-152
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: This line configures three interfaces, the first with default parameters, the
     second with a bridge argument, the third with bridge and IP. Note the commas between
     both separate interfaces and separate arguments.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: 这行配置了三个接口，第一个使用默认参数，第二个使用桥接参数，第三个使用桥接和IP。注意两个单独接口和单独参数之间的逗号。
 - en: Finally, in some examples you will see a `dhcp=yes` line. The `dhcp=` line isn't
     necessary unless the kernel needs to get its address at boot—for example, if it's
     mounting its root filesystem over NFS.
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，在一些示例中，你会看到一个`dhcp=yes`行。除非内核在启动时需要获取其地址（例如，如果它正在通过NFS挂载其根文件系统），否则`dhcp=`行不是必需的。
 - en: Custom Network Scripts
+  id: totrans-155
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 自定义网络脚本
 - en: 'You might be thinking at this point that it''s overkill to specify a configuration
     script in the Xen config file rather than simply selecting among built-in options.
     Take our word for it: The ability to specify your own network script is fantastically
     useful. Because Xen''s networking is built on standard tools, the scripts are
     easy to understand and tailor to your particular needs.'
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
+  zh: 你可能此时会想，在Xen配置文件中指定配置脚本而不是简单地选择内置选项是过度杀鸡用牛刀。但请相信我们：指定自己的网络脚本的能力非常实用。因为Xen的网络建立在标准工具之上，所以脚本易于理解并可以根据你的特定需求进行定制。
 - en: The easiest way to do this, and a sufficient method for most configurations,
     is to create a small wrapper script that calls the standard Xen scripts with appropriate
     arguments. You can also modify the standard scripts to source additional functions
     and call those as necessary—for example, to modify firewall rules or attach monitoring
     scripts.
+  id: totrans-157
   prefs: []
   type: TYPE_NORMAL
+  zh: 做这件事最简单的方法，也是大多数配置的足够方法，是创建一个小的包装脚本，该脚本使用适当的参数调用标准Xen脚本。你也可以修改标准脚本以源额外的函数并在需要时调用它们——例如，修改防火墙规则或附加监控脚本。
 - en: Multiple-Bridge Setups
+  id: totrans-158
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 多桥配置
 - en: Consider a scenario where you want inter-domU communication to occur on a purely
     virtual network, with a separate interface in each domain to communicate with
     the outside world.
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 考虑一个场景，你希望在纯虚拟网络上进行跨域U通信，每个域都有一个单独的接口与外界通信。
 - en: In that case, you would create a pair of bridges, one with the default Xen setup,
     bridging the physical interface with the virtual ones, and one that bridges only
     virtual interfaces. Then you would specify both interfaces in the domain config
     file and configure them as normal from within the domain or the config file.
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: 在那种情况下，你需要创建一对桥梁，一个使用默认的Xen设置，将物理接口与虚拟接口桥接，另一个只桥接虚拟接口。然后你需要在域配置文件中指定这两个接口，并在域内或配置文件中正常配置它们。
 - en: 'The wrapper would look something like this:'
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 包装器可能看起来像这样：
 - en: '[PRE35]'
+  id: totrans-162
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: This calls `network-bridge` twice, the first time as normal and the second time
     with a `netdev` argument, causing `network-bridge` to use a dummy network device
     rather than a real one.
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
+  zh: 这会调用`network-bridge`两次，第一次是正常调用，第二次带有`netdev`参数，导致`network-bridge`使用虚拟网络设备而不是真实设备。
 - en: 'To tell `xend` to run this script at startup, change the `network-script` line
     in *xend-config.sxp* as follows:'
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 要让`xend`在启动时运行此脚本，请按照以下方式更改`xend-config.sxp`中的`network-script`行：
 - en: '[PRE36]'
+  id: totrans-165
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'
 - en: Make sure that the `my-wrapper` script is executable, or else nothing will work.
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 确保`my-wrapper`脚本可执行，否则将无法正常工作。
 - en: 'To use these bridges from the domUs, specify the correct bridge in the `vif=`
     line:'
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: 要从domUs使用这些桥梁，请在`vif=`行中指定正确的桥梁：
 - en: '[PRE37]'
+  id: totrans-168
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE37]'
 - en: Bridged and Routing
+  id: totrans-169
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 桥接和路由
 - en: A slight modification to this scenario puts the domU communication on its own
     bridge, which is then routed via `iptables` rules in the dom0, as shown in [Figure 5-2](ch05s09.html#combining_bridging_and_routing
     "Figure 5-2. Combining bridging and routing"). (Arjen Runsink, who wrote a script
     that does this, calls this a *brouter*—a portmanteau of bridge and router.)
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: 对这个场景进行轻微修改，将domU通信放在自己的桥接器上，然后通过dom0中的`iptables`规则进行路由，如图[图5-2](ch05s09.html#combining_bridging_and_routing
+    "图5-2. 结合桥接和路由")所示。（编写了执行此操作的脚本的Arjen Runsink称这为*brouter*——桥接和路由的组合。）
 - en: '![Combining bridging and routing](httpatomoreillycomsourcenostarchimages333219.png.jpg)'
+  id: totrans-171
   prefs: []
   type: TYPE_IMG
+  zh: '![结合桥接和路由](httpatomoreillycomsourcenostarchimages333219.png.jpg)'
 - en: Figure 5-2. Combining bridging and routing
+  id: totrans-172
   prefs: []
   type: TYPE_NORMAL
+  zh: 图5-2. 结合桥接和路由
 - en: This creates a standard bridge, but it doesn't attach the physical device to
     it. Instead the bridge gets an IP address and a route. When a domU starts, its
     `vif` is attached to the bridge by the ordinary `vif-bridge` script.
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
+  zh: 这创建了一个标准桥接器，但它并没有将物理设备附加到它上。相反，桥接器获得了一个IP地址和路由。当domU启动时，它的`vif`通过普通的`vif-bridge`脚本附加到桥接器上。
 - en: 'Omitting the standard functions and such, the script looks something like this:'
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 忽略标准函数等，脚本看起来大致如下：
 - en: '[PRE38]'
+  id: totrans-175
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE38]'
 - en: We've cut out the `show_status` function to save space; the full version of
     this script is available at [http://en.opensuse.org/Xen3_and_a_Virtual_Network](http://en.opensuse.org/Xen3_and_a_Virtual_Network).
     We've also removed the default values for parameters like `$bridgeip` because
     that's site specific, and we removed the declarations for `create_bridge` and
     `add_to_bridge` because those are provided by `xen-network-common`.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们删除了`show_status`函数以节省空间；此脚本的完整版本可在[http://en.opensuse.org/Xen3_and_a_Virtual_Network](http://en.opensuse.org/Xen3_and_a_Virtual_Network)找到。我们还删除了像`$bridgeip`这样的参数的默认值，因为那是特定于站点的，并且我们删除了`create_bridge`和`add_to_bridge`的声明，因为这些由`xen-network-common`提供。
 - en: 'Call this script with a pair of lines like the following in */etc/xen/xend-config.sxp*:'
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 在*/etc/xen/xend-config.sxp*中使用以下两行调用此脚本：
 - en: '[PRE39]'
+  id: totrans-178
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE39]'
 - en: Further Thoughts
+  id: totrans-179
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 进一步思考
 - en: Variants of this same technique can be used to provide logging and accounting
     on a per-domain basis, or they can set up domain-specific firewall rules just
     by editing the network scripts. Ultimately, Xen's networking infrastructure is
     so flexible that you're able to do anything with a domU that you can with the
     dom0 (or, for that matter, with a non-Xen system), and there are enough script
     hooks to do it in an automated fashion.
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 这种技术的变体可以用于在特定域的基础上提供日志记录和会计功能，或者只需编辑网络脚本即可设置特定域的防火墙规则。最终，Xen的网络基础设施非常灵活，你能够对domU做任何你能在dom0（或者，就事论事，在非Xen系统）上做的事情，而且有足够的脚本钩子来实现自动化操作。
