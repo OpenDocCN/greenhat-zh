@@ -1,161 +1,250 @@
 - en: 'Chapter 9. Case Study: Parallel Port Printer Driver'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第 9 章. 案例研究：并行端口打印机驱动程序
 - en: '![image with no caption](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
+  id: totrans-1
   prefs: []
   type: TYPE_IMG
+  zh: '![无标题的图片](httpatomoreillycomsourcenostarchimages1137497.png.jpg)'
 - en: This chapter is the second case study in this book. In this chapter, we’ll go
     through `lpt(4)`, the parallel port printer driver. `lpt(4)`, by default, is configured
     to be interrupt-driven, which gives us an opportunity to go through a nontrivial
     interrupt handler. Aside from this, I chose to profile `lpt(4)` because it uses
     almost every topic described in the previous chapters. It’s also relatively short.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章是本书的第二个案例研究。在本章中，我们将分析 `lpt(4)`，即并行端口打印机驱动程序。默认情况下，`lpt(4)` 被配置为中断驱动，这为我们提供了一个机会来分析一个非平凡的中断处理程序。除此之外，我选择分析
+    `lpt(4)`，因为它几乎使用了前几章中描述的每个主题。它也相对较短。
 - en: Note
+  id: totrans-3
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: To improve readability, some of the variables and functions presented in this
     chapter have been renamed and restructured from their counterparts in the FreeBSD
     source.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了提高可读性，本章中介绍的一些变量和函数已被重命名和重构，以从 FreeBSD 源代码中的对应部分进行对比。
 - en: Code Analysis
+  id: totrans-5
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 代码分析
 - en: '[Example 9-1](ch09.html#lpt.c "Example 9-1. lpt.c") provides a terse, source-level
     overview of `lpt(4)`.'
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 9-1](ch09.html#lpt.c "示例 9-1. lpt.c") 提供了 `lpt(4)` 的简洁、源代码级别的概述。'
 - en: Example 9-1. lpt.c
+  id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例 9-1. lpt.c
 - en: '[PRE0]'
+  id: totrans-8
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: '[Example 9-1](ch09.html#lpt.c "Example 9-1. lpt.c") is provided as a convenience;
     as I go through the code for lpt(4) you can refer to it to see how `lpt(4)`’s
     functions and structures are laid out.'
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: '[示例 9-1](ch09.html#lpt.c "示例 9-1. lpt.c") 提供了方便；当我分析 `lpt(4)` 的代码时，你可以参考它来查看
+    `lpt(4)` 的函数和结构是如何布局的。'
 - en: To make things easier to follow, I’ll analyze the functions in `lpt(4)` in the
     approximate order they would execute in (rather than in the order they appear).
     To that end, I’ll begin with the `lpt_identify` function.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了使内容更容易理解，我将按照它们在执行时的大致顺序分析 `lpt(4)` 中的函数（而不是它们出现的顺序）。为此，我将从 `lpt_identify`
+    函数开始。
 - en: lpt_identify Function
+  id: totrans-11
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_identify 函数
 - en: The `lpt_identify` function is the `device_identify` implementation for `lpt(4)`.
     Logically, this function is required because the parallel port cannot identify
     its children unaided.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_identify` 函数是 `lpt(4)` 的 `device_identify` 实现。从逻辑上讲，此函数是必需的，因为并行端口无法在没有辅助的情况下识别其子设备。'
 - en: 'Here is the function definition for `lpt_identify`:'
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是 `lpt_identify` 函数的定义：
 - en: '[PRE1]'
+  id: totrans-14
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) determines
     whether the parallel port has (ever) identified a child device named ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `LPT_NAME`. If it has not, then `lpt_identify` ![](httpatomoreillycomsourcenostarchimages1137503.png)
     adds `LPT_NAME` to the parallel port’s list of identified children.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先 ![](httpatomoreillycomsourcenostarchimages1137499.png) 确定并行端口是否（曾经）识别了一个名为
+    ![](httpatomoreillycomsourcenostarchimages1137501.png) `LPT_NAME` 的子设备。如果没有，则
+    `lpt_identify` ![](httpatomoreillycomsourcenostarchimages1137503.png) 将 `LPT_NAME`
+    添加到并行端口的已识别子设备列表中。
 - en: lpt_probe Function
+  id: totrans-16
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_probe 函数
 - en: 'The `lpt_probe` function is the `device_probe` implementation for `lpt(4)`.
     Here is its function definition:'
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_probe` 函数是 `lpt(4)` 的 `device_probe` 实现。以下是它的函数定义：'
 - en: '[PRE2]'
+  id: totrans-18
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: This function simply calls ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `lpt_detect` to detect (that is, probe for) the presence of a printer.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数简单地调用 ![](httpatomoreillycomsourcenostarchimages1137499.png) `lpt_detect`
+    来检测（即探测）打印机的存在。
 - en: lpt_detect Function
+  id: totrans-20
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_detect 函数
 - en: As mentioned in the previous section, `lpt_detect` detects the presence of a
     printer. It works by writing to the parallel port’s data register. If a printer
     is present, it can read back the value just written.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，`lpt_detect` 检测打印机的存在。它通过写入并行端口的寄存器来实现。如果存在打印机，它可以读取刚才写入的值。
 - en: 'Here is the function definition for `lpt_detect`:'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是 `lpt_detect` 函数的定义：
 - en: '[PRE3]'
+  id: totrans-23
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137501.png) acquires
     the parallel port mutex. Next, `lpt(4)` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
     assigned ownership of the parallel port. Then ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `lpt_port_test` is called to write to and read from the parallel port’s data register.
     The values written to this 8-bit register are housed in ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `test[]` and are designed to toggle all 8 bits.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先 ![](httpatomoreillycomsourcenostarchimages1137501.png) 获取并行端口的互斥锁。接下来，`lpt(4)`
+    ![](httpatomoreillycomsourcenostarchimages1137503.png) 被分配为并行端口的拥有者。然后 ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    调用 `lpt_port_test` 来写入和读取并行端口的寄存器。写入此 8 位寄存器的值存储在 ![](httpatomoreillycomsourcenostarchimages1137499.png)
+    `test[]` 中，并设计为切换所有 8 位。
 - en: Once this is done, the parallel port’s ![](httpatomoreillycomsourcenostarchimages1137507.png)
     data and ![](httpatomoreillycomsourcenostarchimages1137509.png) control registers
     are cleared, ownership of the parallel port is ![](httpatomoreillycomsourcenostarchimages1137511.png)
     relinquished, and the parallel port mutex is ![](httpatomoreillycomsourcenostarchimages1137513.png)
     released.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 完成这些操作后，并行端口的 ![](httpatomoreillycomsourcenostarchimages1137507.png) 数据和控制寄存器被清除，并行端口的拥有权
+    ![](httpatomoreillycomsourcenostarchimages1137511.png) 被放弃，并行端口互斥锁 ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    被释放。
 - en: lpt_port_test Function
+  id: totrans-26
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_port_test 函数
 - en: 'The `lpt_port_test` function is called by `lpt_detect` to determine whether
     a printer is present. Here is its function definition:'
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_port_test` 函数由 `lpt_detect` 调用，以确定是否存在打印机。以下是它的函数定义：'
 - en: '[PRE4]'
+  id: totrans-28
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: This function takes an ![](httpatomoreillycomsourcenostarchimages1137499.png)
     8-bit value and ![](httpatomoreillycomsourcenostarchimages1137501.png) writes
     it to the parallel port’s data register. Then it ![](httpatomoreillycomsourcenostarchimages1137503.png)
     reads from that register and ![](httpatomoreillycomsourcenostarchimages1137505.png)
     returns whether the value written and read match.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数接收一个 ![](httpatomoreillycomsourcenostarchimages1137499.png) 8位值并将其写入并行端口的数据寄存器。然后它
+    ![](httpatomoreillycomsourcenostarchimages1137503.png) 从该寄存器读取并 ![](httpatomoreillycomsourcenostarchimages1137505.png)
+    返回写入和读取的值是否匹配。
 - en: lpt_attach Function
+  id: totrans-30
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_attach 函数
 - en: 'The `lpt_attach` function is the `device_attach` implementation for `lpt(4)`.
     Here is its function definition:'
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_attach` 函数是 `lpt(4)` 的 `device_attach` 实现。以下是它的函数定义：'
 - en: '[PRE5]'
+  id: totrans-32
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: This function can be split into five parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
     sets `sc->sc_primed` to `0` to indicate that the printer needs to be primed. It
     also ![](httpatomoreillycomsourcenostarchimages1137501.png) initializes `lpt(4)`’s
     `callout` structure. The second part essentially ![](httpatomoreillycomsourcenostarchimages1137503.png)
     changes the electrical signal at pin 16, dubbed *nINIT*, from high to low causing
     the printer to initiate an internal reset.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数可以分为五个部分。第一部分 ![](httpatomoreillycomsourcenostarchimages1137499.png) 将 `sc->sc_primed`
+    设置为 `0`，以指示打印机需要初始化。它还 ![](httpatomoreillycomsourcenostarchimages1137501.png)
+    初始化 `lpt(4)` 的 `callout` 结构。第二部分实际上 ![](httpatomoreillycomsourcenostarchimages1137503.png)
+    将引脚16的电信号，称为 *nINIT*，从高电平变为低电平，导致打印机启动内部复位。
 - en: Note
+  id: totrans-34
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: As most signals are active high, the *n* in *nINIT* denotes that the signal
     is active low.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于大多数信号都是高电平有效，*n* 在 *nINIT* 中表示信号是低电平有效。
 - en: 'The third part registers the function ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `lpt_intr` as the interrupt handler. If successful, the `variable sc->sc_irq_status`
     is ![](httpatomoreillycomsourcenostarchimages1137507.png) assigned `LP_HAS_IRQ`,
@@ -169,19 +258,34 @@
     is used to tell `lpt%d.ctl` from `lpt%d`. As you’ll see, the `lpt%d` device node
     represents the printer, while `lpt%d.ctl` is used solely to change the printer’s
     mode of operation (via `lpt(4)`’s `d_ioctl` routine).'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 第三部分将函数 ![](httpatomoreillycomsourcenostarchimages1137505.png) `lpt_intr` 注册为中断处理程序。如果成功，`variable
+    sc->sc_irq_status` 被赋予 ![](httpatomoreillycomsourcenostarchimages1137507.png)
+    `LP_HAS_IRQ`、`LP_USE_IRQ` 和 `LP_ENABLE_IRQ`，以指示打印机是中断驱动的。第四部分为两个缓冲区分配内存：![](httpatomoreillycomsourcenostarchimages1137509.png)
+    `sc->sc_buf`（将维护要打印的数据）和 ![](httpatomoreillycomsourcenostarchimages1137511.png)
+    `sc->sc_buf_stat`（将维护打印机的状态）。最后，第五部分创建 `lpt(4)` 的设备节点：`lpt%d` 和 `lpt%d.ctl`，其中
+    `%d` 是单元号。请注意，`lpt%d.ctl` 包含 ![](httpatomoreillycomsourcenostarchimages1137513.png)
+    `LP_BYPASS` 标志，而 `lpt%d` 则没有。在 `d_foo` 函数中，`LP_BYPASS` 用于区分 `lpt%d.ctl` 和 `lpt%d`。正如您将看到的，`lpt%d`
+    设备节点代表打印机，而 `lpt%d.ctl` 仅用于更改打印机的操作模式（通过 `lpt(4)` 的 `d_ioctl` 例程）。
 - en: lpt_detach Function
+  id: totrans-37
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_detach 函数
 - en: 'The `lpt_detach` function is the `device_detach` implementation for `lpt(4)`.
     Here is its function definition:'
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_detach` 函数是 `lpt(4)` 的 `device_detach` 实现。以下是它的函数定义：'
 - en: '[PRE6]'
+  id: totrans-39
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
     ![](httpatomoreillycomsourcenostarchimages1137501.png) destroying `lpt(4)`’s device
     nodes. Once this is done, it ![](httpatomoreillycomsourcenostarchimages1137503.png)
@@ -190,30 +294,42 @@
     tears down `lpt(4)`’s interrupt handler, ![](httpatomoreillycomsourcenostarchimages1137509.png)
     releases `lpt(4)`’s IRQ, and ![](httpatomoreillycomsourcenostarchimages1137511.png)
     ![](httpatomoreillycomsourcenostarchimages1137513.png) frees the allocated memory.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先销毁`lpt(4)`的设备节点。一旦完成，它放弃对并行端口的控制，清空`lpt(4)`的调用函数，拆除`lpt(4)`的中断处理程序，释放`lpt(4)`的IRQ，并释放分配的内存。
 - en: lpt_open Function
+  id: totrans-41
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`lpt_open`函数'
 - en: The `lpt_open` function is defined in `lpt_cdevsw` (that is, `lpt(4)`’s character
     device switch table) as the `d_open` operation. Recall that `d_open` operations
     prepare the device for I/O.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_open`函数在`lpt_cdevsw`（即`lpt(4)`的字符设备切换表中）定义为`d_open`操作。回想一下，`d_open`操作是为I/O准备设备。'
 - en: 'Here is the function definition for `lpt_open`:'
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 下面是`lpt_open`函数的定义：
 - en: '[PRE7]'
+  id: totrans-44
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: This function can be split into six parts. The first ![](httpatomoreillycomsourcenostarchimages1137499.png)
     checks the value of `sc->sc_state`. If it does not equal `0`, which implies that
     another process has opened the printer, the error code `EBUSY` is returned; otherwise,
     `sc->sc_state` is assigned `LP_INIT`. The second part ![](httpatomoreillycomsourcenostarchimages1137501.png)
     checks the value of `dev->si_drv2`.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数可以分为六个部分。第一部分检查`sc->sc_state`的值。如果不等于`0`，这意味着另一个进程已经打开了打印机，返回错误代码`EBUSY`；否则，将`sc->sc_state`赋值为`LP_INIT`。第二部分检查`dev->si_drv2`的值。
 - en: If it contains the `LP_BYPASS` flag, which indicates that the device node is
     `lpt%d.ctl, sc->sc_state` is set to `LP_OPEN` and `lpt_open` exits. Recall that
     `lpt%d.ctl` is used solely to change the printer’s mode of operation, hence the
@@ -228,55 +344,81 @@
     enables automatic line feed if requested,^([[8](#ftn.CHP-9-FN-1)]) and ![](httpatomoreillycomsourcenostarchimages1137515.png)
     enables interrupts if the printer is interrupt-driven. The fifth part also assigns
     `LP_OPEN` to `sc->sc_state` and zeroes the variable `sc->sc_transfer_count`.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果它包含`LP_BYPASS`标志，这表示设备节点是`lpt%d.ctl`，则将`sc->sc_state`设置为`LP_OPEN`并退出`lpt_open`。回想一下，`lpt%d.ctl`仅用于更改打印机的操作模式，因此准备工作量很小。第三部分初始化打印机，然后选择并重置打印机（当17脚的电信号从高变低时，即被称为*nSELIN*，打印机准备接收数据），选择并重置打印机。第四部分等待打印机完成内部重置。第五部分选择并重置打印机，如果需要，启用自动换行，^([[8](#ftn.CHP-9-FN-1)])并启用中断，如果打印机是中断驱动的。第五部分还将`LP_OPEN`赋给`sc->sc_state`并将变量`sc->sc_transfer_count`清零。
 - en: Note
+  id: totrans-47
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Automatic line feed is enabled when the electrical signal at pin 14, dubbed
     nAUTOF, changes from high to low. As you would expect, this causes the printer
     to automatically insert a line feed after each line.
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 当14脚的电信号从高变低时，自动换行被启用，这个电信号被称为nAUTOF。正如你所期望的，这会导致打印机在每一行后自动插入换行符。
 - en: Finally, the sixth part causes ![](httpatomoreillycomsourcenostarchimages1137517.png)
     `lpt_timeout` to execute one time after `sc->sc_ticks` / `hz` seconds. The `lpt_timeout`
     function is used alongside the interrupt handler `lpt_intr`. I’ll discuss these
     functions shortly.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，第六部分会在 `sc->sc_ticks` / `hz` 秒后执行一次 `lpt_timeout`。`lpt_timeout` 函数与中断处理程序
+    `lpt_intr` 一起使用。我将在稍后讨论这些函数。
 - en: lpt_read Function
+  id: totrans-50
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_read 函数
 - en: The `lpt_read` function retrieves the printer’s status. Users can get the printer’s
     status by applying the `cat(1)` command to the device node `lpt%d`.
+  id: totrans-51
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_read` 函数检索打印机的状态。用户可以通过对设备节点 `lpt%d` 应用 `cat(1)` 命令来获取打印机的状态。'
 - en: 'Here is the function definition for `lpt_read`:'
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 下面是 `lpt_read` 函数的定义：
 - en: '[PRE8]'
+  id: totrans-53
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'This function first ![](httpatomoreillycomsourcenostarchimages1137499.png)
     checks the value of `sc->sc_flags`. If it contains the `LP_BYPASS` flag, which
     indicates that the device node is `lpt%d.ctl`, the error code `EPERM` (which stands
     for *error: operation not permitted*) is returned. Next, the function ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `ppb_1284_negociate` is called to put the parallel port interface into ![](httpatomoreillycomsourcenostarchimages1137503.png)
     nibble mode.'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: '此函数首先检查 `sc->sc_flags` 的值。如果它包含 `LP_BYPASS` 标志，这表示设备节点是 `lpt%d.ctl`，则返回错误代码
+    `EPERM`（代表 *error: operation not permitted*）。接下来，函数调用 `ppb_1284_negociate` 将并行端口接口置于
+    nibble 模式。'
 - en: Note
+  id: totrans-55
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Nibble mode is the most common way to retrieve data from a printer. Normally,
     pins 10, 11, 12, 13, and 15 are used by the printer as external status indicators;
     however, in nibble mode these pins are used to send data to the host (4 bits at
     a time).
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: Nibble 模式是检索打印机数据最常见的方式。通常，引脚 10、11、12、13 和 15 被打印机用作外部状态指示器；然而，在 nibble 模式下，这些引脚用于向主机发送数据（每次发送
+    4 位）。
 - en: The remainder of this function transfers data from the printer to user space.
     The data in this case is the printer’s status. Here, ![](httpatomoreillycomsourcenostarchimages1137513.png)
     `ppb_1284_read` transfers data from the printer to ![](httpatomoreillycomsourcenostarchimages1137507.png)
@@ -285,22 +427,33 @@
     `0`, `lpt_read` exits. The ![](httpatomoreillycomsourcenostarchimages1137513.png)
     `uiomove` function then moves the data from ![](httpatomoreillycomsourcenostarchimages1137515.png)
     kernel space to ![](httpatomoreillycomsourcenostarchimages1137517.png) user space.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数的其余部分将数据从打印机传输到用户空间。在这种情况下，数据是打印机的状态。这里，`ppb_1284_read` 将数据从打印机传输到内核空间。传输的字节数保存在
+    `num` 中。如果 `num` 等于 `0`，则 `lpt_read` 退出。然后 `uiomove` 函数将数据从内核空间移动到用户空间。
 - en: lpt_write Function
+  id: totrans-58
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_write 函数
 - en: The `lpt_write` function acquires data from user space and stores it in `sc->sc_buf`.
     This data is then sent to the printer to be printed.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_write` 函数从用户空间获取数据并将其存储在 `sc->sc_buf` 中。然后，这些数据被发送到打印机进行打印。'
 - en: 'Here is the function definition for `lpt_write`:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 下面是 `lpt_write` 函数的定义：
 - en: '[PRE9]'
+  id: totrans-61
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: Like `lpt_read`, this function starts by checking the value of `sc->sc_flags`.
     If it contains the `LP_BYPASS` flag, the error code `EPERM` is returned. Next,
     the `LP_INTERRUPTED` flag is ![](httpatomoreillycomsourcenostarchimages1137499.png)
@@ -311,24 +464,36 @@
     copy from user space to kernel space. This amount is saved in ![](httpatomoreillycomsourcenostarchimages1137505.png)
     `sc->sc_transfer_count`, which is decremented each time a byte is sent to the
     printer.
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: 与 `lpt_read` 类似，这个函数首先检查 `sc->sc_flags` 的值。如果它包含 `LP_BYPASS` 标志，则返回错误代码 `EPERM`。接下来，从
+    `sc->sc_state` 中移除 `LP_INTERRUPTED` 标志（正如你将看到的，每当写操作被中断时，`LP_INTERRUPTED` 都会被添加到
+    `sc->sc_state`）。下面的 `while` 循环包含了 `lpt_write` 的主要部分。注意，其表达式决定了从用户空间复制到内核空间的数据量。这个量被保存在
+    `sc->sc_transfer_count` 中，每次向打印机发送一个字节时，这个值都会递减。
 - en: Now, there are three ways to transfer data from kernel space to the printer.
     First, if extended mode is ![](httpatomoreillycomsourcenostarchimages1137507.png)
     enabled, `lpt_write` can ![](httpatomoreillycomsourcenostarchimages1137509.png)
     write directly to the printer.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，有三种方式将数据从内核空间传输到打印机。首先，如果扩展模式被启用，`lpt_write` 可以直接写入打印机。
 - en: Note
+  id: totrans-64
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Extended mode refers to either Enhanced Parallel Port (EPP) or Extended Capabilities
     Port (ECP) mode. EPP and ECP modes are designed to transmit data faster and with
     less CPU overhead than normal parallel port communications. Most parallel ports
     support one or both of these modes.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 扩展模式指的是增强型并行端口 (EPP) 或扩展功能端口 (ECP) 模式。EPP 和 ECP 模式旨在比普通并行端口通信更快地传输数据，并且具有更少的
+    CPU 开销。大多数并行端口支持这两种模式之一或两者。
 - en: Second, if the printer is ![](httpatomoreillycomsourcenostarchimages1137511.png)
     interrupt-driven and the `LP_BUSY` flag is cleared in `sc->sc_state`, `lpt_write`
     can call ![](httpatomoreillycomsourcenostarchimages1137513.png) `lpt_intr` to
@@ -338,31 +503,49 @@
     `0`. This prevents `lpt_write` from issuing another interrupt-driven transfer
     until the current one completes, which is why `lpt_write` ![](httpatomoreillycomsourcenostarchimages1137515.png)
     sleeps.
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二种情况，如果打印机是中断驱动的，并且 `sc->sc_state` 中的 `LP_BUSY` 标志被清除，`lpt_write` 可以调用 `lpt_intr`
+    来将数据传输到打印机。在下一节中查看 `lpt_intr` 函数的定义，你会看到在 `lpt_intr` 执行期间设置了 `LP_BUSY`，并且 `LP_BUSY`
+    不会清除直到 `sc->sc_transfer_count` 为 `0`。这防止了 `lpt_write` 在当前传输完成之前发出另一个中断驱动的传输，这就是为什么
+    `lpt_write` 会睡眠。
 - en: Finally, if the first and second options are unavailable, `lpt_write` can issue
     a polled transfer by calling ![](httpatomoreillycomsourcenostarchimages1137517.png)
     `lpt_push_bytes`, which is described in [lpt_push_bytes Function](ch09.html#lpt_underscore_push_underscore_bytes_fun
     "lpt_push_bytes Function") in [lpt_close Function](ch09.html#lpt_underscore_close_function
     "lpt_close Function").
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，如果前两种选项不可用，`lpt_write` 可以通过调用 `lpt_push_bytes` 来发出轮询传输，该函数在 [lpt_push_bytes
+    函数](ch09.html#lpt_underscore_push_underscore_bytes_fun "lpt_push_bytes 函数") 和
+    [lpt_close 函数](ch09.html#lpt_underscore_close_function "lpt_close 函数") 中描述。
 - en: lpt_intr Function
+  id: totrans-68
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_intr 函数
 - en: The `lpt_intr` function is `lpt(4)`’s interrupt handler. This function transfers
     1 byte from `sc->sc_buf` to the printer and then it exits. When the printer is
     ready for another byte, it will send an interrupt. Note that in `lpt_intr`, `sc->sc_buf`
     is accessed via `sc->sc_cp`.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_intr` 函数是 `lpt(4)` 的中断处理程序。这个函数将 1 个字节从 `sc->sc_buf` 传输到打印机，然后退出。当打印机准备好接收另一个字节时，它会发送一个中断。注意，在
+    `lpt_intr` 中，`sc->sc_buf` 通过 `sc->sc_cp` 访问。'
 - en: 'Here is the function definition for `lpt_intr`:'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是 `lpt_intr` 函数的定义：
 - en: '[PRE10]'
+  id: totrans-71
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) checks
     ad nauseam that the printer is online and ready for output. If it is, the ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `LP_BUSY` flag is added to `sc->sc_state` and the `LP_ERROR` flag, which denotes
@@ -377,46 +560,66 @@
     there is no more data to send, `LP_BUSY` is ![](httpatomoreillycomsourcenostarchimages1137511.png)
     cleared from `sc->sc_state` and `lpt_write` is ![](httpatomoreillycomsourcenostarchimages1137513.png)
     woken up.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先反复检查打印机是否在线且准备输出。如果是，将`LP_BUSY`标志添加到`sc->sc_state`，并移除表示打印机错误的`LP_ERROR`标志。接下来，重置`sc->sc_ticks`。然后从`sc->sc_buf`写入1个字节到并行端口的数据寄存器，并随后发送到打印机（当1号引脚的电信号，被称为*nSTROBE*，从高电平变为低电平时，并行端口接口上的数据被发送到打印机）。如果有更多数据要发送（即`sc->sc_transfer_count`大于`0`），`lpt_intr`将退出，因为等待中断再发送另一个字节是协议。如果没有更多数据要发送，将`LP_BUSY`从`sc->sc_state`中清除，并唤醒`lpt_write`。
 - en: lpt_timeout Function
+  id: totrans-73
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`lpt_timeout`函数'
 - en: 'The `lpt_timeout` function is the callout function for `lpt(4)`. It is designed
     to deal with missed or unhandled interrupts. Here is its function definition:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_timeout`函数是`lpt(4)`的调用函数。它被设计来处理错过或未处理的中断。以下是它的函数定义：'
 - en: '[PRE11]'
+  id: totrans-75
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) checks
     whether `lpt%d` is open. If so, `lpt_timeout` ![](httpatomoreillycomsourcenostarchimages1137501.png)
     reschedules itself to execute. Next, `LP_ERROR` is ![](httpatomoreillycomsourcenostarchimages1137503.png)
     removed from `sc->sc_state`. Now if `lpt(4)` has ![](httpatomoreillycomsourcenostarchimages1137505.png)
     missed an interrupt, ![](httpatomoreillycomsourcenostarchimages1137507.png) `lpt_intr`
     is called to restart transferring data to the printer.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先检查`lpt%d`是否已打开。如果是，`lpt_timeout`将重新安排自身以执行。接下来，`LP_ERROR`从`sc->sc_state`中移除。现在如果`lpt(4)`错过了一个中断，将调用`lpt_intr`以重新开始向打印机传输数据。
 - en: Note that without the `if` block at ![](httpatomoreillycomsourcenostarchimages1137505.png),
     `lpt(4)` would hang waiting for an interrupt that’s been sent and lost.
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，如果没有在`![](httpatomoreillycomsourcenostarchimages1137505.png)`处的`if`块，`lpt(4)`将挂起等待已发送但丢失的中断。
 - en: lpt_push_bytes Function
+  id: totrans-78
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`lpt_push_bytes`函数'
 - en: The `lpt_push_bytes` function uses polling to transfer data to the printer.
     This function is called (by `lpt_write`) only if extended mode is disabled and
     the printer is not interrupt-driven.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_push_bytes`函数使用轮询将数据传输到打印机。此函数仅在扩展模式禁用且打印机不是中断驱动时由`lpt_write`调用。'
 - en: 'Here is the function definition for `lpt_push_bytes`:'
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是`lpt_push_bytes`的函数定义：
 - en: '[PRE12]'
+  id: totrans-81
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) verifies
     that there is data to transfer. Then it ![](httpatomoreillycomsourcenostarchimages1137501.png)
     polls the printer to see if it is online and ready for output. If the printer
@@ -427,19 +630,32 @@
     written to the parallel port’s data register and then ![](httpatomoreillycomsourcenostarchimages1137507.png)
     sent to the printer. This entire process is repeated until all of the data in
     `sc->sc_buf` is transferred.
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先 ![图片](httpatomoreillycomsourcenostarchimages1137499.png) 验证是否有数据要传输。然后它
+    ![图片](httpatomoreillycomsourcenostarchimages1137501.png) 轮询打印机以查看其是否在线且准备输出。如果打印机未准备好，`lpt_push_bytes`
+    ![图片](httpatomoreillycomsourcenostarchimages1137503.png) 将短暂休眠，然后在唤醒时重新轮询打印机。这种休眠和轮询的循环会一直重复，直到打印机准备好。如果打印机准备好了，从
+    `sc->sc_buf` 中取出的 1 字节 ![图片](httpatomoreillycomsourcenostarchimages1137505.png)
+    将写入并行端口的数据寄存器，然后 ![图片](httpatomoreillycomsourcenostarchimages1137507.png) 发送到打印机。这个过程会一直重复，直到
+    `sc->sc_buf` 中的所有数据都传输完毕。
 - en: lpt_close Function
+  id: totrans-83
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_close 函数
 - en: 'The `lpt_close` function is defined in `lpt_cdevsw` as the `d_close` operation.
     Here is its function definition:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_close` 函数在 `lpt_cdevsw` 中定义为 `d_close` 操作。以下是它的函数定义：'
 - en: '[PRE13]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: Like `lpt_read` and `lpt_write`, this function first ![](httpatomoreillycomsourcenostarchimages1137499.png)
     checks the value of `sc->sc_flags`. If it contains the `LP_BYPASS flag`, `lpt_close
     jumps` to ![](httpatomoreillycomsourcenostarchimages1137513.png) `end_close`.
@@ -453,27 +669,47 @@
     ownership of the parallel port is relinquished. Lastly, ![](httpatomoreillycomsourcenostarchimages1137515.png)
     `sc->sc_state` and ![](httpatomoreillycomsourcenostarchimages1137517.png) `sc->sc_transfer_count`
     are zeroed.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 与 `lpt_read` 和 `lpt_write` 类似，此函数首先检查 `sc->sc_flags` 的值。如果包含 `LP_BYPASS` 标志，`lpt_close`
+    将跳转到 ![图片](httpatomoreillycomsourcenostarchimages1137513.png) `end_close`。接下来，`lpt(4)`
+    被分配为并行端口的拥有权。下面的 ![图片](httpatomoreillycomsourcenostarchimages1137501.png) `if`
+    块确保在关闭 `lpt%d` 之前，如果仍有数据要传输且打印机是 ![图片](httpatomoreillycomsourcenostarchimages1137505.png)
+    中断驱动的，传输将完成。然后，从 `sc->sc_state` 中移除 `LP_OPEN`，停止 `lpt_timeout`，重置打印机，并放弃并行端口的拥有权。最后，![图片](httpatomoreillycomsourcenostarchimages1137515.png)
+    `sc->sc_state` 和 ![图片](httpatomoreillycomsourcenostarchimages1137517.png) `sc->sc_transfer_count`
+    被置零。
 - en: lpt_ioctl Function
+  id: totrans-87
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: lpt_ioctl 函数
 - en: 'The `lpt_ioctl` function is defined in `lpt_cdevsw` as the `d_ioctl` operation.
     Before I describe this function, an explanation of its ioctl command, `LPT_IRQ`,
     is needed. `LPT_IRQ` is defined in the `<dev/ppbus/lptio.h>` header as follows:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_ioctl` 函数在 `lpt_cdevsw` 中定义为 `d_ioctl` 操作。在我描述此函数之前，需要对其 ioctl 命令 `LPT_IRQ`
+    进行解释。`LPT_IRQ` 在 `<dev/ppbus/lptio.h>` 头文件中定义为以下内容：'
 - en: '[PRE14]'
+  id: totrans-89
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: As you can see, `LPT_IRQ` requires a ![](httpatomoreillycomsourcenostarchimages1137499.png)
     `long int` value.
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，`LPT_IRQ` 需要一个 ![图片](httpatomoreillycomsourcenostarchimages1137499.png)
+    `long int` 值。
 - en: '[PRE15]'
+  id: totrans-91
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: Based on the ![](httpatomoreillycomsourcenostarchimages1137501.png) argument
     given to ![](httpatomoreillycomsourcenostarchimages1137499.png) `LPT_IRQ`, `lpt_ioctl`
     either ![](httpatomoreillycomsourcenostarchimages1137503.png) disables interrupt-driven
@@ -483,68 +719,102 @@
     disables extended mode (which enables standard mode). Note that interrupt-driven
     mode and extended mode conflict with each other, so if one is enabled, the other
     is disabled.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 根据 `LPT_IRQ` 给出的参数，`lpt_ioctl` 要么禁用中断驱动模式（这启用了轮询模式），要么启用中断驱动模式，要么启用扩展模式，要么禁用扩展模式（这启用了标准模式）。请注意，中断驱动模式和扩展模式相互冲突，因此如果启用其中一个，另一个将被禁用。
 - en: Note
+  id: totrans-93
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: To run this function, you’d use the `lptcontrol(8)` utility, whose source code
     I suggest you take a quick look at.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 要运行此函数，您将使用 `lptcontrol(8)` 工具，我建议您快速查看其源代码。
 - en: lpt_request_ppbus Function
+  id: totrans-95
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`lpt_request_ppbus` 函数'
 - en: The `lpt_request_ppbus` function sets `lpt(4)` as the owner of the parallel
     port. Recall that owning the parallel port lets a device (such as `lpt%d`) transfer
     data to and from it.
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_request_ppbus` 函数将 `lpt(4)` 设置为并行端口的拥有者。回想一下，拥有并行端口允许设备（如 `lpt%d`）向其传输数据。'
 - en: 'Here is the function definition for `lpt_request_ppbus`:'
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是 `lpt_request_ppbus` 函数的定义：
 - en: '[PRE16]'
+  id: totrans-98
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: This function begins by ![](httpatomoreillycomsourcenostarchimages1137499.png)
     checking the value of `sc->sc_state`. If it contains `LP_HAVEBUS`, which indicates
     that `lpt(4)` currently owns the parallel port, `lpt_request_ppbus` ![](httpatomoreillycomsourcenostarchimages1137501.png)
     exits. Otherwise, ![](httpatomoreillycomsourcenostarchimages1137503.png) `ppb_request_bus`
     is called to set `lpt(4)` as the owner of the parallel port and `sc->sc_state`
     is ![](httpatomoreillycomsourcenostarchimages1137505.png) assigned `LP_HAVEBUS`.
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先检查 `sc->sc_state` 的值。如果它包含 `LP_HAVEBUS`，这表示 `lpt(4)` 当前拥有并行端口，则 `lpt_request_ppbus`
+    退出。否则，调用 `ppb_request_bus` 将 `lpt(4)` 设置为并行端口的拥有者，并将 `LP_HAVEBUS` 分配给 `sc->sc_state`。
 - en: lpt_release_ppbus Function
+  id: totrans-100
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`lpt_release_ppbus` 函数'
 - en: 'The `lpt_release_ppbus` function causes `lpt(4)` to relinquish ownership of
     the parallel port. Here is its function definition:'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: '`lpt_release_ppbus` 函数使 `lpt(4)` 放弃对并行端口的拥有权。以下是其函数定义：'
 - en: '[PRE17]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: This function first ![](httpatomoreillycomsourcenostarchimages1137499.png) verifies
     that `lpt(4)` currently owns the parallel port. Next, it calls ![](httpatomoreillycomsourcenostarchimages1137501.png)
     `ppb_release_bus` to relinquish ownership of the parallel port. Then `LP_HAVEBUS`
     is ![](httpatomoreillycomsourcenostarchimages1137503.png) removed from `sc->sc_state`.
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数首先验证 `lpt(4)` 当前是否拥有并行端口。接下来，它调用 `ppb_release_bus` 放弃对并行端口的拥有权。然后从 `sc->sc_state`
+    中移除 `LP_HAVEBUS`。
 - en: '* * *'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[8](#CHP-9-FN-1)]) Curiously enough, it’s currently impossible to request
     automatic line feed.
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[8](#CHP-9-FN-1)]) 奇怪的是，目前无法请求自动换行。
 - en: Conclusion
+  id: totrans-106
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: This chapter described the entire code base of `lpt(4)`, the parallel port printer
     driver.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章描述了 `lpt(4)` 并行端口打印驱动程序的整个代码库。
