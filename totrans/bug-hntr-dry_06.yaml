@@ -1,17 +1,25 @@
 - en: Chapter 6. One Kernel to Rule Them All
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第六章。一个内核统治一切
 - en: Note
+  id: totrans-1
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Saturday, March 8, 2008*'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: '*2008年3月8日星期六*'
 - en: '*Dear Diary*,'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: '*亲爱的日记*，'
 - en: 'After spending time auditing open source kernels and finding some interesting
     bugs, I wondered whether I could find a bug in a Microsoft Windows driver. There
     are lots of third-party drivers available for Windows, so choosing just a few
@@ -20,127 +28,196 @@
     I visited VirusTotal^([[58](ch06s05.html#ftn.CHP-6-FN-2)]) and chose the first
     antivirus product that I recognized on its list: avast! from ALWIL Software.^([[59](ch06s05.html#ftn.CHP-6-FN-3)])
     That turned out to be a serendipitous decision.'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 在花费时间审计开源内核并找到一些有趣的错误后，我开始思考是否能在Microsoft Windows驱动程序中找到一个错误。Windows有很多第三方驱动程序可用，因此选择几个来探索并不容易。我最终选择了一些杀毒产品，因为它们通常是寻找错误的理想目标.^([[57](ch06s05.html#ftn.CHP-6-FN-1)])
+    我访问了VirusTotal^([[58](ch06s05.html#ftn.CHP-6-FN-2)]) 并在其列表中选择了第一个我认识的杀毒产品：ALWIL
+    Software的avast!。这最终证明是一个偶然的决定。
 - en: Note
+  id: totrans-5
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*On June 1, 2010, ALWIL Software was renamed AVAST Software*.'
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: '*2010年6月1日，ALWIL Software更名为AVAST Software*。'
 - en: 6.1 Vulnerability Discovery
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 6.1 漏洞发现
 - en: 'I used the following steps to find the vulnerability:'
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 我使用以下步骤来发现漏洞：
 - en: Note
+  id: totrans-9
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*The vulnerability described in this chapter affects all Microsoft Windows
     platforms supported by avast! Professional 4.7\. The platform that I used throughout
     this chapter was the default installation of Windows XP SP3 32-bit*.'
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: '*本章中描述的漏洞影响所有由avast! Professional 4.7\. 支持的Microsoft Windows平台。本章中使用的平台是Windows
+    XP SP3 32位的默认安装*。'
 - en: 'Step 1: Prepare a VMware guest for kernel debugging.'
+  id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第一步：为内核调试准备VMware虚拟机。
 - en: 'Step 2: Generate a list of the drivers and device objects created by avast!'
+  id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第二步：生成由avast! 创建的驱动程序和设备对象列表
 - en: 'Step 3: Check the device security settings.'
+  id: totrans-13
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第三步：检查设备安全设置。
 - en: 'Step 4: List the IOCTLs.'
+  id: totrans-14
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第四步：列出IOCTLS。
 - en: 'Step 5: Find the user-controlled input values.'
+  id: totrans-15
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第五步：找到用户控制的输入值。
 - en: 'Step 6: Reverse engineer the IOCTL handler.'
+  id: totrans-16
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第六步：逆向工程IOCTL处理程序。
 - en: 'Step 1: Prepare a VMware Guest for Kernel Debugging'
+  id: totrans-17
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第一步：为内核调试准备VMware虚拟机
 - en: First, I set up a Windows XP VMware^([[60](ch06s05.html#ftn.CHP-6-FN-4)]) guest
     system that I configured for remote kernel debugging with WinDbg.^([[61](ch06s05.html#ftn.CHP-6-FN-5)])
     The necessary steps are described in Section B.3.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我设置了一个Windows XP VMware^([[60](ch06s05.html#ftn.CHP-6-FN-4)]) 虚拟机系统，我使用WinDbg.^([[61](ch06s05.html#ftn.CHP-6-FN-5)])
+    进行远程内核调试。必要的步骤在B.3节中描述。
 - en: 'Step 2: Generate a List of the Drivers and Device Objects Created by avast!'
+  id: totrans-19
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第二步：生成由avast! 创建的驱动程序和设备对象列表
 - en: After downloading and installing the latest version of avast! Professional^([[62](ch06s05.html#ftn.CHP-6-FN-6)])
     in the VMware guest system, I used DriverView^([[63](ch06s05.html#ftn.CHP-6-FN-7)])
     to generate a list of the drivers that avast! loaded.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 在VMware虚拟机系统中下载并安装了最新的avast! Professional^([[62](ch06s05.html#ftn.CHP-6-FN-6)])
+    版本后，我使用DriverView^([[63](ch06s05.html#ftn.CHP-6-FN-7)]) 生成avast! 加载的驱动程序列表。
 - en: One of the benefits of DriverView is that it makes identification of third-party
     drivers easy. As illustrated in [Figure 6-1](ch06.html#a_list_of_the_avast_exclamation_drivers
     "Figure 6-1. A list of the avast! drivers in DriverView"), avast! loaded four
     drivers. I chose the first one on the list, called *Aavmker4.sys*, and used IDA
     Pro^([[64](ch06s05.html#ftn.CHP-6-FN-8)]) to generate a list of the device objects
     of that driver.
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: DriverView的一个好处是它使得识别第三方驱动程序变得容易。如图6-1所示，avast! 加载了四个驱动程序。我选择了列表中的第一个，称为 *Aavmker4.sys*，并使用IDA
+    Pro^([[64](ch06s05.html#ftn.CHP-6-FN-8)]) 生成该驱动程序的设备对象列表。
 - en: Note
+  id: totrans-22
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: A driver can create device objects to represent devices, or an interface to
     the driver, at any time by calling *`IoCreateDevice`* or *`IoCreateDeviceSecure`*.^([[65](ch06s05.html#ftn.CHP-6-FN-9)])
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 驱动程序可以在任何时间通过调用*`IoCreateDevice`* 或 *`IoCreateDeviceSecure`* 创建表示设备或驱动程序接口的设备对象。^([[65](ch06s05.html#ftn.CHP-6-FN-9)])
 - en: '![A list of the avast! drivers in DriverView](httpatomoreillycomsourcenostarchimages939305.png.jpg)'
+  id: totrans-24
   prefs: []
   type: TYPE_IMG
+  zh: '![DriverView中的avast! 驱动程序列表](httpatomoreillycomsourcenostarchimages939305.png.jpg)'
 - en: Figure 6-1. A list of the avast! drivers in DriverView
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 图6-1. DriverView中的avast! 驱动程序列表
 - en: After IDA disassembled the driver, I started reading the assembly of the driver’s
     initialization routine, called `DriverEntry()`.^([[66](ch06s05.html#ftn.CHP-6-FN-10)])
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 在IDA反汇编驱动程序后，我开始阅读驱动程序初始化例程的汇编代码，称为`DriverEntry()`.^([[66](ch06s05.html#ftn.CHP-6-FN-10)])
 - en: '[PRE0]'
+  id: totrans-27
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: 'In the `DriverEntry()` function, a device called `\Device\AavmKer4` (see `.text:00010632`
     and `.text:000105D2`) is created using the `IoCreateDevice()` function at address
     `.text:0001064D`. The illustrated assembly snippet of `DriverEntry()` can be translated
     into the following C code:'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 `DriverEntry()` 函数中，使用 `IoCreateDevice()` 函数在地址 `.text:0001064D` 处创建了一个名为
+    `\Device\AavmKer4` 的设备（见 `.text:00010632` 和 `.text:000105D2`）。`DriverEntry()`
+    的示例汇编代码可以翻译成以下 C 代码：
 - en: '[PRE1]'
+  id: totrans-29
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'Step 3: Check the Device Security Settings'
+  id: totrans-30
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第3步：检查设备安全设置
 - en: I then checked the security settings of the `AavmKer4` device using WinObj (see
     [Figure 6-2](ch06.html#navigating_to_the_security_settings_of_t "Figure 6-2. Navigating
     to the security settings of the AavmKer4 device in WinObj")).^([[67](ch06s05.html#ftn.CHP-6-FN-11)])
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 我随后使用WinObj检查了 `AavmKer4` 设备的安全设置（见[图6-2](ch06.html#navigating_to_the_security_settings_of_t
+    "图6-2. 在WinObj中导航到设备 \Device\AavmKer4 的安全设置")）。^([[67](ch06s05.html#ftn.CHP-6-FN-11)])
 - en: '![Navigating to the security settings of the AavmKer4 device in WinObj](httpatomoreillycomsourcenostarchimages939307.png.jpg)'
+  id: totrans-32
   prefs: []
   type: TYPE_IMG
+  zh: '![在WinObj中导航到AavmKer4设备的安全设置](httpatomoreillycomsourcenostarchimages939307.png.jpg)'
 - en: Figure 6-2. Navigating to the security settings of the `AavmKer4` device in
     WinObj
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 图6-2. 在WinObj中导航到设备 `AavmKer4` 的安全设置
 - en: To view the security settings of the device in WinObj, I right-clicked the device
     name, chose **Properties** from the option list, and then chose the **Security**
     tab. The device object allows every system user (Everyone group) to read from
@@ -148,12 +225,18 @@
     "Figure 6-3. Viewing the security settings of \Device\AavmKer4")). This means
     that every user of the system is allowed to send data to the IOCTLs implemented
     by the driver, which is great—this makes this driver a valuable target!
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 在WinObj中查看设备的安全设置时，我右键单击设备名称，从选项列表中选择**属性**，然后选择**安全**选项卡。设备对象允许每个系统用户（ Everyone
+    组）从设备中读取或写入（见[图6-3](ch06.html#viewing_the_security_settings_of_reverse "图6-3.
+    查看设备 \Device\AavmKer4 的安全设置")）。这意味着系统的每个用户都可以向驱动程序实现的 IOCTL 发送数据，这真是太好了——这使得这个驱动程序成为一个有价值的攻击目标！
 - en: 'Step 4: List the IOCTLs'
+  id: totrans-35
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第4步：列出 IOCTL
 - en: A Windows user space application must call `DeviceIoControl()` in order to send
     an IOCTL request to a kernel driver. Such calls to `DeviceIoControl()` cause the
     I/O manager of Windows to create an `IRP_MJ_DEVICE_CONTROL` request, which is
@@ -162,137 +245,217 @@
     through an array called `MajorFunction[]`. This array is an element of the `DRIVER_OBJECT`
     data structure, which can be found in *ntddk.h* of the Windows Driver Kit.^([[68](ch06s05.html#ftn.CHP-6-FN-12)])
     To save space, I removed the comments from the following code.
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 一个 Windows 用户空间应用程序必须调用 `DeviceIoControl()` 来向内核驱动程序发送 IOCTL 请求。此类对 `DeviceIoControl()`
+    的调用会导致 Windows 的 I/O 管理器创建一个 `IRP_MJ_DEVICE_CONTROL` 请求，并将其发送到最顶层的驱动程序。驱动程序实现一个特殊的分派例程来处理
+    `IRP_MJ_DEVICE_CONTROL` 请求，该例程通过名为 `MajorFunction[]` 的数组进行引用。此数组是 `DRIVER_OBJECT`
+    数据结构的一个元素，可以在 Windows 驱动程序包的 *ntddk.h* 中找到.^([[68](ch06s05.html#ftn.CHP-6-FN-12)])
+    为了节省空间，我从以下代码中移除了注释。
 - en: '![Viewing the security settings of \Device\AavmKer4](httpatomoreillycomsourcenostarchimages939309.png.jpg)'
+  id: totrans-37
   prefs: []
   type: TYPE_IMG
+  zh: '![查看设备 \Device\AavmKer4 的安全设置](httpatomoreillycomsourcenostarchimages939309.png.jpg)'
 - en: Figure 6-3. Viewing the security settings of `\Device\AavmKer4`
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 图6-3. 查看设备 `\Device\AavmKer4` 的安全设置
 - en: '[PRE2]'
+  id: totrans-39
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'Below, the elements of the `MajorFunction[]` array are defined (also from *ntddk.h*):'
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 下面定义了 `MajorFunction[]` 数组的元素（也来自 *ntddk.h*）：
 - en: '[PRE3]'
+  id: totrans-41
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: 'To list the IOCTLs implemented by a driver, I had to find the driver’s IOCTL
     dispatch routine. If I’d had access to the C code of the driver, this would have
     been easy, since I know that the assignment of the dispatch routine usually looks
     like this:'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 要列出驱动程序实现的 IOCTL，我必须找到驱动程序的 IOCTL 分派例程。如果我能访问驱动程序的 C 代码，这将会很容易，因为我知道分派例程的分配通常看起来像这样：
 - en: '[PRE4]'
+  id: totrans-43
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Unfortunately, I didn’t have access to the source code of the avast! *Aavmker4.sys*
     driver. How could I find the dispatch assignment using only the disassembly provided
     by IDA Pro?
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 不幸的是，我没有访问到 avast! *Aavmker4.sys* 驱动程序的源代码。我如何仅使用 IDA Pro 提供的反汇编代码来找到分派分配呢？
 - en: 'To answer this question, I needed more information about the `DRIVER_OBJECT`
     data structure. I attached WinDbg to the VMware guest system and used the `dt`
     command (see Section B.2 for a detailed description of the following debugger
     commands) to display the available information about the structure:'
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了回答这个问题，我需要更多关于 `DRIVER_OBJECT` 数据结构的信息。我将 WinDbg 连接到 VMware 虚拟机系统，并使用 `dt`
+    命令（见 B.2 节中关于以下调试命令的详细描述）来显示有关结构的信息：
 - en: '[PRE5]'
+  id: totrans-46
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: The debugger output shows that the `MajorFunction[]` array starts at structure
     offset `0x38`. After looking at the *ntddk.h* header file of the Windows Driver
     Kit, I knew that `IRP_MJ_DEVICE_CONTROL` was located at offset `0x0e` in `MajorFunction[]`
     and that the element size of the array was a pointer (4 bytes on 32-bit platforms).
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 调试器输出显示，`MajorFunction[]` 数组从结构偏移 `0x38` 开始。在查看 Windows 驱动器工具包的 *ntddk.h* 头文件后，我知道
+    `IRP_MJ_DEVICE_CONTROL` 位于 `MajorFunction[]` 的偏移 `0x0e`，并且该数组的元素大小是一个指针（32 位平台上的
+    4 个字节）。
 - en: 'So the assignment can be expressed as the following:'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，赋值可以表示为以下形式：
 - en: '[PRE6]'
+  id: totrans-49
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: 'There are countless ways to express this assignment in Intel assembly, but
     what I found in the driver code of avast! was these instructions:'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 Intel 汇编中表达这个赋值的方法不计其数，但在 avast! 驱动程序代码中我找到了这些指令：
 - en: '[PRE7]'
+  id: totrans-51
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: At address `.text:00010748`, a pointer to a `DRIVER_OBJECT` is stored in `EAX`.
     Then at address `.text:00010750`, the function pointer of the IOCTL dispatch routine
     gets assigned to `MajorFunction[IRP_MJ_DEVICE_CONTROL]`.
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 在地址 `.text:00010748`，一个 `DRIVER_OBJECT` 指针存储在 `EAX` 中。然后在地址 `.text:00010750`，IOCTL
+    调度例程的函数指针被分配给 `MajorFunction[IRP_MJ_DEVICE_CONTROL]`。
 - en: '[PRE8]'
+  id: totrans-53
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'I had finally found the IOCTL dispatch routine of the driver: `sub_1098C`!
     The IOCTL dispatch routine could also be found with the help of the debugger:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 我终于找到了驱动程序的 IOCTL 调度例程：`sub_1098C`！借助调试器也可以找到 IOCTL 调度例程：
 - en: '[PRE9]'
+  id: totrans-55
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: The output of WinDbg shows that the `IRP_MJ_DEVICE_CONTROL` dispatch routine
     can be found at address `Aavmker4+0x98c`.
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: WinDbg 的输出显示，`IRP_MJ_DEVICE_CONTROL` 调度例程位于地址 `Aavmker4+0x98c`。
 - en: After I found the dispatch routine, I searched this function for the implemented
     IOCTLs. The IOCTL dispatch routine has the following prototype:^([[69](ch06s05.html#ftn.CHP-6-FN-13)])
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 在找到调度例程之后，我在该函数中搜索了已实现的 IOCTL。IOCTL 调度例程具有以下原型^([[69](ch06s05.html#ftn.CHP-6-FN-13)])。
 - en: '[PRE10]'
+  id: totrans-58
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: The second function parameter is a pointer to an *I/O request packet* (*IRP*)
     structure. An IRP is the basic structure that the Windows I/O manager uses to
     communicate with drivers and allow drivers to communicate with each other. This
     structure transports the user-supplied IOCTL data as well as the requested IOCTL
     code.^([[70](ch06s05.html#ftn.CHP-6-FN-14)])
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 第二个函数参数是指向一个 *I/O 请求包* (*IRP*) 结构的指针。IRP 是 Windows I/O 管理器用来与驱动程序通信以及允许驱动程序之间相互通信的基本结构。这个结构传输用户提供的
+    IOCTL 数据以及请求的 IOCTL 代码^([[70](ch06s05.html#ftn.CHP-6-FN-14)])。
 - en: 'I then had a look at the disassembly of the dispatch routine in order to generate
     a list of the IOCTLs:'
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 我随后查看了调度例程的反汇编代码，以生成 IOCTL 列表：
 - en: '[PRE11]'
+  id: totrans-61
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: A pointer to the IRP structure is stored in `EBX` at address `.text:000109B2`
     of the IOCTL dispatch routine. Then a value, located at offset `0x60` of the IRP
     structure, is referenced (see `.text:000109B5`).
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: IRP 结构的指针存储在 `.text:000109B2` 地址的 `EBX` 中，这是 IOCTL 调度例程的位置。然后，一个位于 IRP 结构偏移
+    `0x60` 的值被引用（见 `.text:000109B5`）。
 - en: '[PRE12]'
+  id: totrans-63
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'The output of WinDbg shows that the IRP structure member `CurrentStackLocation`
     is located at offset `0x60`. This structure is defined in *ntddk.h* of the Windows
     Driver Kit:'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: WinDbg 的输出显示，IRP 结构成员 `CurrentStackLocation` 位于偏移 `0x60`。这个结构在 Windows 驱动器工具包的
+    *ntddk.h* 中定义：
 - en: '[PRE13]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'The layout of the `_IO_STACK_LOCATION` structure is shown below (see *ntddk.h*
     of the Windows Driver Kit):'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: '`_IO_STACK_LOCATION` 结构的布局如下（见 Windows 驱动器工具包中的 *ntddk.h*）：'
 - en: '[PRE14]'
+  id: totrans-67
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: 'In addition to the `IoControlCode` of the requested IOCTL, this structure contains
     information about the size of the input and output buffer. Now that I had more
     information about the `_IO_STACK_LOCATION` structure, I took a second look at
     the disassembly:'
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: 除了请求的 IOCTL 的 `IoControlCode` 之外，这个结构还包含有关输入和输出缓冲区大小的信息。现在我对 `_IO_STACK_LOCATION`
+    结构有了更多信息，我再次查看了反汇编代码：
 - en: '[PRE15]'
+  id: totrans-69
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: As I mentioned before, a pointer to `_IO_STACK_LOCATION` is stored in `EAX`
     at address `.text:000109B5`, and then at address `.text:000109B8` the `InputBufferLength`
     is stored in `ESI`. At `.text:000109BE` the `OutputBufferLength` is stored in
@@ -302,12 +465,16 @@
     IOCTL code of the driver! I searched the function for all values that are compared
     with the requested IOCTL code in `EAX` and got a list of the supported IOCTLs
     of *Aavmker4.sys*.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 如我之前提到的，在地址`.text:000109B5`，存储了指向`_IO_STACK_LOCATION`的指针，然后在地址`.text:000109B8`存储了`InputBufferLength`在`ESI`中。在`.text:000109BE`，`OutputBufferLength`存储在`EDX`中，在`.text:000109C4`，`IoControlCode`存储在`EAX`中。稍后，请求的IOCTL代码存储在`EAX`中，并与值`0xB2D6002C`（见地址`.text:000109C7`和`.text:000109CC`）进行比较。嘿，我找到了驱动程序的第一个有效IOCTL代码！我在函数中搜索了所有与请求的IOCTL代码在`EAX`中比较的值，并得到了*Aavmker4.sys*支持的IOCTL列表。
 - en: 'Step 5: Find the User-Controlled Input Values'
+  id: totrans-71
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第5步：查找用户控制的输入值
 - en: 'After I generated the list of all the supported IOCTLs, I tried to locate the
     buffer containing the user-supplied IOCTL input data. All `IRP_MJ_DEVICE_CONTROL`
     requests supply both an input buffer and an output buffer. The way the system
@@ -315,113 +482,169 @@
     is stored in the IOCTL code itself. Under Microsoft Windows, the IOCTL code values
     are normally created using the `CTL_CODE` macro.^([[71](ch06s05.html#ftn.CHP-6-FN-15)])
     Here’s another excerpt from *ntddk.h*:'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我生成了所有支持的IOCTL列表之后，我试图定位包含用户提供的IOCTL输入数据的缓冲区。所有`IRP_MJ_DEVICE_CONTROL`请求都提供输入缓冲区和输出缓冲区。系统描述这些缓冲区的方式取决于*数据传输类型*。传输类型存储在IOCTL代码本身中。在Microsoft
+    Windows中，IOCTL代码值通常使用`CTL_CODE`宏创建。[71](ch06s05.html#ftn.CHP-6-FN-15)] 这里是*ntddk.h*的另一个摘录：
 - en: '[PRE16]'
+  id: totrans-73
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: 'The transfer type is specified using the `Method` parameter of the `CTL_CODE`
     macro. I wrote a little tool to reveal which data transfer type is used by the
     IOCTLs of *Aavmker4.sys*:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用`CTL_CODE`宏的`Method`参数指定传输类型。我编写了一个小工具来揭示*Aavmker4.sys*的IOCTL使用了哪种数据传输类型：
 - en: Example 6-1. A little tool that I wrote (*IOCTL_method.c*) to show which data
     transfer type is used by the IOCTLs of *Aavmker4.sys*
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例6-1. 我编写的一个小工具（`IOCTL_method.c`），用于展示*Aavmker4.sys*的IOCTL使用了哪种数据传输类型。
 - en: '[PRE17]'
+  id: totrans-76
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: 'I then compiled the tool with the command-line C compiler of Visual Studio
     (`cl`):'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后我用Visual Studio的命令行C编译器（`cl`）编译了这个工具：
 - en: '[PRE18]'
+  id: totrans-78
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: 'The following output shows the tool from [Example 6-1](ch06.html#a_little_tool_that_i_wrote
     "Example 6-1. A little tool that I wrote (IOCTL_method.c) to show which data transfer
     type is used by the IOCTLs of Aavmker4.sys") in action:'
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下输出显示了[示例6-1](ch06.html#a_little_tool_that_i_wrote "示例6-1. 我编写的一个小工具（IOCTL_method.c）来展示*Aavmker4.sys*的IOCTL使用了哪种数据传输类型")中的工具在运行：
 - en: '[PRE19]'
+  id: totrans-80
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: So the driver uses the `METHOD_BUFFERED` transfer type to describe the input
     and output buffers of an IOCTL request. According to the buffer descriptions in
     the Windows Driver Kit, the input buffer of IOCTLs, which use the `METHOD_BUFFERED`
     transfer type, can be found at `Irp->AssociatedIrp.SystemBuffer`.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，驱动程序使用`METHOD_BUFFERED`传输类型来描述IOCTL请求的输入和输出缓冲区。根据Windows驱动程序套件中的缓冲区描述，使用`METHOD_BUFFERED`传输类型的IOCTL的输入缓冲区可以在`Irp->AssociatedIrp.SystemBuffer`中找到。
 - en: 'Below is an example of a reference to the input buffer in the disassembly of
     *Aavmker4.sys*:'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 下面是*Aavmker4.sys*反汇编中对输入缓冲区引用的一个示例：
 - en: '[PRE20]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: In this example, `EBX` holds a pointer to the IRP structure. At address `.text:00010CF1`,
     the IRP structure member at offset `0x0c` is referenced.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个例子中，`EBX`持有IRP结构的指针。在地址`.text:00010CF1`，引用了IRP结构成员的偏移量`0x0c`。
 - en: '[PRE21]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: The output of WinDbg shows that `AssociatedIrp` is located at this offset (`IRP->AssociatedIrp`).
     At address `.text:00010CF4`, the input buffer of the IOCTL call is referenced
     and stored in `EAX` (`Irp->AssociatedIrp.SystemBuffer`). Now that I had found
     the supported IOCTLs, as well as the IOCTL input data, I started searching for
     bugs.
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: WinDbg的输出显示`AssociatedIrp`位于这个偏移量（`IRP->AssociatedIrp`）。在地址`.text:00010CF4`，对IOCTL调用的输入缓冲区进行了引用并存储在`EAX`（`Irp->AssociatedIrp.SystemBuffer`）。既然我已经找到了支持的IOCTL以及IOCTL输入数据，我就开始寻找bug。
 - en: 'Step 6: Reverse Engineer the IOCTL Handler'
+  id: totrans-87
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第6步：逆向工程IOCTL处理程序
 - en: To find a possible security defect, I audited the handler code of one IOCTL
     at a time while tracing the supplied input data. When I came across the IOCTL
     code `0xB2D60030`, I found a subtle bug.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了找到可能的安全缺陷，我一次审计一个IOCTL的处理程序代码，同时跟踪提供的输入数据。当我遇到IOCTL代码`0xB2D60030`时，我发现了一个微小的bug。
 - en: 'If the IOCTL code `0xB2D60030` is requested by a user space application, the
     following code is executed:'
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果用户空间应用程序请求IOCTL代码`0xB2D60030`，则执行以下代码：
 - en: '[PRE22]'
+  id: totrans-90
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'If the requested IOCTL code matches `0xB2D60030` (see `.text:00010D28`), the
     assembler code at address `.text:00010DAB` (`loc_10DAB`) is executed:'
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果请求的IOCTL代码与`0xB2D60030`（见`.text:00010D28`）匹配，则执行地址`.text:00010DAB`（`loc_10DAB`）处的汇编代码：
 - en: '[PRE23]'
+  id: totrans-92
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: At address `.text:00010DAB EDI` is set to 0\. The `EBX` register holds a pointer
     to the IRP structure, and at address `.text:00010DC9` a pointer to the input buffer
     data is stored in `ESI` (`Irp->AssociatedIrp.SystemBuffer`).
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 在地址`.text:00010DAB EDI`处设置为0。`EBX`寄存器持有IRP结构的指针，在地址`.text:00010DC9`处将输入缓冲区数据的指针存储在`ESI`中（`Irp->AssociatedIrp.SystemBuffer`）。
 - en: At the beginning of the dispatch routine, the `InputBufferLength` of the request
     is stored in the stack variable `var_1c` (see `.text:000109BB`). The length of
     the input data at address `.text:00010DCC` is then compared to the value `0x878`
     (see [Figure 6-4](ch06.html#graph_view_of_the_vulnerable_code_path_i "Figure 6-4. Graph
     view of the vulnerable code path in IDA Pro, part 1")).
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: 在调度例程的开始，将请求的`InputBufferLength`存储在堆栈变量`var_1c`中（见`.text:000109BB`）。然后，将地址`.text:00010DCC`处的输入数据长度与值`0x878`（见[图6-4](ch06.html#graph_view_of_the_vulnerability_from_ioctl
+    "图6-4. IDA Pro中易受攻击的代码路径的图形视图，第1部分")）进行比较。
 - en: '![Graph view of the vulnerable code path in IDA Pro, part 1](httpatomoreillycomsourcenostarchimages939311.png.jpg)'
+  id: totrans-95
   prefs: []
   type: TYPE_IMG
+  zh: '![IDA Pro中易受攻击的代码路径的图形视图，第1部分](httpatomoreillycomsourcenostarchimages939311.png.jpg)'
 - en: Figure 6-4. Graph view of the vulnerable code path in IDA Pro, part 1
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 图6-4. IDA Pro中易受攻击的代码路径的图形视图，第1部分
 - en: 'If the data length equals `0x878`, the user-controlled input data, pointed
     to by `ESI`, is further processed:'
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果数据长度等于`0x878`，则进一步处理由`ESI`指向的用户可控输入数据：
 - en: '[PRE24]'
+  id: totrans-98
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: 'The code at address `.text:00010DE2` checks whether the input data equals NULL.
     If the input data is not NULL, a pointer from this data is extracted at `[user_data+0x870]`
     and stored in `EAX` (see `.text:00010DE6`). This pointer value is stored in the
@@ -429,11 +652,15 @@
     if the data, pointed to by `EAX`, starts with the values `0xD0DEAD07` and `0x10BAD0BA`
     (see `.text:00010DEF` and `.text:00010DF7`). If so, the parsing of the input data
     continues:'
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 地址`.text:00010DE2`处的代码检查输入数据是否等于NULL。如果输入数据不是NULL，则从该数据中提取一个指针，存储在`[user_data+0x870]`，并存储在`EAX`中（见`.text:00010DE6`）。此指针值存储在堆栈变量`var_48`中（见`.text:00010DEC`）。然后执行检查，看由`EAX`指向的数据是否以值`0xD0DEAD07`和`0x10BAD0BA`开头（见`.text:00010DEF`和`.text:00010DF7`）。如果是这样，则继续解析输入数据：
 - en: '[PRE25]'
+  id: totrans-100
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: The `rep movsd` instruction at address `.text:00010E1B` represents a `memcpy()`
     function. So `ESI` holds the source address, `EDI` holds the destination address,
     and `ECX` holds the length for the copy operation. `ECX` gets assigned the value
@@ -441,92 +668,138 @@
     (see `.text:00010E10`), and `EDI` is also derived from user-controlled data pointed
     to by `EAX` (see `.text:00010E18` and [Figure 6-5](ch06.html#graph_view_of_the_vulnerable_code_pa
     "Figure 6-5. Graph view of the vulnerable code path in IDA Pro, part 2")).
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 地址`.text:00010E1B`处的`rep movsd`指令代表一个`memcpy()`函数。因此`ESI`持有源地址，`EDI`持有目标地址，`ECX`持有复制操作的长度的值。`ECX`被分配了值`0x21a`（见`.text:00010E13`）。`ESI`指向用户可控的IOCTL数据（见`.text:00010E10`），而`EDI`也是从由`EAX`指向的用户可控数据派生出来的（见`.text:00010E18`和[图6-5](ch06.html#graph_view_of_the_vulnerable_code_pa
+    "图6-5. IDA Pro中易受攻击的代码路径的图形视图，第2部分")）。
 - en: '![Graph view of the vulnerable code path in IDA Pro, part 2](httpatomoreillycomsourcenostarchimages939313.png.jpg)'
+  id: totrans-102
   prefs: []
   type: TYPE_IMG
+  zh: '![IDA Pro中易受攻击的代码路径的图形视图，第2部分](httpatomoreillycomsourcenostarchimages939313.png.jpg)'
 - en: Figure 6-5. Graph view of the vulnerable code path in IDA Pro, part 2
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 图6-5. IDA Pro中易受攻击的代码路径的图形视图，第2部分
 - en: 'Here’s some pseudo C code of that `memcpy()` call:'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里有一些伪C代码，用于那个`memcpy()`调用：
 - en: '[PRE26]'
+  id: totrans-105
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: 'Or, in more abstract terms:'
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 或者，用更抽象的话来说：
 - en: '[PRE27]'
+  id: totrans-107
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: It is therefore possible to write `0x868` bytes (`0x21a * 4` bytes, as the `rep
     movsd` instruction copies DWORDs from one location to another) of user-controllable
     data to an arbitrary user-controlled address in either user or kernel space. Nice!
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 因此，可以将`0x868`字节（`0x21a * 4`字节，因为`rep movsd`指令从一个位置复制DWORD到另一个位置）的用户可控数据写入用户或内核空间中的任意用户可控地址。太棒了！
 - en: 'The anatomy of the bug, diagrammed in [Figure 6-6](ch06.html#overview_of_the_vulnerability_from_ioctl
     "Figure 6-6. Overview of the vulnerability from IOCTL request to memory corruption"),
     is as follows:'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: 漏洞的解剖结构，如图6-6[图6-6. 从IOCTL请求到内存损坏的漏洞概述](ch06.html#overview_of_the_vulnerability_from_ioctl
+    "图6-6. 从IOCTL请求到内存损坏的漏洞概述")所示，如下：
 - en: An IOCTL request (`0xB2D60030`) is sent to the kernel driver *Aavmker4.sys*
     using the `AavmKer4` device.
+  id: totrans-110
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 使用`AavmKer4`设备向内核驱动程序*Aavmker4.sys*发送了IOCTL请求(`0xB2D60030`)。
 - en: The driver code checks whether the IOCTL input data length equals the value
     `0x878`. If so, proceed to step 3.
+  id: totrans-111
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 驱动程序代码检查IOCTL输入数据长度是否等于值`0x878`。如果是，则进行步骤3。
 - en: '![Overview of the vulnerability from IOCTL request to memory corruption](httpatomoreillycomsourcenostarchimages939315.png.jpg)'
+  id: totrans-112
   prefs:
   - PREF_IND
   type: TYPE_IMG
+  zh: '![从IOCTL请求到内存损坏的漏洞概述](httpatomoreillycomsourcenostarchimages939315.png.jpg)'
 - en: Figure 6-6. Overview of the vulnerability from IOCTL request to memory corruption
+  id: totrans-113
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 图6-6. 从IOCTL请求到内存损坏的漏洞概述
 - en: The driver checks whether the user-controlled IOCTL input data contains the
     values `0xD0DEAD07` and `0x10BAD0BA`. If so, proceed to step 4.
+  id: totrans-114
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 驱动程序检查用户控制的IOCTL输入数据是否包含值`0xD0DEAD07`和`0x10BAD0BA`。如果是，则进行步骤4。
 - en: The erroneous `memcpy()` call is executed.
+  id: totrans-115
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 执行了错误的`memcpy()`调用。
 - en: The memory is corrupted.
+  id: totrans-116
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 内存被损坏。
 - en: 6.2 Exploitation
+  id: totrans-117
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 6.2 漏洞利用
 - en: 'To gain control of `EIP`, I first had to find a suitable target address to
     overwrite. While searching through the IOCTL dispatch routine, I found two places
     where a function pointer is called:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了控制`EIP`，我首先必须找到一个合适的覆盖目标地址。在搜索IOCTL调度例程时，我找到了两个调用函数指针的地方：
 - en: '[PRE28]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: 'The function pointer declared at `.data:00012460` is called at `.text:00010D9D`
     and `.text:00010DC3` in the dispatch routine. To gain control over `EIP`, all
     I had to do was overwrite this function pointer and then wait for it to be called.
     I wrote the following POC code to manipulate the function pointer:'
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 在`.data:00012460`处声明的函数指针在调度例程的`.text:00010D9D`和`.text:00010DC3`处被调用。为了控制`EIP`，我只需覆盖这个函数指针并等待它被调用。我编写了以下POC代码来操作函数指针：
 - en: Example 6-2. The POC code that I wrote to manipulate the function pointer at
     `.data:00012460` (*poc.c*)
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例6-2. 我编写的用于操作`.data:00012460`处函数指针的POC代码(*poc.c*)
 - en: '[PRE29]'
+  id: totrans-122
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: 'In line 67 of [Example 6-2](ch06s02.html#the_poc_code_that_i_wrote_to "Example 6-2. The
     POC code that I wrote to manipulate the function pointer at .data:00012460 (poc.c)"),
     the base address of the driver in memory is stored in `driveraddr`. Then, in line
@@ -537,15 +810,23 @@
     array is copied into the input data buffer (see line 89). In the disassembly of
     the driver, this pointer is referenced at address `.text:00010DE6`: `mov eax,
     [esi+870h]`.'
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 在[示例6-2](ch06s02.html#the_poc_code_that_i_wrote_to "示例6-2. 我编写的用于操作.data:00012460处函数指针的POC代码
+    (poc.c)")的第67行，驱动程序在内存中的基本地址存储在`driveraddr`中。然后，在第72行，计算函数指针的地址；这个地址被通过操作的`memcpy()`调用覆盖。在第75行分配了一个`INPUTBUFFER_SIZE`(`0x878`)字节的缓冲区。这个缓冲区包含IOCTL输入数据，并用十六进制值`0x41`填充（见第86行）。然后，将另一个数据数组的指针复制到输入数据缓冲区中（见第89行）。在驱动程序的汇编代码中，这个指针在地址`.text:00010DE6`处被引用：`mov
+    eax, [esi+870h]`。
 - en: 'Directly after the call of the `memcpy()` function, the kernel function `KeSetEvent()`
     is called:'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 在调用`memcpy()`函数之后，直接调用了内核函数`KeSetEvent()`：
 - en: '[PRE30]'
+  id: totrans-125
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: Since the user-derived data pointed to by `EAX` is used as a parameter for this
     function (see `.text:00010E2B`), the data buffer needs to be filled with valid
     pointers in order to prevent an access violation. I filled the whole buffer with
@@ -556,145 +837,218 @@
     The device of the driver is then opened for reading and writing (see line 110),
     and the malicious IOCTL request is sent to the vulnerable kernel driver (see line
     122).
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于`EAX`指向的用户数据被用作此函数的参数（见`.text:00010E2B`），数据缓冲区需要填充有效的指针以防止访问违规。我将整个缓冲区填充了自己的有效用户空间地址（见第97行）。然后在第100行和第103行，将两个预期的模式复制到数据缓冲区中（见`.text:00010DEF`和`.text:00010DF7`），在第106行，将`memcpy()`函数的目标地址复制到数据缓冲区中（`.text:00010E18
+    mov edi, [eax+18h]`）。然后打开驱动程序的设备进行读写（见第110行），并将恶意IOCTL请求发送到有漏洞的内核驱动程序（见第122行）。
 - en: 'After I developed that POC code, I started the Windows XP VMware guest system
     and attached WinDbg to the kernel (see Section B.2 for a description of the following
     debugger commands):'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我开发了那个 POC 代码后，我启动了 Windows XP VMware 虚拟机系统，并将 WinDbg 连接到内核（有关以下调试器命令的描述，请参阅
+    B.2 节）：
 - en: '[PRE31]'
+  id: totrans-128
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: 'I then compiled the POC code with the command-line C compiler of Visual Studio
     (`cl`) and executed it as an unprivileged user inside the VMware guest system:'
+  id: totrans-129
   prefs: []
   type: TYPE_NORMAL
+  zh: 我使用 Visual Studio 的命令行编译器 (`cl`) 编译了 POC 代码，并在 VMware 虚拟机系统内部以无权限用户身份执行它：
 - en: '[PRE32]'
+  id: totrans-130
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: 'After I executed the POC code, nothing happened. So how could I find out if
     the function pointer was successfully manipulated? Well, all I had to do was trigger
     the antivirus engine by opening an arbitrary executable. I opened Internet Explorer
     and got the following message in the debugger:'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我执行了 POC 代码后，没有任何反应。那么我该如何确定函数指针是否被成功操作了呢？嗯，我只需要通过打开任意可执行文件来触发防病毒引擎。我打开了 Internet
+    Explorer，并在调试器中得到了以下信息：
 - en: '[PRE33]'
+  id: totrans-132
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: 'Yes! The instruction pointer appeared to be under my full control. To verify
     this, I asked the debugger for more information:'
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 是的！指令指针似乎完全在我的控制之下。为了验证这一点，我向调试器请求更多信息：
 - en: '[PRE34]'
+  id: totrans-134
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: 'The exploitation process, illustrated in [Figure 6-7](ch06s02.html#diagram_of_my_exploitation_of_the_avast
     "Figure 6-7. Diagram of my exploitation of the avast! vulnerability"), was as
     follows:'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 如 [图 6-7](ch06s02.html#diagram_of_my_exploitation_of_the_avast "图 6-7. 我对 avast!
+    漏洞的利用示意图") 所示的利用过程如下：
 - en: Is the length of the input data `0x878`? If so, proceed to step 2.
+  id: totrans-136
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 输入数据的长度是 `0x878` 吗？如果是，请进行步骤 2。
 - en: The user space buffer `data` gets referenced.
+  id: totrans-137
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 用户空间缓冲区 `data` 被引用。
 - en: Are the expected patterns found at `data[0]` and `data[4]`? If so, proceed to
     step 4.
+  id: totrans-138
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 在 `data[0]` 和 `data[4]` 是否找到了预期的模式？如果是，请进行步骤 4。
 - en: '![Diagram of my exploitation of the avast! vulnerability](httpatomoreillycomsourcenostarchimages939317.png.jpg)'
+  id: totrans-139
   prefs:
   - PREF_IND
   type: TYPE_IMG
+  zh: '![我对 avast! 漏洞的利用示意图](httpatomoreillycomsourcenostarchimages939317.png.jpg)'
 - en: Figure 6-7. Diagram of my exploitation of the avast! vulnerability
+  id: totrans-140
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
+  zh: 图 6-7. 我对 avast! 漏洞的利用示意图
 - en: The destination address for the `memcpy()` call gets referenced.
+  id: totrans-141
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '`memcpy()` 调用的目标地址被引用。'
 - en: The `memcpy()` function copies the IOCTL input data into the `.data` area of
     the kernel.
+  id: totrans-142
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: '`memcpy()` 函数将 IOCTL 输入数据复制到内核的 `.data` 区域。'
 - en: The manipulated function pointer gives full control over `EIP`.
+  id: totrans-143
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 被操作的函数指针完全控制了 `EIP`。
 - en: If the POC code is executed without a kernel debugger attached, the famed Blue
     Screen of Death (BSoD) will appear (see [Figure 6-8](ch06s02.html#the_blue_screen_of_death_open_parenthesi
     "Figure 6-8. The Blue Screen of Death (BSoD)")).
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果在未连接内核调试器的情况下执行 POC 代码，将出现著名的蓝屏死机 (BSoD)（请参阅 [图 6-8](ch06s02.html#the_blue_screen_of_death_open_parenthesi
+    "图 6-8. 蓝屏死机 (BSoD)")）。
 - en: '![The Blue Screen of Death (BSoD)](httpatomoreillycomsourcenostarchimages939319.png.jpg)'
+  id: totrans-145
   prefs: []
   type: TYPE_IMG
+  zh: '![蓝屏死机 (BSoD)](httpatomoreillycomsourcenostarchimages939319.png.jpg)'
 - en: Figure 6-8. The Blue Screen of Death (BSoD)
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 6-8. 死机蓝屏 (BSoD)
 - en: After I gained control over `EIP`, I developed two exploits. One of them grants
     SYSTEM rights to any requesting user (privilege escalation), and the other installs
     a rootkit into the kernel using the well-known Direct Kernel Object Manipulation
     (DKOM) technique.^([[72](ch06s05.html#ftn.CHP-6-FN-16)])
+  id: totrans-147
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我控制了 `EIP` 之后，我开发了两个利用程序。其中一个授予任何请求的用户 SYSTEM 权限（权限提升），另一个使用众所周知的直接内核对象操作 (DKOM)
+    技术将 rootkit 安装到内核中。[^([72](ch06s05.html#ftn.CHP-6-FN-16))]）
 - en: Strict laws prohibit me from providing a full, working exploit, but if you’re
     interested, you can watch a video of the exploit in action at the book’s website.^([[73](ch06s05.html#ftn.CHP-6-FN-17)])
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 严格的法律禁止我提供完整的、可工作的利用程序，但如果您感兴趣，您可以在本书的网站上观看利用程序的实际操作视频。[^([73](ch06s05.html#ftn.CHP-6-FN-17))]）
 - en: 6.3 Vulnerability Remediation
+  id: totrans-149
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 6.3 漏洞修复
 - en: Note
+  id: totrans-150
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Saturday, March 29, 2008*'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: '*2008年3月29日，星期六*'
 - en: I informed ALWIL Software about the bug on March 18, 2008, and it released an
     updated version of avast! today. Wow, that was really fast for a commercial software
     vendor!
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 我于2008年3月18日向 ALWIL Software 报告了该漏洞，并且它今天发布了 avast! 的更新版本。哇，对于一个商业软件供应商来说，这真的很快！
 - en: 6.4 Lessons Learned
+  id: totrans-153
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 6.4 经验教训
 - en: 'As a programmer and kernel-driver developer:'
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 作为一名程序员和内核驱动开发者：
 - en: Define strict security settings for exported device objects. Do not allow unprivileged
     users to read from or write to these devices.
+  id: totrans-155
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 为导出的设备对象定义严格的网络安全设置。不允许无权限用户从这些设备中读取或写入。
 - en: Always take care to validate input data correctly.
+  id: totrans-156
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 总是要小心验证输入数据是否正确。
 - en: Destination addresses for memory-copy operations shouldn’t be extracted from
     user-supplied data.
+  id: totrans-157
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 内存复制操作的目标地址不应从用户提供的数据中提取。
 - en: 6.5 Addendum
+  id: totrans-158
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-159
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: '*Sunday, March 30, 2008*'
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
 - en: Since the vulnerability was fixed and a new version of avast! is now available,
@@ -702,144 +1056,201 @@
     The bug was assigned CVE-2008-1625\. [Figure 6-9](ch06s05.html#timeline_from_vendor_notification_to_the
     "Figure 6-9. Timeline from vendor notification to the release of my security advisory")
     shows the timeline of the vulnerability fix.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
 - en: '![Timeline from vendor notification to the release of my security advisory](httpatomoreillycomsourcenostarchimages939321.png.jpg)'
+  id: totrans-162
   prefs: []
   type: TYPE_IMG
 - en: Figure 6-9. Timeline from vendor notification to the release of my security
     advisory
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
 - en: Notes
+  id: totrans-164
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: ^([[57](#ftn.CHP-6-FN-1)])
+  id: totrans-165
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[58](#ftn.CHP-6-FN-2)])
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[59](#ftn.CHP-6-FN-3)])
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[60](#ftn.CHP-6-FN-4)])
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[61](#ftn.CHP-6-FN-5)])
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[62](#ftn.CHP-6-FN-6)])
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[63](#ftn.CHP-6-FN-7)])
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[64](#ftn.CHP-6-FN-8)])
+  id: totrans-172
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[65](#ftn.CHP-6-FN-9)])
+  id: totrans-173
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[66](#ftn.CHP-6-FN-10)])
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[67](#ftn.CHP-6-FN-11)])
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[68](#ftn.CHP-6-FN-12)])
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[69](#ftn.CHP-6-FN-13)])
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[70](#ftn.CHP-6-FN-14)])
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[71](#ftn.CHP-6-FN-15)])
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[72](#ftn.CHP-6-FN-16)])
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[73](#ftn.CHP-6-FN-17)])
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[74](#ftn.CHP-6-FN-18)])
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
 - en: '* * *'
+  id: totrans-183
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[57](#CHP-6-FN-1)]) See SANS Top 20 Internet Security Problems, Threats and
     Risks (2007 Annual Update), [http://www.sans.org/top20/2007/](http://www.sans.org/top20/2007/).
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[58](#CHP-6-FN-2)]) See [http://www.virustotal.com/](http://www.virustotal.com/).
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[59](#CHP-6-FN-3)]) See [http://www.avast.com/](http://www.avast.com/).
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[60](#CHP-6-FN-4)]) See [http://www.vmware.com/](http://www.vmware.com/).
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[61](#CHP-6-FN-5)]) WinDbg, the “official” Windows Debugger from Microsoft,
     is distributed as part of the free “Debugging Tools for Windows” suite available
     at [http://www.microsoft.com/whdc/DevTools/Debugging/default.mspx](http://www.microsoft.com/whdc/DevTools/Debugging/default.mspx).
+  id: totrans-188
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[62](#CHP-6-FN-6)]) You can find a download link for a vulnerable trial version
     of avast! Professional 4.7 at [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[63](#CHP-6-FN-7)]) See [http://www.nirsoft.net/utils/driverview.html](http://www.nirsoft.net/utils/driverview.html).
+  id: totrans-190
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[64](#CHP-6-FN-8)]) See [http://www.hex-rays.com/idapro/](http://www.hex-rays.com/idapro/).
+  id: totrans-191
   prefs: []
   type: TYPE_NORMAL
 - en: '^([[65](#CHP-6-FN-9)]) See Mark E. Russinovich and David A. Solomon, *Microsoft
     Windows Internals: Microsoft Windows Server 2003, Windows XP, and Windows 2000,
     4th ed*. (Redmond, WA: Microsoft Press, 2005).'
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
 - en: '^([[66](#CHP-6-FN-10)]) See MSDN Library: Windows Development: Windows Driver
     Kit: Kernel-Mode Driver Architecture: Reference: Standard Driver Routines: DriverEntry
     at [http://msdn.microsoft.com/en-us/library/ff544113.aspx](http://msdn.microsoft.com/en-us/library/ff544113.aspx).'
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[67](#CHP-6-FN-11)]) WinObj is available at [http://technet.microsoft.com/en-us/sysinternals/bb896657.aspx](http://technet.microsoft.com/en-us/sysinternals/bb896657.aspx).
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
 - en: ^([[68](#CHP-6-FN-12)]) The Windows Driver Kit can be downloaded at [http://www.microsoft.com/whdc/devtools/WDK/default.mspx](http://www.microsoft.com/whdc/devtools/WDK/default.mspx).
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[68](#CHP-6-FN-12)]) Windows 驱动程序工具包的下载地址为 [http://www.microsoft.com/whdc/devtools/WDK/default.mspx](http://www.microsoft.com/whdc/devtools/WDK/default.mspx)。
 - en: '^([[69](#CHP-6-FN-13)]) See MSDN Library: Windows Development: Windows Driver
     Kit: Kernel-Mode Driver Architecture: Reference: Standard Driver Routines: DispatchDeviceControl
     available at [http://msdn.microsoft.com/en-us/library/ff543287.aspx](http://msdn.microsoft.com/en-us/library/ff543287.aspx).'
+  id: totrans-196
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[69](#CHP-6-FN-13)]) 请参阅 MSDN 库：Windows 开发：Windows 驱动程序工具包：内核模式驱动程序架构：参考：标准驱动程序例程：DispatchDeviceControl，可在
+    [http://msdn.microsoft.com/en-us/library/ff543287.aspx](http://msdn.microsoft.com/en-us/library/ff543287.aspx)
+    找到。
 - en: '^([[70](#CHP-6-FN-14)]) See MSDN Library: Windows Development: Windows Driver
     Kit: Kernel-Mode Driver Architecture: Reference: Kernel Data Types: System-Defined
     Data Structures: IRP available at [http://msdn.microsoft.com/en-us/library/ff550694.aspx](http://msdn.microsoft.com/en-us/library/ff550694.aspx).'
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[70](#CHP-6-FN-14)]) 请参阅 MSDN 库：Windows 开发：Windows 驱动程序工具包：内核模式驱动程序架构：参考：内核数据类型：系统定义的数据结构：IRP，可在
+    [http://msdn.microsoft.com/en-us/library/ff550694.aspx](http://msdn.microsoft.com/en-us/library/ff550694.aspx)
+    找到。
 - en: '^([[71](#CHP-6-FN-15)]) See MSDN Library: Windows Development: Windows Driver
     Kit: Kernel-Mode Driver Architecture: Design Guide: Writing WDM Drivers: Managing
     Input/Output for Drivers: Handling IRPs: Using I/O Control Codes: Buffer Descriptions
     for I/O Control Codes available at [http://msdn.microsoft.com/en-us/library/ff540663.aspx](http://msdn.microsoft.com/en-us/library/ff540663.aspx).'
+  id: totrans-198
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[71](#CHP-6-FN-15)]) 请参阅 MSDN 库：Windows 开发：Windows 驱动程序工具包：内核模式驱动程序架构：设计指南：编写
+    WDM 驱动程序：管理驱动程序的输入/输出：处理 IRPs：使用 I/O 控制代码：I/O 控制代码的缓冲区描述，可在 [http://msdn.microsoft.com/en-us/library/ff540663.aspx](http://msdn.microsoft.com/en-us/library/ff540663.aspx)
+    找到。
 - en: ^([[72](#CHP-6-FN-16)]) See Jamie Butler, *DKOM (Direct Kernel Object Manipulation)*
     (presentation, Black Hat Europe, Amsterdam, May 2004), at [http://www.blackhat.com/presentations/win-usa-04/bh-win-04-butler.pdf](http://www.blackhat.com/presentations/win-usa-04/bh-win-04-butler.pdf).
+  id: totrans-199
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[72](#CHP-6-FN-16)]) 请参阅 Jamie Butler 的 *DKOM (Direct Kernel Object Manipulation)*（演示文稿，Black
+    Hat Europe，阿姆斯特丹，2004 年 5 月），可在 [http://www.blackhat.com/presentations/win-usa-04/bh-win-04-butler.pdf](http://www.blackhat.com/presentations/win-usa-04/bh-win-04-butler.pdf)
+    找到。
 - en: ^([[73](#CHP-6-FN-17)]) See [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
+  id: totrans-200
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[73](#CHP-6-FN-17)]) 请参阅 [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
 - en: ^([[74](#CHP-6-FN-18)]) My security advisory that describes the details of the
     avast! vulnerability can be found at [http://www.trapkit.de/advisories/TKADV2008-002.txt](http://www.trapkit.de/advisories/TKADV2008-002.txt).
+  id: totrans-201
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[74](#CHP-6-FN-18)]) 描述 avast! 漏洞详细信息的我的安全咨询报告可在 [http://www.trapkit.de/advisories/TKADV2008-002.txt](http://www.trapkit.de/advisories/TKADV2008-002.txt)
+    找到。

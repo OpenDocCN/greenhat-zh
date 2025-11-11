@@ -3,19 +3,23 @@
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第5章。浏览即被控制
 - en: Note
   id: totrans-1
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*Sunday, April 6, 2008*'
   id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: '*2008年4月6日，星期日*'
 - en: '*Dear Diary*,'
   id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: '*亲爱的日记*，'
 - en: Vulnerabilities in browsers and browser add-ons are all the rage these days,
     so I decided to have a look at some ActiveX controls. The first one on my list
     was Cisco’s online meeting and web-conferencing software called WebEx, which is
@@ -26,65 +30,80 @@
   id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 浏览器和浏览器插件中的漏洞目前非常流行，所以我决定查看一些 ActiveX 控件。我列表上的第一个是思科的在线会议和网页会议软件，名为 WebEx，它在商业中广泛使用。在花了一些时间对
+    Microsoft 的 Internet Explorer 中的 WebEx ActiveX 控件进行逆向工程之后，我发现了一个明显的错误，如果我用模糊测试而不是阅读汇编代码，我可以在几秒钟内找到这个错误。失败！![httpatomoreillycomsourcenostarchimages939227.png](httpatomoreillycomsourcenostarchimages939227.png)
 - en: 5.1 Vulnerability Discovery
   id: totrans-5
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 5.1 漏洞发现
 - en: 'I used the following process to search for a vulnerability:'
   id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 我使用以下过程来搜索漏洞：
 - en: Note
   id: totrans-7
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: '*I used Windows XP SP3 32-bit and Internet Explorer 6 as the platform for all
     the following steps*.'
   id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: '*我使用 Windows XP SP3 32 位和 Internet Explorer 6 作为以下所有步骤的平台*。'
 - en: 'Step 1: List the registered WebEx objects and exported methods.'
   id: totrans-9
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第1步：列出已注册的 WebEx 对象和导出方法。
 - en: 'Step 2: Test the exported methods in the browser.'
   id: totrans-10
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第2步：在浏览器中测试导出方法。
 - en: 'Step 3: Find the object methods in the binary.'
   id: totrans-11
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第3步：在二进制文件中查找对象方法。
 - en: 'Step 4: Find the user-controlled input values.'
   id: totrans-12
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第4步：查找用户可控的输入值。
 - en: 'Step 5: Reverse engineer the object methods.'
   id: totrans-13
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 第5步：逆向工程对象方法。
 - en: Note
   id: totrans-14
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: A download link for the vulnerable version of WebEx Meeting Manager can be found
     at [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/).
   id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 可疑版本的 WebEx 会议管理器的下载链接可以在 [http://www.trapkit.de/books/bhd/](http://www.trapkit.de/books/bhd/)
+    找到。
 - en: 'Step 1: List the Registered WebEx Objects and Exported Methods'
   id: totrans-16
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 第1步：列出已注册的 WebEx 对象和导出方法。
 - en: After downloading and installing the WebEx Meeting Manager software, I fired
     up COMRaider^([[45](ch05s05.html#ftn.CHP-5-FN-1)]) to generate a list of the exported
     interfaces the control provides to the caller. I clicked the **Start** button
@@ -93,6 +112,9 @@
   id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下载并安装了 WebEx 会议管理器软件之后，我启动了 COMRaider^([[45](ch05s05.html#ftn.CHP-5-FN-1)))
+    以生成控制提供给调用者的导出接口列表。我在 COMRaider 中点击了 **开始** 按钮，并选择 **扫描目录以查找已注册的 COM 服务器** 来测试安装在
+    *C:\Program Files\Webex\* 中的 WebEx 组件。
 - en: As [Figure 5-1](ch05.html#registered_webex_objects_in_comraider "Figure 5-1. Registered
     WebEx objects in COMRaider") illustrates, two objects are registered in the WebEx
     install directory, and the object with GUID `{32E26FD9-F435-4A20-A561-35D4B987CFDC}`
@@ -104,14 +126,20 @@
   id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 如 [图5-1](ch05.html#registered_webex_objects_in_comraider "图5-1. COMRaider 中注册的
+    WebEx 对象") 所示，WebEx 安装目录中注册了两个对象，具有 GUID `{32E26FD9-F435-4A20-A561-35D4B987CFDC}`
+    和 ProgID `WebexUCFObject.WebexUCFObject.1` 的对象实现了 `IObjectSafety`。由于它被标记为 *安全初始化*
+    和 *安全脚本*，Internet Explorer 将信任此对象。这使得该对象成为“浏览即被控制”攻击的潜在目标，因为可以从网页内部调用其方法.^([[46](ch05s05.html#ftn.CHP-5-FN-2)])
 - en: '![Registered WebEx objects in COMRaider](httpatomoreillycomsourcenostarchimages939281.png.jpg)'
   id: totrans-19
   prefs: []
   type: TYPE_IMG
+  zh: '![COMRaider 中注册的 WebEx 对象](httpatomoreillycomsourcenostarchimages939281.png.jpg)'
 - en: Figure 5-1. Registered WebEx objects in COMRaider
   id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 图5-1. COMRaider 中注册的 WebEx 对象
 - en: 'Microsoft also provides a handy C# class called `ClassId.cs`^([[47](ch05s05.html#ftn.CHP-5-FN-3)])
     that lists various properties of ActiveX controls. To use that class, I added
     the following lines to the source file and compiled it with the command-line version
@@ -119,6 +147,8 @@
   id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 微软还提供了一个名为 `ClassId.cs` 的方便的 C# 类，该类列出了 ActiveX 控件的各个属性。要使用该类，我在源文件中添加了以下行，并使用
+    Visual Studio 的 C# 编译器的命令行版本 (`csc`) 编译它：
 - en: '[PRE0]'
   id: totrans-22
   prefs: []
@@ -129,6 +159,7 @@
   id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 要编译和使用该工具，我在命令提示符窗口中运行了以下命令：
 - en: '[PRE1]'
   id: totrans-24
   prefs: []
@@ -139,6 +170,7 @@
   id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 工具的输出显示，该对象确实使用 `IObjectSafety` 被标记为 *安全初始化* 和 *安全脚本*。
 - en: I then clicked the **Select** button in COMRaider to see a list of the public
     methods exported by the object with GUID `{32E26FD9-F435-4A20-A561-35D4B987CFDC}`.
     As illustrated in [Figure 5-2](ch05.html#public_methods_exported_by_the_object_wi
