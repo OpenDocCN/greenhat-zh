@@ -1,6 +1,6 @@
 # 第四部分. 第四部分 特殊应用
 
-# 第二十章 监控 Windows 服务器
+# 第二十章：监控 Windows 服务器
 
 您并不总是处理由仅包含 Linux 或 Linux/Unix 计算机的同质服务器景观。只要您只是监控纯网络服务，操作系统就没有区别。但如果你想要查询本地、非网络功能的资源，那就完全是另一回事了。
 
@@ -1533,7 +1533,7 @@ CheckMultiple command=CheckFileSize ... command=CheckUpTime ... command=...
 
 ^([259]) [`trac.nakednuns.org/nscp/wiki/CheckEventLog/CheckEventLog`](http://trac.nakednuns.org/nscp/wiki/CheckEventLog/CheckEventLog)
 
-# 第二十一章 监控房间温度和湿度
+# 第二十一章：监控房间温度和湿度
 
 有许多用于监控房间温度和湿度的传感器。大多数都作为独立的网络设备集成到网络中，通常通过 SNMP 进行寻址。
 
@@ -1678,7 +1678,7 @@ define service{
 
 ^([264]) [`www.rrdtool.org/`](http://www.rrdtool.org/)
 
-# 第二十二章 监控 SAP 系统
+# 第二十二章：监控 SAP 系统
 
 监控 SAP 系统有几种方法。最简单的是检查对应 SAP 服务运行的端口。通常这些是系统编号**`00`**的 TCP 端口 3200/3300，系统编号**`01`**的 3201/3301 等。这可以通过在第 6.7.1 节“测试 TCP 端口”中描述的通用插件来完成（第 132 页）。但是，即使端口可达，也可能没有用户能够登录，因为 SAP 内部服务失败，使得无法与系统一起工作。
 
@@ -2183,7 +2183,7 @@ define service{
 
 ^([275]) 使用专为输出多个值预定的插件。
 
-# 第二十三章 处理事件数据库中的事件
+# 第二十三章：处理事件数据库中的事件
 
 事件在 Nagios 中与其他通常的主机和状态服务截然不同。在服务处于关键状态时，对服务的检查会返回 CRITICAL，直到服务状态改变，无论检查次数和重复间隔是多少。另一方面，事件只会发生一次，例如以 syslog 条目或 SNMP 陷阱的形式。
 

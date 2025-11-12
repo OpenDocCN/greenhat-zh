@@ -1,4 +1,4 @@
-# 第六章 创意灵感
+# 第六章：创意灵感
 
 ![无标题图片](img/httpatomoreillycomsourcenostarchimages1223480.png.jpg)
 

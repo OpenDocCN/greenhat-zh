@@ -1,4 +1,4 @@
-# 第六章 使用递归解决问题
+# 第六章：使用递归解决问题
 
 ![无标题图片](img/httpatomoreillycomsourcenostarchimages1273151.png.jpg)
 

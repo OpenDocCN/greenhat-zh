@@ -1,4 +1,4 @@
-# 第七章 新型总线与资源分配
+# 第七章：新型总线与资源分配
 
 ![无标题图片](img/httpatomoreillycomsourcenostarchimages1137497.png.jpg)
 

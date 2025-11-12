@@ -126,7 +126,7 @@ Copyright (c) Sam Steingold, Bruno Haible 2001-2006
 
 ![无标题图片](img/httpatomoreillycomsourcenostarchimages703123.png.jpg)
 
-# 第二章 创建你的第一个 Lisp 程序
+# 第二章：创建你的第一个 Lisp 程序
 
 既然我们已经讨论了一些 Lisp 的哲学思想，并且有一个运行的 CLISP 环境，我们就准备好编写一些实际的 Lisp 代码，形式为一个简单的游戏。
 

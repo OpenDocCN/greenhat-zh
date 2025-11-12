@@ -3078,7 +3078,7 @@ int main() {
 
 ^([64]) 注意，Zynamics 于 2011 年 3 月被谷歌收购。
 
-# 第十章 IDA 的多面性
+# 第十章：IDA 的多面性
 
 ![无标题图片](img/httpatomoreillycomsourcenostarchimages854059.png.jpg)
 

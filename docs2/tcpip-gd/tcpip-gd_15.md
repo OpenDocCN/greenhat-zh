@@ -301,7 +301,7 @@ RFCs 通常的工作方式是，当发布新的标准版本，这些新版本是
 
 除了这些表中列出的所有标准之外，还有数十个补充的 RFC，它们描述了 MIB 模块，并澄清了与 SNMP 相关的各种操作细节。您可以通过搜索“MIB”或“SNMP”来在线找到所有 MIB 的 RFC 列表。
 
-# 第六十六章 TCP/IP 结构化管理信息（SMI）和管理信息库（MIBS）
+# 第六十六章：TCP/IP 结构化管理信息（SMI）和管理信息库（MIBS）
 
 ![无标题图片](img/httpatomoreillycomsourcenostarchimages287681.png.jpg)
 

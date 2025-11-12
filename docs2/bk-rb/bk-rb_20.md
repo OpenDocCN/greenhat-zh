@@ -1,4 +1,4 @@
-# 第二十章 动态规划
+# 第二十章：动态规划
 
 ![无标题图片](img/httpatomoreillycomsourcenostarchimages860138.png.jpg)
 
