@@ -1,0 +1,8 @@
++   [GIMP 艺术家指南第二版](README.md)
++   [引言](atst-gd-gimp-2e_0.md)
++   [第一章. 基本技巧](atst-gd-gimp-2e_1.md)
++   [第二章：摄影效果](atst-gd-gimp-2e_2.md)
++   [第三章：网页设计](atst-gd-gimp-2e_3.md)
++   [第四章：广告和特效](atst-gd-gimp-2e_4.md)
++   [第五章. 字体效果](atst-gd-gimp-2e_5.md)
++   [第六章：创意灵感](atst-gd-gimp-2e_6.md)
