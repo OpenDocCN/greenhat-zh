@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# Ruby 示例
 
-> 原文：
+> 原文：Ruby by Example
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

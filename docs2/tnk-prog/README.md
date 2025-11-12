@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# 程序员思维
 
-> 原文：
+> 原文：Think Like a Programmer
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

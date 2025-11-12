@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# Inkscape 之书
 
-> 原文：
+> 原文：The Book ofTM Inkscape
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

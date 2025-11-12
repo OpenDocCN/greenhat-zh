@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# Ruby 之书
 
-> 原文：
+> 原文：The Book of Ruby
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

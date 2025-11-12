@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# 电线上的沉默
 
-> 原文：
+> 原文：Silence on the Wire
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

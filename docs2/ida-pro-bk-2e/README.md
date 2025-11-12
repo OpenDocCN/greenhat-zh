@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# IDA Pro 之书第二版
 
-> 原文：
+> 原文：The IDA Pro Book, 2nd
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

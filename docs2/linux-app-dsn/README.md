@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# Linux 设备设计
 
-> 原文：
+> 原文：Linux Appliance Design
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

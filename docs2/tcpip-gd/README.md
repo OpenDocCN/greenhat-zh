@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# TCOIP 指南
 
-> 原文：
+> 原文：The TCPIP guide
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

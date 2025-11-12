@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# W#eb 的困境
 
-> 原文：
+> 原文：The Tangled Web
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

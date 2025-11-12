@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# Audacity 之书
 
-> 原文：
+> 原文：The Book of Audacity
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

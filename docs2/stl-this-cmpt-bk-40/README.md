@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# 偷走这本计算机书籍 4.0
 
-> 原文：
+> 原文：Steal This Computer Book 4.0
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# 学好 Haskell 成就非凡
 
-> 原文：
+> 原文：Learn You a Haskell for Great Good
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

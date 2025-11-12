@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# 轻松学 Ubuntu
 
-> 原文：
+> 原文：Ubuntu Made Easy
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

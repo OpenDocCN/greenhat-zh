@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# Metasploit 渗透测试者指南
 
-> 原文：
+> 原文：Metasploit The Penetration Tester's Guide
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

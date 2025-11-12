@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# 非极客的 Linux 指南
 
-> 原文：
+> 原文：Linux for non-geeks
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

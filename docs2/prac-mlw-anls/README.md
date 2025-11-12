@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# 恶意软件分析实践指南
 
-> 原文：
+> 原文：Practical Malware Analysis
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

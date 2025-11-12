@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# Lisp 的国度
 
-> 原文：
+> 原文：Land of Lisp
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

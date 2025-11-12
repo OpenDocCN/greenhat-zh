@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# 醉鬼的漫步
 
-> 原文：
+> 原文：The Drunkard's Walk
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

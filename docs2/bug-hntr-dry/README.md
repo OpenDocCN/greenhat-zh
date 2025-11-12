@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# BUG 猎人日记
 
-> 原文：
+> 原文：A Bug Hunter's Diary
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

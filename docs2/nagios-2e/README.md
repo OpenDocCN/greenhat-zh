@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# Nagios 指南第二版
 
-> 原文：
+> 原文：Nagios, 2nd Edition
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

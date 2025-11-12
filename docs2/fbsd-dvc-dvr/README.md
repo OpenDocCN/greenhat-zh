@@ -1,6 +1,6 @@
-# GPT3 探索指南
+# FreeBSD 设备驱动
 
-> 原文：
+> 原文：FreeBSD Device Drivers
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 
