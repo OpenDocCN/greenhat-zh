@@ -1,0 +1,140 @@
+## 程序 87：异常的异常
+
+这个栈类被设计得更加健壮，如果栈出现任何问题都会抛出异常。然而，测试程序仍然会终止并转储核心。为什么？
+
+```
+  1 /************************************************
+  2  * stack_test -- Yet another testing of a       *
+  3  *      stack class.                            *
+  4  ************************************************/
+  5 #include <iostream>
+  6
+  7 /************************************************
+  8  * problem -- Class to hold a "problem".   Used *
+  9  *      for exception throwing and catching.    *
+ 10  *                                              *
+ 11  * Holds a single string which describes the    *
+ 12  * error.                                       *
+ 13  ************************************************/
+ 14 class problem
+ 15 {
+ 16     public:
+ 17         // The reason for the exception
+ 18         char *what;
+ 19
+ 20         // Constructor.
+ 21         // Create stack with messages.
+ 22         problem(char *_what):what(_what){}
+ 23 };
+ 24
+ 25 // Max data we put in a stack
+ 26 // (private to the stack class)
+ 27 const int MAX_DATA = 100;
+ 28 /************************************************
+ 29 * stack -- Classic stack.                       *
+ 30 *                                               *
+ 31 * Member functions:                             *
+ 32 *      push -- Push an item on the stack.       *
+ 33 *      pop -- Remove an item from the stack.    *
+ 34 *                                               *
+ 35 * Exceptions:                                   *
+ 36 *      Pushing too much data on a stack or      *
+ 37 *      removing data from an empty stack        *
+ 38 *      causes an exception of the "problem"     *
+ 39 *      class to be thrown.                      *
+ 40 *                                               *
+ 41 *       Also if you don't empty a stack         *
+ 42 *       before you're finished, an exception    *
+ 43 *       is thrown.                              *
+ 44 *************************************************/
+ 45 class stack {
+ 46     private:
+ 47         // The stack's data
+ 48         int data[MAX_DATA];
+ 49
+ 50         // Number of elements
+ 51         // currently in the stack
+ 52         int count;
+ 53
+ 54     public:
+ 55         // Constructor
+ 56         stack(void) : count(0) {};
+ 57
+ 58         // Destructor -- Check for non
+ 59         ~stack(void)
+ 60         {
+ 61             if (count != 0)
+ 62             {
+ 63                 throw(
+ 64                     problem("Stack not empty"));
+ 65             }
+ 66         }
+ 67
+ 68         // Push an item on the stack
+ 69         void push(
+ 70             const int what       // Item to store
+ 71         )
+ 72         {
+ 73             data[count] = what;
+ 74             ++count;
+ 75         }
+ 76         // Remove an item from the stack
+ 77         int pop(void)
+ 78         {
+ 79             if (count == 0)
+ 80                 throw(
+ 81                     problem("Stack underflow"));
+ 82         --count;
+ 83             return (data[count]);
+ 84         }
+ 85 };
+ 86
+ 87 /************************************************
+ 88 * push_three -- Push three items onto a stack  *
+ 89 *                                              *
+ 90 * Exceptions:                                  *
+ 91 *     If i3 is less than zero, a "problem"     *
+ 92 *     class exception is thrown.               *
+ 93 ************************************************/
+ 94 static void push_three(
+ 95     const int i1,      // First value to push
+ 96     const int i2,      // Second value to push
+ 97     const int i3       // Third value to push
+ 98 )
+ 99 {
+100     // Stack on which to push things
+101     stack a_stack;
+102
+103     a_stack.push(i1);
+104     a_stack.push(i2);
+105     a_stack.push(i3);
+106     if (i3 < 0)
+107         throw (problem("Bad data"));
+108 }
+109
+110 int main(void)
+111 {
+112     try {
+113         push_three(1, 3, -5);
+114     }
+115     catch (problem &info) {
+116
+117         std::cout << "Exception caught: " <<
+118             info.what << std::endl;
+119
+120         exit (8);
+121     }
+122     catch (...) {
+123         std::cout <<
+124             "Caught strange exception " <<
+125             std::endl;
+126
+127         exit (9);
+128     }
+129     std::cout << "Normal exit" << std::endl;
+130     return (0);
+131 }
+
+```
+
+（提示 110。答案 55。）
