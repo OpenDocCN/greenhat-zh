@@ -1,7 +1,9 @@
 - en: Chapter 3. DIRECT KERNEL OBJECT MANIPULATION
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第3章。直接内核对象操作
 - en: All operating systems store internal record-keeping data within main memory,
     usually as objects—that is, structures, queues, and the like. Whenever you ask
     the kernel for a list of running processes, open ports, and so on, this data is
@@ -9,132 +11,199 @@
     directly; there is no need to install a call hook to redirect control flow. This
     technique is commonly referred to as *Direct Kernel Object Manipulation (DKOM)*
     (Hoglund and Butler, 2005).
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有操作系统都在主内存中存储内部记录数据，通常作为对象——即结构、队列等。每次您向内核请求运行进程列表、打开端口等时，这些数据都会被解析并返回。因为此数据存储在主内存中，可以直接操作；无需安装调用钩子来重定向控制流。这种技术通常被称为
+    *直接内核对象操作（DKOM）*（Hoglund和Butler，2005）。
 - en: Before I get into this topic, however, let's look at how kernel data is stored
     in a FreeBSD system.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我深入这个主题之前，让我们看看在FreeBSD系统中内核数据是如何存储的。
 - en: Kernel Queue Data Structures
+  id: totrans-3
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 内核队列数据结构
 - en: In general, a lot of interesting information is stored as a *queue data structure*
     (also known as a *list*) inside the kernel. One example is the list of loaded
     linker files; another is the list of loaded kernel modules.
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，许多有趣的信息以 *队列数据结构*（也称为 *列表*）的形式存储在内核中。一个例子是已加载的链接器文件列表；另一个是已加载的内核模块列表。
 - en: 'The header file `<sys/queue.h>` defines four different types of queue data
     structures: singly-linked lists, singly-linked tail queues, doubly-linked lists,
     and doubly-linked tail queues. This file also contains 61 macros for declaring
     and operating on these structures.'
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 头文件 `<sys/queue.h>` 定义了四种不同类型的队列数据结构：单链表、单链表尾队列、双链表和双链表尾队列。此文件还包含61个宏，用于声明和操作这些结构。
 - en: The following five macros are the basis for DKOM with doubly-linked lists.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下五个宏是双链表DKOM的基础。
 - en: Note
+  id: totrans-7
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The macros for manipulating singly-linked lists, singly-linked tail queues,
     and doubly-linked tail queues are not discussed because they are in effect identical
     to the ones shown below. For details on the use of these macros, see the queue(3)
     manual page.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于这些宏与下面显示的宏在效果上相同，因此不讨论用于操作单链表、单链表尾队列和双链表尾队列的宏。有关这些宏的使用方法，请参阅queue(3)手册页。
 - en: The LIST_HEAD Macro
+  id: totrans-9
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: LIST_HEAD 宏
 - en: A doubly-linked list is headed by a structure defined by the `LIST_HEAD` macro.
     This structure contains a single pointer to the first element on the list. The
     elements are doubly-linked so that an arbitrary element can be removed without
     traversing the list. New elements can be added to the list before an existing
     element, after an existing element, or at the head of the list.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 双链表由 `LIST_HEAD` 宏定义的结构引导。该结构包含指向列表第一个元素的单一指针。元素是双链连接的，这样就可以在不遍历列表的情况下删除任意元素。可以在现有元素之前、之后或在列表头部添加新元素。
 - en: 'The following is the `LIST_HEAD` macro definition:'
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是 `LIST_HEAD` 宏的定义：
 - en: '[PRE0]'
+  id: totrans-12
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: In this definition, `name` is the name of the structure to be defined, and `type`
     specifies the types of elements to be linked into the list.
+  id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 在此定义中，`name` 是要定义的结构名称，而 `type` 指定了要链接到列表中的元素类型。
 - en: 'If a `LIST_HEAD` structure is declared as follows:'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果将 `LIST_HEAD` 结构声明如下：
 - en: '[PRE1]'
+  id: totrans-15
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: 'then a pointer to the head of the list can later be declared as:'
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 然后，可以声明列表头的指针：
 - en: '[PRE2]'
+  id: totrans-17
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: The LIST_HEAD_INITIALIZER Macro
+  id: totrans-18
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: LIST_HEAD_INITIALIZER 宏
 - en: The head of a doubly-linked list is initialized by the `LIST_HEAD_INITIALIZER`
     macro.
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 双链表的头由 `LIST_HEAD_INITIALIZER` 宏初始化。
 - en: '[PRE3]'
+  id: totrans-20
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: The LIST_ENTRY Macro
+  id: totrans-21
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: LIST_ENTRY 宏
 - en: The `LIST_ENTRY` macro declares a structure that connects the elements in a
     doubly-linked list.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: '`LIST_ENTRY` 宏声明了一个结构，用于连接双链表中的元素。'
 - en: '[PRE4]'
+  id: totrans-23
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: This structure is referenced during insertion, removal, and traversal of the
     list.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个结构在插入、删除和遍历列表时被引用。
 - en: The LIST_FOREACH Macro
+  id: totrans-25
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: LIST_FOREACH 宏
 - en: A doubly-linked list is traversed with the `LIST_FOREACH` macro.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 `LIST_FOREACH` 宏遍历双链表。
 - en: '[PRE5]'
+  id: totrans-27
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: This macro traverses the list referenced by `head` in the forward direction,
     assigning each element in turn to `var`. The `field` argument contains the structure
     declared with the `LIST_ENTRY` macro.
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 此宏以正向方向遍历由 `head` 指向的列表，依次将每个元素赋值给 `var`。`field` 参数包含使用 `LIST_ENTRY` 宏声明的结构。
 - en: The LIST_REMOVE Macro
+  id: totrans-29
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: LIST_REMOVE 宏
 - en: An element on a doubly-linked list is decoupled with the `LIST_REMOVE` macro.
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 使用 `LIST_REMOVE` 宏将双链表上的元素解耦。
 - en: '[PRE6]'
+  id: totrans-31
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: Here, `elm` is the element to be removed, and `field` contains the structure
     declared with the `LIST_ENTRY` macro.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里，`elm`是要删除的元素，而`field`包含使用`LIST_ENTRY`宏声明的结构。
 - en: Synchronization Issues
+  id: totrans-33
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 同步问题
 - en: As you'll soon see, you can alter how the kernel perceives the operating system's
     state by manipulating the various kernel queue data structures. However, you risk
     damaging the system by simply traversing and/or modifying these objects by virtue
@@ -143,257 +212,389 @@
     can result. Moreover, with symmetric multiprocessing (SMP), preemption isn't even
     necessary; if your code is running on one CPU, while another thread on another
     CPU is manipulating the same object, data corruption can occur.
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如你很快就会看到的，你可以通过操作各种内核队列数据结构来改变内核对操作系统状态的感知。然而，仅仅通过遍历和/或修改这些对象（由于可抢占性）就有损坏系统的风险；也就是说，如果你的代码被中断，而另一个线程访问或操作你正在操作的同一些对象，可能会导致数据损坏。此外，在对称多处理（SMP）中，抢占甚至不是必要的；如果你的代码在一个CPU上运行，而另一个CPU上的另一个线程正在操作同一个对象，也可能发生数据损坏。
 - en: To safely manipulate the kernel queue data structures—that is, in order to ensure
     thread synchronization—your code should acquire the appropriate lock (i.e., resource
     access control) first. In our examples, this will either be a mutex or shared/exclusive
     lock.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了安全地操作内核队列数据结构——即为了确保线程同步——你的代码应该首先获取适当的锁（即资源访问控制）。在我们的示例中，这将要么是互斥锁，要么是共享/独占锁。
 - en: The mtx_lock Function
+  id: totrans-36
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: mtx_lock函数
 - en: '*Mutexes* provide mutual exclusion for one or more data objects and are the
     primary method of thread synchronization.'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: '*互斥锁*为一个或多个数据对象提供互斥访问，并且是线程同步的主要方法。'
 - en: A kernel thread acquires a mutex by calling the `mtx_lock` function.
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 内核线程通过调用`mtx_lock`函数来获取互斥锁。
 - en: '[PRE7]'
+  id: totrans-39
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: If another thread is currently holding the mutex, the caller will sleep until
     the mutex is available.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果另一个线程当前持有互斥锁，调用者将休眠，直到互斥锁可用。
 - en: The mtx_unlock Function
+  id: totrans-41
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: mtx_unlock函数
 - en: A mutex lock is released by calling the `mtx_unlock` function.
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过调用`mtx_unlock`函数来释放互斥锁。
 - en: '[PRE8]'
+  id: totrans-43
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: If a higher priority thread is waiting for the mutex, the releasing thread may
     be preempted to allow the higher priority thread to acquire the mutex and run.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果一个高优先级的线程正在等待互斥锁，释放锁的线程可能会被抢占，以便高优先级的线程可以获取互斥锁并运行。
 - en: Note
+  id: totrans-45
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: For more on mutexes, see the mutex(9) manual page.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于互斥锁的更多信息，请参阅mutex(9)手册页面。
 - en: The sx_slock and sx_xlock Functions
+  id: totrans-47
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: sx_slock和sx_xlock函数
 - en: '*Shared/exclusive locks* (also known as *sx locks*) are simple reader/writer
     locks that can be held across a sleep. As their name suggests, multiple threads
     may hold a shared lock, but only one thread may hold an exclusive lock. Furthermore,
     if one thread holds an exclusive lock, no other threads may hold a shared lock.'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: '*共享/独占锁*（也称为*sx锁*）是一种简单的读写锁，可以在睡眠期间持有。正如其名称所暗示的，多个线程可以持有共享锁，但只有一个线程可以持有独占锁。此外，如果一个线程持有独占锁，则没有其他线程可以持有共享锁。'
 - en: A thread acquires a shared or exclusive lock by calling the `sx_slock` or `sx_xlock`
     functions, respectively.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 线程通过调用`sx_slock`或`sx_xlock`函数分别获取共享或独占锁。
 - en: '[PRE9]'
+  id: totrans-50
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: The sx_sunlock and sx_xunlock Functions
+  id: totrans-51
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: sx_sunlock和sx_xunlock函数
 - en: To release a shared or exclusive lock, call the `sx_sunlock` or `sx_xunlock`
     functions, respectively.
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 要释放共享或独占锁，分别调用`sx_sunlock`或`sx_xunlock`函数。
 - en: '[PRE10]'
+  id: totrans-53
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: Note
+  id: totrans-54
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: For more on shared/exclusive locks, see the sx(9) manual page.
+  id: totrans-55
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于共享/独占锁的更多信息，请参阅sx(9)手册页面。
 - en: Hiding a Running Process
+  id: totrans-56
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 隐藏一个正在运行的过程
 - en: Now, equipped with the macros and functions from the previous sections, I'll
     detail how to hide a running process using DKOM. First, though, we need some background
     information on process management.
+  id: totrans-57
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，有了前面几节中的宏和函数，我将详细说明如何使用DKOM隐藏一个正在运行的过程。不过，首先我们需要一些关于进程管理的背景信息。
 - en: The proc Structure
+  id: totrans-58
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: proc结构
 - en: In FreeBSD the context of each process is maintained in a `proc` structure,
     which is defined in the `<sys/proc.h>` header. The following list describes the
     fields in `struct proc` that you'll need to understand in order to hide a running
     process.
+  id: totrans-59
   prefs: []
   type: TYPE_NORMAL
+  zh: 在FreeBSD中，每个进程的上下文都保存在一个`proc`结构中，该结构在`<sys/proc.h>`头文件中定义。以下列表描述了`struct proc`中你需要了解的字段，以便隐藏一个正在运行的过程。
 - en: Note
+  id: totrans-60
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: I've tried to keep this list brief so that it can be used as a reference. You
     can skip over this list on your first reading and refer back to it when you face
     some real C code.
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 我尽量使这个列表简短，以便它可以作为参考。你可以在第一次阅读时跳过这个列表，在你遇到一些真实的C代码时再查阅它。
 - en: '**`LIST_ENTRY(proc) p_list;`**'
+  id: totrans-62
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`LIST_ENTRY(proc) p_list;`**'
 - en: This field contains the linkage pointers that are associated with the `proc`
     structure, which is stored on either the `allproc` or `zombproc` list (discussed
     in [The allproc List](ch03s03.html#the_allproc_list "The allproc List")). This
     field is referenced during insertion, removal, and traversal of either list.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 该字段包含与 `proc` 结构相关联的链接指针，该结构存储在 `allproc` 或 `zombproc` 列表中（在[全进程列表](ch03s03.html#the_allproc_list
+    "全进程列表")中讨论）。在插入、删除和遍历任一列表时都会引用此字段。
 - en: '**`int p_flag;`**'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`int p_flag;`**'
 - en: These are the process flags, such as `P_WEXIT`, `P_EXEC`, and so on, that are
     set on the running process. All the flags are defined in the `<sys/proc.h>` header.
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
+  zh: 这些是在运行进程上设置的进程标志，例如 `P_WEXIT`、`P_EXEC` 等。所有标志都在 `<sys/proc.h>` 头文件中定义。
 - en: '**`enum { PRS_NEW = 0, PRS_NORMAL, PRS_ZOMBIE } p_state;`**'
+  id: totrans-66
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`enum { PRS_NEW = 0, PRS_NORMAL, PRS_ZOMBIE } p_state;`**'
 - en: This field represents the current process state, where `PRS_NEW` identifies
     a newly born but incompletely initialized process, `PRS_NORMAL` identifies a "live"
     process, and `PRS_ZOMBIE` identifies a zombie process.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 该字段表示当前进程状态，其中 `PRS_NEW` 表示一个新出生但未完全初始化的进程，`PRS_NORMAL` 表示一个“活动”进程，而 `PRS_ZOMBIE`
+    表示一个僵尸进程。
 - en: '**`pid_t p_pid;`**'
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`pid_t p_pid;`**'
 - en: This is the process identifier (PID), which is a 32-bit integer value.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是进程标识符（PID），它是一个32位的整数值。
 - en: '**`LIST_ENTRY(proc) p_hash;`**'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`LIST_ENTRY(proc) p_hash;`**'
 - en: This field contains the linkage pointers that are associated with the `proc`
     structure, which is stored on `pidhashtbl` (discussed in [pidhashtbl](ch03s04.html#pidhashtbl
     "pidhashtbl")). This field is referenced during insertion, removal, and traversal
     of `pidhashtbl`.
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 该字段包含与 `proc` 结构相关联的链接指针，该结构存储在 `pidhashtbl` 中（在[pidhashtbl](ch03s04.html#pidhashtbl
+    "pidhashtbl")中讨论）。在插入、删除和遍历 `pidhashtbl` 时会引用此字段。
 - en: '**`struct mtx p_mtx;`**'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`struct mtx p_mtx;`**'
 - en: This is the resource access control associated with the `proc` structure. The
     header file `<sys/proc.h>` defines two macros, `PROC_LOCK` and `PROC_UNLOCK`,
     for conveniently acquiring and releasing this lock.
+  id: totrans-73
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是与 `proc` 结构相关联的资源访问控制。头文件 `<sys/proc.h>` 定义了两个宏，`PROC_LOCK` 和 `PROC_UNLOCK`，以便方便地获取和释放此锁。
 - en: '[PRE11]'
+  id: totrans-74
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: '**`struct vmspace *p_vmspace;`**'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`struct vmspace *p_vmspace;`**'
 - en: This is the virtual memory state of the process, including the machine-dependent
     and machine-independent data structures, as well as statistics.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是进程的虚拟内存状态，包括机器相关和机器无关的数据结构，以及统计数据。
 - en: '**`char p_comm[MAXCOMLEN + 1];`**'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`char p_comm[MAXCOMLEN + 1];`**'
 - en: 'This is the name or command used to execute the process. The constant `MAXCOMLEN`
     is defined in the `<sys/param.h>` header as follows:'
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是用于执行进程的名称或命令。常量 `MAXCOMLEN` 在 `<sys/param.h>` 头文件中定义如下：
 - en: '[PRE12]'
+  id: totrans-79
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: The allproc List
+  id: totrans-80
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 全进程列表
 - en: FreeBSD organizes its `proc` structures into two lists. All processes in the
     `ZOMBIE` state are located on the `zombproc` list; the rest are on the `allproc`
     list. This list is referenced—albeit indirectly—by `ps(1)`, `top(1)`, and other
     reporting tools to list the running processes on the system. Thus, you can hide
     a running process by simply removing its `proc` structure from the `allproc` list.
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
+  zh: FreeBSD 将其 `proc` 结构组织成两个列表。所有处于 `ZOMBIE` 状态的进程都位于 `zombproc` 列表中；其余的都在 `allproc`
+    列表中。此列表通过间接方式被 `ps(1)`、`top(1)` 和其他报告工具引用，以列出系统上的运行进程。因此，您只需从 `allproc` 列表中删除其
+    `proc` 结构，就可以隐藏一个运行进程。
 - en: Note
+  id: totrans-82
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 备注
 - en: Naturally, one might think that by removing a `proc` structure from the `allproc`
     list, the associated process would not execute. In the past, several authors and
     hackers have stated that modifying `allproc` would be far too complicated, because
     it is used in process scheduling and other important system tasks. However, because
     processes are now executed at thread granularity, this is no longer the case.
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 自然地，人们可能会认为，通过从 `allproc` 列表中删除 `proc` 结构，相关的进程将不会执行。在过去，一些作者和黑客表示，修改 `allproc`
+    将会非常复杂，因为它用于进程调度和其他重要系统任务。然而，由于进程现在是在线程粒度上执行的，这种情况已经不再适用了。
 - en: 'The `allproc` list is defined in the `<sys/proc.h>` header as follows:'
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: '`allproc` 列表在 `<sys/proc.h>` 头文件中定义如下：'
 - en: '[PRE13]'
+  id: totrans-85
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: 'Notice that `allproc` is declared as a `proclist` structure, which is defined
     in the `<sys/proc.h>` header as follows:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，`allproc` 被声明为 `proclist` 结构，该结构在 `<sys/proc.h>` 头文件中定义如下：
 - en: '[PRE14]'
+  id: totrans-87
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: From these listings, you can see that `allproc` is simply a kernel queue data
     structure—a doubly-linked list of `proc` structures, to be exact.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 从这些列表中，您可以看到 `allproc` 仅仅是一个内核队列数据结构——一个 `proc` 结构的 双向链表，更确切地说。
 - en: The following excerpt from `<sys/proc.h>` lists the resource access control
     associated with the `allproc` list.
+  id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是从`<sys/proc.h>`中摘录的与`allproc`列表相关的资源访问控制。
 - en: '[PRE15]'
+  id: totrans-90
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: Example
+  id: totrans-91
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 示例
 - en: 'Listing 3-1 shows a system call module designed to hide a running process by
     removing its `proc` structure(s) from the `allproc` list. The system call is invoked
     with one argument: a character pointer (i.e., a string) containing the name of
     the process to be hidden.'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 列表3-1显示了一个系统调用模块，该模块通过从`allproc`列表中删除其`proc`结构（s）来隐藏一个正在运行的过程。系统调用用一个参数调用：一个包含要隐藏的进程名称的字符指针（即字符串）。
 - en: '[PRE16]'
+  id: totrans-93
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: '*Listing 3-1: process_hiding.c*'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表3-1：process_hiding.c*'
 - en: Notice how I've locked ❶ the `allproc` list and ❷ each `proc` structure, prior
     to inspection, to ensure thread synchronization—in layman's terms, to avoid a
     kernel panic. Of course, I also release ❻ ❼ each lock after I'm done.
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意我如何在检查之前❶锁定`allproc`列表和❷每个`proc`结构，以确保线程同步——用通俗的话说，为了避免内核恐慌。当然，我在完成后也会❻❺释放每个锁。
 - en: An interesting detail about `process_hiding` is that prior to ❹ the process
     name comparison, I ❸ examine each process's virtual address space and process
     flags. If the former does not exist or the latter is set to "working on exiting"
     the `proc` structure is unlocked and skipped over. What's the point of hiding
     a process that's not going to run?
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于`process_hiding`的一个有趣细节是，在❹过程名称比较之前，我❸检查每个进程的虚拟地址空间和进程标志。如果前者不存在或后者设置为“正在退出”，则`proc`结构将解锁并跳过。隐藏一个不会运行的过程有什么意义呢？
 - en: Another interesting detail worth mentioning is that after I ❺ remove the user-specified
     `proc` structure from the `allproc` list, I don't force an immediate exit from
     the `for` loop. That is, there is no `break` statement. To understand why, consider
@@ -404,413 +605,618 @@
     because each child process gets its own individual entry on the `allproc` list.
     Therefore, in order to hide every instance of a single process, you need to iterate
     through `allproc` in its entirety.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一个值得注意的细节是，在我❺从`allproc`列表中删除用户指定的`proc`结构之后，我没有强制立即退出`for`循环。也就是说，没有`break`语句。为什么这样做，考虑一个已经复制或分叉了自己的进程，以便父进程和子进程可以同时执行不同代码段的情况。（这是网络服务器，如`httpd`中的一种流行做法。）在这种情况下，向系统请求运行进程列表将返回父进程和子进程，因为每个子进程都在`allproc`列表上有一个单独的条目。因此，为了隐藏单个进程的每个实例，你需要遍历`allproc`列表的整个内容。
 - en: 'The following output shows `process_hiding` in action:'
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下输出显示了`process_hiding`的实际操作：
 - en: '[PRE17]'
+  id: totrans-99
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: Notice how I am able to hide `top(1)` from the output of `ps(1)`. Just for fun,
     let's look at this from `top(1)`'s perspective, shown below in a before-and-after
     style.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意我能够从`ps(1)`的输出中隐藏`top(1)`。为了好玩，让我们从`top(1)`的角度来看，如下所示，以前后对比的方式。
 - en: '[PRE18]'
+  id: totrans-101
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: Notice how in the "before" section, `top(1)` reports ❶ one running process,
     ❷ itself, while in the "after" section it reports ❸ zero running processes—even
     though it is clearly still running . . . /me grins.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意在“之前”部分，`top(1)`报告了❶一个正在运行的过程，❷自身，而在“之后”部分，它报告了❸零个正在运行的过程——尽管它显然仍在运行……/me微笑。
 - en: Hiding a Running Process Redux
+  id: totrans-103
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 再次注意隐藏正在运行的过程
 - en: 'Of course, process management involves more than just the `allproc` and `zombproc`
     lists, and as such, hiding a running process involves more than just manipulating
     the `allproc` list. For instance:'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，进程管理不仅涉及`allproc`和`zombproc`列表，因此隐藏一个正在运行的过程也不仅仅是操作`allproc`列表。例如：
 - en: '[PRE19]'
+  id: totrans-105
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: Notice how the hidden process (`top`) was found through its PID. Undoubtedly,
     I'm going to remedy this. But first, some background information on FreeBSD hash
     tables^([[1](#ftn.CHP-3-FN-1)]) is required.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意隐藏的过程（`top`）是通过其PID找到的。毫无疑问，我将解决这个问题。但首先，需要一些关于FreeBSD哈希表的背景信息^([[1](#ftn.CHP-3-FN-1)])。
 - en: The hashinit Function
+  id: totrans-107
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: '`hashinit`函数'
 - en: In FreeBSD, a *hash table* is a contiguous array of `LIST_HEAD` entries that
     is initialized by calling the `hashinit` function.
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 在FreeBSD中，一个*哈希表*是由`LIST_HEAD`条目组成的连续数组，它通过调用`hashinit`函数进行初始化。
 - en: '[PRE20]'
+  id: totrans-109
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: This function allocates space for a hash table of size `nelements`. If successful,
     a pointer to the allocated hash table is returned, with the bit mask (which is
     used in the hash function) set in `hashmask`.
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 此函数为大小为`nelements`的哈希表分配空间。如果成功，则返回分配的哈希表的指针，并将位掩码（在哈希函数中使用）设置在`hashmask`中。
 - en: pidhashtbl
+  id: totrans-111
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: pidhashtbl
 - en: For efficiency purposes, all running processes, in addition to being on the
     `allproc` list, are stored on a hash table named `pidhashtbl`. This hash table
     is used to locate a `proc` structure by its PID more quickly than an O(*n*) walk
     of (i.e., a linear search through) the `allproc` list. This hash table is how
     the hidden process at the beginning of this section was found through its PID.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了提高效率，除了存储在`allproc`列表中之外，所有正在运行的过程还存储在一个名为`pidhashtbl`的哈希表中。这个哈希表用于通过PID比在`allproc`列表中进行O(*n*)遍历（即，线性搜索）更快地定位`proc`结构。这就是本节开头通过PID找到隐藏过程的方式。
 - en: '`pidhashtbl` is defined in the `<sys/proc.h>` header as follows:'
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
+  zh: '`pidhashtbl`在`<sys/proc.h>`头文件中定义如下：'
 - en: '[PRE21]'
+  id: totrans-114
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: 'It is initialized in the file /sys/kern/kern_proc.c as:'
+  id: totrans-115
   prefs: []
   type: TYPE_NORMAL
+  zh: 它在文件/sys/kern/kern_proc.c中初始化为：
 - en: '[PRE22]'
+  id: totrans-116
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: The pfind Function
+  id: totrans-117
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: pfind函数
 - en: 'To locate a process via `pidhashtbl`, a kernel thread calls the `pfind` function.
     This function is implemented in the file /sys/kern/kern_proc.c as follows:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 要通过`pidhashtbl`定位一个进程，内核线程调用`pfind`函数。此函数在文件/sys/kern/kern_proc.c中实现如下：
 - en: '[PRE23]'
+  id: totrans-119
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: Notice how the resource access control for `pidhashtbl` is ❶ `allproc_lock`—the
     same lock associated with the `allproc` list. This is because `allproc` and `pidhashtbl`
     are designed to be in synch.
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，`pidhashtbl`的资源访问控制是❶ `allproc_lock`——与`allproc`列表关联的相同锁。这是因为`allproc`和`pidhashtbl`被设计成同步的。
 - en: 'Also, notice that `pidhashtbl` is traversed via the ❷ `PIDHASH` macro. This
     macro is defined in the `<sys/proc.h>` header as follows:'
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，`pidhashtbl`是通过❷ `PIDHASH`宏遍历的。此宏在`<sys/proc.h>`头文件中定义如下：
 - en: '[PRE24]'
+  id: totrans-122
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: As you can see, `PIDHASH` is a macro substitution for `pidhashtbl`; specifically,
     it's the hash function.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，`PIDHASH`是`pidhashtbl`的宏替换；具体来说，它是哈希函数。
 - en: Example
+  id: totrans-124
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 示例
 - en: In the following listing, I modify `process_hiding` to protect a running process
     from being found through its PID, with the changes shown in bold.
+  id: totrans-125
   prefs: []
   type: TYPE_NORMAL
+  zh: 在下面的列表中，我将`process_hiding`修改为通过PID保护正在运行的过程不被发现，修改内容以粗体显示。
 - en: '[PRE25]'
+  id: totrans-126
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: As you can see, all I've done is remove the `proc` structure from `pidhashtbl`.
     Easy, eh?
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，我所做的只是从`pidhashtbl`中移除了`proc`结构。简单，对吧？
 - en: Listing 3-2 is an alternative approach, which takes advantage of your knowledge
     of `pidhashtbl`.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 列表3-2是另一种方法，它利用了你对`pidhashtbl`的了解。
 - en: '[PRE26]'
+  id: totrans-129
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: '*Listing 3-2: process_hiding_redux.c*'
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表3-2：process_hiding_redux.c*'
 - en: As you can see, `process_hiding` has been rewritten to work with PIDs (instead
     of names), so that you may forgo iterating through `allproc` in favor of iterating
     through `pidhashtbl`. This should reduce the overall run time.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，`process_hiding`已被重写以使用PID（而不是名称），这样你就可以选择遍历`pidhashtbl`而不是遍历`allproc`。这应该会减少总的运行时间。
 - en: 'Here is some sample output:'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里有一些示例输出：
 - en: '[PRE27]'
+  id: totrans-133
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: At this point, unless someone is actively searching for your hidden process,
     you should be safe from discovery. However, keep in mind that there are still
     data structures in the kernel that reference the various running processes, which
     means that your hidden process can still be detected—and quite easily, at that!
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，除非有人正在积极搜索你的隐藏进程，否则你应该不会被发现。然而，请记住，内核中仍然有一些数据结构引用了各种运行中的进程，这意味着你的隐藏进程仍然可能被检测到——而且相当容易！
 - en: '* * *'
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[1](#CHP-3-FN-1)]) ¹ In general, a *hash table* is a data structure in which
     keys are mapped to array positions by a hash function. The purpose of a hash table
     is to provide quick and efficient data retrieval. That is, given a key (e.g.,
     a person's name), you can easily find the corresponding value (e.g., the person's
     phone number). This works by transforming the key, using a hash function, into
     a number that represents the offset in an array, which contains the desired value.
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[1](#CHP-3-FN-1)]) ¹ 通常，*哈希表*是一种数据结构，其中键通过哈希函数映射到数组位置。哈希表的目的在于提供快速高效的数据检索。也就是说，给定一个键（例如，一个人的名字），你可以轻松地找到相应的值（例如，这个人的电话号码）。这是通过使用哈希函数将键转换为一个表示数组中偏移量的数字来实现的，该数组包含所需值。
 - en: Hiding with DKOM
+  id: totrans-137
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 使用DKOM隐藏
 - en: As you've seen, the main challenge to overcome when hiding an object with DKOM
     is removing all references to your object in the kernel. The best way to do so
     is to look through and mimic the source code of the object's terminating function(s),
     which are designed to remove all references to the object. For instance, to identify
     all the data structures that reference a running process, refer to the `_exit(2)`
     system call function, which is implemented in the file /sys/kern/kern_exit.c.
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如你所见，在隐藏带有DKOM的对象时，主要的挑战是移除内核中所有对你的对象的引用。最好的方法是查看并模仿对象的终止函数（s）的源代码，这些函数旨在移除对象的所有引用。例如，为了识别所有引用正在运行进程的数据结构，请参考
+    `_exit(2)` 系统调用函数，该函数在文件 /sys/kern/kern_exit.c 中实现。
 - en: Note
+  id: totrans-139
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Because sorting through unfamiliar kernel code is never quick and easy, I didn't
     dump the source for *`_exit(2)`* at the beginning of [Hiding a Running Process](ch03s03.html
     "Hiding a Running Process"), when I first discussed hiding a running process.
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于整理不熟悉的内核代码永远不会又快又容易，我在首次讨论隐藏正在运行的过程时，并没有在 [隐藏一个正在运行的过程](ch03s03.html "隐藏一个正在运行的过程")
+    的开头就列出 *`_exit(2)`* 的源代码。
 - en: 'At this point, you should know enough to be able to go through `_exit(2)` on
     your own. Still, here are the remaining objects you need to patch in order to
     hide a running process:'
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个阶段，你应该已经了解足够的信息，可以自己执行 `_exit(2)`。尽管如此，以下是你需要修补的剩余对象，以便隐藏一个正在运行的过程：
 - en: The parent process' child list
+  id: totrans-142
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 父进程的子进程列表
 - en: The parent process' process-group list
+  id: totrans-143
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 父进程的进程组列表
 - en: The `nprocs` variable
+  id: totrans-144
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`nprocs` 变量'
 - en: Hiding an Open TCP-based Port
+  id: totrans-145
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 隐藏一个打开的基于TCP的端口
 - en: Because no book about rootkits is complete without a discussion of how to hide
     an open TCP-based port, which indirectly hides an established TCP-based connection,
     I'll show an example here using DKOM. First, though, we need some background information
     on Internet protocol data structures.
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于没有关于rootkits的书籍不讨论如何隐藏一个打开的基于TCP的端口，这间接隐藏了一个建立的基于TCP的连接，因此我将在这里使用DKOM展示一个示例。不过，首先我们需要一些关于互联网协议数据结构的背景信息。
 - en: The inpcb Structure
+  id: totrans-147
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: inpcb 结构
 - en: For each TCP- or UDP-based socket, an `inpcb` structure, which is known as an
     *Internet protocol control block*, is created to hold internetworking data such
     as network addresses, port numbers, routing information, and so on (McKusick and
     Neville-Neil, 2004). This structure is defined in the `<netinet/in_pcb.h>` header.
     The following list describes the fields in `struct inpcb` that you'll need to
     understand in order to hide an open TCP-based port.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于每个基于TCP或UDP的套接字，都会创建一个 `inpcb` 结构，称为 *互联网协议控制块*，用于存储诸如网络地址、端口号、路由信息等互联网数据（McKusick和Neville-Neil，2004）。此结构在
+    `<netinet/in_pcb.h>` 头文件中定义。以下列表描述了 `struct inpcb` 中的字段，你需要了解这些字段才能隐藏一个打开的TCP端口。
 - en: Note
+  id: totrans-149
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: As before, you can skip over this list on your first reading and return to it
     when you deal with some real C code.
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前所述，你可以在第一次阅读时跳过此列表，并在处理一些真实的C代码时返回。
 - en: '**`LIST_ENTRY(inpcb) inp_list;`**'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`LIST_ENTRY(inpcb) inp_list;`**'
 - en: This field contains the linkage pointers that are associated with the `inpcb`
     structure, which is stored on the `tcbinfo.listhead` list (discussed in [The tcbinfo.listhead
     List](ch03s06.html#the_tcbinfo.listhead_list "The tcbinfo.listhead List")). This
     field is referenced during insertion, removal, and traversal of this list.
+  id: totrans-152
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段包含与 `inpcb` 结构关联的链接指针，该结构存储在 `tcbinfo.listhead` 列表中（在 [The tcbinfo.listhead
+    List](ch03s06.html#the_tcbinfo.listhead_list "The tcbinfo.listhead List") 中讨论）。在插入、删除和遍历此列表时引用此字段。
 - en: '**`struct in_conninfo inp_inc;`**'
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`struct in_conninfo inp_inc;`**'
 - en: 'This structure maintains the socket pair 4-tuple in an established connection;
     that is, the local IP address, local port, foreign IP address, and foreign port.
     The definition of `struct in_conninfo` can be found in the `<netinet/in_pcb.h>`
     header as follows:'
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
+  zh: 此结构维护已建立连接中的套接字对4元组；即本地IP地址、本地端口号、外方IP地址和外方端口号。`struct in_conninfo` 的定义可以在 `<netinet/in_pcb.h>`
+    头文件中找到，如下所示：
 - en: '[PRE28]'
+  id: totrans-155
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE28]'
 - en: '| Within an `in_conninfo` structure, the socket pair 4-tuple is stored in the
     last member, `inc_ie`. This can be verified by looking up the definition of `struct
     in_endpoints` in the `<netinet/in_pcb.h>` header as follows: |'
+  id: totrans-156
   prefs: []
   type: TYPE_TB
+  zh: '| 在 `in_conninfo` 结构中，套接字对4元组存储在最后一个成员 `inc_ie` 中。这可以通过在 `<netinet/in_pcb.h>`
+    头文件中查找 `struct in_endpoints` 的定义来验证，如下所示：|'
 - en: '[PRE29]'
+  id: totrans-157
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE29]'
 - en: '**`u_char inp_vflag;`**'
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`u_char inp_vflag;`**'
 - en: This field identifies the IP version in use as well as the IP flags that are
     set on the `inpcb` structure. All the flags are defined in the `<netinet/in_pcb.h>`
     header.
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段标识正在使用的IP版本以及设置在 `inpcb` 结构上的IP标志。所有标志都在 `<netinet/in_pcb.h>` 头文件中定义。
 - en: '**`struct mtx inp_mtx;`**'
+  id: totrans-160
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`struct mtx inp_mtx;`**'
 - en: This is the resource access control associated with the `inpcb` structure. The
     header file `<netinet/in_pcb.h>` defines two macros, `INP_LOCK` and `INP_UNLOCK`,
     that conveniently acquire and release this lock.
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是与`inpcb`结构相关的资源访问控制。头文件`<netinet/in_pcb.h>`定义了两个宏，`INP_LOCK`和`INP_UNLOCK`，用于方便地获取和释放这个锁。
 - en: '[PRE30]'
+  id: totrans-162
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE30]'
 - en: The tcbinfo.listhead List
+  id: totrans-163
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: tcbinfo.listhead列表
 - en: '`inpcb` structures associated with TCP-based sockets are maintained on a doubly-linked
     list private to the TCP protocol module. This list is contained within `tcbinfo`,
     which is defined in the `<netinet/tcp_var.h>` header as follows:'
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
+  zh: 与基于TCP的套接字相关的`inpcb`结构被维护在TCP协议模块的私有双链表中。这个列表包含在`tcbinfo`中，该`tcbinfo`在`<netinet/tcp_var.h>`头文件中如下定义：
 - en: '[PRE31]'
+  id: totrans-165
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE31]'
 - en: As you can see, `tcbinfo` is declared as of type `struct inpcbinfo`, which is
     defined in the `<netinet/in_pcb.h>` header. Before I go further, let me describe
     the fields of `struct inpcbinfo` that you'll need to understand in order to hide
     an open TCP-based port.
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
+  zh: 如您所见，`tcbinfo`被声明为`struct inpcbinfo`类型，该类型在`<netinet/in_pcb.h>`头文件中定义。在我继续之前，让我描述一下`struct
+    inpcbinfo`的字段，这些字段是您为了隐藏一个基于TCP的开放端口而需要了解的。
 - en: '**`struct inpcbhead *listhead;`**'
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`struct inpcbhead *listhead;`**'
 - en: Within `tcbinfo`, this field maintains the list of `inpcb` structures associated
     with TCP-based sockets. This can be verified by looking up the definition of `struct
     inpcbhead` in the `<netinet/in_pcb.h>` header.
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
+  zh: 在`tcbinfo`中，这个字段维护了与基于TCP的套接字相关的`inpcb`结构列表。这可以通过在`<netinet/in_pcb.h>`头文件中查找`struct
+    inpcbhead`的定义来验证。
 - en: '[PRE32]'
+  id: totrans-169
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE32]'
 - en: '**`struct mtx ipi_mtx;`**'
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`struct mtx ipi_mtx;`**'
 - en: 'This is the resource access control associated with the `inpcbinfo` structure.
     The header file `<netinet/in_pcb.h>` defines four macros for conveniently acquiring
     and releasing this lock; you''ll make use of the following two:'
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
+  zh: 这是与`inpcbinfo`结构相关的资源访问控制。头文件`<netinet/in_pcb.h>`定义了四个宏，用于方便地获取和释放这个锁；您将使用以下两个：
 - en: '[PRE33]'
+  id: totrans-172
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE33]'
 - en: Example
+  id: totrans-173
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 示例
 - en: 'At this point, it should come as no surprise that you can hide an open TCP-based
     port by simply removing its `inpcb` structure from `tcbinfo.listhead`. Listing
     3-3 is a system call module designed to do just that. The system call is invoked
     with one argument: an integer containing the local port to be hidden.'
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
+  zh: 到目前为止，您可能不会感到惊讶，您可以通过简单地从`tcbinfo.listhead`中移除其`inpcb`结构来隐藏一个基于TCP的开放端口。列表3-3是一个系统调用模块，专门用于执行此操作。该系统调用使用一个参数：一个包含要隐藏的本地端口的整数值。
 - en: '[PRE34]'
+  id: totrans-175
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE34]'
 - en: '*Listing 3-3: port_hiding.c*'
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表3-3: port_hiding.c*'
 - en: An interesting detail about this code is that prior to ❷ the port number comparison,
     I ❶ examine each `inpcb` structure's `inp_vflag` member. If the `inpcb` is found
     to be in the 2MSL wait state, I skip over it.^([[2](#ftn.CHP-3-FN-2)]) What's
     the point of hiding a port that's about to close?
+  id: totrans-177
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于这段代码的一个有趣细节是，在❷端口号比较之前，我❶检查每个`inpcb`结构的`inp_vflag`成员。如果发现`inpcb`处于2MSL等待状态，我就跳过它.^([[2](#ftn.CHP-3-FN-2)])
+    隐藏一个即将关闭的端口有什么意义？
 - en: 'In the following output, I `telnet(1)` into a remote machine and then invoke
     `port_hiding` to hide the session:'
+  id: totrans-178
   prefs: []
   type: TYPE_NORMAL
+  zh: 在以下输出中，我使用`telnet(1)`连接到远程机器，然后调用`port_hiding`来隐藏会话：
 - en: '[PRE35]'
+  id: totrans-179
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE35]'
 - en: 'Notice how `port_hiding` hid the local telnet server as well as the connection.
     To change this behavior, simply rewrite `port_hiding` to require two arguments:
     a local port and a local address.'
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意`port_hiding`如何隐藏了本地telnet服务器以及连接。要改变这种行为，只需将`port_hiding`重写为需要两个参数：一个本地端口和一个本地地址。
 - en: '* * *'
+  id: totrans-181
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[2](#CHP-3-FN-2)]) ² When a TCP connection performs an active close and sends
     the final ACK, the connection is put into the 2MSL wait state for twice the maximum
     segment lifetime. This lets the TCP connection resend the final ACK in case the
     first one was lost.
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[2](#CHP-3-FN-2)]) ² 当一个TCP连接执行主动关闭并发送最终的ACK时，连接将被置于2MSL等待状态，这是最大段生命期的两倍。这允许TCP连接在第一个ACK丢失的情况下重新发送最终的ACK。
 - en: Corrupting Kernel Data
+  id: totrans-183
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 污染内核数据
 - en: 'Before I conclude this chapter, let''s consider the following: What happens
     when one of your hidden objects is found and killed?'
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
+  zh: 在我总结这一章之前，让我们考虑以下问题：当你的一个隐藏对象被发现并被消灭时会发生什么？
 - en: In the best case scenario, nothing. In the worst case scenario, the kernel panics
     because when an object is killed, the kernel unconditionally removes it from its
     various lists. However, in this situation, the object has already been removed.
     Therefore, the kernel will fail to find it, and will walk off the end of its lists,
     corrupting those data structures in the process.
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
+  zh: 在最佳情况下，什么都不会发生。在最坏的情况下，内核会崩溃，因为当一个对象被杀死时，内核会无条件地将其从其各种列表中移除。然而，在这种情况下，对象已经被移除。因此，内核将无法找到它，并会在其列表的末尾越界，在这个过程中破坏那些数据结构。
 - en: 'To prevent this data corruption, here are some suggestions:'
+  id: totrans-186
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了防止这种数据损坏，这里有一些建议：
 - en: Hook the terminating function(s) to prevent them from removing your hidden objects.
+  id: totrans-187
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将终止函数（们）挂钩以防止它们移除您的隐藏对象。
 - en: Hook the terminating function(s) to place your hidden objects back onto the
     lists before termination.
+  id: totrans-188
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 在终止之前，将终止函数（们）挂钩以将您的隐藏对象放回列表中。
 - en: Implement your own "exit" function to safely kill your hidden objects.
+  id: totrans-189
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 实现您自己的“退出”函数以安全地杀死您的隐藏对象。
 - en: Do nothing. If your hidden objects are never found, they can never be killed—right?
+  id: totrans-190
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 什么也不做。如果您的隐藏对象从未被发现，它们永远不会被杀死——对吗？
 - en: Concluding Remarks
+  id: totrans-191
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: DKOM is one of the hardest rootkit techniques to detect. By patching the objects
     the kernel relies upon for its bookkeeping and reporting, you can produce desirable
     results while leaving an extremely small footprint. For example, in this chapter
     I've shown how to hide a running process and an open port using a few simple modifications.
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
+  zh: DKOM 是最难检测的 rootkit 技术之一。通过修补内核用于账簿和报告所依赖的对象，您可以在留下极小痕迹的同时产生期望的结果。例如，在本章中，我已经展示了如何通过一些简单的修改来隐藏一个正在运行的过程和一个打开的端口。
 - en: 'While DKOM does have limited use (because it can only manipulate objects resident
     in main memory), there are many objects within the kernel to patch. For instance,
     for a complete listing of all the kernel queue data structures, execute the following
     commands:'
+  id: totrans-193
   prefs: []
   type: TYPE_NORMAL
+  zh: 虽然 DKOM 确实有有限的使用（因为它只能操作主内存中的对象），但内核中有许多对象可以修补。例如，要获取所有内核队列数据结构的完整列表，请执行以下命令：
 - en: '[PRE36]'
+  id: totrans-194
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE36]'

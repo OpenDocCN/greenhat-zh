@@ -1,11 +1,15 @@
 - en: Chapter 2. HOOKING
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第二章 钩子
 - en: We'll start our discussion of kernel-mode rootkits with call hooking, or simply
     hooking, which is arguably the most popular rootkit technique.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将开始讨论内核模式rootkit的讨论，从调用钩子开始，或者简单地称为钩子，这可能是最流行的rootkit技术。
 - en: '*Hooking* is a programming technique that employs handler functions (called
     *hooks*) to modify control flow. A new hook registers its address as the location
     for a specific function, so that when that function is called, the hook is run
@@ -13,373 +17,573 @@
     to preserve the original behavior. [Figure 2-1](ch02.html#normal_execution_versus_hooked_execution
     "Figure 2-1. Normal execution versus hooked execution") illustrates the control
     flow of a subroutine before and after installing a call hook.'
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: '*钩子*是一种编程技术，它使用处理函数（称为钩子）来修改控制流。一个新的钩子将其地址注册为特定函数的位置，因此当该函数被调用时，钩子将被运行。通常，钩子会在某个时刻调用原始函数，以保留原始行为。[图2-1](ch02.html#normal_execution_versus_hooked_execution
+    "图2-1. 正常执行与钩子执行")说明了安装调用钩子前后子例程的控制流。'
 - en: '![Normal execution versus hooked execution](tagoreillycom20090804nostarchimages313930.png)'
+  id: totrans-3
   prefs: []
   type: TYPE_IMG
+  zh: '![正常执行与钩子执行](tagoreillycom20090804nostarchimages313930.png)'
 - en: '**Figure 2-1. Normal execution versus hooked execution**'
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: '**图2-1. 正常执行与钩子执行**'
 - en: As you can see, hooking is used to extend (or decrease) the functionality of
     a subroutine. In terms of rootkit design, hooking is used to alter the results
     of the operating system's application programming interfaces (APIs), most commonly
     those involved with bookkeeping and reporting.
+  id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如你所见，钩子用于扩展（或减少）子例程的功能。在rootkit设计中，钩子用于改变操作系统的应用程序编程接口（API）的结果，最常见的是与账簿和报告相关的API。
 - en: Now, let's start abusing the KLD interface.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，让我们开始滥用KLD接口。
 - en: Hooking a System Call
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 系统调用钩子
 - en: Recall from [Chapter 1](ch01.html "Chapter 1. LOADABLE KERNEL MODULES") that
     a system call is the entry point through which an application program requests
     service from the operating system's kernel. By hooking these entry points, a rootkit
     can alter the data the kernel returns to any or every user space process. In fact,
     hooking system calls is so effective that most (publicly available) rootkits employ
     it in some way.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 回想一下[第一章](ch01.html "第一章. 可加载内核模块")中提到的系统调用是应用程序程序请求操作系统内核服务的入口点。通过钩子这些入口点，rootkit可以改变内核返回给任何或所有用户空间进程的数据。事实上，钩子系统调用非常有效，大多数（公开可用的）rootkit都以某种方式使用它。
 - en: In FreeBSD, a system call hook is installed by registering its address as the
     system call function within the target system call's `sysent` structure (which
     is located within `sysent[]`).
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 在FreeBSD中，通过将地址注册为目标系统调用`sysent`结构（位于`sysent[]`中）内的系统调用函数来安装系统调用钩子。
 - en: Note
+  id: totrans-10
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: For more on system calls, see [System Call Modules](ch01s04.html "System Call
     Modules").
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 更多关于系统调用的信息，请参阅[系统调用模块](ch01s04.html "系统调用模块")。
 - en: Listing 2-1 is an example system call hook (albeit a trivial one) designed to
     output a debug message whenever a user space process calls the `mkdir` system
     call—in other words, whenever a directory is created.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 列表2-1是一个示例系统调用钩子（尽管是微不足道的），设计用于在用户空间进程调用`mkdir`系统调用时输出调试信息——换句话说，每当创建目录时。
 - en: '[PRE0]'
+  id: totrans-13
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: '*Listing 2-1: mkdir_hook.c*'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表2-1: mkdir_hook.c*'
 - en: Notice that upon module load, the event handler ❶ registers `mkdir_hook` (which
     simply prints a debug message and then calls `mkdir`) as the `mkdir` system call
     function. This single line installs the system call hook. To remove the hook,
     simply ❸ reinstate the original `mkdir` system call function upon module unload.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，在模块加载时，事件处理程序❶注册了`mkdir_hook`（它只是打印一条调试信息然后调用`mkdir`）作为`mkdir`系统调用函数。这一行安装了系统调用钩子。要移除钩子，只需在模块卸载时恢复原始的`mkdir`系统调用函数❸。
 - en: Note
+  id: totrans-16
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The constant ❷ *`SYS_mkdir`* is defined as the offset value for the *`mkdir`*
     system call. This constant is defined in the *`<sys/syscall.h>`* header, which
     also contains a complete listing of all in-kernel system call numbers.
+  id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 常量❷ *`SYS_mkdir`* 被定义为`mkdir`系统调用的偏移值。这个常量在`<sys/syscall.h>`头文件中定义，该文件还包含所有内核系统调用数字的完整列表。
 - en: The following output shows the results of executing `mkdir(1)` after loading
     `mkdir_hook`.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下输出显示了加载`mkdir_hook`后执行`mkdir(1)`的结果。
 - en: '[PRE1]'
+  id: totrans-19
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: As you can see, `mkdir(1)` is now a lot more verbose.^([[1](#ftn.CHP-2-FN-1)])
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如你所见，`mkdir(1)`现在变得非常冗长.^([[1](#ftn.CHP-2-FN-1)])
 - en: '* * *'
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[1](#CHP-2-FN-1)]) ¹ For you astute readers, yes, I have a umask of 022,
     which is why the permissions for "test" are 755, not 777.
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[1](#CHP-2-FN-1)]) ¹ 对于你这些敏锐的读者，是的，我有一个 umask 为 022，这就是为什么 "test" 的权限是 755，而不是
+    777。
 - en: Keystroke Logging
+  id: totrans-23
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 按键记录
 - en: Now let's look at a more interesting (but still somewhat trivial) example of
     a system call hook.
+  id: totrans-24
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在我们来看一个更有趣（但仍然有些简单）的系统调用挂钩示例。
 - en: '*Keystroke logging* is the simple act of intercepting and capturing a user''s
     keystrokes. In FreeBSD, this can be accomplished by hooking the `read` system
     call.^([[2](#ftn.CHP-2-FN-2)]) As its name implies, this call is responsible for
     reading in input. Here is its C library definition:'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: '*按键记录* 是拦截和捕获用户按键的简单行为。在 FreeBSD 中，这可以通过挂钩 `read` 系统调用来实现.^([[2](#ftn.CHP-2-FN-2)])
+    如其名称所示，这个调用负责读取输入。以下是它的 C 库定义：'
 - en: '[PRE2]'
+  id: totrans-26
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: The `read` system call reads in `nbytes` of data from the object referenced
     by the descriptor `fd` into the buffer `buf`. Therefore, in order to capture a
     user's keystrokes, you simply have to save the contents of `buf` (before returning
     from a `read` call) whenever `fd` points to standard input (i.e., file descriptor
     0).
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: '`read` 系统调用从由描述符 `fd` 引用的对象中读取 `nbytes` 的数据到缓冲区 `buf`。因此，为了捕获用户的按键，你只需在 `fd`
+    指向标准输入（即文件描述符 0）时，保存 `buf` 的内容（在从 `read` 调用返回之前）。'
 - en: 'For example, take a look at Listing 2-2:'
+  id: totrans-28
   prefs: []
   type: TYPE_NORMAL
+  zh: 例如，看看列表 2-2：
 - en: '[PRE3]'
+  id: totrans-29
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: '*Listing 2-2: read_hook.c*'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表 2-2: read_hook.c*'
 - en: In Listing 2-2 the function `read_hook` first ❶ calls `read` to read in the
     data from `fd`. If this data is ❷ not a keystroke (which is defined as one character
     or one byte in size) originating from standard input, then ❸ `read_hook` returns.
     Otherwise, the data (i.e., keystroke) is ❹ copied into a local buffer, effectively
     "capturing" it.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 在列表 2-2 中，函数 `read_hook` 首先调用 `read` 从 `fd` 读取数据。如果这些数据不是来自标准输入的按键（按键被定义为单个字符或单个字节大小），则
+    ❶ `read_hook` 返回。否则，数据（即按键）被复制到一个局部缓冲区中，有效地“捕获”它。
 - en: Note
+  id: totrans-32
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: In the interest of saving space (and keeping things simple), *`read_hook`* simply
     dumps the captured keystroke(s) to the system console.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了节省空间（并保持简单），*`read_hook`* 只是将捕获的按键（键）输出到系统控制台。
 - en: 'Here are the results from logging into a system after loading `read_hook`:'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里是加载 `read_hook` 后登录系统的结果：
 - en: '[PRE4]'
+  id: totrans-35
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: 'As you can see, my login credentials—my username (`root`) and password (`passwd`)^([[3](#ftn.CHP-2-FN-3)])—have
     been captured. At this point, you should be able to hook any system call. However,
     one question remains: If you aren''t a kernel guru, how do you determine which
     system call(s) to hook? The answer is: you use kernel process tracing.'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 正如你所见，我的登录凭证——我的用户名 (`root`) 和密码 (`passwd`)^([[3](#ftn.CHP-2-FN-3)])——已经被捕获。在这个时候，你应该能够挂钩任何系统调用。然而，还有一个问题：如果你不是内核高手，你如何确定要挂钩哪个系统调用？答案是：你使用内核进程跟踪。
 - en: '* * *'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[2](#CHP-2-FN-2)]) ² Actually, to create a full-fledged keystroke logger,
     you would have to hook `read`, `readv`, `pread`, and `preadv`.
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[2](#CHP-2-FN-2)]) ² 实际上，要创建一个完整的按键记录器，你需要挂钩 `read`、`readv`、`pread` 和 `preadv`。
 - en: ^([[3](#CHP-2-FN-3)]) ³ Obviously, this is not my real root password.
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[3](#CHP-2-FN-3)]) ³ 显然，这不是我的真实 root 密码。
 - en: Kernel Process Tracing
+  id: totrans-40
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 内核进程跟踪
 - en: '*Kernel process tracing* is a diagnostic and debugging technique used to intercept
     and record each kernel operation—that is, every system call, namei translation,
     I/O, signal processed, and context switch performed on behalf of a specific running
     process. In FreeBSD, this is done with the `ktrace(1)` and `kdump(1)` utilities.
     For example:'
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: '*内核进程跟踪* 是一种诊断和调试技术，用于拦截和记录每个内核操作——也就是说，每个代表特定运行进程执行的系统调用、名称解析、I/O、处理的信号和上下文切换。在
+    FreeBSD 中，这是通过 `ktrace(1)` 和 `kdump(1)` 工具来完成的。例如：'
 - en: '[PRE5]'
+  id: totrans-42
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: Note
+  id: totrans-43
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: In the interest of being concise, any output irrelevant to this discussion is
     omitted.
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了简洁起见，任何与这次讨论无关的输出都被省略了。
 - en: As the preceding example shows, the `ktrace(1)` utility enables kernel trace
     logging for a specific process [in this case,`ls(1)`],while `kdump(1)` displays
     the trace data.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 如前例所示，`ktrace(1)` 工具为特定进程（在这种情况下，`ls(1)`）启用内核跟踪日志记录，而 `kdump(1)` 显示跟踪数据。
 - en: Notice the various system calls that `ls(1)` issues during its execution, such
     as ❶`getdirentries`, ❷`lseek`, ❸`close`, ❹`fchdir`, and so on. This means that
     you can affect the operation and/or output of `ls(1)` by hooking one or more of
     these calls.
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意 `ls(1)` 在其执行过程中发出的各种系统调用，例如 ❶`getdirentries`、❷`lseek`、❸`close`、❹`fchdir`
+    等。这意味着你可以通过挂钩一个或多个这些调用来影响 `ls(1)` 的操作和/或输出。
 - en: The main point to all of this is that when you want to alter a specific process
     and you don't know which system call(s) to hook, you just need to perform a kernel
     trace.
+  id: totrans-47
   prefs: []
   type: TYPE_NORMAL
+  zh: 所有这些的主要观点是，当你想要改变一个特定的进程，而你不知道要钩子哪个系统调用时，你只需要执行内核跟踪。
 - en: Common System Call Hooks
+  id: totrans-48
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 常见系统调用钩子
 - en: For the sake of being thorough, [Table 2-1](ch02s04.html#common_system_call_hooks-id1
     "Table 2-1. Common System Call Hooks") outlines some of the most common system
     call hooks.
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了全面，[表 2-1](ch02s04.html#common_system_call_hooks-id1 "表 2-1. 常见系统调用钩子") 列出了一些最常见的系统调用钩子。
 - en: '**Table 2-1. Common System Call Hooks**'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: '**表 2-1. 常见系统调用钩子**'
 - en: '| System Call | Purpose of Hook |'
+  id: totrans-51
   prefs: []
   type: TYPE_TB
+  zh: '| 系统调用 | 钩子目的 |'
 - en: '| --- | --- |'
+  id: totrans-52
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `read`, `readv`, `pread`, `preadv` | Logging input |'
+  id: totrans-53
   prefs: []
   type: TYPE_TB
+  zh: '| `read`, `readv`, `pread`, `preadv` | 记录输入 |'
 - en: '| `write`,`writev`,`pwrite`, `pwritev` | Logging output |'
+  id: totrans-54
   prefs: []
   type: TYPE_TB
+  zh: '| `write`,`writev`,`pwrite`, `pwritev` | 记录输出 |'
 - en: '| `open` | Hiding file contents |'
+  id: totrans-55
   prefs: []
   type: TYPE_TB
+  zh: '| `open` | 隐藏文件内容 |'
 - en: '| `unlink` | Preventing file removal |'
+  id: totrans-56
   prefs: []
   type: TYPE_TB
+  zh: '| `unlink` | 防止文件删除 |'
 - en: '| `chdir` | Preventing directory traversal |'
+  id: totrans-57
   prefs: []
   type: TYPE_TB
+  zh: '| `chdir` | 防止目录遍历 |'
 - en: '| `chmod` | Preventing file mode modification |'
+  id: totrans-58
   prefs: []
   type: TYPE_TB
+  zh: '| `chmod` | 防止文件模式修改 |'
 - en: '| `chown` | Preventing ownership change |'
+  id: totrans-59
   prefs: []
   type: TYPE_TB
+  zh: '| `chown` | 防止所有权变更 |'
 - en: '| `kill` | Preventing signal sending |'
+  id: totrans-60
   prefs: []
   type: TYPE_TB
+  zh: '| `kill` | 防止发送信号 |'
 - en: '| `ioctl` | Manipulating `ioctl` requests |'
+  id: totrans-61
   prefs: []
   type: TYPE_TB
+  zh: '| `ioctl` | 操作 `ioctl` 请求 |'
 - en: '| `execve` | Redirecting file execution |'
+  id: totrans-62
   prefs: []
   type: TYPE_TB
+  zh: '| `execve` | 重定向文件执行 |'
 - en: '| `rename` | Preventing file renaming |'
+  id: totrans-63
   prefs: []
   type: TYPE_TB
+  zh: '| `rename` | 防止文件重命名 |'
 - en: '| `rmdir` | Preventing directory removal |'
+  id: totrans-64
   prefs: []
   type: TYPE_TB
+  zh: '| `rmdir` | 防止目录删除 |'
 - en: '| `stat`, `lstat` | Hiding file status |'
+  id: totrans-65
   prefs: []
   type: TYPE_TB
+  zh: '| `stat`, `lstat` | 隐藏文件状态 |'
 - en: '| `getdirentries` | Hiding files |'
+  id: totrans-66
   prefs: []
   type: TYPE_TB
+  zh: '| `getdirentries` | 隐藏文件 |'
 - en: '| `truncate` | Preventing file truncating or extending |'
+  id: totrans-67
   prefs: []
   type: TYPE_TB
+  zh: '| `truncate` | 防止文件截断或扩展 |'
 - en: '| `kldload` | Preventing module loading |'
+  id: totrans-68
   prefs: []
   type: TYPE_TB
+  zh: '| `kldload` | 防止模块加载 |'
 - en: '| `kldunload` | Preventing module unloading |'
+  id: totrans-69
   prefs: []
   type: TYPE_TB
+  zh: '| `kldunload` | 防止模块卸载 |'
 - en: Now let's look at some of the other kernel functions that you can hook.
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在让我们看看一些其他的内核函数，你可以对其进行钩子操作。
 - en: Communication Protocols
+  id: totrans-71
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 通信协议
 - en: As its name implies, a *communication protocol* is a set of rules and conventions
     used by two communicating processes (for example, the TCP/IP protocol suite).
     In FreeBSD, a communication protocol is defined by its entries in a protocol switch
     table. As such, by modifying these entries, a rootkit can alter the data sent
     and received by either communication endpoint. To better illustrate this "attack"
     allow me to digress.
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 如其名所示，*通信协议*是一组由两个通信进程（例如，TCP/IP 协议套件）使用的规则和约定。在 FreeBSD 中，通信协议由其在协议切换表中的条目定义。因此，通过修改这些条目，rootkit
+    可以改变通信端点发送和接收的数据。为了更好地说明这种“攻击”，让我稍微偏离一下。
 - en: The protosw Structure
+  id: totrans-73
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: protosw 结构
 - en: 'The context of each protocol switch table is maintained in a `protosw` structure,
     which is defined in the `<sys/protosw.h>` header as follows:'
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个协议切换表的内容都保存在一个 `protosw` 结构中，该结构在 `<sys/protosw.h>` 头文件中定义如下：
 - en: '[PRE6]'
+  id: totrans-75
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: '[Table 2-2](ch02s05.html#protocol_switch_table_entry_points "Table 2-2. Protocol
     Switch Table Entry Points") defines the entry points in `struct protosw` that
     you''ll need to know in order to modify a communication protocol.'
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: '[表 2-2](ch02s05.html#protocol_switch_table_entry_points "表 2-2. 协议切换表入口点")
+    定义了在 `struct protosw` 中你需要了解的入口点，以便修改通信协议。'
 - en: '**Table 2-2. Protocol Switch Table Entry Points**'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: '**表 2-2. 协议切换表入口点**'
 - en: '| Entry Point | Description |'
+  id: totrans-78
   prefs: []
   type: TYPE_TB
+  zh: '| 入口点 | 描述 |'
 - en: '| --- | --- |'
+  id: totrans-79
   prefs: []
   type: TYPE_TB
+  zh: '| --- | --- |'
 - en: '| `pr_init` | Initialization routine |'
+  id: totrans-80
   prefs: []
   type: TYPE_TB
+  zh: '| `pr_init` | 初始化例程 |'
 - en: '| `pr_input` | Pass data up toward the user |'
+  id: totrans-81
   prefs: []
   type: TYPE_TB
+  zh: '| `pr_input` | 将数据向上传递给用户 |'
 - en: '| `pr_output` | Pass data down toward the network |'
+  id: totrans-82
   prefs: []
   type: TYPE_TB
+  zh: '| `pr_output` | 将数据向下传递到网络 |'
 - en: '| `pr_ctlinput` | Pass control information up |'
+  id: totrans-83
   prefs: []
   type: TYPE_TB
+  zh: '| `pr_ctlinput` | 将控制信息向上传递 |'
 - en: '| `pr_ctloutput` | Pass control information down |'
+  id: totrans-84
   prefs: []
   type: TYPE_TB
+  zh: '| `pr_ctloutput` | 将控制信息向下传递 |'
 - en: The inetsw[ ] Switch Table
+  id: totrans-85
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: inetsw[] 切换表
 - en: 'Each communication protocol''s `protosw` structure is defined in the file/sys/netinet/in_proto.c.
     Here is a snippet from this file:'
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个通信协议的 `protosw` 结构定义在文件 /sys/netinet/in_proto.c 中。以下是该文件的一个片段：
 - en: '[PRE7]'
+  id: totrans-87
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: Notice that every protocol switch table is defined within ❶ `inetsw[]`. This
     means that in order to modify a communication protocol, you have to go through
     `inetsw[]`.
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，每个协议切换表都定义在❶ `inetsw[]` 内。这意味着为了修改通信协议，你必须通过 `inetsw[]`。
 - en: The mbuf Structure
+  id: totrans-89
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: mbuf 结构
 - en: 'Data (and control information) that is passed between two communicating processes
     is stored within an `mbuf` structure, which is defined in the `<sys/mbuf.h>` header.
     To be able to read and modify this data, there are two fields in `struct mbuf`
     that you''ll need to know: `m_len`, which identifies the amount of data contained
     within the `mbuf`, and `m_data`, which points to the data.'
+  id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 在两个通信进程之间传递的数据（和控制信息）存储在`mbuf`结构中，该结构在`<sys/mbuf.h>`头文件中定义。为了能够读取和修改这些数据，`struct
+    mbuf`中有两个字段你需要了解：`m_len`，它标识了`mbuf`中包含的数据量，以及`m_data`，它指向数据。
 - en: Hooking a Communication Protocol
+  id: totrans-91
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 通信协议钩子
 - en: Listing 2-3 is an example communication protocol hook designed to output a debug
     message whenever an Internet Control Message Protocol (ICMP) redirect for Type
     of Service and Host message containing the phrase *Shiny* is received.
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: 列表2-3是一个示例通信协议钩子，设计用于在接收到包含短语*Shiny*的Internet控制消息协议（ICMP）类型为服务和主机消息的重定向时输出调试信息。
 - en: Note
+  id: totrans-93
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: An ICMP redirect for Type of Service and Host message contains a type field
     of 5 and a code field of 3.
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: ICMP类型为服务和主机消息包含类型字段为5和代码字段为3。
 - en: '[PRE8]'
+  id: totrans-95
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: '*Listing 2-3: icmp_input_hook.c*'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表2-3：icmp_input_hook.c*'
 - en: In Listing 2-3 the function `icmp_input_hook` first ❶ sets `hlen` to the received
     ICMP message's IP header length (`off`). Next, the location of the ICMP message
     within `m` is determined; keep in mind that an ICMP message is transmitted within
@@ -388,34 +592,48 @@
     so that when `m` is actually processed, it's as if nothing even happened. Finally,
     if the ICMP message is the one we are looking for, ❺ a debug message is printed;
     otherwise, `icmp_input` is called.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 在列表2-3中，函数`icmp_input_hook`首先❶将`hlen`设置为接收到的ICMP消息的IP头部长度（`off`）。接下来，确定ICMP消息在`m`中的位置；记住，ICMP消息是在IP数据报中传输的，这就是为什么❷`m_data`需要增加`hlen`。然后，从`m`中❸提取ICMP消息。之后，对`m`所做的更改❹被撤销，这样当`m`实际被处理时，就像什么都没发生一样。最后，如果ICMP消息是我们正在寻找的，❺将打印一条调试信息；否则，调用`icmp_input`。
 - en: Notice that upon module load, the event handler ❻ registers `icmp_input_hook`
     as the `pr_input` entry point within the ICMP switch table. This single line installs
     the communication protocol hook. To remove the hook, simply ❼ reinstate the original
     `pr_input` entry point (which is `icmp_input`, in this case) upon module unload.
+  id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意到在模块加载时，事件处理器❻将`icmp_input_hook`注册为ICMP交换表中的`pr_input`入口点。这一行安装了通信协议钩子。要移除钩子，只需在模块卸载时❼恢复原始的`pr_input`入口点（在这种情况下是`icmp_input`）即可。
 - en: Note
+  id: totrans-99
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: The value of ❽*`ip_protox[IPPROTO_ICMP]`* is defined as the offset, within *`inetsw[]`*,
     for the ICMP switch table. For more on *`ip_protox[]`*, see the *`ip_init`* function
     in /sys/netinet/ip_input.c.
+  id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: ❽*`ip_protox[IPPROTO_ICMP]`*的值定义为在*`inetsw[]`*中ICMP交换表的偏移量。关于*`ip_protox[]`*的更多信息，请参阅/sys/netinet/ip_input.c中的*`ip_init`*函数。
 - en: The following output shows the results of receiving an ICMP redirect for Type
     of Service and Host message after loading `icmp_input_hook:`
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下输出显示了加载`icmp_input_hook`后接收ICMP类型为服务和主机消息重定向的结果：
 - en: '[PRE9]'
+  id: totrans-102
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: Admittedly, `icmp_input_hook` has some flaws; however, for the purpose of demonstrating
     a communication protocol hook, it's more than sufficient.
+  id: totrans-103
   prefs: []
   type: TYPE_NORMAL
+  zh: 诚然，`icmp_input_hook`有一些缺陷；然而，对于演示通信协议钩子的目的来说，已经足够了。
 - en: If you are interested in fixing up `icmp_input_hook` for use in the real world,
     you only need to make two additions. First, make sure that the IP datagram actually
     contains an ICMP message before you attempt to locate it. This can be achieved
@@ -423,41 +641,61 @@
     the data within `m` is actually there and accessible. This can be achieved by
     calling `m_pullup`. For example code on how to do both of these things, see the
     `icmp_input` function in /sys/netinet/ip_icmp.c.
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你感兴趣，想要为实际使用修复`icmp_input_hook`，你只需要做两个添加。首先，确保IP数据报实际上包含一个ICMP消息，在你尝试定位它之前。这可以通过检查IP头部数据字段长度来实现。其次，确保`m`中的数据实际上存在且可访问。这可以通过调用`m_pullup`来实现。关于如何做这两件事的示例代码，请参阅/sys/netinet/ip_icmp.c中的`icmp_input`函数。
 - en: Concluding Remarks
+  id: totrans-105
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: As you can see, call hooking is really all about redirecting function pointers,
     and at this point, you should have no trouble doing that.
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，调用钩子实际上就是重定向函数指针，到这一点，你应该没有困难做到这一点。
 - en: Keep in mind that there are usually a few different entry points you could hook
     in order to accomplish a specific task. For example, in [Keystroke Logging](ch02s02.html
     "Keystroke Logging") I created a keystroke logger by hooking the `read` system
     call; however, this can also be accomplished by hooking the `l_read` entry point
     in the terminal line discipline (termios)^([[4](#ftn.CHP-2-FN-4)]) switch table.
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 请记住，通常有几个不同的入口点可以钩住以完成特定任务。例如，在[按键记录](ch02s02.html "按键记录")中，我通过钩住`read`系统调用来创建了一个按键记录器；然而，这也可以通过钩住终端行规程（termios）的`l_read`入口点在切换表中的`switch
+    table`来实现^([[4](#ftn.CHP-2-FN-4)])。
 - en: For educational purposes and just for fun, I encourage you to try to hook the
     `l_read` entry point in the termios switch table. To do so, you'll need to be
     familiar with the `linesw[]` switch table, which is implemented in the file /sys/kern/tty_conf.c,
     as well as `struct linesw`, which is defined in the `<sys/linedisc.h>` header.
+  id: totrans-108
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了教育目的和乐趣，我鼓励你尝试钩住termios切换表中的`l_read`入口点。为此，你需要熟悉`linesw[]`切换表，它在文件`/sys/kern/tty_conf.c`中实现，以及定义在`<sys/linedisc.h>`头文件中的`struct
+    linesw`。
 - en: Note
+  id: totrans-109
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: This hook entails a bit more work than the ones shown throughout this chapter.
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 这个钩子比本章中展示的其他钩子需要做更多的工作。
 - en: '* * *'
+  id: totrans-111
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[4](#CHP-2-FN-4)]) ⁴ The terminal line discipline (termios) is essentially
     the data structure used to process communication with a terminal and to describe
     its state.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[4](#CHP-2-FN-4)]) ⁴ 终端行规程（termios）基本上是用于处理与终端通信并描述其状态的数据结构。
