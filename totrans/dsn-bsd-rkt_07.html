@@ -1,0 +1,151 @@
+<html><head></head><body><div class="chapter" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="detection"/>Chapter 7. DETECTION</h1></div></div></div><p>We'll now turn to the challenging world of rootkit detection. In general, you can detect a rootkit in one of two ways: either by signature or by behavior. <span class="emphasis"><em>Detecting by signature</em></span> involves scanning the operating system for a particular rootkit trait (e.g., inline function hooks). <span class="emphasis"><em>Detecting by behavior</em></span> involves catching the operating system in a "lie" (e.g., <code class="literal">sockstat(1)</code> lists two open ports, but a port scan reveals three).<a id="IDX-CHP-7-0374" class="indexterm"/></p><p>In this chapter, you'll learn how to detect the different rootkit techniques described throughout this book. Keep in mind, however, that rootkits and rootkit detectors are in a perpetual arms race. When one side develops a new technique, the other side develops a countermeasure. In other words, what works today may not work tomorrow.</p><div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="detecting_call_hooks"/>Detecting Call Hooks</h1></div></div></div><p>As stated in <a class="xref" href="ch02.html" title="Chapter 2. HOOKING">Chapter 2</a>, call hooking is really all about redirecting function pointers. Therefore, to detect a call hook, you simply need to determine whether or not a function pointer still points to its original function. For example, you can determine if the <code class="literal">mkdir</code> system call has been hooked by checking its <code class="literal">sysent</code> structure's <code class="literal">sy_call</code> member. If it points to any function other than <code class="literal">mkdir</code>, you've got yourself a call hook.<a id="IDX-CHP-7-0375" class="indexterm"/><a id="IDX-CHP-7-0376" class="indexterm"/><a id="IDX-CHP-7-0377" class="indexterm"/></p><div class="sect2" xml:lang="en"><div class="titlepage"><div><div><h2 class="title"><a id="finding_system_call_hooks"/>Finding System Call Hooks</h2></div></div></div><p>Listing 7-1 is a simple program designed to find (and uninstall) system call hooks. This program is invoked with two parameters: the name of the system call to check and its corresponding system call number. It also has an optional third parameter, the string "fix," which restores the original system call function if a hook is found.<a id="IDX-CHP-7-0378" class="indexterm"/></p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>The following program is actually Stephanie Wehner's checkcall.c; I have made some minor changes so that it compiles cleanly under FreeBSD 6. I also made some cosmetic changes so that it looks better in print.</p></div><a id="I_programlisting7_d1e7552"/><pre class="programlisting">
+#include &lt;fcntl.h&gt;
+#include &lt;kvm.h&gt;
+#include &lt;limits.h&gt;
+#include &lt;nlist.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;sys/sysent.h&gt;
+
+void usage();
+
+int
+main(int argc, char *argv[])
+{
+        char errbuf[_POSIX2_LINE_MAX];
+        kvm_t *kd;
+        struct nlist nl[] = { { NULL }, { NULL }, { NULL }, };
+
+        unsigned long addr;
+        int callnum;
+        struct sysent call;
+
+        /* Check arguments. */
+        if (argc &lt; 3) {
+                usage();
+                exit(-1);
+        }
+
+        nl[0].n_name = "sysent";
+        nl[1].n_name = argv[1];
+        callnum = (int)strtol(argv[2], (char **)NULL, 10);
+
+        printf("Checking system call %d: %s\n\n", callnum, argv[1]);
+
+        kd = kvm_openfiles(NULL, NULL, NULL, O_RDWR, errbuf);
+        if (!kd) {
+                fprintf(stderr, "ERROR: %s\n", errbuf);
+                exit(-1);
+        }
+
+        /* Find the address of sysent[] and argv[1]. */
+        if (❶kvm_nlist(kd, nl) &lt; 0) {
+                fprintf(stderr, "ERROR: %s\n", kvm_geterr(kd));
+                exit(-1);
+        }
+
+        if (nl[0].n_value)
+                printf("%s[] is 0x%x at 0x%lx\n", nl[0].n_name, nl[0].n_type,
+                    nl[0].n_value);
+        else {
+                fprintf(stderr, "ERROR: %s not found (very weird...)\n",
+                    nl[0].n_name);
+                exit(-1);
+        }
+
+        if (!nl[1].n_value) {
+                fprintf(stderr, "ERROR: %s not found\n", nl[1].n_name);
+                exit(-1);
+        }
+
+        /* Determine the address of sysent[callnum]. */
+        addr = nl[0].n_value + callnum * sizeof(struct sysent);
+
+        /* Copy sysent[callnum]. */
+        if (❷kvm_read(kd, addr, &amp;call, sizeof(struct sysent)) &lt; 0) {
+                fprintf(stderr, "ERROR: %s\n", kvm_geterr(kd));
+                exit(-1);
+        }
+
+        /* Where does sysent[callnum].sy_call point to? */
+        printf("sysent[%d] is at 0x%lx and its sy_call member points to "
+            "%p\n", callnum, addr, call.sy_call);
+
+        /* Check if that's correct. */
+        ❸if ((uintptr_t)call.sy_call != nl[1].n_value) {
+                printf("ALERT! It should point to 0x%lx instead\n",
+                    nl[1].n_value);
+
+                /* Should this be fixed? */
+                if (argv[3] &amp;&amp; strncmp(argv[3], "fix", 3) == 0) {
+                        printf("Fixing it... ");
+
+                        ❹call.sy_call =(sy_call_t *)(uintptr_t)nl[1].n_value;
+                        if (kvm_write(kd, addr, &amp;call, sizeof(struct sysent))
+                            &lt; 0) {
+
+                                fprintf(stderr,"ERROR: %s\n",kvm_geterr(kd));
+                                exit(-1);
+                        }
+
+                        printf("Done.\n");
+                }
+        }
+
+        if (kvm_close(kd) &lt; 0) {
+                fprintf(stderr, "ERROR: %s\n", kvm_geterr(kd));
+                exit(-1);
+        }
+
+        exit(0);
+}
+
+void
+usage()
+{
+        fprintf(stderr,"Usage:\ncheckcall [system call function] "
+            "[call number] &lt;fix&gt;\n\n");
+        fprintf(stderr, "For a list of system call numbers see "
+            "/sys/sys/syscall.h\n");
+}
+</pre><p><span class="emphasis"><em>Listing 7-1: checkcall.c</em></span></p><p>Listing 7-1 first ❶ retrieves the in-memory address of <code class="literal">sysent[]</code> and the system call to be checked (<code class="literal">argv[1]</code>). Next, ❷ a local copy of <code class="literal">argv[1]</code>'s <code class="literal">sysent</code> structure is created. This structure's <code class="literal">sy_call</code> member is then ❸ checked to make sure that it still points to its original function; if it does, the program returns. Otherwise, it means there is a system call hook, and the program continues. If the optional third parameter is present, <code class="literal">sy_call</code> is ❹ adjusted to point to its original function, effectively uninstalling the system call hook.</p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>The checkcall program only uninstalls the system call hook; it doesn't remove it from memory. Also, if you pass an incorrect system call function and number pair, checkcall can actually damage your system. However, the point of this example is that it details (in code) the theory behind detecting any call hook.</p></div><p>In the following output, checkcall is run against <code class="literal">mkdir_hook</code> (the <code class="literal">mkdir</code> system call hook developed in <a class="xref" href="ch02.html" title="Chapter 2. HOOKING">Chapter 2</a>) to demonstrate its functionality.</p><a id="I_programlisting7_d1e7591"/><pre class="programlisting">
+$ <strong class="userinput"><code>sudo kldload ./mkdir_hook.ko</code></strong>
+$ <strong class="userinput"><code>mkdir 1</code></strong>
+The directory "1" will be created with the following permissions: 777
+$ <strong class="userinput"><code>sudo ./checkcall mkdir 136 fix</code></strong>
+Checking system call 136: mkdir
+
+sysent[] is 0x4 at 0xc08bdf60
+sysent[136] is at 0xc08be5c0 and its sy_call member points to 0xc1eb8470
+ALERT! It should point to 0xc0696354 instead
+Fixing it... Done.
+$ <strong class="userinput"><code>mkdir 2</code></strong>
+$ <strong class="userinput"><code>ls -l</code></strong>
+. . .
+drwxr-xr-x  2 ghost  ghost   512 Mar 23 14:12 1
+drwxr-xr-x  2 ghost  ghost   512 Mar 23 14:15 2
+</pre><p>As you can see, the hook is caught and uninstalled.</p><p>Because checkcall works by referencing the kernel's in-memory symbol table, patching this table would defeat checkcall. Of course, you could get around this by referencing a symbol table on the filesystem, but then you would be susceptible to a file redirection attack. See what I meant earlier by a perpetual arms race?</p></div></div></div>
+<div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="detecting_dkom"/>Detecting DKOM</h1></div></div></div><p>As stated in <a class="xref" href="ch03.html" title="Chapter 3. DIRECT KERNEL OBJECT MANIPULATION">Chapter 3</a>, DKOM is one of the most difficult-to-detect rootkit techniques. This is because you can unload a DKOM-based rootkit from memory after patching, which leaves almost no signature. Therefore, in order to detect a DKOM-based attack, your best bet is to catch the operating system in a "lie." To do this, you should have a good understanding of what is considered normal behavior for your system(s).<a id="IDX-CHP-7-0379" class="indexterm"/><a id="IDX-CHP-7-0380" class="indexterm"/><a id="IDX-CHP-7-0381" class="indexterm"/><a id="IDX-CHP-7-0382" class="indexterm"/><a id="IDX-CHP-7-0383" class="indexterm"/></p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>One caveat to this approach is that you can't trust the APIs on the system you are checking.</p></div><div class="sect2" xml:lang="en"><div class="titlepage"><div><div><h2 class="title"><a id="finding_hidden_processes"/>Finding Hidden Processes</h2></div></div></div><p>Recall from <a class="xref" href="ch03.html" title="Chapter 3. DIRECT KERNEL OBJECT MANIPULATION">Chapter 3</a> that in order to hide a running process with DKOM, you need to patch the <code class="literal">allproc</code> list, <code class="literal">pidhashtbl</code>, the parent process's child list, the parent process's process-group list, and the <code class="literal">nprocs</code> variable. If any of these objects is left unpatched, it can be used as the litmus test to determine whether or not a process is hidden.<a id="IDX-CHP-7-0384" class="indexterm"/></p><p>However, if all of these objects are patched, you can still find a hidden process by checking <code class="literal">curthread</code> before (or after) each context switch, since every running process stores its context in <code class="literal">curthread</code> when it executes. You can check <code class="literal">curthread</code> by installing an inline function hook at the beginning of <code class="literal">mi_switch</code>.<a id="IDX-CHP-7-0385" class="indexterm"/></p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>Because the code to do this is rather lengthy, I'll simply explain how it's done and leave the actual code to you.</p></div><p>The <code class="literal">mi_switch</code> function implements the machine-independent prelude to a thread context switch. In other words, it handles all the administrative tasks required to perform a context switch, but not the context switch itself. (Either <code class="literal">cpu_switch</code> or <code class="literal">cpu_throw</code> performs the actual context switch.)<a id="IDX-CHP-7-0386" class="indexterm"/></p><p>Here is the disassembly of <code class="literal">mi_switch</code>:</p><a id="I_programlisting7_d1e7706"/><pre class="programlisting">
+$ <strong class="userinput"><code>nm /boot/kernel/kernel | grep mi_switch</code></strong>
+c063e7dc T mi_switch
+$ <strong class="userinput"><code>objdump -d --start-address=0xc063e7dc /boot/kernel/kernel</code></strong>
+/boot/kernel/kernel:     file format elf32-i386-freebsd
+
+Disassembly of section .text:
+
+c063e7dc &lt;mi_switch&gt;:
+c063e7dc:       55                      push   %ebp
+c063e7dd:       89 e5                   mov    %esp,%ebp
+c063e7df:       57                      push   %edi
+c063e7e0:       56                      push   %esi
+c063e7e1:       53                      push   %ebx
+c063e7e2:       83 ec 30                sub    $0x30,%esp
+c063e7e5:       64 a1 00 00 00 00       mov    ❶%fs:0x0,%eax
+c063e7eb:       89 45 d0                mov    %eax,0xffffffd0(%ebp)
+c063e7ee:       8b 38                   mov    (%eax),%edi
+. . .
+</pre><p>Assuming that your <code class="literal">mi_switch</code> hook is going to be installed on a wide range of systems, you can use the fact that <code class="literal">mi_switch</code> always accesses ❶ the <code class="literal">%fs</code> segment register (which is, of course, <code class="literal">curthread</code>) as your placeholder instruction. That is, you can use 0×64 in a manner similar to how we used 0xe8 in <a class="xref" href="ch05.html" title="Chapter 5. RUN-TIME KERNEL MEMORY PATCHING">Chapter 5</a>'s <code class="literal">mkdir</code> inline function hook.</p><p>With regard to the hook itself, you can either write something very simple, such as a hook that prints out the process name and PID of the currently running thread (which, given enough time, would give you the "true" list of running processes on your system) or write something very complex, such as a hook that checks whether the current thread's process structure is still linked in <code class="literal">allproc</code>.</p><p>Regardless, this hook will add a substantial amount of overhead to your system's thread-scheduling algorithm, which means that while it's in place, your system will become more or less unusable. Therefore, you should also write an uninstall routine.</p><p>Also, because this is a rootkit detection program and not a rootkit, I would suggest that you allocate kernel memory for your hook the "proper" way—with a kernel module. Remember, the algorithm to allocate kernel memory via run-time patching has an inherent race condition, and you don't want to crash your system while checking for hidden processes.</p><p>That's it. As you can see, this program is really just a simple inline function hook, no more complex than the example from <a class="xref" href="ch05.html" title="Chapter 5. RUN-TIME KERNEL MEMORY PATCHING">Chapter 5</a>.</p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>Based on the process-hiding routine from <a class="xref" href="ch03.html" title="Chapter 3. DIRECT KERNEL OBJECT MANIPULATION">Chapter 3</a>, you can also detect a hidden process by checking the UMA zone for processes. First, select an unused flag bit from <span class="emphasis"><em>p_flag</em></span>. Next, iterate through all of the slabs/buckets in the UMA zone and find all of the allocated processes; lock each process and clear the flag. Then, iterate through <span class="emphasis"><em>allproc</em></span> and set the flag on each process. Finally, iterate through the processes in the UMA zone again, and look for any processes that don't have the flag set. Note that you'll need to hold <span class="emphasis"><em>allproc_lock</em></span> the entire time you are doing this to prevent races that would result in false positives; you can use a shared lock, though, to avoid starving the system too much. <sup>[<a id="CHP-7-FN-1" href="#ftn.CHP-7-FN-1" class="footnote">1</a>]</sup></p></div></div><div class="sect2" xml:lang="en"><div class="titlepage"><div><div><h2 class="title"><a id="finding_hidden_ports"/>Finding Hidden Ports</h2></div></div></div><p>Recall from <a class="xref" href="ch03.html" title="Chapter 3. DIRECT KERNEL OBJECT MANIPULATION">Chapter 3</a> that we hid an open TCP-based port by removing its <code class="literal">inpcb</code> structure from <code class="literal">tcbinfo.listhead</code>. Compare that with hiding a running process, which involves removing its <code class="literal">proc</code> structure from three lists and a hash table, as well as adjusting a variable. Seems a little imbalanced, doesn't it? The fact is, if you want to completely hide an open TCP-based port, you need to adjust one list (<code class="literal">tcbinfo.listhead</code>), two hash tables (<code class="literal">tcbinfo.hashbase</code> and <code class="literal">tcbinfo.porthashbase</code>), and one variable (<code class="literal">tcbinfo.ipi_count</code>). But there is one problem.<a id="IDX-CHP-7-0387" class="indexterm"/><a id="IDX-CHP-7-0388" class="indexterm"/><a id="IDX-CHP-7-0389" class="indexterm"/><a id="IDX-CHP-7-0390" class="indexterm"/><a id="IDX-CHP-7-0391" class="indexterm"/><a id="IDX-CHP-7-0392" class="indexterm"/><a id="IDX-CHP-7-0393" class="indexterm"/><a id="IDX-CHP-7-0394" class="indexterm"/><a id="IDX-CHP-7-0395" class="indexterm"/><a id="IDX-CHP-7-0396" class="indexterm"/><a id="IDX-CHP-7-0397" class="indexterm"/><a id="IDX-CHP-7-0398" class="indexterm"/><a id="IDX-CHP-7-0399" class="indexterm"/><a id="IDX-CHP-7-0400" class="indexterm"/></p><p>When data arrives for an open TCP-based port, its associated <code class="literal">inpcb</code> structure is retrieved through <code class="literal">tcbinfo.hashbase</code>, not <code class="literal">tcbinfo.listhead</code>. In other words, if you remove an <code class="literal">inpcb</code> structure from <code class="literal">tcbinfo.hashbase</code>, the associated port is rendered useless (i.e., no one can connect to or exchange data with it). Consequently, if you want to find every open TCP-based port on your system, you just need to iterate through <code class="literal">tcbinfo.hashbase</code>.</p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a id="ftn.CHP-7-FN-1" href="#CHP-7-FN-1" class="para">1</a>] </sup><sup>1</sup> Of course, all of this just means that my process-hiding routine needs to patch the UMA zone for processes and threads. Thanks, John.</p></div></div></div>
+<div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="detecting_run-time_kernel_memory_patching"/>Detecting Run-Time Kernel Memory Patching</h1></div></div></div><p>There are essentially two types of run-time kernel memory patching attacks: those that employ inline function hooks and those that don't. I'll discuss detecting each in turn.<a id="IDX-CHP-7-0401" class="indexterm"/></p><div class="sect2" xml:lang="en"><div class="titlepage"><div><div><h2 class="title"><a id="finding_inline_function_hooks"/>Finding Inline Function Hooks</h2></div></div></div><p>Finding an inline function hook is rather tedious, which also makes it somewhat difficult. You can install an inline function hook just about anywhere, as long as there is enough room within the body of your target function, and you can use a variety of instructions to get the instruction pointer to point to a region of memory under your control. In other words, you don't have to use the exact jump code presented in <a class="xref" href="ch05s06.html#example-id8" title="Example">Example</a>.</p><p>What this means is that in order to detect an inline function hook you need to scan, more or less, the entire range of executable kernel memory and look through each unconditional jump instruction.</p><p>In general, there are two ways to do this. You could look through each function, one at a time, to see if any jump instructions pass control to a region of memory outside the function's start and end addresses. Alternately, you could create an HIDS that works with executable kernel memory instead of files; that is, you first scan your memory to establish a baseline and then periodically scan it again, looking for differences.</p></div><div class="sect2" xml:lang="en"><div class="titlepage"><div><div><h2 class="title"><a id="finding_code_byte_patches"/>Finding Code Byte Patches</h2></div></div></div><p>Finding a function that has had its code patched is like looking for a needle in a haystack, except that you don't know what the needle looks like. Your best bet is to create (or use) an HIDS that works with executable kernel memory.</p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>In general, it's much less tedious to detect run-time kernel memory patching through behavioral analysis.</p></div></div></div>
+<div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="concluding_remarks-id7"/>Concluding Remarks</h1></div></div></div><p>As you can probably tell by the lack of example code in this chapter, rootkit detection isn't easy. More specifically, developing and writing a generalized rootkit detector isn't easy, for two reasons. First, kernel-mode rootkits are on a level playing field with detection software (i.e., if something is guarded, it can be bypassed, but the reverse is also true—if something is hooked, it can be unhooked). <sup>[<a id="CHP-7-FN-2" href="#ftn.CHP-7-FN-2" class="footnote">2</a>]</sup> Second, the kernel is a very big place, and if you don't know specifically where to look, you have to look everywhere.<a id="IDX-CHP-7-0402" class="indexterm"/></p><p>This is probably why most rootkit detectors are designed as follows: First, someone writes a rootkit that hooks or patches function A, and then someone else writes a rootkit detector that guards function A. In other words, most rootkit detectors are of the one-shot fix variety. Therefore, it's an arms race, with the rootkit authors dictating the pace and the anti-rootkit authors constantly playing catch-up.</p><p>In short, while rootkit detection is necessary, prevention is the best course.<a id="IDX-CHP-7-0403" class="indexterm"/></p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>I purposely left prevention out of this book because there are pages upon pages dedicated to the subject (i.e., all the books and articles about hardening your system), and I don't have anything to add.</p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a id="ftn.CHP-7-FN-2" href="#CHP-7-FN-2" class="para">2</a>] </sup><sup>2</sup> There is an exception to this rule, however, that favors detection. You can detect a rootkit through a service, which it provides, that can't be cut off; the <code class="literal">inpcb</code> example in <a class="xref" href="ch07s02.html#finding_hidden_ports" title="Finding Hidden Ports">Finding Hidden Ports</a> is an example. Of course, this is not always easy or even possible.</p></div></div></div></body></html>

