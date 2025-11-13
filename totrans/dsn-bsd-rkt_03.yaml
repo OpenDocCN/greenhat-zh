@@ -1,0 +1,816 @@
+- en: Chapter 3. DIRECT KERNEL OBJECT MANIPULATION
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: All operating systems store internal record-keeping data within main memory,
+    usually as objects—that is, structures, queues, and the like. Whenever you ask
+    the kernel for a list of running processes, open ports, and so on, this data is
+    parsed and returned. Because this data is stored in main memory, it can be manipulated
+    directly; there is no need to install a call hook to redirect control flow. This
+    technique is commonly referred to as *Direct Kernel Object Manipulation (DKOM)*
+    (Hoglund and Butler, 2005).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before I get into this topic, however, let's look at how kernel data is stored
+    in a FreeBSD system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kernel Queue Data Structures
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In general, a lot of interesting information is stored as a *queue data structure*
+    (also known as a *list*) inside the kernel. One example is the list of loaded
+    linker files; another is the list of loaded kernel modules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The header file `<sys/queue.h>` defines four different types of queue data
+    structures: singly-linked lists, singly-linked tail queues, doubly-linked lists,
+    and doubly-linked tail queues. This file also contains 61 macros for declaring
+    and operating on these structures.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following five macros are the basis for DKOM with doubly-linked lists.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The macros for manipulating singly-linked lists, singly-linked tail queues,
+    and doubly-linked tail queues are not discussed because they are in effect identical
+    to the ones shown below. For details on the use of these macros, see the queue(3)
+    manual page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The LIST_HEAD Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A doubly-linked list is headed by a structure defined by the `LIST_HEAD` macro.
+    This structure contains a single pointer to the first element on the list. The
+    elements are doubly-linked so that an arbitrary element can be removed without
+    traversing the list. New elements can be added to the list before an existing
+    element, after an existing element, or at the head of the list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is the `LIST_HEAD` macro definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this definition, `name` is the name of the structure to be defined, and `type`
+    specifies the types of elements to be linked into the list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If a `LIST_HEAD` structure is declared as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'then a pointer to the head of the list can later be declared as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The LIST_HEAD_INITIALIZER Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The head of a doubly-linked list is initialized by the `LIST_HEAD_INITIALIZER`
+    macro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The LIST_ENTRY Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `LIST_ENTRY` macro declares a structure that connects the elements in a
+    doubly-linked list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This structure is referenced during insertion, removal, and traversal of the
+    list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The LIST_FOREACH Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A doubly-linked list is traversed with the `LIST_FOREACH` macro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This macro traverses the list referenced by `head` in the forward direction,
+    assigning each element in turn to `var`. The `field` argument contains the structure
+    declared with the `LIST_ENTRY` macro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The LIST_REMOVE Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: An element on a doubly-linked list is decoupled with the `LIST_REMOVE` macro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, `elm` is the element to be removed, and `field` contains the structure
+    declared with the `LIST_ENTRY` macro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Synchronization Issues
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As you'll soon see, you can alter how the kernel perceives the operating system's
+    state by manipulating the various kernel queue data structures. However, you risk
+    damaging the system by simply traversing and/or modifying these objects by virtue
+    of being preemptible; that is, if your code is interrupted and another thread
+    accesses or manipulates the same objects that you were manipulating, data corruption
+    can result. Moreover, with symmetric multiprocessing (SMP), preemption isn't even
+    necessary; if your code is running on one CPU, while another thread on another
+    CPU is manipulating the same object, data corruption can occur.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To safely manipulate the kernel queue data structures—that is, in order to ensure
+    thread synchronization—your code should acquire the appropriate lock (i.e., resource
+    access control) first. In our examples, this will either be a mutex or shared/exclusive
+    lock.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The mtx_lock Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Mutexes* provide mutual exclusion for one or more data objects and are the
+    primary method of thread synchronization.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A kernel thread acquires a mutex by calling the `mtx_lock` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: If another thread is currently holding the mutex, the caller will sleep until
+    the mutex is available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The mtx_unlock Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A mutex lock is released by calling the `mtx_unlock` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: If a higher priority thread is waiting for the mutex, the releasing thread may
+    be preempted to allow the higher priority thread to acquire the mutex and run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For more on mutexes, see the mutex(9) manual page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The sx_slock and sx_xlock Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Shared/exclusive locks* (also known as *sx locks*) are simple reader/writer
+    locks that can be held across a sleep. As their name suggests, multiple threads
+    may hold a shared lock, but only one thread may hold an exclusive lock. Furthermore,
+    if one thread holds an exclusive lock, no other threads may hold a shared lock.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A thread acquires a shared or exclusive lock by calling the `sx_slock` or `sx_xlock`
+    functions, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The sx_sunlock and sx_xunlock Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To release a shared or exclusive lock, call the `sx_sunlock` or `sx_xunlock`
+    functions, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For more on shared/exclusive locks, see the sx(9) manual page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hiding a Running Process
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now, equipped with the macros and functions from the previous sections, I'll
+    detail how to hide a running process using DKOM. First, though, we need some background
+    information on process management.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The proc Structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In FreeBSD the context of each process is maintained in a `proc` structure,
+    which is defined in the `<sys/proc.h>` header. The following list describes the
+    fields in `struct proc` that you'll need to understand in order to hide a running
+    process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: I've tried to keep this list brief so that it can be used as a reference. You
+    can skip over this list on your first reading and refer back to it when you face
+    some real C code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`LIST_ENTRY(proc) p_list;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the linkage pointers that are associated with the `proc`
+    structure, which is stored on either the `allproc` or `zombproc` list (discussed
+    in [The allproc List](ch03s03.html#the_allproc_list "The allproc List")). This
+    field is referenced during insertion, removal, and traversal of either list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`int p_flag;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These are the process flags, such as `P_WEXIT`, `P_EXEC`, and so on, that are
+    set on the running process. All the flags are defined in the `<sys/proc.h>` header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`enum { PRS_NEW = 0, PRS_NORMAL, PRS_ZOMBIE } p_state;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field represents the current process state, where `PRS_NEW` identifies
+    a newly born but incompletely initialized process, `PRS_NORMAL` identifies a "live"
+    process, and `PRS_ZOMBIE` identifies a zombie process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`pid_t p_pid;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the process identifier (PID), which is a 32-bit integer value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`LIST_ENTRY(proc) p_hash;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the linkage pointers that are associated with the `proc`
+    structure, which is stored on `pidhashtbl` (discussed in [pidhashtbl](ch03s04.html#pidhashtbl
+    "pidhashtbl")). This field is referenced during insertion, removal, and traversal
+    of `pidhashtbl`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`struct mtx p_mtx;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the resource access control associated with the `proc` structure. The
+    header file `<sys/proc.h>` defines two macros, `PROC_LOCK` and `PROC_UNLOCK`,
+    for conveniently acquiring and releasing this lock.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`struct vmspace *p_vmspace;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the virtual memory state of the process, including the machine-dependent
+    and machine-independent data structures, as well as statistics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`char p_comm[MAXCOMLEN + 1];`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is the name or command used to execute the process. The constant `MAXCOMLEN`
+    is defined in the `<sys/param.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The allproc List
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: FreeBSD organizes its `proc` structures into two lists. All processes in the
+    `ZOMBIE` state are located on the `zombproc` list; the rest are on the `allproc`
+    list. This list is referenced—albeit indirectly—by `ps(1)`, `top(1)`, and other
+    reporting tools to list the running processes on the system. Thus, you can hide
+    a running process by simply removing its `proc` structure from the `allproc` list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Naturally, one might think that by removing a `proc` structure from the `allproc`
+    list, the associated process would not execute. In the past, several authors and
+    hackers have stated that modifying `allproc` would be far too complicated, because
+    it is used in process scheduling and other important system tasks. However, because
+    processes are now executed at thread granularity, this is no longer the case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `allproc` list is defined in the `<sys/proc.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice that `allproc` is declared as a `proclist` structure, which is defined
+    in the `<sys/proc.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: From these listings, you can see that `allproc` is simply a kernel queue data
+    structure—a doubly-linked list of `proc` structures, to be exact.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following excerpt from `<sys/proc.h>` lists the resource access control
+    associated with the `allproc` list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Listing 3-1 shows a system call module designed to hide a running process by
+    removing its `proc` structure(s) from the `allproc` list. The system call is invoked
+    with one argument: a character pointer (i.e., a string) containing the name of
+    the process to be hidden.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 3-1: process_hiding.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice how I've locked ❶ the `allproc` list and ❷ each `proc` structure, prior
+    to inspection, to ensure thread synchronization—in layman's terms, to avoid a
+    kernel panic. Of course, I also release ❻ ❼ each lock after I'm done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An interesting detail about `process_hiding` is that prior to ❹ the process
+    name comparison, I ❸ examine each process's virtual address space and process
+    flags. If the former does not exist or the latter is set to "working on exiting"
+    the `proc` structure is unlocked and skipped over. What's the point of hiding
+    a process that's not going to run?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another interesting detail worth mentioning is that after I ❺ remove the user-specified
+    `proc` structure from the `allproc` list, I don't force an immediate exit from
+    the `for` loop. That is, there is no `break` statement. To understand why, consider
+    a process that has duplicated or forked itself so that the parent and child can
+    each execute different sections of code at the same time. (This is a popular practice
+    in network servers, such as `httpd`.) In this situation, asking the system for
+    a list of running processes would return both the parent and child processes,
+    because each child process gets its own individual entry on the `allproc` list.
+    Therefore, in order to hide every instance of a single process, you need to iterate
+    through `allproc` in its entirety.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following output shows `process_hiding` in action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how I am able to hide `top(1)` from the output of `ps(1)`. Just for fun,
+    let's look at this from `top(1)`'s perspective, shown below in a before-and-after
+    style.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how in the "before" section, `top(1)` reports ❶ one running process,
+    ❷ itself, while in the "after" section it reports ❸ zero running processes—even
+    though it is clearly still running . . . /me grins.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hiding a Running Process Redux
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Of course, process management involves more than just the `allproc` and `zombproc`
+    lists, and as such, hiding a running process involves more than just manipulating
+    the `allproc` list. For instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how the hidden process (`top`) was found through its PID. Undoubtedly,
+    I'm going to remedy this. But first, some background information on FreeBSD hash
+    tables^([[1](#ftn.CHP-3-FN-1)]) is required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The hashinit Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In FreeBSD, a *hash table* is a contiguous array of `LIST_HEAD` entries that
+    is initialized by calling the `hashinit` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function allocates space for a hash table of size `nelements`. If successful,
+    a pointer to the allocated hash table is returned, with the bit mask (which is
+    used in the hash function) set in `hashmask`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: pidhashtbl
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For efficiency purposes, all running processes, in addition to being on the
+    `allproc` list, are stored on a hash table named `pidhashtbl`. This hash table
+    is used to locate a `proc` structure by its PID more quickly than an O(*n*) walk
+    of (i.e., a linear search through) the `allproc` list. This hash table is how
+    the hidden process at the beginning of this section was found through its PID.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`pidhashtbl` is defined in the `<sys/proc.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It is initialized in the file /sys/kern/kern_proc.c as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: The pfind Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To locate a process via `pidhashtbl`, a kernel thread calls the `pfind` function.
+    This function is implemented in the file /sys/kern/kern_proc.c as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how the resource access control for `pidhashtbl` is ❶ `allproc_lock`—the
+    same lock associated with the `allproc` list. This is because `allproc` and `pidhashtbl`
+    are designed to be in synch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Also, notice that `pidhashtbl` is traversed via the ❷ `PIDHASH` macro. This
+    macro is defined in the `<sys/proc.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, `PIDHASH` is a macro substitution for `pidhashtbl`; specifically,
+    it's the hash function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In the following listing, I modify `process_hiding` to protect a running process
+    from being found through its PID, with the changes shown in bold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, all I've done is remove the `proc` structure from `pidhashtbl`.
+    Easy, eh?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Listing 3-2 is an alternative approach, which takes advantage of your knowledge
+    of `pidhashtbl`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 3-2: process_hiding_redux.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, `process_hiding` has been rewritten to work with PIDs (instead
+    of names), so that you may forgo iterating through `allproc` in favor of iterating
+    through `pidhashtbl`. This should reduce the overall run time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is some sample output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: At this point, unless someone is actively searching for your hidden process,
+    you should be safe from discovery. However, keep in mind that there are still
+    data structures in the kernel that reference the various running processes, which
+    means that your hidden process can still be detected—and quite easily, at that!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[1](#CHP-3-FN-1)]) ¹ In general, a *hash table* is a data structure in which
+    keys are mapped to array positions by a hash function. The purpose of a hash table
+    is to provide quick and efficient data retrieval. That is, given a key (e.g.,
+    a person's name), you can easily find the corresponding value (e.g., the person's
+    phone number). This works by transforming the key, using a hash function, into
+    a number that represents the offset in an array, which contains the desired value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hiding with DKOM
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As you've seen, the main challenge to overcome when hiding an object with DKOM
+    is removing all references to your object in the kernel. The best way to do so
+    is to look through and mimic the source code of the object's terminating function(s),
+    which are designed to remove all references to the object. For instance, to identify
+    all the data structures that reference a running process, refer to the `_exit(2)`
+    system call function, which is implemented in the file /sys/kern/kern_exit.c.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Because sorting through unfamiliar kernel code is never quick and easy, I didn't
+    dump the source for *`_exit(2)`* at the beginning of [Hiding a Running Process](ch03s03.html
+    "Hiding a Running Process"), when I first discussed hiding a running process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At this point, you should know enough to be able to go through `_exit(2)` on
+    your own. Still, here are the remaining objects you need to patch in order to
+    hide a running process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The parent process' child list
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The parent process' process-group list
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `nprocs` variable
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Hiding an Open TCP-based Port
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Because no book about rootkits is complete without a discussion of how to hide
+    an open TCP-based port, which indirectly hides an established TCP-based connection,
+    I'll show an example here using DKOM. First, though, we need some background information
+    on Internet protocol data structures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The inpcb Structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For each TCP- or UDP-based socket, an `inpcb` structure, which is known as an
+    *Internet protocol control block*, is created to hold internetworking data such
+    as network addresses, port numbers, routing information, and so on (McKusick and
+    Neville-Neil, 2004). This structure is defined in the `<netinet/in_pcb.h>` header.
+    The following list describes the fields in `struct inpcb` that you'll need to
+    understand in order to hide an open TCP-based port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As before, you can skip over this list on your first reading and return to it
+    when you deal with some real C code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`LIST_ENTRY(inpcb) inp_list;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the linkage pointers that are associated with the `inpcb`
+    structure, which is stored on the `tcbinfo.listhead` list (discussed in [The tcbinfo.listhead
+    List](ch03s06.html#the_tcbinfo.listhead_list "The tcbinfo.listhead List")). This
+    field is referenced during insertion, removal, and traversal of this list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`struct in_conninfo inp_inc;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This structure maintains the socket pair 4-tuple in an established connection;
+    that is, the local IP address, local port, foreign IP address, and foreign port.
+    The definition of `struct in_conninfo` can be found in the `<netinet/in_pcb.h>`
+    header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: '| Within an `in_conninfo` structure, the socket pair 4-tuple is stored in the
+    last member, `inc_ie`. This can be verified by looking up the definition of `struct
+    in_endpoints` in the `<netinet/in_pcb.h>` header as follows: |'
+  prefs: []
+  type: TYPE_TB
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`u_char inp_vflag;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field identifies the IP version in use as well as the IP flags that are
+    set on the `inpcb` structure. All the flags are defined in the `<netinet/in_pcb.h>`
+    header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`struct mtx inp_mtx;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the resource access control associated with the `inpcb` structure. The
+    header file `<netinet/in_pcb.h>` defines two macros, `INP_LOCK` and `INP_UNLOCK`,
+    that conveniently acquire and release this lock.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: The tcbinfo.listhead List
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`inpcb` structures associated with TCP-based sockets are maintained on a doubly-linked
+    list private to the TCP protocol module. This list is contained within `tcbinfo`,
+    which is defined in the `<netinet/tcp_var.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, `tcbinfo` is declared as of type `struct inpcbinfo`, which is
+    defined in the `<netinet/in_pcb.h>` header. Before I go further, let me describe
+    the fields of `struct inpcbinfo` that you'll need to understand in order to hide
+    an open TCP-based port.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`struct inpcbhead *listhead;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Within `tcbinfo`, this field maintains the list of `inpcb` structures associated
+    with TCP-based sockets. This can be verified by looking up the definition of `struct
+    inpcbhead` in the `<netinet/in_pcb.h>` header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`struct mtx ipi_mtx;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is the resource access control associated with the `inpcbinfo` structure.
+    The header file `<netinet/in_pcb.h>` defines four macros for conveniently acquiring
+    and releasing this lock; you''ll make use of the following two:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'At this point, it should come as no surprise that you can hide an open TCP-based
+    port by simply removing its `inpcb` structure from `tcbinfo.listhead`. Listing
+    3-3 is a system call module designed to do just that. The system call is invoked
+    with one argument: an integer containing the local port to be hidden.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 3-3: port_hiding.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An interesting detail about this code is that prior to ❷ the port number comparison,
+    I ❶ examine each `inpcb` structure's `inp_vflag` member. If the `inpcb` is found
+    to be in the 2MSL wait state, I skip over it.^([[2](#ftn.CHP-3-FN-2)]) What's
+    the point of hiding a port that's about to close?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following output, I `telnet(1)` into a remote machine and then invoke
+    `port_hiding` to hide the session:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice how `port_hiding` hid the local telnet server as well as the connection.
+    To change this behavior, simply rewrite `port_hiding` to require two arguments:
+    a local port and a local address.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[2](#CHP-3-FN-2)]) ² When a TCP connection performs an active close and sends
+    the final ACK, the connection is put into the 2MSL wait state for twice the maximum
+    segment lifetime. This lets the TCP connection resend the final ACK in case the
+    first one was lost.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Corrupting Kernel Data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Before I conclude this chapter, let''s consider the following: What happens
+    when one of your hidden objects is found and killed?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the best case scenario, nothing. In the worst case scenario, the kernel panics
+    because when an object is killed, the kernel unconditionally removes it from its
+    various lists. However, in this situation, the object has already been removed.
+    Therefore, the kernel will fail to find it, and will walk off the end of its lists,
+    corrupting those data structures in the process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To prevent this data corruption, here are some suggestions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hook the terminating function(s) to prevent them from removing your hidden objects.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Hook the terminating function(s) to place your hidden objects back onto the
+    lists before termination.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implement your own "exit" function to safely kill your hidden objects.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Do nothing. If your hidden objects are never found, they can never be killed—right?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Concluding Remarks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: DKOM is one of the hardest rootkit techniques to detect. By patching the objects
+    the kernel relies upon for its bookkeeping and reporting, you can produce desirable
+    results while leaving an extremely small footprint. For example, in this chapter
+    I've shown how to hide a running process and an open port using a few simple modifications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While DKOM does have limited use (because it can only manipulate objects resident
+    in main memory), there are many objects within the kernel to patch. For instance,
+    for a complete listing of all the kernel queue data structures, execute the following
+    commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE

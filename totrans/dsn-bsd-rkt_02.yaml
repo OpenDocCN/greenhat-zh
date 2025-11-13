@@ -1,0 +1,463 @@
+- en: Chapter 2. HOOKING
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We'll start our discussion of kernel-mode rootkits with call hooking, or simply
+    hooking, which is arguably the most popular rootkit technique.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Hooking* is a programming technique that employs handler functions (called
+    *hooks*) to modify control flow. A new hook registers its address as the location
+    for a specific function, so that when that function is called, the hook is run
+    instead. Typically, a hook will call the original function at some point in order
+    to preserve the original behavior. [Figure 2-1](ch02.html#normal_execution_versus_hooked_execution
+    "Figure 2-1. Normal execution versus hooked execution") illustrates the control
+    flow of a subroutine before and after installing a call hook.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Normal execution versus hooked execution](tagoreillycom20090804nostarchimages313930.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '**Figure 2-1. Normal execution versus hooked execution**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, hooking is used to extend (or decrease) the functionality of
+    a subroutine. In terms of rootkit design, hooking is used to alter the results
+    of the operating system's application programming interfaces (APIs), most commonly
+    those involved with bookkeeping and reporting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's start abusing the KLD interface.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hooking a System Call
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Recall from [Chapter 1](ch01.html "Chapter 1. LOADABLE KERNEL MODULES") that
+    a system call is the entry point through which an application program requests
+    service from the operating system's kernel. By hooking these entry points, a rootkit
+    can alter the data the kernel returns to any or every user space process. In fact,
+    hooking system calls is so effective that most (publicly available) rootkits employ
+    it in some way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In FreeBSD, a system call hook is installed by registering its address as the
+    system call function within the target system call's `sysent` structure (which
+    is located within `sysent[]`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For more on system calls, see [System Call Modules](ch01s04.html "System Call
+    Modules").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Listing 2-1 is an example system call hook (albeit a trivial one) designed to
+    output a debug message whenever a user space process calls the `mkdir` system
+    call—in other words, whenever a directory is created.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 2-1: mkdir_hook.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice that upon module load, the event handler ❶ registers `mkdir_hook` (which
+    simply prints a debug message and then calls `mkdir`) as the `mkdir` system call
+    function. This single line installs the system call hook. To remove the hook,
+    simply ❸ reinstate the original `mkdir` system call function upon module unload.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The constant ❷ *`SYS_mkdir`* is defined as the offset value for the *`mkdir`*
+    system call. This constant is defined in the *`<sys/syscall.h>`* header, which
+    also contains a complete listing of all in-kernel system call numbers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following output shows the results of executing `mkdir(1)` after loading
+    `mkdir_hook`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, `mkdir(1)` is now a lot more verbose.^([[1](#ftn.CHP-2-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[1](#CHP-2-FN-1)]) ¹ For you astute readers, yes, I have a umask of 022,
+    which is why the permissions for "test" are 755, not 777.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Keystroke Logging
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now let's look at a more interesting (but still somewhat trivial) example of
+    a system call hook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Keystroke logging* is the simple act of intercepting and capturing a user''s
+    keystrokes. In FreeBSD, this can be accomplished by hooking the `read` system
+    call.^([[2](#ftn.CHP-2-FN-2)]) As its name implies, this call is responsible for
+    reading in input. Here is its C library definition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `read` system call reads in `nbytes` of data from the object referenced
+    by the descriptor `fd` into the buffer `buf`. Therefore, in order to capture a
+    user's keystrokes, you simply have to save the contents of `buf` (before returning
+    from a `read` call) whenever `fd` points to standard input (i.e., file descriptor
+    0).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, take a look at Listing 2-2:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 2-2: read_hook.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In Listing 2-2 the function `read_hook` first ❶ calls `read` to read in the
+    data from `fd`. If this data is ❷ not a keystroke (which is defined as one character
+    or one byte in size) originating from standard input, then ❸ `read_hook` returns.
+    Otherwise, the data (i.e., keystroke) is ❹ copied into a local buffer, effectively
+    "capturing" it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the interest of saving space (and keeping things simple), *`read_hook`* simply
+    dumps the captured keystroke(s) to the system console.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the results from logging into a system after loading `read_hook`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, my login credentials—my username (`root`) and password (`passwd`)^([[3](#ftn.CHP-2-FN-3)])—have
+    been captured. At this point, you should be able to hook any system call. However,
+    one question remains: If you aren''t a kernel guru, how do you determine which
+    system call(s) to hook? The answer is: you use kernel process tracing.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[2](#CHP-2-FN-2)]) ² Actually, to create a full-fledged keystroke logger,
+    you would have to hook `read`, `readv`, `pread`, and `preadv`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[3](#CHP-2-FN-3)]) ³ Obviously, this is not my real root password.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kernel Process Tracing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Kernel process tracing* is a diagnostic and debugging technique used to intercept
+    and record each kernel operation—that is, every system call, namei translation,
+    I/O, signal processed, and context switch performed on behalf of a specific running
+    process. In FreeBSD, this is done with the `ktrace(1)` and `kdump(1)` utilities.
+    For example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the interest of being concise, any output irrelevant to this discussion is
+    omitted.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As the preceding example shows, the `ktrace(1)` utility enables kernel trace
+    logging for a specific process [in this case,`ls(1)`],while `kdump(1)` displays
+    the trace data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice the various system calls that `ls(1)` issues during its execution, such
+    as ❶`getdirentries`, ❷`lseek`, ❸`close`, ❹`fchdir`, and so on. This means that
+    you can affect the operation and/or output of `ls(1)` by hooking one or more of
+    these calls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The main point to all of this is that when you want to alter a specific process
+    and you don't know which system call(s) to hook, you just need to perform a kernel
+    trace.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Common System Call Hooks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For the sake of being thorough, [Table 2-1](ch02s04.html#common_system_call_hooks-id1
+    "Table 2-1. Common System Call Hooks") outlines some of the most common system
+    call hooks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Table 2-1. Common System Call Hooks**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| System Call | Purpose of Hook |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `read`, `readv`, `pread`, `preadv` | Logging input |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `write`,`writev`,`pwrite`, `pwritev` | Logging output |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `open` | Hiding file contents |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `unlink` | Preventing file removal |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `chdir` | Preventing directory traversal |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `chmod` | Preventing file mode modification |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `chown` | Preventing ownership change |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `kill` | Preventing signal sending |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `ioctl` | Manipulating `ioctl` requests |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `execve` | Redirecting file execution |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `rename` | Preventing file renaming |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `rmdir` | Preventing directory removal |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `stat`, `lstat` | Hiding file status |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `getdirentries` | Hiding files |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `truncate` | Preventing file truncating or extending |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `kldload` | Preventing module loading |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `kldunload` | Preventing module unloading |'
+  prefs: []
+  type: TYPE_TB
+- en: Now let's look at some of the other kernel functions that you can hook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Communication Protocols
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As its name implies, a *communication protocol* is a set of rules and conventions
+    used by two communicating processes (for example, the TCP/IP protocol suite).
+    In FreeBSD, a communication protocol is defined by its entries in a protocol switch
+    table. As such, by modifying these entries, a rootkit can alter the data sent
+    and received by either communication endpoint. To better illustrate this "attack"
+    allow me to digress.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The protosw Structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The context of each protocol switch table is maintained in a `protosw` structure,
+    which is defined in the `<sys/protosw.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[Table 2-2](ch02s05.html#protocol_switch_table_entry_points "Table 2-2. Protocol
+    Switch Table Entry Points") defines the entry points in `struct protosw` that
+    you''ll need to know in order to modify a communication protocol.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Table 2-2. Protocol Switch Table Entry Points**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Entry Point | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `pr_init` | Initialization routine |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `pr_input` | Pass data up toward the user |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `pr_output` | Pass data down toward the network |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `pr_ctlinput` | Pass control information up |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `pr_ctloutput` | Pass control information down |'
+  prefs: []
+  type: TYPE_TB
+- en: The inetsw[ ] Switch Table
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Each communication protocol''s `protosw` structure is defined in the file/sys/netinet/in_proto.c.
+    Here is a snippet from this file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that every protocol switch table is defined within ❶ `inetsw[]`. This
+    means that in order to modify a communication protocol, you have to go through
+    `inetsw[]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The mbuf Structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Data (and control information) that is passed between two communicating processes
+    is stored within an `mbuf` structure, which is defined in the `<sys/mbuf.h>` header.
+    To be able to read and modify this data, there are two fields in `struct mbuf`
+    that you''ll need to know: `m_len`, which identifies the amount of data contained
+    within the `mbuf`, and `m_data`, which points to the data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hooking a Communication Protocol
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Listing 2-3 is an example communication protocol hook designed to output a debug
+    message whenever an Internet Control Message Protocol (ICMP) redirect for Type
+    of Service and Host message containing the phrase *Shiny* is received.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: An ICMP redirect for Type of Service and Host message contains a type field
+    of 5 and a code field of 3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 2-3: icmp_input_hook.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In Listing 2-3 the function `icmp_input_hook` first ❶ sets `hlen` to the received
+    ICMP message's IP header length (`off`). Next, the location of the ICMP message
+    within `m` is determined; keep in mind that an ICMP message is transmitted within
+    an IP datagram, which is why ❷`m_data` is increased by `hlen`. Next, the ICMP
+    message is ❸extracted from `m`. Thereafter, the changes made to `m` are ❹ reversed,
+    so that when `m` is actually processed, it's as if nothing even happened. Finally,
+    if the ICMP message is the one we are looking for, ❺ a debug message is printed;
+    otherwise, `icmp_input` is called.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice that upon module load, the event handler ❻ registers `icmp_input_hook`
+    as the `pr_input` entry point within the ICMP switch table. This single line installs
+    the communication protocol hook. To remove the hook, simply ❼ reinstate the original
+    `pr_input` entry point (which is `icmp_input`, in this case) upon module unload.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The value of ❽*`ip_protox[IPPROTO_ICMP]`* is defined as the offset, within *`inetsw[]`*,
+    for the ICMP switch table. For more on *`ip_protox[]`*, see the *`ip_init`* function
+    in /sys/netinet/ip_input.c.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following output shows the results of receiving an ICMP redirect for Type
+    of Service and Host message after loading `icmp_input_hook:`
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Admittedly, `icmp_input_hook` has some flaws; however, for the purpose of demonstrating
+    a communication protocol hook, it's more than sufficient.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are interested in fixing up `icmp_input_hook` for use in the real world,
+    you only need to make two additions. First, make sure that the IP datagram actually
+    contains an ICMP message before you attempt to locate it. This can be achieved
+    by checking the length of the data field in the IP header. Second, make sure that
+    the data within `m` is actually there and accessible. This can be achieved by
+    calling `m_pullup`. For example code on how to do both of these things, see the
+    `icmp_input` function in /sys/netinet/ip_icmp.c.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concluding Remarks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As you can see, call hooking is really all about redirecting function pointers,
+    and at this point, you should have no trouble doing that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Keep in mind that there are usually a few different entry points you could hook
+    in order to accomplish a specific task. For example, in [Keystroke Logging](ch02s02.html
+    "Keystroke Logging") I created a keystroke logger by hooking the `read` system
+    call; however, this can also be accomplished by hooking the `l_read` entry point
+    in the terminal line discipline (termios)^([[4](#ftn.CHP-2-FN-4)]) switch table.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For educational purposes and just for fun, I encourage you to try to hook the
+    `l_read` entry point in the termios switch table. To do so, you'll need to be
+    familiar with the `linesw[]` switch table, which is implemented in the file /sys/kern/tty_conf.c,
+    as well as `struct linesw`, which is defined in the `<sys/linedisc.h>` header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This hook entails a bit more work than the ones shown throughout this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[4](#CHP-2-FN-4)]) ⁴ The terminal line discipline (termios) is essentially
+    the data structure used to process communication with a terminal and to describe
+    its state.
+  prefs: []
+  type: TYPE_NORMAL

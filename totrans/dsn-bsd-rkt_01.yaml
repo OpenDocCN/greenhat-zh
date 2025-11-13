@@ -1,0 +1,892 @@
+- en: Chapter 1. LOADABLE KERNEL MODULES
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The simplest way to introduce code into a running kernel is through a *loadable
+    kernel module (LKM)*, which is a kernel subsystem that can be loaded and unloaded
+    after bootup, allowing a system administrator to dynamically add and remove functionality
+    from a live system. This makes LKMs an ideal platform for kernel-mode rootkits.
+    In fact, the vast majority of modern rootkits are simply LKMs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In FreeBSD 3.0, substantial changes were made to the kernel module subsystem,
+    and the LKM Facility was renamed the Dynamic Kernel Linker (KLD) Facility. Subsequently,
+    the term KLD is commonly used to describe LKMs under FreeBSD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter we'll discuss LKM (that is, KLD) programming within FreeBSD
+    for programmers new to kernel hacking.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Throughout this book, the terms *device driver*, *KLD*, *LKM*, *loadable module*,
+    and *module* are all used interchangeably.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Module Event Handler
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Whenever a KLD is loaded into or unloaded from the kernel, a function known
+    as the *module event handler* is called. This function handles the initialization
+    and shutdown routines for the KLD. Every KLD must include an event handler.^([[1](#ftn.CHP-1-FN-1)])
+    The prototype for the event handler function is defined in the `<sys/module.h>`
+    header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'where `module_t` is a pointer to a `module` structure and `modeventtype_t`
+    is defined in the `<sys/module.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is an example of an event handler function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This function will print "Hello, world!" when the module loads, "Good-bye, cruel
+    world!" when it unloads, and will return with an error (`EOPNOTSUPP`)^([[2](#ftn.CHP-1-FN-2)])
+    on shutdown and quiesce.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[1](#CHP-1-FN-1)]) ¹ Actually, this isn't entirely true. You can have a KLD
+    that just includes a `sysctl`. You can also dis-pense with module handlers if
+    you wish and just use `SYSINIT` and `SYSUNINIT` directly to register func-tions
+    to be invoked on load and unload, respectively. You can't, however, indicate failure
+    in those.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[2](#CHP-1-FN-2)]) ² `EOPNOTSUPP` stands for *Error: Operation not supported*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The DECLARE_MODULE Macro
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When a KLD is loaded (by the `kldload(8)` command, described in ["Hello, world!"](ch01s03.html
+    ""Hello, world!"")), it must link and register itself with the kernel. This can
+    be easily accomplished by calling the `DECLARE_MODULE` macro, which is defined
+    in the `<sys/module.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is a brief description of each parameter :'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`name`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the generic module name, which is passed as a character string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`data`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This parameter specifies the official module name and event handler function,
+    which is passed as a `moduledata` structure. `struct moduledata` is defined in
+    the `<sys/module.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**`sub`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the system startup interface, which identifies the module type.
+    Valid entries for this parameter can be found in the `<sys/kernel.h>` header within
+    the `sysinit_sub_id` enumeration list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For our purposes, we'll always set this parameter to `SI_SUB_DRIVERS`, which
+    is used when registering a device driver.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`order`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the KLD's order of initialization within the subsystem. You'll
+    find valid entries for this parameter in the `<sys/kernel.h>` header within the
+    `sysinit_elem_order` enumeration list.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For our purposes, we'll always set this parameter to `SI_ORDER_MIDDLE`, which
+    will initialize the KLD somewhere in the middle.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '"Hello, world!"'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You now know enough to write your first KLD. Listing 1-1 is a complete "Hello,
+    world!" module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 1-1: hello.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, this module is simply a combination of the sample event handler
+    function from [Module Event Handler](ch01.html#module_event_handler "Module Event
+    Handler") and a filled-out `DECLARE_MODULE` macro.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To compile this module, you can use the system Makefile^([[3](#ftn.CHP-1-FN-3)])
+    `bsd.kmod.mk`. Listing 1-2 shows the complete Makefile for hello.c.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing1-2: Makefile*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Throughout this book, we'll adapt this Makefile to compile every KLD by filling
+    out *`KMOD`* and *`SRCS`* with the appropriate module name and source listing(s),
+    respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, assuming the Makefile and hello.c are in the same directory, simply type
+    **`make`** and (if we haven''t botched anything) the compilation should proceed—very
+    verbosely—and produce an executable file named hello.ko, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can load and unload hello.ko with the `kldload(8)` and `kldunload(8)` utilities,^([[4](#ftn.CHP-1-FN-4)])
+    as shown below:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Excellent—you have successfully loaded and unloaded code into a running kernel.
+    Now, let's try something a little more advanced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[3](#CHP-1-FN-3)]) ³ A *Makefile* is used to simplify the process of converting
+    a file or files from one form to another by describing the dependencies and build
+    scripts for a given output. For more on Makefiles, see the make(1) manual page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[4](#CHP-1-FN-4)]) ⁴ With a Makefile that includes `<bsd.kmod.mk>`, you can
+    also use `make load` and `make unload` to load and unload the module once you
+    have built it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: System Call Modules
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*System call modules* are simply KLDs that install a system call. In operating
+    systems, a *system call*, also known as a *system service request*, is the mechanism
+    an application uses to request service from the operating system''s kernel.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In [Chapter 2](ch02.html "Chapter 2. HOOKING"), [Chapter 3](ch03.html "Chapter 3. DIRECT
+    KERNEL OBJECT MANIPULATION"), and [Chapter 6](ch06.html "Chapter 6. PUTTING IT
+    ALL TOGETHER"), you'll be writing rootkits that either hack the existing system
+    calls or install new ones. Thus, this section serves as a primer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are three items that are unique to each system call module: the system
+    call function, the `sysent` structure, and the offset value.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The System Call Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The system call function implements the system call. Its function prototype
+    is defined in the `<sys/sysent.h>` header as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: where `struct thread *` points to the currently running thread, and `void *`
+    points to the system call's arguments' structure, if there is any.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here is an example system call function that takes in a character pointer (i.e.,
+    a string) and outputs it to the system console and logging facility via `printf(9)`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that the system call's arguments are ❶ declared within a structure (`sc_example_args`).
+    Also, notice that these arguments are accessed within the system call function
+    by ❷ first declaring a `struct sc_example_args` pointer (`uap`) and then assigning
+    ❸ the coerced `void` pointer (`syscall_args`) to that pointer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Keep in mind that the system call's arguments reside in user space but that
+    the system call function executes in kernel space.^([[5](#ftn.CHP-1-FN-5)]) Thus,
+    when you access the arguments via `uap`, you are actually working by value, not
+    reference. This means that, with this approach, you aren't able to modify the
+    actual arguments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In [Kernel/User Space Transitions](ch01s05.html "Kernel/User Space Transitions"),
+    I'll detail how to modify data residing in user space while in kernel space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is probably worth mentioning that the kernel expects each system call argument
+    to be of size `register_t` (which is an `int` on i386, but is typically a `long`
+    on other platforms) and that it builds an array of `register_t` values that are
+    then cast to `void *` and passed as the arguments. For this reason, you might
+    need to include explicit padding in your arguments' structure to make it work
+    correctly if it has any types that aren't of size `register_t` (e.g., `char`,
+    or `int` on a 64-bit platform). The `<sys/sysproto.h>` header provides some macros
+    to do this, along with examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The sysent Structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'System calls are defined by their entries in a `sysent` structure, which is
+    defined in the `<sys/sysent.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is the complete `sysent` structure for the example system call (shown
+    in [The System Call Function](ch01s04.html#the_system_call_function "The System
+    Call Function")):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Recall that the example system call has only one argument (a character pointer)
+    and is named `sc_example`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One additional point is also worth mentioning. In FreeBSD, the system call
+    table is simply an array of `sysent` structures, and it is declared in the `<sys/sysent.h>`
+    header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Whenever a system call is installed, its `sysent` structure is placed within
+    an open element in `sysent[]`. (This is an important point that will come into
+    play in [Chapter 2](ch02.html "Chapter 2. HOOKING") and [Chapter 6](ch06.html
+    "Chapter 6. PUTTING IT ALL TOGETHER").)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Throughout this book, I'll refer to FreeBSD's system call table as *`sysent[]`*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Offset Value
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The *offset value* (also known as the *system call number*) is a unique integer
+    between 0 and 456 that is assigned to each system call to indicate its `sysent`
+    structure's offset within `sysent[]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Within a system call module, the offset value needs to be explicitly declared.
+    This is typically done as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The constant `NO_SYSCALL` sets `offset` to the next available or open element
+    in `sysent[]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although you could manually set `offset` to any unused system call number, it's
+    considered good practice to avoid doing so when implementing something dynamic,
+    like a KLD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For a list of used and unused system call numbers, see the file /sys/kern/syscalls.master.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The SYSCALL_MODULE Macro
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Recall from [The DECLARE_MODULE Macro](ch01s02.html "The DECLARE_MODULE Macro")
+    that when a KLD is loaded, it must link and register itself with the kernel and
+    that you use the `DECLARE_MODULE` macro to do so. However, when writing a system
+    call module, the `DECLARE_MODULE` macro is somewhat inconvenient, as you''ll soon
+    see. Thus, we use the `SYSCALL_MODULE` macro instead, which is defined in the
+    `<sys/sysent.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, if we were to use the `DECLARE_MODULE` macro, we would've had
+    to set up a `syscall_module_data` and `moduledata` structure first; thankfully,
+    `SYSCALL_MODULE` saves us this trouble.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is a brief description of each parameter in `SYSCALL_MODULE`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`name`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the generic module name, which is passed as a character string.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`offset`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the system call's offset value, which is passed as an integer
+    pointer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`new_sysent`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the completed `sysent` structure, which is passed as a `struct
+    sysent` pointer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`evh`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the event handler function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`arg`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This specifies the arguments to be passed to the event handler function. For
+    our purposes, we'll always set this parameter to `NULL`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Listing 1-3 is a complete system call module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 1-3: sc_example.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, this module is simply a combination of all the components described
+    throughout this section, with the addition of an event handler function. Simple,
+    no?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the results of loading this module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: So far, so good. Now, let's write a simple user space program to execute and
+    test this new system call. But first, an explanation of the `modfind`, `modstat`,
+    and `syscall` functions is required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The modfind Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `modfind` function returns the modid of a kernel module based on its module
+    name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Modids* are integers used to uniquely identify each loaded module in the system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The modstat Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `modstat` function returns the status of a kernel module referred to by
+    its modid.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The returned information is stored in `stat`, a `module_stat` structure, which
+    is defined in the `<sys/module.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: The syscall Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `syscall` function executes the system call specified by its system call
+    number.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Executing the System Call
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Listing 1-4 is a user space program designed to execute the system call in
+    Listing 1-3 (which is named `sc_example`). This program takes one command-line
+    argument: a string to be passed to `sc_example`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 1-4: interface.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, we first call ❶ `modfind` and `modstat` to determine `sc_example`'s
+    offset value. This value is then passed to ❷ `syscall`, along with the first command-line
+    argument, which effectively executes `sc_example`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Some sample output follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Executing the System Call Without C Code
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'While writing a user space program to execute a system call is the "proper"
+    way to do it, when you just want to test a system call module, it''s annoying
+    to have to write an additional program first. To execute a system call without
+    writing a user space program, here''s what I do:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: As the preceding demonstration shows, by taking advantage of Perl's command-line
+    execution (i.e., the `-e` option), its `syscall` function, and the fact that you
+    know your system call's offset value, you can quickly test any system call module.
+    One thing to keep in mind is that you cannot use string literals with Perl's `syscall`
+    function, which is why I use a variable (`$str`) to pass the string to `sc_example`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '^([[5](#CHP-1-FN-5)]) ⁵ FreeBSD segregates its virtual memory into two parts:
+    *user space* and *kernel space*. User space is where all user-mode applications
+    run, while kernel space is where the kernel and kernel exten-sions (i.e., LKMs)
+    run. Code running in user space cannot access kernel space directly (but code
+    running in kernel space *can* access user space). To access kernel space from
+    user space, an application issues a system call.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Kernel/User Space Transitions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: I'll now describe a set of core functions that you can use from kernel space
+    to copy, manipulate, and overwrite the data stored in user space. We'll put these
+    functions to much use throughout this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The copyin and copyinstr Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `copyin` and `copyinstr` functions allow you to copy a continuous region
+    of data from user space to kernel space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `copyin` function copies `len` bytes of data from the user space address
+    `uaddr` to the kernel space address `kaddr`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `copyinstr` function is similar, except that it copies a null-terminated
+    string, which is at most `len` bytes long, with the number of bytes actually copied
+    returned in `done`.^([[6](#ftn.CHP-1-FN-6)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: The copyout Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `copyout` function is similar to `copyin`, except that it operates in the
+    opposite direction, copying data from kernel space to user space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: The copystr Function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The `copystr` function is similar to `copyinstr`, except that it copies a string
+    from one kernel space address to another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[6](#CHP-1-FN-6)]) ⁶ In Listing 1-3, the system call function should, admittedly,
+    first call `copyinstr` to copy in the user space string and then print that. As
+    is, it prints a userland string directly from kernel space, which can trigger
+    a fatal panic if the page holding the string is unmapped (i.e., swapped out or
+    not faulted in yet). That's why it's just an example and not a real system call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Character Device Modules
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Character device modules* are KLDs that create or install a character device.
+    In FreeBSD, a *character device* is the interface for accessing a specific device
+    within the kernel. For example, data is read from and written to the system console
+    via the character device /dev/console.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In [Chapter 4](ch04.html "Chapter 4. KERNEL OBJECT HOOKING") you'll be writing
+    rootkits that hack the existing character devices on the system. Thus, this section
+    serves as a primer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are three items that are unique to each character device module: a `cdevsw`
+    structure, the character device functions, and a device registration routine.
+    We''ll discuss each in turn below.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The cdevsw Structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A character device is defined by its entries in a character device switch table,
+    `struct cdevsw`, which is defined in the `<sys/conf.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[Table 1-1](ch01s06.html#entry_points_for_character_device_drivers "Table 1-1. Entry
+    Points for Character Device Drivers") provides a brief description of the most
+    relevant entry points.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Table 1-1. Entry Points for Character Device Drivers**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Entry Point | Description |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_open` | Opens a device for I/O operations |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_close` | Closes a device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_read` | Reads data from a device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_write` | Writes data to a device |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_ioctl` | Performs an operation other than a read or a write |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `d_poll` | Polls a device to see if there is data to be read or space available
+    for writing |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Here is an example `cdevsw` structure for a simple read/write character device
+    module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that I do not define every entry point or fill out every attribute. This
+    is perfectly okay. For every entry point left null, the operation is considered
+    unsupported. For example, when creating a write-only device, you would not declare
+    the read entry point.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Still, there are two elements that must be defined in every `cdevsw` structure:
+    `d_version`, which indicates the versions of FreeBSD that the driver supports,
+    and `d_name`, which specifies the device''s name.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The constant *`D_VERSION`* is defined in the *`<sys/conf.h>`* header, along
+    with other version numbers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Character Device Functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For every entry point defined in a character device module's `cdevsw` structure,
+    you must implement a corresponding function. The function prototype for each entry
+    point is defined in the `<sys/conf.h>` header.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Below is an example implementation for the write entry point.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, this function simply calls `copyinstr` to copy a string from
+    user space and store it in a buffer, `buf`, in kernel space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In [Example](ch01s06.html#example-id1 "Example") I'll show and explain some
+    more entry-point implementations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Device Registration Routine
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The device registration routine creates or installs the character device on
+    /dev and registers it with the device file system (DEVFS). You can accomplish
+    this by calling the `make_dev` function within the event handler function as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: This example function will register the character device, `cd_example`, when
+    the module loads by calling the `make_dev` function, which will create a `cd_example`
+    device node on /dev. Also, this function will unregister the character device
+    when the module unloads by calling the `destroy_dev` function, which takes as
+    its sole argument the `cdev` structure returned from a preceding `make_dev` call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Listing 1-5 shows a complete character device module (based on Rajesh Vaidheeswarran's
+    cdev.c) that installs a simple read/write character device. This device acts on
+    an area of kernel memory, reading and writing a single character string from and
+    to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 1-5: cd_example.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is a breakdown of the above listing. First, at the beginning,
+    we declare the character device''s entry points (open, close, read, and write).
+    Next, we appropriately fill out a `cdevsw` structure. Afterward, we declare two
+    global variables: `buf`, which is used to store the character string that this
+    device will be reading in, and `len`, which is used to store the string length.
+    Next, we implement each entry point. The open entry point simply initializes `buf`
+    and then returns. The close entry point does nothing, more or less, but it still
+    needs to be implemented in order to close the device. The write entry point is
+    what is called to store the character string (from user space) in `buf`, and the
+    read entry point is what is called to return it. Lastly, the event handler function
+    takes care of the character device''s registration routine.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Notice that the character device module calls `DEV_MODULE` at the end, instead
+    of `DECLARE_MODULE`. The `DEV_MODULE` macro is defined in the `<sys/conf.h>` header
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, `DEV_MODULE` wraps `DECLARE_MODULE`. `DEV_MODULE` simply allows
+    you to call `DECLARE_MODULE` without having to explicitly set up a `moduledata`
+    structure first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The *`DEV_MODULE`* macro is typically associated with character device modules.
+    Thus, when I write a generic KLD (such as the "Hello, world!" example in ["Hello,
+    world!"](ch01s03.html ""Hello, world!"")), I'll continue to use the *`DECLARE_MODULE`*
+    macro, even if *`DEV_MODULE`* would save space and time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing the Character Device
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now let''s look at the user space program (Listing 1-6) that we''ll use to
+    interact with the `cd_example` character device. This program (based on Rajesh
+    Vaidheeswarran''s testcdev.c) calls each `cd_example` entry point in the following
+    order: open, write, read, close; then it exits.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 1-6: interface.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the results of loading the character device module and interacting
+    with it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: Linker Files and Modules
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before wrapping up this chapter, let's take a brief look at the `kldstat(8)`
+    command, which displays the status of any files dynamically linked into the kernel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the above listing, three "modules" are loaded: the kernel (`kernel`), the
+    ACPI power-management module (`acpi.ko`), and the "Hello, world!" module (`hello.ko`)
+    that we developed in ["Hello, world!"](ch01s03.html ""Hello, world!"").'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Running the command `kldstat -v` (for more verbose output) gives us the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that `kernel` contains multiple "submodules" (`xpt`, `probe`, and `cam`).
+    This brings us to the real point of this section. In the preceding output, `kernel`
+    and `hello.ko` are technically linker files, and `xpt`, `probe`, `cam`, and `hello`
+    are the actual modules. This means that the arguments(s) for `kldload(8)` and
+    `kldunload(8)` are actually linker files, not modules, and that for every module
+    loaded into the kernel, there is an accompanying linker file. (This point will
+    come into play when we discuss hiding KLDs.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For our purposes, think of a linker file as an usher (or escort) for one or
+    more kernel modules, guiding them into kernel space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concluding Remarks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter has been a whirlwind tour of FreeBSD kernel-module programming.
+    I've described some of the various types of KLDs that we'll encounter again and
+    again, and you've seen numerous small examples to give you a feel for what the
+    remainder of this book is like.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Two additional points are also worth mentioning. First, the kernel source tree,
+    which is located in /usr/src/sys/,^([[7](#ftn.CHP-1-FN-7)]) is the best reference
+    and learning tool for a newbie FreeBSD kernel hacker. If you have yet to look
+    through this directory, by all means, do so; much of the code in this book is
+    gleaned from there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Second, consider setting up a FreeBSD machine with a debug kernel or kernel-mode
+    debugger; this helps considerably when you write your own kernel code. The following
+    online resources will help you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*The FreeBSD Developer''s Handbook*, specifically Chapter 10, located at [http://www.freebsd.org/doc/en_US.ISO8859-1/books/developers-handbook](http://www.freebsd.org/doc/en_US.ISO8859-1/books/developers-handbook).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Debugging Kernel Problems* by Greg Lehey, located at [http://www.lemis.com/grog/Papers/Debug-tutorial/tutorial.pdf](http://www.lemis.com/grog/Papers/Debug-tutorial/tutorial.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[7](#CHP-1-FN-7)]) ⁷ Typically, there is also a symlink from /sys/ to /usr/src/sys/.
+  prefs: []
+  type: TYPE_NORMAL

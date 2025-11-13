@@ -1,0 +1,321 @@
+- en: Chapter 7. DETECTION
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We''ll now turn to the challenging world of rootkit detection. In general,
+    you can detect a rootkit in one of two ways: either by signature or by behavior.
+    *Detecting by signature* involves scanning the operating system for a particular
+    rootkit trait (e.g., inline function hooks). *Detecting by behavior* involves
+    catching the operating system in a "lie" (e.g., `sockstat(1)` lists two open ports,
+    but a port scan reveals three).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, you'll learn how to detect the different rootkit techniques
+    described throughout this book. Keep in mind, however, that rootkits and rootkit
+    detectors are in a perpetual arms race. When one side develops a new technique,
+    the other side develops a countermeasure. In other words, what works today may
+    not work tomorrow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting Call Hooks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As stated in [Chapter 2](ch02.html "Chapter 2. HOOKING"), call hooking is really
+    all about redirecting function pointers. Therefore, to detect a call hook, you
+    simply need to determine whether or not a function pointer still points to its
+    original function. For example, you can determine if the `mkdir` system call has
+    been hooked by checking its `sysent` structure's `sy_call` member. If it points
+    to any function other than `mkdir`, you've got yourself a call hook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding System Call Hooks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Listing 7-1 is a simple program designed to find (and uninstall) system call
+    hooks. This program is invoked with two parameters: the name of the system call
+    to check and its corresponding system call number. It also has an optional third
+    parameter, the string "fix," which restores the original system call function
+    if a hook is found.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The following program is actually Stephanie Wehner's checkcall.c; I have made
+    some minor changes so that it compiles cleanly under FreeBSD 6\. I also made some
+    cosmetic changes so that it looks better in print.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 7-1: checkcall.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Listing 7-1 first ❶ retrieves the in-memory address of `sysent[]` and the system
+    call to be checked (`argv[1]`). Next, ❷ a local copy of `argv[1]`'s `sysent` structure
+    is created. This structure's `sy_call` member is then ❸ checked to make sure that
+    it still points to its original function; if it does, the program returns. Otherwise,
+    it means there is a system call hook, and the program continues. If the optional
+    third parameter is present, `sy_call` is ❹ adjusted to point to its original function,
+    effectively uninstalling the system call hook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The checkcall program only uninstalls the system call hook; it doesn't remove
+    it from memory. Also, if you pass an incorrect system call function and number
+    pair, checkcall can actually damage your system. However, the point of this example
+    is that it details (in code) the theory behind detecting any call hook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following output, checkcall is run against `mkdir_hook` (the `mkdir`
+    system call hook developed in [Chapter 2](ch02.html "Chapter 2. HOOKING")) to
+    demonstrate its functionality.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, the hook is caught and uninstalled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because checkcall works by referencing the kernel's in-memory symbol table,
+    patching this table would defeat checkcall. Of course, you could get around this
+    by referencing a symbol table on the filesystem, but then you would be susceptible
+    to a file redirection attack. See what I meant earlier by a perpetual arms race?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting DKOM
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As stated in [Chapter 3](ch03.html "Chapter 3. DIRECT KERNEL OBJECT MANIPULATION"),
+    DKOM is one of the most difficult-to-detect rootkit techniques. This is because
+    you can unload a DKOM-based rootkit from memory after patching, which leaves almost
+    no signature. Therefore, in order to detect a DKOM-based attack, your best bet
+    is to catch the operating system in a "lie." To do this, you should have a good
+    understanding of what is considered normal behavior for your system(s).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: One caveat to this approach is that you can't trust the APIs on the system you
+    are checking.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding Hidden Processes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Recall from [Chapter 3](ch03.html "Chapter 3. DIRECT KERNEL OBJECT MANIPULATION")
+    that in order to hide a running process with DKOM, you need to patch the `allproc`
+    list, `pidhashtbl`, the parent process's child list, the parent process's process-group
+    list, and the `nprocs` variable. If any of these objects is left unpatched, it
+    can be used as the litmus test to determine whether or not a process is hidden.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, if all of these objects are patched, you can still find a hidden process
+    by checking `curthread` before (or after) each context switch, since every running
+    process stores its context in `curthread` when it executes. You can check `curthread`
+    by installing an inline function hook at the beginning of `mi_switch`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Because the code to do this is rather lengthy, I'll simply explain how it's
+    done and leave the actual code to you.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `mi_switch` function implements the machine-independent prelude to a thread
+    context switch. In other words, it handles all the administrative tasks required
+    to perform a context switch, but not the context switch itself. (Either `cpu_switch`
+    or `cpu_throw` performs the actual context switch.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the disassembly of `mi_switch`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Assuming that your `mi_switch` hook is going to be installed on a wide range
+    of systems, you can use the fact that `mi_switch` always accesses ❶ the `%fs`
+    segment register (which is, of course, `curthread`) as your placeholder instruction.
+    That is, you can use 0×64 in a manner similar to how we used 0xe8 in [Chapter 5](ch05.html
+    "Chapter 5. RUN-TIME KERNEL MEMORY PATCHING")'s `mkdir` inline function hook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With regard to the hook itself, you can either write something very simple,
+    such as a hook that prints out the process name and PID of the currently running
+    thread (which, given enough time, would give you the "true" list of running processes
+    on your system) or write something very complex, such as a hook that checks whether
+    the current thread's process structure is still linked in `allproc`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Regardless, this hook will add a substantial amount of overhead to your system's
+    thread-scheduling algorithm, which means that while it's in place, your system
+    will become more or less unusable. Therefore, you should also write an uninstall
+    routine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, because this is a rootkit detection program and not a rootkit, I would
+    suggest that you allocate kernel memory for your hook the "proper" way—with a
+    kernel module. Remember, the algorithm to allocate kernel memory via run-time
+    patching has an inherent race condition, and you don't want to crash your system
+    while checking for hidden processes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's it. As you can see, this program is really just a simple inline function
+    hook, no more complex than the example from [Chapter 5](ch05.html "Chapter 5. RUN-TIME
+    KERNEL MEMORY PATCHING").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Based on the process-hiding routine from [Chapter 3](ch03.html "Chapter 3. DIRECT
+    KERNEL OBJECT MANIPULATION"), you can also detect a hidden process by checking
+    the UMA zone for processes. First, select an unused flag bit from *p_flag*. Next,
+    iterate through all of the slabs/buckets in the UMA zone and find all of the allocated
+    processes; lock each process and clear the flag. Then, iterate through *allproc*
+    and set the flag on each process. Finally, iterate through the processes in the
+    UMA zone again, and look for any processes that don't have the flag set. Note
+    that you'll need to hold *allproc_lock* the entire time you are doing this to
+    prevent races that would result in false positives; you can use a shared lock,
+    though, to avoid starving the system too much. ^([[1](#ftn.CHP-7-FN-1)])
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding Hidden Ports
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Recall from [Chapter 3](ch03.html "Chapter 3. DIRECT KERNEL OBJECT MANIPULATION")
+    that we hid an open TCP-based port by removing its `inpcb` structure from `tcbinfo.listhead`.
+    Compare that with hiding a running process, which involves removing its `proc`
+    structure from three lists and a hash table, as well as adjusting a variable.
+    Seems a little imbalanced, doesn't it? The fact is, if you want to completely
+    hide an open TCP-based port, you need to adjust one list (`tcbinfo.listhead`),
+    two hash tables (`tcbinfo.hashbase` and `tcbinfo.porthashbase`), and one variable
+    (`tcbinfo.ipi_count`). But there is one problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When data arrives for an open TCP-based port, its associated `inpcb` structure
+    is retrieved through `tcbinfo.hashbase`, not `tcbinfo.listhead`. In other words,
+    if you remove an `inpcb` structure from `tcbinfo.hashbase`, the associated port
+    is rendered useless (i.e., no one can connect to or exchange data with it). Consequently,
+    if you want to find every open TCP-based port on your system, you just need to
+    iterate through `tcbinfo.hashbase`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[1](#CHP-7-FN-1)]) ¹ Of course, all of this just means that my process-hiding
+    routine needs to patch the UMA zone for processes and threads. Thanks, John.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting Run-Time Kernel Memory Patching
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are essentially two types of run-time kernel memory patching attacks:
+    those that employ inline function hooks and those that don''t. I''ll discuss detecting
+    each in turn.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding Inline Function Hooks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Finding an inline function hook is rather tedious, which also makes it somewhat
+    difficult. You can install an inline function hook just about anywhere, as long
+    as there is enough room within the body of your target function, and you can use
+    a variety of instructions to get the instruction pointer to point to a region
+    of memory under your control. In other words, you don't have to use the exact
+    jump code presented in [Example](ch05s06.html#example-id8 "Example").
+  prefs: []
+  type: TYPE_NORMAL
+- en: What this means is that in order to detect an inline function hook you need
+    to scan, more or less, the entire range of executable kernel memory and look through
+    each unconditional jump instruction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In general, there are two ways to do this. You could look through each function,
+    one at a time, to see if any jump instructions pass control to a region of memory
+    outside the function's start and end addresses. Alternately, you could create
+    an HIDS that works with executable kernel memory instead of files; that is, you
+    first scan your memory to establish a baseline and then periodically scan it again,
+    looking for differences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding Code Byte Patches
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Finding a function that has had its code patched is like looking for a needle
+    in a haystack, except that you don't know what the needle looks like. Your best
+    bet is to create (or use) an HIDS that works with executable kernel memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In general, it's much less tedious to detect run-time kernel memory patching
+    through behavioral analysis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concluding Remarks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As you can probably tell by the lack of example code in this chapter, rootkit
+    detection isn't easy. More specifically, developing and writing a generalized
+    rootkit detector isn't easy, for two reasons. First, kernel-mode rootkits are
+    on a level playing field with detection software (i.e., if something is guarded,
+    it can be bypassed, but the reverse is also true—if something is hooked, it can
+    be unhooked). ^([[2](#ftn.CHP-7-FN-2)]) Second, the kernel is a very big place,
+    and if you don't know specifically where to look, you have to look everywhere.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is probably why most rootkit detectors are designed as follows: First,
+    someone writes a rootkit that hooks or patches function A, and then someone else
+    writes a rootkit detector that guards function A. In other words, most rootkit
+    detectors are of the one-shot fix variety. Therefore, it''s an arms race, with
+    the rootkit authors dictating the pace and the anti-rootkit authors constantly
+    playing catch-up.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In short, while rootkit detection is necessary, prevention is the best course.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: I purposely left prevention out of this book because there are pages upon pages
+    dedicated to the subject (i.e., all the books and articles about hardening your
+    system), and I don't have anything to add.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[2](#CHP-7-FN-2)]) ² There is an exception to this rule, however, that favors
+    detection. You can detect a rootkit through a service, which it provides, that
+    can't be cut off; the `inpcb` example in [Finding Hidden Ports](ch07s02.html#finding_hidden_ports
+    "Finding Hidden Ports") is an example. Of course, this is not always easy or even
+    possible.
+  prefs: []
+  type: TYPE_NORMAL

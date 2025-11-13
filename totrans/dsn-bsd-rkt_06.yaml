@@ -1,0 +1,624 @@
+- en: Chapter 6. PUTTING IT ALL TOGETHER
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We'll now use the techniques from the previous chapters to write a complete
+    example rootkit—albeit a trivial one—to bypass *Host-based Intrusion Detection
+    Systems (HIDSes)*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What HIDSes Do
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In general, an HIDS is designed to monitor, detect, and log the modifications
+    to the files on a filesystem. That is, it is designed to detect file tampering
+    and trojaned binaries. For every file, an HIDS creates a cryptographic hash of
+    the file data and records it in a database; any change to a file results in a
+    different hash being generated. Whenever an HIDS audits a filesystem, it compares
+    the current hash of every file with its counterpart in the database; if the two
+    differ, the file is flagged.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In principle this is a good idea, but . . .
+  prefs: []
+  type: TYPE_NORMAL
+- en: Bypassing HIDSes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The problem with HIDS software is that it trusts and uses the operating system's
+    APIs. By abusing this trust (e.g., hooking these APIs) you can bypass any HIDS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: It's somewhat ironic that software designed to detect a root level compromise
+    (e.g., the tampering of system binaries) would trust the underlying operating
+    system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The question now is, "Which calls do I hook?" The answer depends on what you
+    wish to accomplish. Consider the following scenario. You have a FreeBSD machine
+    with the binary shown in Listing 6-1 installed in /sbin/.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 6-1: hello.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You want to replace that binary with a Trojan version—which simply prints a
+    different debug message, shown in Listing 6-2—without alerting the HIDS, of course.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 6-2: trojan_hello.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This can be accomplished by performing an *execution redirection* (halflife,
+    1997)—which simply switches the execution of one binary with another—so that whenever
+    there is a request to execute `hello`, you intercept it and execute `trojan_hello`
+    instead. This works because you don't replace (or even touch) the original binary
+    and, as a result, the HIDS will always calculate the correct hash.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are of course some "hiccups" to this approach, but we'll deal with them
+    later, as they come up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Execution Redirection
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The execution redirection routine in the example rootkit is achieved by hooking
+    the `execve` system call. This call is responsible for file execution and is implemented
+    in the file /sys/kern/kern_exec.c as follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note how the `execve` system call ❶ copies in its arguments (`uap`) from the
+    user data space to a temporary buffer (`args`) and then ❷ passes that buffer to
+    the `kern_execve` function, which actually performs the file execution. This means
+    that in order to redirect the execution of one binary into another, you simply
+    have to insert a new set of `execve` arguments or change the existing one—within
+    the current process's user data space—before `execve` calls `exec_copyin_args`.
+    Listing 6-3 (which is based on Stephanie Wehner's exec.c) offers an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 6-3: incognito-0.1.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this listing the function `execve_hook`❶ first checks the name of the file
+    to be executed. If the filename is /sbin/hello, ❷ the end boundary address of
+    the current process's user data space is stored in `addr`, which is then passed
+    to ❸ `vm_map_find` to map a `PAGE_SIZE` block of `NULL` memory there. Next, ❹
+    an `execve` arguments structure is set up for the `trojan_hello` binary, which
+    is then ❺ inserted into the newly "allocated" user data space. Finally, ❻ `execve`
+    is called with the address of the `trojan_hello execve_args` structure as its
+    second argument—effectively redirecting the execution of `hello` into `trojan_hello`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: An interesting detail about *`execve_hook`* is that, with one or two slight
+    modifications, it's the exact code required to execute a user space process from
+    kernel space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One additional point is also worth mentioning. Notice how, this time around,
+    the event handler function does not uninstall the system call hook; that would
+    require a reboot. This is because the "live" rootkit has no need for an unload
+    routine—once you install it, you want it to remain installed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following output shows the example rootkit in action.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Excellent, it works. We have now effectively trojaned `hello` and no HIDS will
+    be the wiser—except that we have placed a new binary (`trojan_hello`) on the filesystem,
+    which any HIDS will flag. D'oh!
+  prefs: []
+  type: TYPE_NORMAL
+- en: File Hiding
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To remedy this problem, let's hide `trojan_hello` so that it doesn't appear
+    on the filesystem. This can be accomplished by hooking the `getdirentries` system
+    call. This call is responsible for listing (i.e., returning) a directory's contents,
+    and it is implemented in the file /sys/kern/vfs_syscalls.c as follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Take a look at this code and try to discern some structure in it. If you don't
+    understand all of it, don't worry. An explanation of the *`getdirentries`* system
+    call appears after this listing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `getdirentries` system call reads in the directory entries referenced by
+    the directory (i.e., the file descriptor) `fd` into the buffer `buf`. Put more
+    simply, `getdirentries` gets directory entries. If successful, ❶ the number of
+    bytes actually transferred is returned. Otherwise, `−1` is returned and the global
+    variable `errno` is set to indicate the error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The directory entries read into `buf` are stored as a series of `dirent` structures,
+    defined in the `<sys/dirent.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: As this listing shows, the context of each directory entry is maintained in
+    a `dirent` structure. This means that in order to hide a file on the filesystem,
+    you simply have to prevent `getdirentries` from storing the file's `dirent` structure
+    in `buf`. Listing 6-4 is an example rootkit adapted to do just that (based on
+    pragmatic's file-hiding routine, 1999).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the interest of saving space, I haven't relisted the execution redirection
+    routine (i.e., the `execve_hook` function) in its entirety.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 6-4: incognito-0.2.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this code the function `getdirentries_hook` ❶ first calls `getdirentries`
+    in order to store the directory entries found in `fd` in `buf`. Next, ❷ the number
+    of bytes actually transferred is checked, and if it's greater than zero (i.e.,
+    if `fd` actually contains any directory entries) ❸ the contents of `buf` (which
+    is a series of `dirent` structures) are copied into kernel space. Afterward, ❹
+    the filename of each `dirent` structure is compared with the constant `T_NAME`
+    (which is `trojan_hello`, in this case). If a match is found, ❺ the "lucky" `dirent`
+    structure is removed from the kernel space copy of `buf`, which is eventually
+    ❼ copied back out, overwriting the contents of `buf` and effectively hiding `T_NAME`
+    (i.e., `trojan_hello`). Additionally, to keep things consistent, ❻ the number
+    of bytes actually transferred is adjusted to account for "losing" this `dirent`
+    structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, if you install the new rootkit, you get:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Wonderful. We have now effectively trojaned `hello` without leaving a footprint
+    on the filesystem.^([[1](#ftn.CHP-6-FN-1)]) Of course, none of this matters since
+    a simple `kldstat(8)` reveals the rootkit:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Darn it!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[1](#CHP-6-FN-1)]) ¹ Actually, you can still find `trojan_hello` with `ls
+    /sbin/trojan_hello`, because direct lookups aren't blocked. Blocking the file
+    from a direct lookup isn't too hard, but it is tedious. You will need to hook
+    `open(2)`, `stat(2)`, and `lstat(2)`, and have them return `ENOENT` whenever the
+    file is /sbin/trojan_hello.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hiding a KLD
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To remedy this problem, we'll employ some DKOM to hide the rootkit, which is,
+    technically, a KLD.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Recall from [Chapter 1](ch01.html "Chapter 1. LOADABLE KERNEL MODULES") that
+    whenever you load a KLD into the kernel, you are actually loading a linker file
+    that contains one or more kernel modules. As a result, whenever a KLD is loaded,
+    it is stored on two different lists: `linker_files` and `modules`. As their names
+    imply, `linker_files` contains the set of loaded linker files, while `modules`
+    contains the set of loaded kernel modules.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As with the previous DKOM code, the KLD hiding routine will traverse both of
+    these lists in a safe manner and remove the structure(s) of your choosing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The linker_files List
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `linker_files` list is defined in the file /sys/kern/kern_linker.c as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice that `linker_files` is declared as of type `linker_file_list_t`, which
+    is defined in the `<sys/linker.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: From these listings, you can see that `linker_files` is simply a doubly-linked
+    tail queue of `linker_file` structures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An interesting detail about `linker_files` is that it has an associated counter,
+    which is defined in the file /sys/kern/kern_linker.c as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: When a linker file is loaded (i.e., whenever an entry is added to `linker_files`),
+    its file ID number becomes the current value of `next_file_id`, which is then
+    increased by one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another interesting detail about `linker_files` is that, unlike the other lists
+    in this book, it is not protected by a dedicated lock; this forces us to make
+    use of `Giant`. `Giant` is, more or less, the "catchall" lock designed to protect
+    the entire kernel. It is defined in the `<sys/mutex.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In FreeBSD 6.0, *`linker_files`* does have an associated lock, which is named
+    *`kld_mtx`*. However, *`kld_mtx`* doesn't really protect *`linker_files`*, which
+    is why we use *`Giant`* instead. In FreeBSD version 7, *`linker_files`* is protected
+    by an sx lock.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The linker_file Structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The context of each linker file is maintained in a `linker_file` structure,
+    which is defined in the `<sys/linker.h>` header. The following list describes
+    the fields in `struct linker_file` that you'll need to understand in order to
+    hide a linker file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*int refs;*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field maintains the linker file's reference count.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An important point to note is that the very first `linker_file` structure on
+    `linker_files` is the current kernel image, and whenever a linker file is loaded,
+    this structure''s `refs` field is increased by one, as illustrated below:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, prior to loading incognito-0.2.ko, the current kernel image's
+    reference count is 3, but afterward, it's 4\. Thus, when hiding a linker file,
+    you have to remember to decrease the current kernel image's `refs` field by one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`TAILQ_ENTRY(linker_file) link;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the linkage pointers that are associated with the `linker_file`
+    structure, which is stored on the `linker_files` list. This field is referenced
+    during insertion, removal, and traversal of `linker_files`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`char* filename;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the linker file's name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The modules List
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The `modules` list is defined in the file /sys/kern/kern_module.c as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice that `modules` is declared as of type `modulelist_t`, which is defined
+    in the file /sys/kern/kern_module.c as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: From these listings, you can see that `modules` is simply a doubly-linked tail
+    queue of `module` structures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Like the `linker_files` list, `modules` also has an associated counter, which
+    is defined in the file /sys/kern/kern_module.c as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: For every kernel module that is loaded, its modid becomes the current value
+    of `nextid`, which is then increased by one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The resource access control associated with the `modules` list is defined in
+    the `<sys/module.h>` header as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: The module Structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The context of each kernel module is maintained in a `module` structure, which
+    is defined in the file /sys/kern/kern_module.c. The following list describes the
+    fields in `struct module` that you'll need to understand in order to hide a kernel
+    module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`TAILQ_ENTRY(module) link;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the linkage pointers that are associated with the `module`
+    structure, which is stored on the `modules` list. This field is referenced during
+    insertion, removal, and traversal of `modules`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`char* name;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the kernel module's name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Listing 6-5 shows the new-and-improved rootkit, which can now hide itself. It
+    works by removing its `linker_file` and `module` structure from the `linker_files`
+    and `modules` lists. To keep things consistent, it also decrements the current
+    kernel image's reference count, the linker files counter (`next_file_id`), and
+    the modules counter (`nextid`) by one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To save space, I haven't relisted the execution redirection and file hiding
+    routines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 6-5: incognito-0.3.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, loading the above KLD gives us:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note how the output of `kldstat(8)` is the same before and after installing
+    the rootkit—groovy!
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, you can redirect the execution of `hello` into `trojan_hello`
+    while hiding both `trojan_hello` and the rootkit itself from the system (which,
+    subsequently, makes it unloadable). There is just one more problem. When you install
+    `trojan_hello` into /sbin/, the directory's access, modification, and change times
+    update—a dead giveaway that something is amiss.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preventing Access, Modification, and Change Time Updates
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Because the access and modification times on a file can be set, you can "prevent"
+    them from updating by just rolling them back. Listing 6-6 demonstrates how:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*listing 6-6: rollback.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The preceding code first ❶ calls the function `stat` to obtain the /sbin/ directory''s
+    filesystem information. This information is placed into the variable `sb`, a `stat`
+    structure defined by the `<sys/stat.h>` header. The fields of `struct stat` relevant
+    to our discussion are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, ❷ /sbin/''s access and modification times are stored within `time[]`,
+    an array of two `timeval` structures, defined in the `<sys/_timeval.h>` header
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Finally, ❸ the function `utimes` is called to set (or roll back) /sbin/'s access
+    and modification times, effectively "preventing" them from updating.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Change Time
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Unfortunately, the change time cannot be set or rolled back, because that would
+    go against its intended purpose, which is to record all file status changes, including
+    "corrections" to the access or modification times. The function responsible for
+    updating an inode''s change time (along with its access and modification times)
+    is `ufs_itimes`, which is implemented in the file /sys/ufs/ufs/ufs_vnops.c as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you `nop` out the lines shown in bold, you can effectively prevent all updates
+    to an inode's change time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That being said, you need to know what these lines (i.e., the `DIP_SET` macro)
+    look like once they're loaded in main memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this output, the six lines shown in bold (within the disassembly dump) each
+    represent a call to `DIP_SET`, with the last two lines corresponding to the ones
+    you want to `nop` out. The following narrative details how I came to this conclusion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, within the function `ufs_itimes`, the macro `DIP_SET` is called six times,
+    in three sets of two. Therefore, within the disassembly, there should be three
+    sets of instructions that are somewhat similar. Next, the `DIP_SET` calls all
+    occur after the function `vfs_timestamp` is called. Therefore, any code occurring
+    before the call to `vfs_timestamp` can be ignored. Finally, because the macro
+    `DIP_SET` alters a passed parameter, its disassembly (most likely) involves the
+    general purpose data registers. Given these criteria, the two `mov` instructions
+    surrounding each `sar` instruction are the only ones that match.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Listing 6-7 installs `trojan_hello` into the directory /sbin/ without updating
+    its access, modification, or change times. The program first saves the access
+    and modification times of /sbin/. Then the function `ufs_itimes` is patched to
+    prevent updating change times. Next, the binary `trojan_hello` is copied into
+    /sbin/, and /sbin/'s access and modification times are rolled back. Finally, the
+    function `ufs_itimes` is restored.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*trojan_loader.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We could have patched *`ufs_itimes`* (in four additional spots) to prevent the
+    access, modification, and change times from updating on *all* files. However,
+    we want to be as subtle as possible; hence, we rolled back the access and modification
+    times instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Proof of Concept: Faking Out Tripwire'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the following output, I run the rootkit developed in this chapter against
+    Tripwire, which is arguably the most common and well-known HIDS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, I execute the command `tripwire --check` to validate the integrity of
+    the filesystem. Next, the rootkit is installed to trojan the binary `hello` (which
+    is located within /sbin/). Finally, I execute `tripwire --check` again to audit
+    the filesystem and see if the rootkit is detected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Because the average Tripwire report is rather detailed and lengthy, I have omitted
+    any extraneous or redundant information from the following output to save space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Wonderful—Tripwire reports no violations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, there is still more you can do to improve this rootkit. For example,
+    you could cloak the system call hooks (as discussed in [Cloaking System Call Hooks](ch05s07.html
+    "Cloaking System Call Hooks")).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: An offline analysis would have detected the Trojan; after all, you can't hide
+    within the system if the system isn't running!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concluding Remarks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The purpose of this chapter (believe it or not) wasn't to badmouth HIDSes, but
+    rather to demonstrate what you can achieve by combining the techniques described
+    throughout this book. Just for fun, here is another example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Combine the `icmp_input_hook` code from [Chapter 2](ch02.html "Chapter 2. HOOKING")
+    with portions of the `execve_hook` code from this chapter to create a "network
+    trigger" capable of executing a user space process, such as `netcat`, to spawn
+    a backdoor root shell. Then, combine that with the `process_hiding` and `port_hiding`
+    code from [Chapter 3](ch03.html "Chapter 3. DIRECT KERNEL OBJECT MANIPULATION")
+    to hide the root shell and connection. Include the module hiding routine from
+    this chapter to hide the rootkit itself. And just to be safe, throw in the `getdirentries_hook`
+    code for `netcat`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, this rootkit can also be improved upon. For example, because a lot
+    of admins set their firewalls/packet filters to drop incoming ICMP packets, consider
+    hooking a different *`*_input`* function, such as *`tcp_input`*.
+  prefs: []
+  type: TYPE_NORMAL

@@ -1,0 +1,131 @@
+- en: Chapter 4. KERNEL OBJECT HOOKING
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter we covered subverting the FreeBSD kernel using simple
+    data-state changes. The discussion centered around modifying the data contained
+    within the kernel queue data structures. In addition to record keeping, many of
+    these structures are also directly involved in control flow, as they maintain
+    a limited number of entry points into the kernel. Consequently, these can be hooked,
+    too, just like the entry points discussed in [Chapter 2](ch02.html "Chapter 2. HOOKING").
+    This technique is referred to as *Kernel Object Hooking (KOH)*. To demonstrate
+    it, let's hook a character device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hooking a Character Device
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Recall from [Chapter 1](ch01.html "Chapter 1. LOADABLE KERNEL MODULES") that
+    a character device is defined by its entries in a character device switch table.^([[1](#ftn.CHP-4-FN-1)])
+    As such, by modifying these entries, you can modify the behavior of a character
+    device. Before demonstrating this "attack," however, some background information
+    on character device management is necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The cdevp_list Tail Queue and cdev_priv Structures
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In FreeBSD all active character devices are maintained on a private, doubly-linked
+    tail queue named `cdevp_list`, which is defined in the file /sys/fs/devfs/devfs_devs.c
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As you can see, `cdevp_list` is composed of ❶ `cdev_priv` structures. The definition
+    for `struct cdev_priv` can be found in the `<fs/devfs/devfs_int.h>` header. Here
+    are the fields in `struct cdev_priv` that you''ll need to understand in order
+    to hook a character device:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`TAILQ_ENTRY(cdev_priv) cdp_list;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the linkage pointers that are associated with the `cdev_priv`
+    structure, which is stored on `cdevp_lst`. This field is referenced during insertion,
+    removal, and traversal of `cdevp_list.`
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`struct cdev cdp_c;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This structure maintains the context of the character device. The definition
+    for `struct cdev` can be found in the `<sys/conf.h>` header. The fields in `struct
+    cdev` relevant to our discussion are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`char *si_name;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field contains the name of the character device.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**`struct cdevsw *si_devsw;`**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This field points to the character device's switch table.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The devmtx Mutex
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The following excerpt from `<fs/devfs/devfs_int.h>` lists the resource access
+    control associated with `cdevp_list`
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As you might have guessed, in order to modify a character device's switch table,
+    you simply have to go through `cdevp_list`. Listing 4-1 offers an example. This
+    code traverses `cdevp_list`, looking for `cd_example`;^([[2](#ftn.CHP-4-FN-2)])
+    if it finds it, `cd_example`'s read entry point is replaced with a simple call
+    hook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Listing 4.1: cd_example_hook.c*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice that prior to ❸ replacing `cd_example`'s read entry point, I ❷ saved
+    the memory address of the original entry. This allows you to ❶ call and ❹ restore
+    the original function without having to include its definition in your code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the results of interacting with `cd_example` after loading the above
+    module:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[1](#CHP-4-FN-1)]) ¹ For the definition of a character device switch table,
+    see [The cdevsw Structure](ch01s06.html#the_cdevsw_structure "The cdevsw Structure")
+  prefs: []
+  type: TYPE_NORMAL
+- en: ^([[2](#CHP-4-FN-2)]) ² `cd_example` is the character device developed in [Example](ch01s06.html#example-id1
+    "Example").
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concluding Remarks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As you can see, KOH is more or less like DKOM, except that it uses call hooks
+    instead of data-state changes. As such, there is really nothing "new" presented
+    in this chapter (which is why it's so short).
+  prefs: []
+  type: TYPE_NORMAL
