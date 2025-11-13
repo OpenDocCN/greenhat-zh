@@ -3,6 +3,7 @@
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第四章：内核对象挂钩
 - en: In the previous chapter we covered subverting the FreeBSD kernel using simple
     data-state changes. The discussion centered around modifying the data contained
     within the kernel queue data structures. In addition to record keeping, many of
@@ -14,11 +15,14 @@
   id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 在上一章中，我们介绍了通过简单的数据状态更改来颠覆FreeBSD内核。讨论主要集中在修改内核队列数据结构中的数据。除了记录保存外，许多这些结构也直接参与控制流，因为它们维护了有限的内核入口点。因此，这些也可以被挂钩，就像在[第二章](ch02.html
+    "第二章：挂钩")中讨论的入口点一样。这种技术被称为*内核对象挂钩（KOH）*。为了演示它，让我们挂钩一个字符设备。
 - en: Hooking a Character Device
   id: totrans-2
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 字符设备挂钩
 - en: Recall from [Chapter 1](ch01.html "Chapter 1. LOADABLE KERNEL MODULES") that
     a character device is defined by its entries in a character device switch table.^([[1](#ftn.CHP-4-FN-1)])
     As such, by modifying these entries, you can modify the behavior of a character
@@ -27,17 +31,21 @@
   id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 回想一下[第一章](ch01.html "第一章：可加载内核模块")，字符设备是由其在字符设备切换表中的条目定义的.^([[1](#ftn.CHP-4-FN-1)])
+    因此，通过修改这些条目，你可以修改字符设备的行为。然而，在演示这种“攻击”之前，需要一些关于字符设备管理的背景信息。
 - en: The cdevp_list Tail Queue and cdev_priv Structures
   id: totrans-4
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: cdevp_list 尾队列和 cdev_priv 结构
 - en: 'In FreeBSD all active character devices are maintained on a private, doubly-linked
     tail queue named `cdevp_list`, which is defined in the file /sys/fs/devfs/devfs_devs.c
     as follows:'
   id: totrans-5
   prefs: []
   type: TYPE_NORMAL
+  zh: 在FreeBSD中，所有活动的字符设备都维护在一个名为`cdevp_list`的私有、双链表尾队列中，该队列在文件`/sys/fs/devfs/devfs_devs.c`中定义如下：
 - en: '[PRE0]'
   id: totrans-6
   prefs: []
@@ -50,52 +58,64 @@
   id: totrans-7
   prefs: []
   type: TYPE_NORMAL
+  zh: '如你所见，`cdevp_list`由❶ `cdev_priv`结构组成。`struct cdev_priv`的定义可以在`<fs/devfs/devfs_int.h>`头文件中找到。以下是在挂钩字符设备时需要了解的`struct
+    cdev_priv`字段： '
 - en: '**`TAILQ_ENTRY(cdev_priv) cdp_list;`**'
   id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`TAILQ_ENTRY(cdev_priv) cdp_list;`**'
 - en: This field contains the linkage pointers that are associated with the `cdev_priv`
     structure, which is stored on `cdevp_lst`. This field is referenced during insertion,
     removal, and traversal of `cdevp_list.`
   id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段包含与`cdev_priv`结构相关联的链接指针，该结构存储在`cdevp_lst`上。在插入、删除和遍历`cdevp_list`时引用此字段。
 - en: '**`struct cdev cdp_c;`**'
   id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`struct cdev cdp_c;`**'
 - en: 'This structure maintains the context of the character device. The definition
     for `struct cdev` can be found in the `<sys/conf.h>` header. The fields in `struct
     cdev` relevant to our discussion are as follows:'
   id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 此结构维护字符设备的上下文。`struct cdev`的定义可以在`<sys/conf.h>`头文件中找到。与我们的讨论相关的`struct cdev`字段如下：
 - en: '**`char *si_name;`**'
   id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`char *si_name;`**'
 - en: This field contains the name of the character device.
   id: totrans-13
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段包含字符设备名称。
 - en: '**`struct cdevsw *si_devsw;`**'
   id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`struct cdevsw *si_devsw;`**'
 - en: This field points to the character device's switch table.
   id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段指向字符设备的切换表。
 - en: The devmtx Mutex
   id: totrans-16
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: devmtx 互斥锁
 - en: The following excerpt from `<fs/devfs/devfs_int.h>` lists the resource access
     control associated with `cdevp_list`
   id: totrans-17
   prefs: []
   type: TYPE_NORMAL
+  zh: 以下是从`<fs/devfs/devfs_int.h>`中摘录的与`cdevp_list`相关的资源访问控制
 - en: '[PRE1]'
   id: totrans-18
   prefs: []
@@ -106,6 +126,7 @@
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 示例
 - en: As you might have guessed, in order to modify a character device's switch table,
     you simply have to go through `cdevp_list`. Listing 4-1 offers an example. This
     code traverses `cdevp_list`, looking for `cd_example`;^([[2](#ftn.CHP-4-FN-2)])
@@ -114,6 +135,8 @@
   id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所猜，为了修改字符设备的切换表，你只需通过`cdevp_list`即可。列表 4-1 提供了一个示例。此代码遍历`cdevp_list`，寻找`cd_example`；^([[2](#ftn.CHP-4-FN-2)])
+    如果找到它，将`cd_example`的读取入口点替换为一个简单的调用挂钩。
 - en: '[PRE2]'
   id: totrans-21
   prefs: []
@@ -123,12 +146,14 @@
   id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表 4.1：cd_example_hook.c*'
 - en: Notice that prior to ❸ replacing `cd_example`'s read entry point, I ❷ saved
     the memory address of the original entry. This allows you to ❶ call and ❹ restore
     the original function without having to include its definition in your code.
   id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，在❸替换`cd_example`的读取入口点之前，我❷保存了原始入口点的内存地址。这允许你在不包含其定义的情况下调用和❹恢复原始函数。
 - en: 'Here are the results of interacting with `cd_example` after loading the above
     module:'
   id: totrans-24
