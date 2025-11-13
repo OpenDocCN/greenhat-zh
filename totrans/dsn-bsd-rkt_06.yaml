@@ -1,16 +1,22 @@
 - en: Chapter 6. PUTTING IT ALL TOGETHER
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 第6章 整合一切
 - en: We'll now use the techniques from the previous chapters to write a complete
     example rootkit—albeit a trivial one—to bypass *Host-based Intrusion Detection
     Systems (HIDSes)*.
+  id: totrans-1
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们现在将使用前几章中的技术来编写一个完整的示例rootkit——尽管这是一个微不足道的例子——以绕过*基于主机的入侵检测系统（HIDSes）*。
 - en: What HIDSes Do
+  id: totrans-2
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: HIDS的功能
 - en: In general, an HIDS is designed to monitor, detect, and log the modifications
     to the files on a filesystem. That is, it is designed to detect file tampering
     and trojaned binaries. For every file, an HIDS creates a cryptographic hash of
@@ -18,72 +24,106 @@
     different hash being generated. Whenever an HIDS audits a filesystem, it compares
     the current hash of every file with its counterpart in the database; if the two
     differ, the file is flagged.
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 通常，HIDS被设计用来监控、检测和记录文件系统上文件的修改。也就是说，它被设计用来检测文件篡改和特洛伊木马二进制文件。对于每个文件，HIDS都会创建文件数据的加密哈希并将其记录在数据库中；任何对文件的更改都会导致生成不同的哈希值。每当HIDS审计文件系统时，它会将每个文件的当前哈希值与其数据库中的对应值进行比较；如果两者不同，则标记该文件。
 - en: In principle this is a good idea, but . . .
+  id: totrans-4
   prefs: []
   type: TYPE_NORMAL
+  zh: 从原则上讲，这是一个好主意，但……
 - en: Bypassing HIDSes
+  id: totrans-5
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 绕过HIDS
 - en: The problem with HIDS software is that it trusts and uses the operating system's
     APIs. By abusing this trust (e.g., hooking these APIs) you can bypass any HIDS.
+  id: totrans-6
   prefs: []
   type: TYPE_NORMAL
+  zh: HIDS（主机入侵检测系统）软件的问题在于它信任并使用操作系统的API。通过滥用这种信任（例如，挂钩这些API），你可以绕过任何HIDS。
 - en: Note
+  id: totrans-7
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: It's somewhat ironic that software designed to detect a root level compromise
     (e.g., the tampering of system binaries) would trust the underlying operating
     system.
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 软件旨在检测根级妥协（例如，系统二进制的篡改）却信任底层操作系统，这有点讽刺。
 - en: The question now is, "Which calls do I hook?" The answer depends on what you
     wish to accomplish. Consider the following scenario. You have a FreeBSD machine
     with the binary shown in Listing 6-1 installed in /sbin/.
+  id: totrans-9
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在的问题是，“我应该挂钩哪些调用？”答案取决于你想要实现什么。考虑以下场景。你有一台FreeBSD机器，在/sbin/目录下安装了列表6-1中显示的二进制文件。
 - en: '[PRE0]'
+  id: totrans-10
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: '*Listing 6-1: hello.c*'
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表6-1: hello.c*'
 - en: You want to replace that binary with a Trojan version—which simply prints a
     different debug message, shown in Listing 6-2—without alerting the HIDS, of course.
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 你想用特洛伊木马版本替换那个二进制文件——这个版本简单地打印不同的调试信息，如列表6-2所示——当然，不会触发HIDS。
 - en: '[PRE1]'
+  id: totrans-13
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: '*Listing 6-2: trojan_hello.c*'
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表6-2: trojan_hello.c*'
 - en: This can be accomplished by performing an *execution redirection* (halflife,
     1997)—which simply switches the execution of one binary with another—so that whenever
     there is a request to execute `hello`, you intercept it and execute `trojan_hello`
     instead. This works because you don't replace (or even touch) the original binary
     and, as a result, the HIDS will always calculate the correct hash.
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 这可以通过执行*执行重定向*（halflife，1997）来实现——这仅仅是切换一个二进制文件的执行到另一个——所以每当有请求执行`hello`时，你拦截它并执行`trojan_hello`。这之所以有效，是因为你没有替换（甚至没有触及）原始的二进制文件，因此HIDS将始终计算正确的哈希值。
 - en: There are of course some "hiccups" to this approach, but we'll deal with them
     later, as they come up.
+  id: totrans-16
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，这种方法有一些“小插曲”，但我们将在它们出现时处理它们。
 - en: Execution Redirection
+  id: totrans-17
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 执行重定向
 - en: The execution redirection routine in the example rootkit is achieved by hooking
     the `execve` system call. This call is responsible for file execution and is implemented
     in the file /sys/kern/kern_exec.c as follows.
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 示例rootkit中的执行重定向例程是通过挂钩`execve`系统调用来实现的。这个调用负责文件执行，并在文件/sys/kern/kern_exec.c中实现如下。
 - en: '[PRE2]'
+  id: totrans-19
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: Note how the `execve` system call ❶ copies in its arguments (`uap`) from the
     user data space to a temporary buffer (`args`) and then ❷ passes that buffer to
     the `kern_execve` function, which actually performs the file execution. This means
@@ -91,14 +131,21 @@
     have to insert a new set of `execve` arguments or change the existing one—within
     the current process's user data space—before `execve` calls `exec_copyin_args`.
     Listing 6-3 (which is based on Stephanie Wehner's exec.c) offers an example.
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意`execve`系统调用❶如何从用户数据空间复制其参数（`uap`）到一个临时缓冲区（`args`），然后❷将这个缓冲区传递给`kern_execve`函数，该函数实际上执行文件。这意味着为了将一个二进制文件的执行重定向到另一个，你只需在`execve`调用`exec_copyin_args`之前，在当前进程的用户数据空间中插入一组新的`execve`参数或更改现有的参数——列表6-3（基于Stephanie
+    Wehner的exec.c）提供了一个示例。
 - en: '[PRE3]'
+  id: totrans-21
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: '*Listing 6-3: incognito-0.1.c*'
+  id: totrans-22
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表6-3: incognito-0.1.c*'
 - en: In this listing the function `execve_hook`❶ first checks the name of the file
     to be executed. If the filename is /sbin/hello, ❷ the end boundary address of
     the current process's user data space is stored in `addr`, which is then passed
@@ -107,91 +154,138 @@
     is then ❺ inserted into the newly "allocated" user data space. Finally, ❻ `execve`
     is called with the address of the `trojan_hello execve_args` structure as its
     second argument—effectively redirecting the execution of `hello` into `trojan_hello`.
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个列表中，函数 `execve_hook`❶ 首先检查要执行的文件名。如果文件名是 /sbin/hello，❷ 当前进程的用户数据空间的结束边界地址存储在
+    `addr` 中，然后传递给 ❸ `vm_map_find` 以在该处映射一个 `PAGE_SIZE` 大小的 `NULL` 内存块。接下来，❹ 为 `trojan_hello`
+    二进制文件设置一个 `execve` 参数结构，然后将其 ❺ 插入到新“分配”的用户数据空间中。最后，❻ 使用 `execve` 调用，其第二个参数是 `trojan_hello
+    execve_args` 结构的地址——实际上是将 `hello` 的执行重定向到 `trojan_hello`。
 - en: Note
+  id: totrans-24
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: An interesting detail about *`execve_hook`* is that, with one or two slight
     modifications, it's the exact code required to execute a user space process from
     kernel space.
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于 *`execve_hook`* 的一个有趣细节是，经过一两个细微的修改，它就是从内核空间执行用户空间进程所需的精确代码。
 - en: One additional point is also worth mentioning. Notice how, this time around,
     the event handler function does not uninstall the system call hook; that would
     require a reboot. This is because the "live" rootkit has no need for an unload
     routine—once you install it, you want it to remain installed.
+  id: totrans-26
   prefs: []
   type: TYPE_NORMAL
+  zh: 还有一点也值得提一下。注意，这次事件处理函数没有卸载系统调用钩子；那将需要重启。这是因为“活”的 rootkit 没有卸载例程的需求——一旦安装，你希望它保持安装状态。
 - en: The following output shows the example rootkit in action.
+  id: totrans-27
   prefs: []
   type: TYPE_NORMAL
+  zh: 下面的输出显示了示例 rootkit 的运行情况。
 - en: '[PRE4]'
+  id: totrans-28
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: Excellent, it works. We have now effectively trojaned `hello` and no HIDS will
     be the wiser—except that we have placed a new binary (`trojan_hello`) on the filesystem,
     which any HIDS will flag. D'oh!
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 太棒了，它工作了。现在我们已经有效地将 `hello` 木马化了，没有任何 HIDS 会察觉到——除了我们在文件系统中放置了一个新的二进制文件（`trojan_hello`），任何
+    HIDS 都会将其标记出来。唉！
 - en: File Hiding
+  id: totrans-30
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 文件隐藏
 - en: To remedy this problem, let's hide `trojan_hello` so that it doesn't appear
     on the filesystem. This can be accomplished by hooking the `getdirentries` system
     call. This call is responsible for listing (i.e., returning) a directory's contents,
     and it is implemented in the file /sys/kern/vfs_syscalls.c as follows.
+  id: totrans-31
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了解决这个问题，让我们隐藏 `trojan_hello`，使其不在文件系统中出现。这可以通过挂钩 `getdirentries` 系统调用来实现。这个调用负责列出（即返回）目录的内容，并在文件
+    `/sys/kern/vfs_syscalls.c` 中实现如下。
 - en: Note
+  id: totrans-32
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Take a look at this code and try to discern some structure in it. If you don't
     understand all of it, don't worry. An explanation of the *`getdirentries`* system
     call appears after this listing.
+  id: totrans-33
   prefs: []
   type: TYPE_NORMAL
+  zh: 看看这段代码，并尝试从中找出一些结构。如果你不完全理解它，不要担心。关于 *`getdirentries`* 系统调用的解释将在列表之后出现。
 - en: '[PRE5]'
+  id: totrans-34
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: The `getdirentries` system call reads in the directory entries referenced by
     the directory (i.e., the file descriptor) `fd` into the buffer `buf`. Put more
     simply, `getdirentries` gets directory entries. If successful, ❶ the number of
     bytes actually transferred is returned. Otherwise, `−1` is returned and the global
     variable `errno` is set to indicate the error.
+  id: totrans-35
   prefs: []
   type: TYPE_NORMAL
+  zh: '`getdirentries` 系统调用将目录条目（即文件描述符）`fd` 指向的内容读取到缓冲区 `buf` 中。简单来说，`getdirentries`
+    获取目录条目。如果成功，返回实际传输的字节数。否则，返回 `-1` 并将全局变量 `errno` 设置为指示错误。'
 - en: 'The directory entries read into `buf` are stored as a series of `dirent` structures,
     defined in the `<sys/dirent.h>` header as follows:'
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 将读取到 `buf` 的目录条目存储为一系列 `dirent` 结构，这些结构在 `<sys/dirent.h>` 头文件中定义如下：
 - en: '[PRE6]'
+  id: totrans-37
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: As this listing shows, the context of each directory entry is maintained in
     a `dirent` structure. This means that in order to hide a file on the filesystem,
     you simply have to prevent `getdirentries` from storing the file's `dirent` structure
     in `buf`. Listing 6-4 is an example rootkit adapted to do just that (based on
     pragmatic's file-hiding routine, 1999).
+  id: totrans-38
   prefs: []
   type: TYPE_NORMAL
+  zh: 如此列表所示，每个目录条目的上下文都保存在一个 `dirent` 结构中。这意味着为了在文件系统中隐藏一个文件，你只需防止 `getdirentries`
+    将文件的 `dirent` 结构存储在 `buf` 中。列表 6-4 是一个示例 rootkit，它被调整为执行此操作（基于 pragmatic 的文件隐藏例程，1999）。
 - en: Note
+  id: totrans-39
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: In the interest of saving space, I haven't relisted the execution redirection
     routine (i.e., the `execve_hook` function) in its entirety.
+  id: totrans-40
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了节省空间，我没有完整地重新列出执行重定向例程（即 `execve_hook` 函数）。
 - en: '[PRE7]'
+  id: totrans-41
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: '*Listing 6-4: incognito-0.2.c*'
+  id: totrans-42
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表 6-4：incognito-0.2.c*'
 - en: In this code the function `getdirentries_hook` ❶ first calls `getdirentries`
     in order to store the directory entries found in `fd` in `buf`. Next, ❷ the number
     of bytes actually transferred is checked, and if it's greater than zero (i.e.,
@@ -204,321 +298,501 @@
     (i.e., `trojan_hello`). Additionally, to keep things consistent, ❻ the number
     of bytes actually transferred is adjusted to account for "losing" this `dirent`
     structure.
+  id: totrans-43
   prefs: []
   type: TYPE_NORMAL
+  zh: 在此代码中，函数 `getdirentries_hook` ❶ 首先调用 `getdirentries` 以将 `fd` 中找到的目录条目存储到 `buf`
+    中。接下来，❷ 检查实际传输的字节数，如果大于零（即，如果 `fd` 实际上包含任何目录条目），❸ 则将 `buf`（它是一系列 `dirent` 结构）的内容复制到内核空间。之后，❹
+    将每个 `dirent` 结构的文件名与常量 `T_NAME`（在这种情况下为 `trojan_hello`）进行比较。如果找到匹配项，❺ 则将“幸运”的
+    `dirent` 结构从 `buf` 的内核空间副本中移除，最终 ❼ 复制出来，覆盖 `buf` 的内容，从而有效地隐藏 `T_NAME`（即，`trojan_hello`）。此外，为了保持一致性，❻
+    调整实际传输的字节数以补偿“丢失”此 `dirent` 结构。
 - en: 'Now, if you install the new rootkit, you get:'
+  id: totrans-44
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，如果你安装新的根工具包，你会得到：
 - en: '[PRE8]'
+  id: totrans-45
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: 'Wonderful. We have now effectively trojaned `hello` without leaving a footprint
     on the filesystem.^([[1](#ftn.CHP-6-FN-1)]) Of course, none of this matters since
     a simple `kldstat(8)` reveals the rootkit:'
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 太棒了。我们现在已经有效地木马化了 `hello`，而没有在文件系统中留下任何痕迹.^([[1](#ftn.CHP-6-FN-1)]) 当然，这一切都没有关系，因为简单的
+    `kldstat(8)` 就会揭示根工具包：
 - en: '[PRE9]'
+  id: totrans-47
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: Darn it!
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 真糟糕！
 - en: '* * *'
+  id: totrans-49
   prefs: []
   type: TYPE_NORMAL
+  zh: '* * *'
 - en: ^([[1](#CHP-6-FN-1)]) ¹ Actually, you can still find `trojan_hello` with `ls
     /sbin/trojan_hello`, because direct lookups aren't blocked. Blocking the file
     from a direct lookup isn't too hard, but it is tedious. You will need to hook
     `open(2)`, `stat(2)`, and `lstat(2)`, and have them return `ENOENT` whenever the
     file is /sbin/trojan_hello.
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: ^([[1](#CHP-6-FN-1)]) ¹ 实际上，你仍然可以用 `ls /sbin/trojan_hello` 找到 `trojan_hello`，因为直接查找没有被阻止。阻止文件直接查找并不太难，但很麻烦。你需要挂钩
+    `open(2)`、`stat(2)` 和 `lstat(2)`，并在文件是 `/sbin/trojan_hello` 时让它们返回 `ENOENT`。
 - en: Hiding a KLD
+  id: totrans-51
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 隐藏一个 KLD
 - en: To remedy this problem, we'll employ some DKOM to hide the rootkit, which is,
     technically, a KLD.
+  id: totrans-52
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了解决这个问题，我们将使用一些 DKOM 来隐藏根工具包，技术上讲，这是一个 KLD。
 - en: 'Recall from [Chapter 1](ch01.html "Chapter 1. LOADABLE KERNEL MODULES") that
     whenever you load a KLD into the kernel, you are actually loading a linker file
     that contains one or more kernel modules. As a result, whenever a KLD is loaded,
     it is stored on two different lists: `linker_files` and `modules`. As their names
     imply, `linker_files` contains the set of loaded linker files, while `modules`
     contains the set of loaded kernel modules.'
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
+  zh: 回想一下 [第 1 章](ch01.html "第 1 章。可加载内核模块")，每次将 KLD 加载到内核时，实际上是在加载一个包含一个或多个内核模块的链接文件。因此，每次加载
+    KLD 时，它都会存储在两个不同的列表中：`linker_files` 和 `modules`。正如它们的名称所暗示的，`linker_files` 包含加载的链接文件集合，而
+    `modules` 包含加载的内核模块集合。
 - en: As with the previous DKOM code, the KLD hiding routine will traverse both of
     these lists in a safe manner and remove the structure(s) of your choosing.
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
+  zh: 与之前的 DKOM 代码一样，KLD 隐藏例程将以安全的方式遍历这两个列表并移除您选择的结构。
 - en: The linker_files List
+  id: totrans-55
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 链接文件列表
 - en: 'The `linker_files` list is defined in the file /sys/kern/kern_linker.c as follows:'
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
+  zh: '`linker_files` 列表在文件 `/sys/kern/kern_linker.c` 中定义如下：'
 - en: '[PRE10]'
+  id: totrans-57
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: 'Notice that `linker_files` is declared as of type `linker_file_list_t`, which
     is defined in the `<sys/linker.h>` header as follows:'
+  id: totrans-58
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意，`linker_files` 被声明为 `linker_file_list_t` 类型，该类型在 `<sys/linker.h>` 头文件中定义如下：
 - en: '[PRE11]'
+  id: totrans-59
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: From these listings, you can see that `linker_files` is simply a doubly-linked
     tail queue of `linker_file` structures.
+  id: totrans-60
   prefs: []
   type: TYPE_NORMAL
+  zh: 从这些列表中，你可以看到 `linker_files` 只是一个 `linker_file` 结构的双向链尾队列。
 - en: 'An interesting detail about `linker_files` is that it has an associated counter,
     which is defined in the file /sys/kern/kern_linker.c as:'
+  id: totrans-61
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于 `linker_files` 的一个有趣细节是它有一个关联的计数器，该计数器在文件 `/sys/kern/kern_linker.c` 中定义如下：
 - en: '[PRE12]'
+  id: totrans-62
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: When a linker file is loaded (i.e., whenever an entry is added to `linker_files`),
     its file ID number becomes the current value of `next_file_id`, which is then
     increased by one.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
+  zh: 当加载链接文件时（即，每当向 `linker_files` 添加条目时），其文件 ID 号成为 `next_file_id` 的当前值，然后增加一。
 - en: 'Another interesting detail about `linker_files` is that, unlike the other lists
     in this book, it is not protected by a dedicated lock; this forces us to make
     use of `Giant`. `Giant` is, more or less, the "catchall" lock designed to protect
     the entire kernel. It is defined in the `<sys/mutex.h>` header as follows:'
+  id: totrans-64
   prefs: []
   type: TYPE_NORMAL
+  zh: 关于 `linker_files` 的另一个有趣细节是，与本书中的其他列表不同，它没有由专门的锁保护；这迫使我们使用 `Giant`。`Giant` 大概是“万用”锁，旨在保护整个内核。它在
+    `<sys/mutex.h>` 头文件中定义如下：
 - en: '[PRE13]'
+  id: totrans-65
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE13]'
 - en: Note
+  id: totrans-66
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 备注
 - en: In FreeBSD 6.0, *`linker_files`* does have an associated lock, which is named
     *`kld_mtx`*. However, *`kld_mtx`* doesn't really protect *`linker_files`*, which
     is why we use *`Giant`* instead. In FreeBSD version 7, *`linker_files`* is protected
     by an sx lock.
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 FreeBSD 6.0 中，*`linker_files`* 确实有一个关联的锁，该锁名为 *`kld_mtx`*。然而，*`kld_mtx`* 并没有真正保护
+    *`linker_files`*，这就是我们为什么使用 *`Giant`* 的原因。在 FreeBSD 7 版本中，*`linker_files`* 由一个
+    sx 锁保护。
 - en: The linker_file Structure
+  id: totrans-68
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 链接文件结构
 - en: The context of each linker file is maintained in a `linker_file` structure,
     which is defined in the `<sys/linker.h>` header. The following list describes
     the fields in `struct linker_file` that you'll need to understand in order to
     hide a linker file.
+  id: totrans-69
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个链接文件的内容都保存在一个 `linker_file` 结构体中，该结构体在 `<sys/linker.h>` 头文件中定义。以下列表描述了 `struct
+    linker_file` 结构体中的字段，这些字段是你为了隐藏链接文件需要了解的。
 - en: '*int refs;*'
+  id: totrans-70
   prefs: []
   type: TYPE_NORMAL
+  zh: '*内部引用；*'
 - en: This field maintains the linker file's reference count.
+  id: totrans-71
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段维护链接文件的引用计数。
 - en: 'An important point to note is that the very first `linker_file` structure on
     `linker_files` is the current kernel image, and whenever a linker file is loaded,
     this structure''s `refs` field is increased by one, as illustrated below:'
+  id: totrans-72
   prefs: []
   type: TYPE_NORMAL
+  zh: 需要注意的一个重要点是，`linker_files` 中的第一个 `linker_file` 结构体是当前内核镜像，每当加载一个链接文件时，此结构体的
+    `refs` 字段会增加一，如下所示：
 - en: '[PRE14]'
+  id: totrans-73
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE14]'
 - en: As you can see, prior to loading incognito-0.2.ko, the current kernel image's
     reference count is 3, but afterward, it's 4\. Thus, when hiding a linker file,
     you have to remember to decrease the current kernel image's `refs` field by one.
+  id: totrans-74
   prefs: []
   type: TYPE_NORMAL
+  zh: 如你所见，在加载 incognito-0.2.ko 之前，当前内核镜像的引用计数是 3，但之后变为 4。因此，在隐藏链接文件时，你必须记得将当前内核镜像的
+    `refs` 字段减一。
 - en: '**`TAILQ_ENTRY(linker_file) link;`**'
+  id: totrans-75
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`TAILQ_ENTRY(linker_file) link;`**'
 - en: This field contains the linkage pointers that are associated with the `linker_file`
     structure, which is stored on the `linker_files` list. This field is referenced
     during insertion, removal, and traversal of `linker_files`.
+  id: totrans-76
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段包含与 `linker_file` 结构体关联的链接指针，该结构体存储在 `linker_files` 列表中。在插入、删除和遍历 `linker_files`
+    时会引用此字段。
 - en: '**`char* filename;`**'
+  id: totrans-77
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`char* filename;`**'
 - en: This field contains the linker file's name.
+  id: totrans-78
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段包含链接文件的名称。
 - en: The modules List
+  id: totrans-79
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 模块列表
 - en: 'The `modules` list is defined in the file /sys/kern/kern_module.c as follows:'
+  id: totrans-80
   prefs: []
   type: TYPE_NORMAL
+  zh: '`modules` 列表在文件 `/sys/kern/kern_module.c` 中定义，如下所示：'
 - en: '[PRE15]'
+  id: totrans-81
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE15]'
 - en: 'Notice that `modules` is declared as of type `modulelist_t`, which is defined
     in the file /sys/kern/kern_module.c as follows:'
+  id: totrans-82
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意到 `modules` 被声明为 `modulelist_t` 类型，该类型在文件 `/sys/kern/kern_module.c` 中定义如下：
 - en: '[PRE16]'
+  id: totrans-83
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE16]'
 - en: From these listings, you can see that `modules` is simply a doubly-linked tail
     queue of `module` structures.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 从这些列表中，你可以看到 `modules` 只是一个 `module` 结构体的双链表尾队列。
 - en: 'Like the `linker_files` list, `modules` also has an associated counter, which
     is defined in the file /sys/kern/kern_module.c as:'
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
+  zh: 与 `linker_files` 列表一样，`modules` 也有一个关联的计数器，该计数器在文件 `/sys/kern/kern_module.c`
+    中定义如下：
 - en: '[PRE17]'
+  id: totrans-86
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE17]'
 - en: For every kernel module that is loaded, its modid becomes the current value
     of `nextid`, which is then increased by one.
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于每个加载的内核模块，其 modid 变为 `nextid` 的当前值，然后 `nextid` 增加一。
 - en: 'The resource access control associated with the `modules` list is defined in
     the `<sys/module.h>` header as follows:'
+  id: totrans-88
   prefs: []
   type: TYPE_NORMAL
+  zh: 与 `modules` 列表相关的资源访问控制定义在 `<sys/module.h>` 头文件中，如下所示：
 - en: '[PRE18]'
+  id: totrans-89
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE18]'
 - en: The module Structure
+  id: totrans-90
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 模块结构
 - en: The context of each kernel module is maintained in a `module` structure, which
     is defined in the file /sys/kern/kern_module.c. The following list describes the
     fields in `struct module` that you'll need to understand in order to hide a kernel
     module.
+  id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个内核模块的内容都保存在一个 `module` 结构体中，该结构体在文件 `/sys/kern/kern_module.c` 中定义。以下列表描述了
+    `struct module` 结构体中的字段，这些字段是你为了隐藏内核模块需要了解的。
 - en: '**`TAILQ_ENTRY(module) link;`**'
+  id: totrans-92
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`TAILQ_ENTRY(module) link;`**'
 - en: This field contains the linkage pointers that are associated with the `module`
     structure, which is stored on the `modules` list. This field is referenced during
     insertion, removal, and traversal of `modules`.
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段包含与 `module` 结构体关联的链接指针，该结构体存储在 `modules` 列表中。在插入、删除和遍历 `modules` 时会引用此字段。
 - en: '**`char* name;`**'
+  id: totrans-94
   prefs: []
   type: TYPE_NORMAL
+  zh: '**`char* name;`**'
 - en: This field contains the kernel module's name.
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
+  zh: 此字段包含内核模块的名称。
 - en: Example
+  id: totrans-96
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 示例
 - en: Listing 6-5 shows the new-and-improved rootkit, which can now hide itself. It
     works by removing its `linker_file` and `module` structure from the `linker_files`
     and `modules` lists. To keep things consistent, it also decrements the current
     kernel image's reference count, the linker files counter (`next_file_id`), and
     the modules counter (`nextid`) by one.
+  id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 列表 6-5 展示了新的改进版的 rootkit，它现在可以隐藏自己。它通过从 `linker_files` 和 `modules` 列表中移除其 `linker_file`
+    和 `module` 结构来实现。为了保持一致性，它还将当前内核映像的引用计数、链接文件计数器（`next_file_id`）和模块计数器（`nextid`）减一。
 - en: Note
+  id: totrans-98
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: To save space, I haven't relisted the execution redirection and file hiding
     routines.
+  id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 为了节省空间，我没有重新列出执行重定向和文件隐藏例程。
 - en: '[PRE19]'
+  id: totrans-100
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE19]'
 - en: '*Listing 6-5: incognito-0.3.c*'
+  id: totrans-101
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表 6-5：incognito-0.3.c*'
 - en: 'Now, loading the above KLD gives us:'
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 现在，加载上述 KLD 给我们：
 - en: '[PRE20]'
+  id: totrans-103
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE20]'
 - en: Note how the output of `kldstat(8)` is the same before and after installing
     the rootkit—groovy!
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
+  zh: 注意 `kldstat(8)` 的输出在安装 rootkit 前后是相同的——太棒了！
 - en: At this point, you can redirect the execution of `hello` into `trojan_hello`
     while hiding both `trojan_hello` and the rootkit itself from the system (which,
     subsequently, makes it unloadable). There is just one more problem. When you install
     `trojan_hello` into /sbin/, the directory's access, modification, and change times
     update—a dead giveaway that something is amiss.
+  id: totrans-105
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这一点上，你可以将 `hello` 的执行重定向到 `trojan_hello`，同时隐藏 `trojan_hello` 和 rootkit 本身（这随后使得它不可卸载）。只有一个问题。当你将
+    `trojan_hello` 安装到 `/sbin/` 中时，目录的访问、修改和更改时间会更新——这是一个明显的迹象，表明出了问题。
 - en: Preventing Access, Modification, and Change Time Updates
+  id: totrans-106
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 防止访问、修改和更改时间更新
 - en: 'Because the access and modification times on a file can be set, you can "prevent"
     them from updating by just rolling them back. Listing 6-6 demonstrates how:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
+  zh: 因为文件上的访问和修改时间可以被设置，所以你只需通过回滚它们来“防止”它们更新。列表 6-6 展示了如何做到这一点：
 - en: '[PRE21]'
+  id: totrans-108
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE21]'
 - en: '*listing 6-6: rollback.c*'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
+  zh: '*列表 6-6：rollback.c*'
 - en: 'The preceding code first ❶ calls the function `stat` to obtain the /sbin/ directory''s
     filesystem information. This information is placed into the variable `sb`, a `stat`
     structure defined by the `<sys/stat.h>` header. The fields of `struct stat` relevant
     to our discussion are as follows:'
+  id: totrans-110
   prefs: []
   type: TYPE_NORMAL
+  zh: 之前的代码首先 ❶ 调用 `stat` 函数来获取 `/sbin/` 目录的文件系统信息。这个信息被放置在变量 `sb` 中，这是一个由 `<sys/stat.h>`
+    头文件定义的 `stat` 结构。与我们的讨论相关的 `struct stat` 字段如下：
 - en: '[PRE22]'
+  id: totrans-111
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE22]'
 - en: 'Next, ❷ /sbin/''s access and modification times are stored within `time[]`,
     an array of two `timeval` structures, defined in the `<sys/_timeval.h>` header
     as follows:'
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，❷ `/sbin/` 的访问和修改时间存储在 `time[]` 中，这是一个包含两个 `timeval` 结构的数组，在 `<sys/_timeval.h>`
+    头文件中定义如下：
 - en: '[PRE23]'
+  id: totrans-113
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE23]'
 - en: Finally, ❸ the function `utimes` is called to set (or roll back) /sbin/'s access
     and modification times, effectively "preventing" them from updating.
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，❸ 调用 `utimes` 函数来设置（或回滚）`/sbin/` 的访问和修改时间，有效地“防止”它们更新。
 - en: Change Time
+  id: totrans-115
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 更改时间
 - en: 'Unfortunately, the change time cannot be set or rolled back, because that would
     go against its intended purpose, which is to record all file status changes, including
     "corrections" to the access or modification times. The function responsible for
     updating an inode''s change time (along with its access and modification times)
     is `ufs_itimes`, which is implemented in the file /sys/ufs/ufs/ufs_vnops.c as
     follows:'
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
+  zh: 不幸的是，更改时间不能被设置或回滚，因为这会违反其预期目的，即记录所有文件状态变化，包括对访问或修改时间的“纠正”。负责更新inode更改时间（以及其访问和修改时间）的函数是
+    `ufs_itimes`，它在文件 `/sys/ufs/ufs/ufs_vnops.c` 中实现如下：
 - en: '[PRE24]'
+  id: totrans-117
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE24]'
 - en: If you `nop` out the lines shown in bold, you can effectively prevent all updates
     to an inode's change time.
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你将加粗的行 `nop` 出来，你可以有效地防止对inode更改时间的所有更新。
 - en: That being said, you need to know what these lines (i.e., the `DIP_SET` macro)
     look like once they're loaded in main memory.
+  id: totrans-119
   prefs: []
   type: TYPE_NORMAL
+  zh: 话虽如此，你需要知道这些行（即 `DIP_SET` 宏）在加载到主内存后看起来是什么样子。
 - en: '[PRE25]'
+  id: totrans-120
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE25]'
 - en: In this output, the six lines shown in bold (within the disassembly dump) each
     represent a call to `DIP_SET`, with the last two lines corresponding to the ones
     you want to `nop` out. The following narrative details how I came to this conclusion.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这个输出中，加粗显示的六行（在反汇编转储中）每行代表对 `DIP_SET` 的一个调用，最后两行对应于你想 `nop` 出来的那些。以下叙述详细说明了我是如何得出这个结论的。
 - en: First, within the function `ufs_itimes`, the macro `DIP_SET` is called six times,
     in three sets of two. Therefore, within the disassembly, there should be three
     sets of instructions that are somewhat similar. Next, the `DIP_SET` calls all
@@ -527,86 +801,130 @@
     `DIP_SET` alters a passed parameter, its disassembly (most likely) involves the
     general purpose data registers. Given these criteria, the two `mov` instructions
     surrounding each `sar` instruction are the only ones that match.
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，在函数 `ufs_itimes` 中，宏 `DIP_SET` 被调用六次，分为三组，每组两次。因此，在反汇编中，应该有三组类似指令。接下来，`DIP_SET`
+    调用都发生在调用函数 `vfs_timestamp` 之后。因此，在调用 `vfs_timestamp` 之前的任何代码都可以忽略。最后，因为宏 `DIP_SET`
+    修改了一个传递的参数，其反汇编（很可能是）涉及通用数据寄存器。根据这些标准，围绕每个 `sar` 指令的两个 `mov` 指令是唯一匹配的。
 - en: Example
+  id: totrans-123
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 示例
 - en: Listing 6-7 installs `trojan_hello` into the directory /sbin/ without updating
     its access, modification, or change times. The program first saves the access
     and modification times of /sbin/. Then the function `ufs_itimes` is patched to
     prevent updating change times. Next, the binary `trojan_hello` is copied into
     /sbin/, and /sbin/'s access and modification times are rolled back. Finally, the
     function `ufs_itimes` is restored.
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
+  zh: 列表 6-7 将 `trojan_hello` 安装到目录 /sbin/ 中，而没有更新其访问、修改或更改时间。程序首先保存 /sbin/ 的访问和修改时间。然后，函数
+    `ufs_itimes` 被修补以防止更新更改时间。接下来，二进制文件 `trojan_hello` 被复制到 /sbin/ 中，并将 /sbin/ 的访问和修改时间回滚。最后，函数
+    `ufs_itimes` 被恢复。
 - en: '[PRE26]'
+  id: totrans-125
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE26]'
 - en: '*trojan_loader.c*'
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
+  zh: '*trojan_loader.c*'
 - en: Note
+  id: totrans-127
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: We could have patched *`ufs_itimes`* (in four additional spots) to prevent the
     access, modification, and change times from updating on *all* files. However,
     we want to be as subtle as possible; hence, we rolled back the access and modification
     times instead.
+  id: totrans-128
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们本可以修补 *`ufs_itimes`*（在四个额外的位置）以防止所有文件的访问、修改和更改时间更新。然而，我们希望尽可能微妙；因此，我们回滚了访问和修改时间。
 - en: 'Proof of Concept: Faking Out Tripwire'
+  id: totrans-129
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 概念验证：欺骗 Tripwire
 - en: In the following output, I run the rootkit developed in this chapter against
     Tripwire, which is arguably the most common and well-known HIDS.
+  id: totrans-130
   prefs: []
   type: TYPE_NORMAL
+  zh: 在以下输出中，我运行了本章开发的 rootkit 对抗 Tripwire，这可能是最常见和最知名的 HIDS。
 - en: First, I execute the command `tripwire --check` to validate the integrity of
     the filesystem. Next, the rootkit is installed to trojan the binary `hello` (which
     is located within /sbin/). Finally, I execute `tripwire --check` again to audit
     the filesystem and see if the rootkit is detected.
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
+  zh: 首先，我执行命令 `tripwire --check` 以验证文件系统的完整性。接下来，rootkit 被安装到 trojan 二进制文件 `hello`（位于
+    /sbin/ 中）。最后，我再次执行 `tripwire --check` 以审计文件系统并查看是否检测到 rootkit。
 - en: Note
+  id: totrans-132
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: Because the average Tripwire report is rather detailed and lengthy, I have omitted
     any extraneous or redundant information from the following output to save space.
+  id: totrans-133
   prefs: []
   type: TYPE_NORMAL
+  zh: 由于 Tripwire 报告的平均内容相当详细且冗长，我已经从以下输出中省略了任何无关或冗余的信息以节省空间。
 - en: '[PRE27]'
+  id: totrans-134
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE27]'
 - en: Wonderful—Tripwire reports no violations.
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
+  zh: 太棒了——Tripwire 报告没有违规。
 - en: Of course, there is still more you can do to improve this rootkit. For example,
     you could cloak the system call hooks (as discussed in [Cloaking System Call Hooks](ch05s07.html
     "Cloaking System Call Hooks")).
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，你还可以做更多的事情来改进这个 rootkit。例如，你可以隐藏系统调用钩子（如 [隐藏系统调用钩子](ch05s07.html "隐藏系统调用钩子")
+    中讨论的）。
 - en: Note
+  id: totrans-137
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
+  zh: 注意
 - en: An offline analysis would have detected the Trojan; after all, you can't hide
     within the system if the system isn't running!
+  id: totrans-138
   prefs: []
   type: TYPE_NORMAL
+  zh: 离线分析会检测到木马；毕竟，如果系统没有运行，你无法在系统中隐藏！
 - en: Concluding Remarks
+  id: totrans-139
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 结论
 - en: The purpose of this chapter (believe it or not) wasn't to badmouth HIDSes, but
     rather to demonstrate what you can achieve by combining the techniques described
     throughout this book. Just for fun, here is another example.
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章的目的是（信不信由你）并不是要诋毁 HIDS，而是要展示通过结合本书中描述的所有技术可以实现什么。为了好玩，这里还有一个例子。
 - en: Combine the `icmp_input_hook` code from [Chapter 2](ch02.html "Chapter 2. HOOKING")
     with portions of the `execve_hook` code from this chapter to create a "network
     trigger" capable of executing a user space process, such as `netcat`, to spawn
@@ -615,10 +933,16 @@
     to hide the root shell and connection. Include the module hiding routine from
     this chapter to hide the rootkit itself. And just to be safe, throw in the `getdirentries_hook`
     code for `netcat`.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
+  zh: 将[第2章](ch02.html "第2章。挂钩")中的`icmp_input_hook`代码与本章中`execve_hook`代码的部分结合起来，创建一个能够执行用户空间进程（如`netcat`）以生成后门root
+    shell的“网络触发器”。然后，将其与[第3章](ch03.html "第3章。直接内核对象操作")中的`process_hiding`和`port_hiding`代码结合起来，隐藏root
+    shell和连接。包括本章中的模块隐藏例程以隐藏rootkit本身。为了安全起见，还可以加入`netcat`的`getdirentries_hook`代码。
 - en: Of course, this rootkit can also be improved upon. For example, because a lot
     of admins set their firewalls/packet filters to drop incoming ICMP packets, consider
     hooking a different *`*_input`* function, such as *`tcp_input`*.
+  id: totrans-142
   prefs: []
   type: TYPE_NORMAL
+  zh: 当然，这个rootkit也可以进行改进。例如，由于许多管理员将他们的防火墙/数据包过滤器设置为丢弃传入的ICMP数据包，考虑挂钩一个不同的*`*_input`*函数，例如*`tcp_input`*。
