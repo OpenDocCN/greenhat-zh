@@ -200,6 +200,7 @@
 +   [写给 Rust 爱好者的 Rust 指南](docs/rs-rs/README.md)
 +   [数据之形](docs/shp-dt/README.md)
 +   [电线上的沉默](docs/slnc-wr/README.md)
++   [社交媒体挖掘](docs/social-media-mining/README.md)
 +   [密码学严肃指南](docs/srs-crpt/README.md)
 +   [密码学严肃指南第二版](docs/srs-crpt-2e/README.md)
 +   [Python 严肃编程](docs/srs-py/README.md)
